@@ -5,7 +5,7 @@ import type { Locale } from '../i18n'
 const LINKS = [
   { labelKey: 'nav.docs', href: site.links.docs, external: false },
   { label: 'GitHub', href: site.links.github, external: true },
-  { label: 'crates.io', href: site.links.crate, external: true },
+  { label: 'Go SDK', href: site.links.go, external: true },
 ] as const
 
 export function SiteFooter() {

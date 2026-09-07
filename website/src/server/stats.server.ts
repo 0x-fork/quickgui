@@ -19,9 +19,8 @@ async function fetchJson(url: string): Promise<unknown> {
 export async function fetchRepoStats(): Promise<RepoStats> {
   if (cache && Date.now() - cache.at < TTL_MS) return cache.value
 
-  const [github, crate] = await Promise.allSettled([
+  const [github] = await Promise.allSettled([
     fetchJson('https://api.github.com/repos/egoist/quickgui'),
-    fetchJson('https://crates.io/api/v1/crates/quickgui'),
   ])
 
   const stars =
@@ -31,17 +30,8 @@ export async function fetchRepoStats(): Promise<RepoStats> {
       ? ((github.value as { stargazers_count: number }).stargazers_count)
       : null
 
-  const crateData =
-    crate.status === 'fulfilled'
-      ? (crate.value as { crate?: { max_stable_version?: unknown } }).crate
-      : undefined
-  const version =
-    typeof crateData?.max_stable_version === 'string'
-      ? crateData.max_stable_version
-      : null
-
-  const value: RepoStats = { stars, version }
-  if (stars !== null || version !== null) {
+  const value: RepoStats = { stars }
+  if (stars !== null) {
     cache = { value, at: Date.now() }
   }
   return value

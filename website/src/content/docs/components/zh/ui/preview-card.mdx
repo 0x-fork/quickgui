@@ -2,51 +2,52 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `PreviewCard`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { PreviewCard } from "@quickgui/ui/tooltip";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<PreviewCard.Root open={open()} onOpenChange={setOpen} placement="bottom">
-  <PreviewCard.Trigger delay={300}><Text>@quickgui</Text></PreviewCard.Trigger>
-  <PreviewCard.Portal>
-    <PreviewCard.Positioner><PreviewCard.Popup><ProfilePreview /></PreviewCard.Popup></PreviewCard.Positioner>
-  </PreviewCard.Portal>
-</PreviewCard.Root>
+```go
+func PreviewCardExample() {
+	ui.PreviewCard.Root(
+		ui.PreviewCardRootProps{Placement: "bottom-start"},
+		func() {
+			ui.PreviewCard.Trigger(ui.PreviewCardTriggerProps{Delay: 350}, "@ada")
+			ui.PreviewCard.Positioner(
+				ui.PartProps{},
+				func() {
+					ui.PreviewCard.Popup(
+						ui.PartProps{},
+						"Ada Lovelace",
+					)
+				},
+			)
+		},
+	)
+}
 ```
 
 ## 结构
 
-- `PreviewCard.Root`
-- `PreviewCard.Trigger`
-- `PreviewCard.Portal`
-- `PreviewCard.Backdrop`
-- `PreviewCard.Positioner`
-- `PreviewCard.Popup`
-- `PreviewCard.Arrow`
-
-```tsx
-<PreviewCard.Root>
-  <PreviewCard.Trigger />
-  <PreviewCard.Portal />
-  <PreviewCard.Backdrop />
-  <PreviewCard.Positioner />
-  <PreviewCard.Popup />
-  <PreviewCard.Arrow />
-</PreviewCard.Root>
-```
+- `ui.PreviewCard.Root`
+- `ui.PreviewCard.Trigger`
+- `ui.PreviewCard.Portal`
+- `ui.PreviewCard.Backdrop`
+- `ui.PreviewCard.Positioner`
+- `ui.PreviewCard.Popup`
+- `ui.PreviewCard.Arrow`
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `open` | 受控的打开状态。 |
-| `defaultOpen` | 组件自行管理打开状态时的初始状态。 |
-| `delay` | 打开前由核心管理的延迟（毫秒）。 |
-| `closeDelay` | 关闭前由核心管理的延迟（毫秒）。 |
-| `side` | 碰撞处理前的首选放置方向。 |
-
+| `Open` | 受控的打开状态。 |
+| `DefaultOpen` | 组件自行管理打开状态时的初始状态。 |
+| `Delay` | 打开前由核心管理的延迟（毫秒）。 |
+| `CloseDelay` | 关闭前由核心管理的延迟（毫秒）。 |
+| `Placement` | 碰撞处理前的首选放置方向。 |

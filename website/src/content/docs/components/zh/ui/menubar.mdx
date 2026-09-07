@@ -2,39 +2,40 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `Menubar`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { Menubar } from "@quickgui/ui/menu";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<Menubar.Root count={2} open={openMenu()} onOpenChange={setOpenMenu}>
-  <Menubar.Item itemIndex={0}><FileMenu /></Menubar.Item>
-  <Menubar.Item itemIndex={1}><EditMenu /></Menubar.Item>
-</Menubar.Root>
+```go
+func MenubarExample() {
+	ui.Menubar.Root(
+		ui.MenubarRootProps{Count: 2},
+		func() {
+			for index, label := range []string{"File", "Edit"} {
+				ui.Menubar.Item(ui.MenubarItemProps{Index: &index}, label)
+			}
+		},
+	)
+}
 ```
 
 ## 结构
 
-- `Menubar.Root`
-- `Menubar.Item`
-
-```tsx
-<Menubar.Root>
-  <Menubar.Item />
-</Menubar.Root>
-```
+- `ui.Menubar.Root`
+- `ui.Menubar.Item`
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `count` | 已声明的菜单栏项目数。 |
-| `open` | 受控的打开状态。 |
-| `defaultOpen` | 组件自行管理打开状态时的初始状态。 |
-| `onOpenChange` | 报告核心做出的打开或关闭决定。 |
-| `onActiveChange` | 报告当前持有移动焦点状态的项目。 |
-
+| `Count` | 已声明的菜单栏项目数。 |
+| `Open` | 受控的打开状态。 |
+| `DefaultOpen` | 组件自行管理打开状态时的初始状态。 |
+| `OnOpenChange` | 报告核心做出的打开或关闭决定。 |
+| `OnActiveChange` | 报告当前持有移动焦点状态的项目。 |

@@ -1,87 +1,85 @@
 export const snippets = {
-  /* Just the component (see docs/view-api.md for the full main.rs); lines
-     stay ≤ 62 chars so the half-width panes never scroll horizontally. */
-  rust: {
-    lang: 'rust',
-    code: `struct Counter {
-    count: usize,
-}
+  counter: {
+    lang: 'go',
+    code: `package main
 
-impl View for Counter {
-    fn render(
-        &mut self,
-        cx: &mut ViewContext<'_, Self>,
-    ) -> impl IntoElement {
-        let increment = cx.listener("increment", |this, cx| {
-            this.count += 1;
-            cx.invalidate();
-        });
+import (
+	"fmt"
 
-        div()
-            .size_full()
-            .flex_col()
-            .items_center()
-            .justify_center()
-            .gap_3()
-            .child(text(format!("Count: {}", self.count)))
-            .child(
-                div()
-                    .on_click(increment)
-                    .px_4()
-                    .py_2()
-                    .rounded_lg()
-                    .bg(Color::rgb8(24, 24, 27))
-                    .text_color(Color::rgb8(250, 250, 250))
-                    .hover(|s| s.bg(Color::rgb8(63, 63, 70)))
-                    .child("Increment"),
-            )
-    }
+	"github.com/egoist/quickgui/go/ui"
+)
+
+func Counter() {
+	count, setCount := ui.CreateSignal(0)
+	ui.View(
+		ui.Display("flex"),
+		ui.FlexDirection("column"),
+		ui.Height("100%"),
+		ui.AlignItems("center"),
+		ui.JustifyContent("center"),
+		ui.Gap(12),
+		func() {
+			ui.Text(func() string {
+				return fmt.Sprintf("Count: %d", count())
+			})
+			ui.Button(
+				ui.Padding(12),
+				ui.BorderRadius(8),
+				ui.BackgroundColor("#18181b"),
+				ui.Color("white"),
+				ui.OnClick(func() { setCount(count() + 1) }),
+				"Increment",
+			)
+		},
+	)
 }`,
   },
-  ui: {
-    lang: 'tsx',
-    code: `function Counter() {
-  const [count, setCount] = createSignal(0);
+  window: {
+    lang: 'go',
+    code: `package main
 
-  return (
-    <View
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        width: "100%",
-        height: "100%",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 12,
-      }}
-    >
-      <Text>Count: {count()}</Text>
-      <Button onClick={() => setCount(count() + 1)}>
-        Increment
-      </Button>
-    </View>
-  );
+import (
+	"log"
+
+	"github.com/egoist/quickgui/go/native"
+)
+
+func main() {
+	if err := native.Run(func() {
+		openWindow()
+		native.App.OnReopen(func(event native.ReopenEvent) {
+			if !event.HasVisibleWindows {
+				openWindow()
+			}
+		})
+	}); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func openWindow() {
+	native.NewWindow(native.WindowOptions{
+		Title:     "Counter",
+		Width:     720,
+		Height:    480,
+		Component: Counter,
+	})
 }`,
   },
   swiftUi: {
-    lang: 'tsx',
-    code: `import { Button, Host } from "@quickgui/ui/swift-ui";
-import { buttonStyle } from "@quickgui/ui/swift-ui/modifiers";
-
-<Host matchContents>
-  <Button
-    label="Save changes"
-    modifiers={[buttonStyle("glass")]}
-  />
-</Host>;`,
-  },
-  cargoAdd: {
-    lang: 'bash',
-    code: `cargo add quickgui`,
-  },
-  cargoRun: {
-    lang: 'bash',
-    code: `cargo run --release`,
+    lang: 'go',
+    code: `ui.SwiftUI.Host(
+	ui.SwiftUIHostProps{MatchContents: true},
+	func() {
+		ui.SwiftUI.Button(ui.SwiftUIButtonProps{
+			Label:       "Save changes",
+			SystemImage: "checkmark",
+			Modifiers: []ui.SwiftUIModifier{
+				ui.SwiftUI.ButtonStyle("glass"),
+			},
+		})
+	},
+)`,
   },
   cliInit: {
     lang: 'bash',
@@ -89,9 +87,14 @@ import { buttonStyle } from "@quickgui/ui/swift-ui/modifiers";
 cd my-app
 bun run dev`,
   },
+  cliFormat: {
+    lang: 'bash',
+    code: `bun run fmt
+bun run build`,
+  },
   cliBuild: {
     lang: 'bash',
-    code: `quickgui build --target darwin-arm64 \\
+    code: `bun run build --target darwin-arm64 \\
   --sign "Developer ID Application: Example (TEAMID)" \\
   --notarize quickgui-notary`,
   },

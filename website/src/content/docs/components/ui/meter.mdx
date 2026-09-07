@@ -2,47 +2,54 @@ Displays a scalar measurement within a known range and semantic low, high, and o
 
 ## Import
 
-Import `Meter` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Meter } from "@quickgui/ui/gauges";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Meter.Root value={storage()} min={0} max={100} high={80} optimum={40} format="percent">
-  <Meter.Label><Text>Storage</Text></Meter.Label>
-  <Meter.Track><Meter.Indicator /></Meter.Track>
-  <Meter.Value />
-</Meter.Root>
+```go
+func MeterExample(value func() *float64) {
+	ui.Meter.Root(
+		ui.MeterProps{
+			Value:   value,
+			Min:     0,
+			Max:     100,
+			Low:     25,
+			High:    80,
+			Optimum: 50,
+		},
+		func() {
+			ui.Meter.Label(ui.PartProps{}, "Disk used")
+			ui.Meter.Track(
+				ui.PartProps{},
+				func() { ui.Meter.Indicator(ui.PartProps{}) },
+			)
+			ui.Meter.Value(ui.PartProps{})
+		},
+	)
+}
 ```
 
 ## Anatomy
 
-- `Meter.Root`
-- `Meter.Track`
-- `Meter.Indicator`
-- `Meter.Label`
-- `Meter.Value`
-
-```tsx
-<Meter.Root>
-  <Meter.Track />
-  <Meter.Indicator />
-  <Meter.Label />
-  <Meter.Value />
-</Meter.Root>
-```
+- `ui.Meter.Root`
+- `ui.Meter.Track`
+- `ui.Meter.Indicator`
+- `ui.Meter.Label`
+- `ui.Meter.Value`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `value` | Controlled value. The precise value type follows this component’s contract. |
-| `min` | Minimum accepted value. |
-| `max` | Maximum accepted value. |
-| `low` | Upper boundary of the low meter range. |
-| `high` | Lower boundary of the high meter range. |
-| `optimum` | Preferred point or range for the meter value. |
-
+| `Value` | Controlled value. The precise value type follows this component’s contract. |
+| `Min` | Minimum accepted value. |
+| `Max` | Maximum accepted value. |
+| `Low` | Upper boundary of the low meter range. |
+| `High` | Lower boundary of the high meter range. |
+| `Optimum` | Preferred point or range for the meter value. |

@@ -2,31 +2,38 @@
 
 ## 导入
 
-从 `@quickgui/ui/swift-ui` 导入 `TextField`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { Host, TextField } from "@quickgui/ui/swift-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<Host matchContents={{ vertical: true }} style={{ width: 280 }}>
-  <TextField
-    value={name()}
-    placeholder="Name"
-    onValueChange={setName}
-    onSubmit={save}
-  />
-</Host>
+```go
+func SwiftUiTextFieldExample() {
+	text, setText := ui.CreateSignal("")
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.TextField(ui.SwiftUITextFieldProps{
+				Value:         text,
+				Placeholder:   "Enter text",
+				OnValueChange: func(next string, _ *native.Event) { setText(next) },
+			})
+		},
+	)
+}
 ```
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `value` | 受控值，具体类型取决于该组件的约定。 |
-| `placeholder` | 可编辑值为空时显示的文本。 |
-| `onValueChange` | 报告核心接受的值。 |
-| `onSubmit` | 原生字段提交当前值时运行。 |
-
+| `Value` | 受控值，具体类型取决于该组件的约定。 |
+| `Placeholder` | 可编辑值为空时显示的文本。 |
+| `OnValueChange` | 报告核心接受的值。 |
+| `OnSubmit` | 原生字段提交当前值时运行。 |

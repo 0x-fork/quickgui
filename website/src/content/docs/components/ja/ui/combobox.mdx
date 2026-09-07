@@ -2,95 +2,70 @@
 
 ## インポート
 
-`@quickgui/ui` から `Combobox` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Combobox } from "@quickgui/ui/select";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<Combobox.Root
-  ariaLabel="Framework"
-  items={frameworks}
-  value={framework()}
-  inputValue={query()}
-  filterMode="fuzzy"
-  onValueChange={setFramework}
-  onInputValueChange={setQuery}
-/>
+```go
+func ComboboxExample() {
+	value, setValue := ui.CreateSignal[*string](nil)
+	ui.Combobox.Root(ui.ComboboxRootProps{
+		PickerInputProps: ui.PickerInputProps{
+			PickerSourceProps: ui.PickerSourceProps{Items: func() []ui.OptionDeclaration {
+				return []ui.OptionDeclaration{{Value: "go", Label: "Go"}, {Value: "swift", Label: "Swift"}}
+			}},
+			Placeholder: "Choose a language",
+		},
+		Value:         value,
+		OnValueChange: func(next *string, _ *native.Event) { setValue(next) },
+	})
+}
 ```
 
 ## 構成
 
-- `Combobox.Root`
-- `Combobox.Input`
-- `Combobox.Option`
-- `Combobox.Label`
-- `Combobox.Value`
-- `Combobox.Icon`
-- `Combobox.InputGroup`
-- `Combobox.Clear`
-- `Combobox.Trigger`
-- `Combobox.Chips`
-- `Combobox.Chip`
-- `Combobox.ChipRemove`
-- `Combobox.Backdrop`
-- `Combobox.Portal`
-- `Combobox.Positioner`
-- `Combobox.Popup`
-- `Combobox.Arrow`
-- `Combobox.Status`
-- `Combobox.Empty`
-- `Combobox.List`
-- `Combobox.Row`
-- `Combobox.Item`
-- `Combobox.ItemIndicator`
-- `Combobox.Group`
-- `Combobox.GroupLabel`
-- `Combobox.Collection`
-- `Combobox.Separator`
-
-```tsx
-<Combobox.Root>
-  <Combobox.Input />
-  <Combobox.Option />
-  <Combobox.Label />
-  <Combobox.Value />
-  <Combobox.Icon />
-  <Combobox.InputGroup />
-  <Combobox.Clear />
-  <Combobox.Trigger />
-  <Combobox.Chips />
-  <Combobox.Chip />
-  <Combobox.ChipRemove />
-  <Combobox.Backdrop />
-  <Combobox.Portal />
-  <Combobox.Positioner />
-  <Combobox.Popup />
-  <Combobox.Arrow />
-  <Combobox.Status />
-  <Combobox.Empty />
-  <Combobox.List />
-  <Combobox.Row />
-  <Combobox.Item />
-  <Combobox.ItemIndicator />
-  <Combobox.Group />
-  <Combobox.GroupLabel />
-  <Combobox.Collection />
-  <Combobox.Separator />
-</Combobox.Root>
-```
+- `ui.Combobox.Root`
+- `ui.Combobox.Input`
+- `ui.Combobox.Option`
+- `ui.Combobox.Label`
+- `ui.Combobox.Value`
+- `ui.Combobox.Icon`
+- `ui.Combobox.InputGroup`
+- `ui.Combobox.Clear`
+- `ui.Combobox.Trigger`
+- `ui.Combobox.Chips`
+- `ui.Combobox.Chip`
+- `ui.Combobox.ChipRemove`
+- `ui.Combobox.Backdrop`
+- `ui.Combobox.Portal`
+- `ui.Combobox.Positioner`
+- `ui.Combobox.Popup`
+- `ui.Combobox.Arrow`
+- `ui.Combobox.Status`
+- `ui.Combobox.Empty`
+- `ui.Combobox.List`
+- `ui.Combobox.Row`
+- `ui.Combobox.Item`
+- `ui.Combobox.ItemIndicator`
+- `ui.Combobox.Group`
+- `ui.Combobox.GroupLabel`
+- `ui.Combobox.Collection`
+- `ui.Combobox.Separator`
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `items` | 選択肢やキーボードナビゲーションに使う、上限付きの宣言モデルです。 |
-| `value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
-| `inputValue` | Combobox または Autocomplete が使う、編集可能な検索テキストです。 |
-| `multiple` | 複数の値を選択または開けるようにします。 |
-| `filterMode` | コアが管理する、部分一致、前方一致、あいまい一致、または無効の絞り込みです。 |
-| `onValueChange` | コアが受け入れた値を通知します。 |
-
+| `Items` | 選択肢やキーボードナビゲーションに使う、上限付きの宣言モデルです。 |
+| `Value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `InputValue` | Combobox または Autocomplete が使う、編集可能な検索テキストです。 |
+| `Multiple` | 複数の値を選択または開けるようにします。 |
+| `FilterMode` | コアが管理する、部分一致、前方一致、あいまい一致、または無効の絞り込みです。 |
+| `OnValueChange` | コアが受け入れた値を通知します。 |

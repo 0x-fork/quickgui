@@ -1,63 +1,90 @@
-QuickGUI のフォームコントロールは、テキストサービスと操作をネイティブコア内に保ちながら、QuickGUI UI には使い慣れた制御値を公開します。
+フィールド値をシグナルで保持し、コールバックで受け入れた変更を書き戻します。
 
 ## テキスト入力
 
-`Input` は既定で 1 行です。複数行には、便利な `TextArea` コンポーネントを使います。
+`ui.Input` と `ui.TextArea` はネイティブテキストエディターをホストします。`ui.Value` にアクセサーを渡し、`OnInput` で `event.Value` から更新します。単一行入力での Return は `OnSubmit` が処理します。
 
-```tsx
-<Input
-  value={name()}
-  placeholder="Project name"
-  onInput={(event) => setName(event.value ?? "")}
-/>
-
-<TextArea
-  value={notes()}
-  placeholder="Notes"
-  onInput={(event) => setNotes(event.value ?? "")}
-/>
+```go
+func InputExample() {
+	value, setValue := ui.CreateSignal("")
+	ui.Input(
+		ui.Value(value),
+		ui.Placeholder("Write here"),
+		ui.OnInput(func(event *native.Event) { setValue(event.Value) }),
+		ui.Width(320),
+		ui.Height(32),
+	)
+}
 ```
 
 ## フィールド
 
-`Field` は、1 つのコントロールをラベル、説明、有効性、エラー内容に関連付けます。
+`Field.Root` はラベル、コントロール、説明、エラーを関連付けます。アプリ状態から `Required`、`Invalid`、`ValidationMessage` を設定します。`ValidationMode` と `ValidationDebounceTime` は検証要求のタイミングを設定し、検証ルールはアプリが定義します。
 
-```tsx
-<Field.Root required invalid={!email()} validationMessage="Enter an email address">
-  <Field.Label><Text>Email</Text></Field.Label>
-  <Field.Control value={email()} onInput={(event) => setEmail(event.value ?? "")} />
-  <Field.Description><Text>Used for account recovery.</Text></Field.Description>
-  <Field.Error><Text>Enter an email address.</Text></Field.Error>
-</Field.Root>
+```go
+func FieldExample() {
+	email, setEmail := ui.CreateSignal("")
+	ui.Field.Root(
+		ui.FieldRootProps{
+			Required: true,
+			Filled:   func() bool { return email() != "" },
+		},
+		func() {
+			ui.Field.Label(ui.FieldLabelProps{}, "Email")
+			ui.Field.Control(ui.FieldControlProps{InputPartProps: ui.InputPartProps{
+				Value:       email,
+				Placeholder: "you@example.com",
+				OnInput:     func(event *native.Event) { setEmail(event.Value) },
+			}})
+			ui.Field.Description(ui.PartProps{}, "Used for receipts")
+			ui.Field.Error(ui.PartProps{}, "Enter a valid email address")
+		},
+	)
+}
 ```
 
 ## 選択コントロール
 
-独立した真偽状態には `Checkbox` または `Switch`、1 つの値には `RadioGroup`、ツールバー形式の押下状態には `ToggleGroup` を使います。
+チェックボックスは `ui.CheckedState` を通して `bool` または `ui.CheckedIndeterminate` を受け取ります。ラジオグループは一つの値を、チェックボックスやトグルのグループは複数の値を保持できます。読み取り専用と無効状態は別の意味を持ちます。
 
-```tsx
-<RadioGroup.Root value={theme()} onValueChange={setTheme}>
-  <Radio.Root value="light"><Radio.Indicator /><Text>Light</Text></Radio.Root>
-  <Radio.Root value="dark"><Radio.Indicator /><Text>Dark</Text></Radio.Root>
-</RadioGroup.Root>
+```go
+func CheckboxGroupExample() {
+	values, setValues := ui.CreateSignal([]string{"email"})
+	ui.CheckboxGroup.Root(
+		ui.CheckboxGroupProps{
+			AllValues:     []string{"email", "push"},
+			Value:         values,
+			OnValueChange: func(next []string, _ *native.Event) { setValues(next) },
+		},
+		func() {
+			ui.Checkbox.Root(ui.CheckboxProps{Parent: true}, "All notifications")
+			ui.Checkbox.Root(ui.CheckboxProps{Value: "email"}, "Email")
+			ui.Checkbox.Root(ui.CheckboxProps{Value: "push"}, "Push")
+		},
+	)
+}
 ```
 
 ## Select
 
-`Select`、`Combobox`、`Autocomplete` は、上限のある項目モデルを宣言します。QuickGUI が絞り込みとネイティブ選択肢サーフェスの描画を担います。
+`PickerSourceProps.Items` で選択肢を宣言します。Select は選択値、Combobox はテキスト検索と選択、Autocomplete は自由入力を扱います。複数選択には `Values` と `OnValuesChange` を使います。
 
-```tsx
-<Select.Root
-  ariaLabel="Theme"
-  items={[
-    { value: "system", label: "System" },
-    { value: "dark", label: "Dark" },
-  ]}
-  value={theme()}
-  onValueChange={setTheme}
-/>
+```go
+func SelectExample() {
+	value, setValue := ui.CreateSignal[*string](nil)
+	ui.Select.Root(
+		ui.SelectRootProps{
+			PickerSourceProps: ui.PickerSourceProps{Items: func() []ui.OptionDeclaration {
+				return []ui.OptionDeclaration{{Value: "go", Label: "Go"}, {Value: "swift", Label: "Swift"}}
+			}},
+			Value:         value,
+			OnValueChange: func(next *string, _ *native.Event) { setValue(next) },
+		},
+		func() { ui.Select.Value(ui.PartProps{}); ui.Select.Icon(ui.PartProps{}, "▾") },
+	)
+}
 ```
 
 ## イベント
 
-低レベル入力は `QuickGuiEvent` を通知します。複合コンポーネントの値コールバックは、正規化済みの値を第 1 引数、イベントを第 2 引数として受け取ります。ネイティブ側の決定は、コアが操作を処理した後に非同期で届きます。
+通常のボタンには `ui.OnClick(func() { ... })` を渡します。`*native.Event` が必要な場合は `ui.OnClickEvent` を使います。複合コントロールのコールバックは型付きの値と、必要に応じてネイティブイベントを受け取ります。UI 状態は UI goroutine で更新し、バックグラウンド処理には `ui.Async` を使います。

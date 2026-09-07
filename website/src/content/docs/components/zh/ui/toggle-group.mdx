@@ -2,45 +2,46 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `ToggleGroup`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { ToggleGroup } from "@quickgui/ui/controls";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<ToggleGroup.Root
-  items={[{ value: "left" }, { value: "center" }, { value: "right" }]}
-  value={alignment()}
-  variant="single"
-  onValueChange={setAlignment}
->
-  <ToggleGroup.Item partValue="left"><Text>Left</Text></ToggleGroup.Item>
-  <ToggleGroup.Item partValue="center"><Text>Center</Text></ToggleGroup.Item>
-  <ToggleGroup.Item partValue="right"><Text>Right</Text></ToggleGroup.Item>
-</ToggleGroup.Root>
+```go
+func ToggleGroupExample() {
+	values, setValues := ui.CreateSignal([]string{"bold"})
+	ui.ToggleGroup.Root(
+		ui.ToggleGroupProps{
+			Multiple:      true,
+			Value:         values,
+			Items:         []ui.ComponentItem{{Value: "bold"}, {Value: "italic"}},
+			OnValueChange: func(next []string, _ *native.Event) { setValues(next) },
+		},
+		func() {
+			ui.ToggleGroup.Item(ui.ToggleGroupItemProps{Value: "bold"}, "Bold")
+			ui.ToggleGroup.Item(ui.ToggleGroupItemProps{Value: "italic"}, "Italic")
+		},
+	)
+}
 ```
 
 ## 结构
 
-- `ToggleGroup.Root`
-- `ToggleGroup.Item`
-
-```tsx
-<ToggleGroup.Root>
-  <ToggleGroup.Item />
-</ToggleGroup.Root>
-```
+- `ui.ToggleGroup.Root`
+- `ui.ToggleGroup.Item`
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `items` | 用于选项或键盘导航的有限声明模型。 |
-| `value` | 受控值，具体类型取决于该组件的约定。 |
-| `defaultValue` | 组件自行管理状态时的初始值。 |
-| `variant` | 选择单选或多选策略。 |
-| `onValueChange` | 报告核心接受的值。 |
-
+| `Items` | 用于选项或键盘导航的有限声明模型。 |
+| `Value` | 受控值，具体类型取决于该组件的约定。 |
+| `DefaultValue` | 组件自行管理状态时的初始值。 |
+| `Multiple` | 选择单选或多选策略。 |
+| `OnValueChange` | 报告核心接受的值。 |

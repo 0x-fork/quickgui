@@ -2,46 +2,45 @@ A virtualized hierarchical collection with expansion, selection, and keyboard na
 
 ## Import
 
-Import `Tree` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Tree } from "@quickgui/ui/collections";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Tree.Root
-  nodes={nodes}
-  expanded={expanded()}
-  value={selected()}
-  onExpandedChange={setExpanded}
-  onValueChange={setSelected}
->
-  <For each={visibleNodes()}>{(node) =>
-    <Tree.Row nodeId={node.id}><Text>{node.label}</Text></Tree.Row>
-  }</For>
-</Tree.Root>
+```go
+func TreeExample() {
+	nodes := []ui.TreeNodeDeclaration{{ID: "src", Label: "src", Children: []ui.TreeNodeDeclaration{{ID: "src/main.go", Label: "main.go"}}}}
+	ui.Tree.Root(
+		ui.TreeRootProps{
+			Nodes:           func() []ui.TreeNodeDeclaration { return nodes },
+			DefaultExpanded: []string{"src"},
+			RowHeight:       26,
+			PartProps:       ui.PartProps{Style: ui.Style{Height: 200}},
+		},
+		func() {
+			ui.Tree.Row(ui.TreeRowProps{NodeID: "src"}, "src")
+			ui.Tree.Row(ui.TreeRowProps{NodeID: "src/main.go"}, "main.go")
+		},
+	)
+}
 ```
 
 ## Anatomy
 
-- `Tree.Root`
-- `Tree.Row`
-
-```tsx
-<Tree.Root>
-  <Tree.Row />
-</Tree.Root>
-```
+- `ui.Tree.Root`
+- `ui.Tree.Row`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `nodes` | Bounded hierarchical node declarations for the tree. |
-| `expanded` | Controlled expanded tree node identifiers. |
-| `value` | Controlled value. The precise value type follows this component’s contract. |
-| `onExpandedChange` | Reports the ordered node identifiers expanded by the core. |
-| `onValueChange` | Reports the value accepted by the core. |
-
+| `Nodes` | Bounded hierarchical node declarations for the tree. |
+| `Expanded` | Controlled expanded tree node identifiers. |
+| `Value` | Controlled value. The precise value type follows this component’s contract. |
+| `OnExpandedChange` | Reports the ordered node identifiers expanded by the core. |
+| `OnValueChange` | Reports the value accepted by the core. |

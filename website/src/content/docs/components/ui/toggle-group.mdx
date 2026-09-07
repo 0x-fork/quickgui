@@ -2,45 +2,46 @@ Coordinates single or multiple pressed values with roving keyboard focus.
 
 ## Import
 
-Import `ToggleGroup` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { ToggleGroup } from "@quickgui/ui/controls";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<ToggleGroup.Root
-  items={[{ value: "left" }, { value: "center" }, { value: "right" }]}
-  value={alignment()}
-  variant="single"
-  onValueChange={setAlignment}
->
-  <ToggleGroup.Item partValue="left"><Text>Left</Text></ToggleGroup.Item>
-  <ToggleGroup.Item partValue="center"><Text>Center</Text></ToggleGroup.Item>
-  <ToggleGroup.Item partValue="right"><Text>Right</Text></ToggleGroup.Item>
-</ToggleGroup.Root>
+```go
+func ToggleGroupExample() {
+	values, setValues := ui.CreateSignal([]string{"bold"})
+	ui.ToggleGroup.Root(
+		ui.ToggleGroupProps{
+			Multiple:      true,
+			Value:         values,
+			Items:         []ui.ComponentItem{{Value: "bold"}, {Value: "italic"}},
+			OnValueChange: func(next []string, _ *native.Event) { setValues(next) },
+		},
+		func() {
+			ui.ToggleGroup.Item(ui.ToggleGroupItemProps{Value: "bold"}, "Bold")
+			ui.ToggleGroup.Item(ui.ToggleGroupItemProps{Value: "italic"}, "Italic")
+		},
+	)
+}
 ```
 
 ## Anatomy
 
-- `ToggleGroup.Root`
-- `ToggleGroup.Item`
-
-```tsx
-<ToggleGroup.Root>
-  <ToggleGroup.Item />
-</ToggleGroup.Root>
-```
+- `ui.ToggleGroup.Root`
+- `ui.ToggleGroup.Item`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `items` | Bounded declaration model used for options or keyboard navigation. |
-| `value` | Controlled value. The precise value type follows this component’s contract. |
-| `defaultValue` | Initial value when the component owns its state. |
-| `variant` | Chooses the single- or multiple-selection policy. |
-| `onValueChange` | Reports the value accepted by the core. |
-
+| `Items` | Bounded declaration model used for options or keyboard navigation. |
+| `Value` | Controlled value. The precise value type follows this component’s contract. |
+| `DefaultValue` | Initial value when the component owns its state. |
+| `Multiple` | Chooses the single- or multiple-selection policy. |
+| `OnValueChange` | Reports the value accepted by the core. |

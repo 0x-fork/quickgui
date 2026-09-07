@@ -2,42 +2,48 @@
 
 ## インポート
 
-`@quickgui/ui` から `DateField` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { DateField } from "@quickgui/ui/date-time";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<DateField.Root value={date()} format="ymd" onValueChange={setDate}>
-  <DateField.Segment segment="year" />
-  <Text>–</Text>
-  <DateField.Segment segment="month" />
-  <Text>–</Text>
-  <DateField.Segment segment="day" />
-</DateField.Root>
+```go
+func DateFieldExample() {
+	value, setValue := ui.CreateSignal[*string](nil)
+	ui.DateField.Root(
+		ui.DateFieldRootProps{
+			Value:         value,
+			Format:        "ymd",
+			Min:           "2026-01-01",
+			Max:           "2026-12-31",
+			OnValueChange: func(next *string, _ *native.Event) { setValue(next) },
+		},
+		func() {
+			for _, segment := range []string{"year", "month", "day"} {
+				ui.DateField.Segment(ui.DateFieldSegmentProps{Segment: segment})
+			}
+		},
+	)
+}
 ```
 
 ## 構成
 
-- `DateField.Root`
-- `DateField.Segment`
-
-```tsx
-<DateField.Root>
-  <DateField.Segment />
-</DateField.Root>
-```
+- `ui.DateField.Root`
+- `ui.DateField.Segment`
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
-| `min` | 受け入れる最小値です。 |
-| `max` | 受け入れる最大値です。 |
-| `onValueChange` | コアが受け入れた値を通知します。 |
-| `disabled` | 操作を無効にし、無効状態を公開します。 |
-
+| `Value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `Min` | 受け入れる最小値です。 |
+| `Max` | 受け入れる最大値です。 |
+| `OnValueChange` | コアが受け入れた値を通知します。 |
+| `Disabled` | 操作を無効にし、無効状態を公開します。 |

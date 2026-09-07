@@ -7,16 +7,12 @@ import type { HighlightedSnippets } from '../../lib/snippets'
 
 const PANES = [
   {
-    key: 'rust',
-    file: 'main.rs',
-    icon: 'i-simple-icons-rust',
-    label: 'Rust',
+    key: 'counter',
+    file: 'counter.go',
   },
   {
-    key: 'ui',
-    file: 'app.tsx',
-    icon: 'i-simple-icons',
-    label: 'TypeScript · QuickGUI UI',
+    key: 'window',
+    file: 'main.go',
   },
 ] as const
 
@@ -26,7 +22,7 @@ export function CodeShowcase({
   highlighted: HighlightedSnippets
 }) {
   const { t } = useTranslation()
-  const [active, setActive] = useState<(typeof PANES)[number]['key']>('rust')
+  const [active, setActive] = useState<(typeof PANES)[number]['key']>('counter')
 
   return (
     <section id="code" className="border-b border-border">
@@ -64,8 +60,8 @@ export function CodeShowcase({
             <div className="hidden items-center justify-between border-b border-border bg-card-2 px-5 py-2.5 lg:flex">
               <span className="font-mono text-xs">{pane.file}</span>
               <span className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
-                <span className={`${pane.icon} size-3.5`} aria-hidden />
-                {pane.label}
+                <span className="i-simple-icons-go size-4" aria-hidden />
+                Go · QuickGUI
               </span>
             </div>
             <CodeBlock html={highlighted[pane.key]} />

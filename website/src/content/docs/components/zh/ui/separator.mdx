@@ -2,33 +2,32 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `Separator`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { Separator } from "@quickgui/ui/toolbar";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<Separator.Root
-  orientation="horizontal"
-  style={{ height: 1, backgroundColor: "#e4e4e7" }}
-/>
+```go
+func SeparatorExample() {
+	ui.Separator.Root(ui.SeparatorProps{
+		Orientation: "horizontal",
+		PartProps:   ui.PartProps{Style: ui.Style{Height: 1, BackgroundColor: "#d1d5db"}},
+	})
+}
 ```
 
 ## 结构
 
-- `Separator.Root`
-
-```tsx
-<Separator.Root>{/* content */}</Separator.Root>
-```
+- `ui.Separator.Root`
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `orientation` | 水平或垂直布局，以及对应的键盘方向。 |
-| `style` | QuickGUI 的布局、绘制、排版和交互状态样式。 |
-
+| `Orientation` | 水平或垂直布局，以及对应的键盘方向。 |
+| `Style` | QuickGUI 的布局、绘制、排版和交互状态样式。 |

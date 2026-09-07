@@ -1,79 +1,98 @@
-QuickGUI 通过带类型的 `style` 对象设置保留式原生节点的样式。属性名看起来很熟悉，但它们由 QuickGUI 而不是浏览器解析。
+基础组件直接接收样式选项和子节点。复合部件通过 `ui.PartProps` 接收 `ui.Style`。
 
 ## `style` 属性
 
-```tsx
-<View
-  style={{
-    width: 360,
-    padding: 20,
-    borderRadius: 14,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#e4e4e7",
-  }}
->
-  <Text style={{ color: "#18181b", fontSize: 15 }}>Settings</Text>
-</View>
-```
+简短声明可以使用函数式选项；复用样式记录时使用 `ui.WithStyle(style)`。数字长度以逻辑像素为单位，字符串也接受百分比。数值零具有明确含义，`nil` 表示省略。运行 `bun run fmt` 可统一较长组件调用的换行。
 
-数字表示逻辑像素。百分比字符串相对于父节点的可用尺寸进行计算。
+```go
+func Card() {
+	ui.View(
+		ui.Padding(20),
+		ui.BorderRadius(12),
+		ui.BackgroundColor("#111827"),
+		ui.Text(ui.Color("#e2e8f0"), "Hello"),
+	)
+}
+```
 
 ## Flexbox
 
-Flexbox 是行、列、对齐、间距、换行和弹性尺寸的默认布局工具。
+设置 `Display("flex")`，再选择方向、尺寸与对齐方式。可滚动的 flex 子节点通常需要 `MinHeight(0)` 或 `MinWidth(0)` 才能收缩。
 
-```tsx
-<View style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 10 }}>
-  <Avatar.Root>{/* … */}</Avatar.Root>
-  <View style={{ flex: 1 }}><Text>Ada Lovelace</Text></View>
-  <Button><Text>Follow</Text></Button>
-</View>
+```go
+func Row() {
+	ui.View(
+		ui.Display("flex"),
+		ui.Gap(12),
+		ui.AlignItems("center"),
+		func() {
+			ui.Text(ui.Flex(1), ui.MinWidth(0), "Flexible content")
+			ui.Button(ui.FlexShrink(0), "Action")
+		},
+	)
+}
 ```
 
 ## 网格布局
 
-使用类似 CSS Grid 的轨道定义二维布局。
+网格使用熟悉的轨道字符串；自动放置不足以满足需求时，可以明确指定子节点位置。
 
-```tsx
-<View
-  style={{
-    display: "grid",
-    gridTemplateColumns: "220px 1fr",
-    gridTemplateRows: "auto 1fr",
-    gap: 12,
-  }}
->
-  <Sidebar />
-  <Editor />
-</View>
+```go
+func Grid() {
+	ui.View(
+		ui.Display("grid"),
+		ui.GridTemplateColumns("220px 1fr"),
+		ui.Gap(16),
+		func() {
+			ui.Text("Sidebar")
+			ui.Text("Content")
+		},
+	)
+}
 ```
 
 ## 文本与颜色
 
-文本会沿保留式树继承排版和颜色。颜色使用 CSS 字符串，字体可使用系统字体族。
-
-```tsx
-<Text style={{ color: "#6b7280", fontSize: 13, lineHeight: 18, fontWeight: 500 }}>
-  Last saved just now
-</Text>
-```
+字体样式会沿节点树继承。颜色接受十六进制、`rgb()`/`rgba()` 或打包的 RGBA 值。传入颜色或数值访问器即可响应式更新绘制与尺寸。
 
 ## 交互状态
 
-直接在节点上声明悬停、按下、聚焦、禁用和选中状态的绘制样式。核心会应用这些状态，无需往返 JavaScript。
+`ui.Hover`、`ui.Active` 和 `ui.Focus` 描述交互样式。`ui.When` 在响应式条件为真时应用选项，条件变为假时恢复之前的值。禁用与选中状态的样式分别使用 `ui.DisabledStyle` 和 `ui.SelectedStyle`。子节点会保持挂载。
 
-```tsx
-<Button
-  style={{
-    backgroundColor: "#ffffff",
-    outlineOffset: 2,
-    hover: { backgroundColor: "#f4f4f5" },
-    active: { backgroundColor: "#e4e4e7" },
-    focus: { outline: "2px solid #f97316" },
-    disabled: { opacity: 0.5 },
-  }}
->
-  <Text>Continue</Text>
-</Button>
+```go
+func SelectableButton() {
+	selected, setSelected := ui.CreateSignal(false)
+	ui.Button(
+		ui.BackgroundColor("#e5e7eb"),
+		ui.When(selected, ui.BackgroundColor("#2563eb"), ui.Color("white")),
+		ui.Hover(ui.Opacity(0.85)),
+		ui.OnClick(func() { setSelected(!selected()) }),
+		"Toggle selection",
+	)
+}
 ```
+
+## 分组与具名分组悬停
+
+`ui.Group(true)` 声明匿名悬停分组，`ui.Group("card")` 声明具名分组。后代的 `ui.GroupHover(...)` 跟随最近的祖先分组，包括具名分组。`ui.GroupHoverNamed("card", ...)` 则跳过其他分组，跟随最近的同名祖先。
+
+```go
+func GroupExample() {
+	ui.View(ui.Group("card"), ui.Padding(20), func() {
+		ui.Text(
+			ui.Color("#64748b"),
+			ui.GroupHover(ui.Color("#2563eb")),
+			"Changes when the card is hovered",
+		)
+		ui.View(ui.Group("toolbar"), func() {
+			ui.Text(
+				ui.GroupHoverNamed("card", ui.Color("#2563eb")),
+				ui.GroupHoverNamed("toolbar", ui.Opacity(0.8)),
+				"Follows the card and the nested toolbar",
+			)
+		})
+	})
+}
+```
+
+鼠标悬停在分组的任意区域（包括内边距和后代）都会启用对应规则。嵌套分组会成为匿名规则的目标，具名规则仍可跟随外层分组。没有匹配的祖先时，规则不生效。多条分组规则按声明顺序叠加；属性冲突时，节点自身的 `ui.Hover(...)` 优先。请使用颜色、透明度、轮廓和变换等绘制属性。悬停由原生层处理，不会重新运行组件或更改布局。

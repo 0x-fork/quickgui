@@ -1,11 +1,12 @@
 import { CliError } from "./error.ts";
 import { parseTarget, type QuickGuiTarget } from "./targets.ts";
 
-export type HelpTopic = "init" | "dev" | "build" | "modules" | "keygen";
+export type HelpTopic = "init" | "dev" | "build" | "keygen" | "fmt";
 
 export type ParsedCliCommand =
   | { command: "help"; topic?: HelpTopic }
   | { command: "version" }
+  | { command: "fmt"; project: string; check: boolean }
   | {
       command: "init";
       directory: string;
@@ -35,13 +36,6 @@ export type ParsedCliCommand =
       macAppStore: boolean;
     }
   | {
-      command: "modules";
-      project: string;
-      configFile: string;
-      target?: QuickGuiTarget;
-      release: boolean;
-    }
-  | {
       command: "keygen";
       outDir: string;
       force: boolean;
@@ -66,10 +60,10 @@ export function parseCliArgs(argv: string[]): ParsedCliCommand {
 
   const command = argv[0];
   const rest = argv.slice(1);
-  const helpTopics: readonly string[] = ["init", "dev", "build", "modules", "keygen"];
+  const helpTopics: readonly string[] = ["init", "dev", "build", "keygen", "fmt"];
   if (command === "help") {
     if (rest.length > 1 || (rest[0] && !helpTopics.includes(rest[0]))) {
-      throw new CliError("Usage: quickgui help [init|dev|build|modules|keygen]");
+      throw new CliError("Usage: quickgui help [init|dev|build|keygen|fmt]");
     }
     return rest[0] ? { command: "help", topic: rest[0] as HelpTopic } : { command: "help" };
   }
@@ -77,6 +71,19 @@ export function parseCliArgs(argv: string[]): ParsedCliCommand {
     if (command !== undefined && helpTopics.includes(command)) {
       return { command: "help", topic: command as HelpTopic };
     }
+  }
+
+  if (command === "fmt") {
+    const parsed = parseOptions(rest, {
+      "--project": { key: "project", value: true },
+      "--check": { key: "check", value: false },
+    });
+    rejectPositionals(parsed, "quickgui fmt");
+    return {
+      command: "fmt",
+      project: stringOption(parsed, "project") ?? ".",
+      check: parsed.values.has("check"),
+    };
   }
 
   if (command === "init") {
@@ -152,24 +159,6 @@ export function parseCliArgs(argv: string[]): ParsedCliCommand {
       ...(signingIdentity ? { signingIdentity } : {}),
       ...(notarizationProfile ? { notarizationProfile } : {}),
       ...(updateBaseUrl ? { updateBaseUrl } : {}),
-    };
-  }
-
-  if (command === "modules") {
-    const parsed = parseOptions(rest, {
-      "--project": { key: "project", value: true },
-      "--config": { key: "configFile", value: true },
-      "--target": { key: "target", value: true },
-      "--release": { key: "release", value: false },
-    });
-    rejectPositionals(parsed, "quickgui modules");
-    const target = stringOption(parsed, "target");
-    return {
-      command: "modules",
-      project: stringOption(parsed, "project") ?? ".",
-      configFile: stringOption(parsed, "configFile") ?? "quickgui.config.ts",
-      release: parsed.values.has("release"),
-      ...(target ? { target: parseTarget(target) } : {}),
     };
   }
 

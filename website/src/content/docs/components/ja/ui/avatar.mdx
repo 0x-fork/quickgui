@@ -2,40 +2,39 @@
 
 ## インポート
 
-`@quickgui/ui` から `Avatar` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Avatar } from "@quickgui/ui/base-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<Avatar.Root ariaLabel="Ada Lovelace" onLoadingStatusChange={setStatus}>
-  <Avatar.Image src="assets/ada.png" fit="cover" />
-  <Avatar.Fallback delay={120}><Text>AL</Text></Avatar.Fallback>
-</Avatar.Root>
+```go
+func AvatarExample(path string) {
+	ui.Avatar.Root(
+		ui.AvatarRootProps{PartProps: ui.PartProps{AriaLabel: "Ada Lovelace"}},
+		func() {
+			ui.Avatar.Image(ui.AvatarImageProps{Src: path})
+			ui.Avatar.Fallback(ui.AvatarFallbackProps{}, "AL")
+		},
+	)
+}
 ```
 
 ## 構成
 
-- `Avatar.Root`
-- `Avatar.Image`
-- `Avatar.Fallback`
-
-```tsx
-<Avatar.Root>
-  <Avatar.Image />
-  <Avatar.Fallback />
-</Avatar.Root>
-```
+- `ui.Avatar.Root`
+- `ui.Avatar.Image`
+- `ui.Avatar.Fallback`
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `ariaLabel` | 表示パーツが変化するコンポーネントに付けるアクセシブル名です。 |
-| `src` | アバター画像のファイルパス、ファイル URL、または base64 データ URL です。 |
-| `delay` | 開くまでの、コアが管理する遅延時間（ミリ秒）です。 |
-| `onLoadingStatusChange` | アバター画像の読み込み状態が変わるたびに通知します。 |
-
+| `AriaLabel` | 表示パーツが変化するコンポーネントに付けるアクセシブル名です。 |
+| `Src` | アバター画像のファイルパス、ファイル URL、または base64 データ URL です。 |
+| `Delay` | 開くまでの、コアが管理する遅延時間（ミリ秒）です。 |
+| `OnLoadingStatusChange` | アバター画像の読み込み状態が変わるたびに通知します。 |

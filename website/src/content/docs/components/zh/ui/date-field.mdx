@@ -2,42 +2,48 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `DateField`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { DateField } from "@quickgui/ui/date-time";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<DateField.Root value={date()} format="ymd" onValueChange={setDate}>
-  <DateField.Segment segment="year" />
-  <Text>–</Text>
-  <DateField.Segment segment="month" />
-  <Text>–</Text>
-  <DateField.Segment segment="day" />
-</DateField.Root>
+```go
+func DateFieldExample() {
+	value, setValue := ui.CreateSignal[*string](nil)
+	ui.DateField.Root(
+		ui.DateFieldRootProps{
+			Value:         value,
+			Format:        "ymd",
+			Min:           "2026-01-01",
+			Max:           "2026-12-31",
+			OnValueChange: func(next *string, _ *native.Event) { setValue(next) },
+		},
+		func() {
+			for _, segment := range []string{"year", "month", "day"} {
+				ui.DateField.Segment(ui.DateFieldSegmentProps{Segment: segment})
+			}
+		},
+	)
+}
 ```
 
 ## 结构
 
-- `DateField.Root`
-- `DateField.Segment`
-
-```tsx
-<DateField.Root>
-  <DateField.Segment />
-</DateField.Root>
-```
+- `ui.DateField.Root`
+- `ui.DateField.Segment`
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `value` | 受控值，具体类型取决于该组件的约定。 |
-| `min` | 可接受的最小值。 |
-| `max` | 可接受的最大值。 |
-| `onValueChange` | 报告核心接受的值。 |
-| `disabled` | 禁止交互，并暴露禁用状态。 |
-
+| `Value` | 受控值，具体类型取决于该组件的约定。 |
+| `Min` | 可接受的最小值。 |
+| `Max` | 可接受的最大值。 |
+| `OnValueChange` | 报告核心接受的值。 |
+| `Disabled` | 禁止交互，并暴露禁用状态。 |

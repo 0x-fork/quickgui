@@ -2,39 +2,41 @@
 
 ## インポート
 
-`@quickgui/ui` から `Checkbox` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Checkbox } from "@quickgui/ui/controls";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<Checkbox.Root checked={checked()} onCheckedChange={setChecked}>
-  <Checkbox.Indicator><Text>✓</Text></Checkbox.Indicator>
-  <Text>Remember this device</Text>
-</Checkbox.Root>
+```go
+func CheckboxExample() {
+	checked, setChecked := ui.CreateSignal(false)
+	ui.Checkbox.Root(
+		ui.CheckboxProps{
+			Checked:         func() ui.CheckedState { return checked() },
+			OnCheckedChange: func(next bool, _ *native.Event) { setChecked(next) },
+		},
+		func() { ui.Checkbox.Indicator(ui.PartProps{}, "✓"); ui.Text("Remember me") },
+	)
+}
 ```
 
 ## 構成
 
-- `Checkbox.Root`
-- `Checkbox.Indicator`
-
-```tsx
-<Checkbox.Root>
-  <Checkbox.Indicator />
-</Checkbox.Root>
-```
+- `ui.Checkbox.Root`
+- `ui.Checkbox.Indicator`
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `checked` | 制御されたチェック状態です。 |
-| `defaultChecked` | コンポーネント自身が状態を管理するときの初期チェック状態です。 |
-| `onCheckedChange` | コアが受け入れたチェック状態を通知します。 |
-| `readOnly` | 値の変更を防ぎつつ、コントロールはフォーカス可能なままにします。 |
-| `disabled` | 操作を無効にし、無効状態を公開します。 |
-
+| `Checked` | 制御されたチェック状態です。 |
+| `DefaultChecked` | コンポーネント自身が状態を管理するときの初期チェック状態です。 |
+| `OnCheckedChange` | コアが受け入れたチェック状態を通知します。 |
+| `ReadOnly` | 値の変更を防ぎつつ、コントロールはフォーカス可能なままにします。 |
+| `Disabled` | 操作を無効にし、無効状態を公開します。 |

@@ -2,33 +2,34 @@ A general-purpose retained container for layout, paint, pointer input, and acces
 
 ## Import
 
-Import `View` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { View } from "@quickgui/ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<View
-  style={{
-    display: "flex",
-    flexDirection: "column",
-    gap: 12,
-    padding: 16,
-  }}
->
-  <Text>Content</Text>
-</View>
+```go
+func ViewExample() {
+	ui.View(
+		ui.Padding(20),
+		ui.Gap(12),
+		func() {
+			ui.Text("Hello from Go")
+			ui.Button(ui.OnClick(func() {}), "Continue")
+		},
+	)
+}
 ```
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `style` | QuickGUI layout, paint, typography, and interaction-state styles. |
+| `WithStyle` | QuickGUI layout, paint, typography, and interaction-state styles. |
 | `children` | Content mounted inside the component. |
-| `onClick` | Runs after the core resolves an activation. |
-| `ref` | Receives the retained native node. |
-
+| `OnClick` | Runs after the core resolves an activation. |
+| `Ref` | Receives the retained native node. |

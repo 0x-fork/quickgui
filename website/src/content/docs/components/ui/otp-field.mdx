@@ -2,41 +2,49 @@ A bounded one-time-code editor made from individually styled input cells.
 
 ## Import
 
-Import `OtpField` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { OtpField } from "@quickgui/ui/base-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"fmt"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<OtpField.Root value={code()} length={6} onValueChange={setCode} onComplete={verify}>
-  <For each={[0, 1, 2, 3, 4, 5]}>{(index) =>
-    <OtpField.Input index={index} />
-  }</For>
-</OtpField.Root>
+```go
+func OtpFieldExample() {
+	code, setCode := ui.CreateSignal("")
+	ui.OtpField.Root(
+		ui.OtpFieldRootProps{
+			Value:          code,
+			Length:         6,
+			ValidationType: "numeric",
+			OnValueChange:  func(next string, _ *native.Event) { setCode(next) },
+			OnComplete:     func(value string, _ *native.Event) { fmt.Println("Complete:", value) },
+		},
+		func() {
+			for index := range 6 {
+				ui.OtpField.Input(ui.OtpFieldInputProps{Index: index})
+			}
+		},
+	)
+}
 ```
 
 ## Anatomy
 
-- `OtpField.Root`
-- `OtpField.Input`
-- `OtpField.Separator`
-
-```tsx
-<OtpField.Root>
-  <OtpField.Input />
-  <OtpField.Separator />
-</OtpField.Root>
-```
+- `ui.OtpField.Root`
+- `ui.OtpField.Input`
+- `ui.OtpField.Separator`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `value` | Controlled value. The precise value type follows this component’s contract. |
-| `length` | Number of one-time-code input slots, bounded to twelve. |
-| `onValueChange` | Reports the value accepted by the core. |
-| `disabled` | Prevents interaction and exposes the disabled state. |
-
+| `Value` | Controlled value. The precise value type follows this component’s contract. |
+| `Length` | Number of one-time-code input slots, bounded to twelve. |
+| `OnValueChange` | Reports the value accepted by the core. |
+| `Disabled` | Prevents interaction and exposes the disabled state. |

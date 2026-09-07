@@ -2,36 +2,47 @@ Owns single-choice selection and keyboard movement across Radio items.
 
 ## Import
 
-Import `RadioGroup` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { RadioGroup } from "@quickgui/ui/controls";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<RadioGroup.Root value={theme()} onValueChange={setTheme}>
-  <Radio.Root value="light"><Radio.Indicator /><Text>Light</Text></Radio.Root>
-  <Radio.Root value="dark"><Radio.Indicator /><Text>Dark</Text></Radio.Root>
-</RadioGroup.Root>
+```go
+func RadioGroupExample() {
+	value, setValue := ui.CreateSignal("system")
+	ui.RadioGroup.Root(
+		ui.RadioGroupProps{
+			Value:         func() *string { current := value(); return &current },
+			OnValueChange: func(next string, _ *native.Event) { setValue(next) },
+		},
+		func() {
+			for _, option := range []string{"light", "dark", "system"} {
+				ui.Radio.Root(
+					ui.RadioProps{Value: option},
+					func() { ui.Radio.Indicator(ui.PartProps{}); ui.Text(option) },
+				)
+			}
+		},
+	)
+}
 ```
 
 ## Anatomy
 
-- `RadioGroup.Root`
-
-```tsx
-<RadioGroup.Root>{/* content */}</RadioGroup.Root>
-```
+- `ui.RadioGroup.Root`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `value` | Controlled value. The precise value type follows this component’s contract. |
-| `defaultValue` | Initial value when the component owns its state. |
-| `onValueChange` | Reports the value accepted by the core. |
-| `readOnly` | Prevents value changes while leaving the control focusable. |
-| `required` | Marks the value as required for validation and form submission. |
-
+| `Value` | Controlled value. The precise value type follows this component’s contract. |
+| `DefaultValue` | Initial value when the component owns its state. |
+| `OnValueChange` | Reports the value accepted by the core. |
+| `ReadOnly` | Prevents value changes while leaving the control focusable. |
+| `Required` | Marks the value as required for validation and form submission. |

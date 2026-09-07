@@ -2,27 +2,31 @@
 
 ## インポート
 
-`@quickgui/ui` から `Shader` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Shader } from "@quickgui/ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<Shader
-  source={gradientShader}
-  shaderParameters={[time(), intensity()]}
-  style={{ width: 320, height: 180 }}
-/>
+```go
+func ShaderExample(source string, parameters func() []float64) {
+	ui.Shader(
+		ui.Value(source),
+		ui.ShaderParameters(parameters),
+		ui.Width(320),
+		ui.Height(180),
+	)
+}
 ```
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `source` | コンポーネントが受け取るファイルパス、データ URL、SVG ドキュメント、またはシェーダーソースです。 |
-| `shaderParameters` | 固定のシェーダーパラメーターベクトルへ格納する最大 16 個の数値です。 |
-| `style` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
-
+| `Value` | コンポーネントが受け取るファイルパス、データ URL、SVG ドキュメント、またはシェーダーソースです。 |
+| `ShaderParameters` | 固定のシェーダーパラメーターベクトルへ格納する最大 16 個の数値です。 |
+| `WithStyle` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |

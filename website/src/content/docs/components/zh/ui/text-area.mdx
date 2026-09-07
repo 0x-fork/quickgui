@@ -2,30 +2,35 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `TextArea`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { TextArea } from "@quickgui/ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<TextArea
-  value={notes()}
-  placeholder="Release notes"
-  onInput={(event) => setNotes(event.value ?? "")}
-  style={{ width: 360, height: 140 }}
-/>
+```go
+func TextAreaExample() {
+	value, setValue := ui.CreateSignal("")
+	ui.TextArea(
+		ui.Value(value),
+		ui.Placeholder("Write here"),
+		ui.OnInput(func(event *native.Event) { setValue(event.Value) }),
+		ui.Width(320),
+		ui.Height(96),
+	)
+}
 ```
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `value` | 受控值，具体类型取决于该组件的约定。 |
-| `placeholder` | 可编辑值为空时显示的文本。 |
-| `onInput` | 报告原生编辑输入。 |
-| `onChange` | 报告已提交的原生值变化。 |
-| `style` | QuickGUI 的布局、绘制、排版和交互状态样式。 |
-
+| `Value` | 受控值，具体类型取决于该组件的约定。 |
+| `Placeholder` | 可编辑值为空时显示的文本。 |
+| `OnInput` | 报告原生编辑输入。 |
+| `WithStyle` | QuickGUI 的布局、绘制、排版和交互状态样式。 |

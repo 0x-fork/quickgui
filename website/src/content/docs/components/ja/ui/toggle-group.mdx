@@ -2,45 +2,46 @@
 
 ## インポート
 
-`@quickgui/ui` から `ToggleGroup` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { ToggleGroup } from "@quickgui/ui/controls";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<ToggleGroup.Root
-  items={[{ value: "left" }, { value: "center" }, { value: "right" }]}
-  value={alignment()}
-  variant="single"
-  onValueChange={setAlignment}
->
-  <ToggleGroup.Item partValue="left"><Text>Left</Text></ToggleGroup.Item>
-  <ToggleGroup.Item partValue="center"><Text>Center</Text></ToggleGroup.Item>
-  <ToggleGroup.Item partValue="right"><Text>Right</Text></ToggleGroup.Item>
-</ToggleGroup.Root>
+```go
+func ToggleGroupExample() {
+	values, setValues := ui.CreateSignal([]string{"bold"})
+	ui.ToggleGroup.Root(
+		ui.ToggleGroupProps{
+			Multiple:      true,
+			Value:         values,
+			Items:         []ui.ComponentItem{{Value: "bold"}, {Value: "italic"}},
+			OnValueChange: func(next []string, _ *native.Event) { setValues(next) },
+		},
+		func() {
+			ui.ToggleGroup.Item(ui.ToggleGroupItemProps{Value: "bold"}, "Bold")
+			ui.ToggleGroup.Item(ui.ToggleGroupItemProps{Value: "italic"}, "Italic")
+		},
+	)
+}
 ```
 
 ## 構成
 
-- `ToggleGroup.Root`
-- `ToggleGroup.Item`
-
-```tsx
-<ToggleGroup.Root>
-  <ToggleGroup.Item />
-</ToggleGroup.Root>
-```
+- `ui.ToggleGroup.Root`
+- `ui.ToggleGroup.Item`
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `items` | 選択肢やキーボードナビゲーションに使う、上限付きの宣言モデルです。 |
-| `value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
-| `defaultValue` | コンポーネント自身が状態を管理するときの初期値です。 |
-| `variant` | 単一選択または複数選択の方針を選びます。 |
-| `onValueChange` | コアが受け入れた値を通知します。 |
-
+| `Items` | 選択肢やキーボードナビゲーションに使う、上限付きの宣言モデルです。 |
+| `Value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `DefaultValue` | コンポーネント自身が状態を管理するときの初期値です。 |
+| `Multiple` | 単一選択または複数選択の方針を選びます。 |
+| `OnValueChange` | コアが受け入れた値を通知します。 |

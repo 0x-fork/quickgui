@@ -2,24 +2,26 @@
 
 ## インポート
 
-`@quickgui/ui` から `Markdown` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Markdown } from "@quickgui/ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<Markdown content={message()} streaming={isStreaming()} />
+```go
+func MarkdownExample(source func() string, streaming func() bool) {
+	ui.Markdown(ui.Value(source), ui.Streaming(streaming), ui.Width("100%"))
+}
 ```
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `content` | 組版・描画する Markdown ソースです。 |
-| `source` | コンポーネントが受け取るファイルパス、データ URL、SVG ドキュメント、またはシェーダーソースです。 |
-| `streaming` | 追記された内容に Markdown の差分更新を使います。 |
-| `style` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
-
+| `Value` | 組版・描画する Markdown ソースです。 |
+| `Streaming` | 追記された内容に Markdown の差分更新を使います。 |
+| `WithStyle` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |

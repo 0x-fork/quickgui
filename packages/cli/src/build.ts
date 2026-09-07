@@ -14,8 +14,7 @@ import { basename, dirname, extname, join, relative, resolve } from "node:path";
 
 import type { MacOSNotarizationConfig, ResolvedQuickGuiConfig } from "./config.ts";
 import { CliError, errorMessage } from "./error.ts";
-import { buildNativeModules, type BuiltNativeModule } from "./modules.ts";
-import { compileNativeApplication } from "./native-build.ts";
+import { compileNativeApplication, sharedLibraryName } from "./native-build.ts";
 import {
   macDocumentTypesPlist,
   macTypeDeclarationsPlist,
@@ -83,12 +82,6 @@ export async function buildProject(
   if (info.platform === "darwin" && options.mode === "production") {
     validateMacPackaging(config, options);
   }
-  // Native modules come first: the application links their libraries.
-  const modules = await buildNativeModules(config, {
-    target: options.target,
-    mode: options.mode,
-    log: (line) => console.log(`[quickgui] ${line}`),
-  });
   const baseOutDir = options.outDir
     ? resolve(config.projectRoot, options.outDir)
     : options.mode === "development"
@@ -101,8 +94,8 @@ export async function buildProject(
   try {
     const staged: StagedBuild =
       info.platform === "darwin"
-        ? await buildMacApp(config, options, stagingRoot, modules)
-        : await buildExecutable(config, options, stagingRoot, modules);
+        ? await buildMacApp(config, options, stagingRoot)
+        : await buildExecutable(config, options, stagingRoot);
     const finalPath = resolve(targetOutDir, basename(staged.artifactPath));
     const finalDmgPath = staged.dmgPath
       ? resolve(targetOutDir, basename(staged.dmgPath))
@@ -155,7 +148,6 @@ async function buildMacApp(
   config: ResolvedQuickGuiConfig,
   options: BuildProjectOptions,
   stagingRoot: string,
-  modules: BuiltNativeModule[],
 ): Promise<StagedBuild> {
   if (process.platform !== "darwin") {
     throw new CliError("macOS .app bundles must currently be assembled and signed on macOS");
@@ -176,7 +168,7 @@ async function buildMacApp(
   mkdirSync(resources, { recursive: true });
   const executablePath = resolve(macos, config.executableName);
   const fonts = stageFonts(config, resolve(resources, "fonts"));
-  await compileExecutable(config, options, executablePath, fonts, modules);
+  await compileExecutable(config, options, executablePath, fonts);
   chmodSync(executablePath, 0o755);
 
   let iconFile: string | undefined;
@@ -378,16 +370,16 @@ async function buildExecutable(
   config: ResolvedQuickGuiConfig,
   options: BuildProjectOptions,
   stagingRoot: string,
-  modules: BuiltNativeModule[],
 ): Promise<StagedBuild> {
   const info = targetInfo(options.target);
   const suffix = info.platform === "windows" ? ".exe" : "";
   const executablePath = resolve(stagingRoot, `${config.executableName}${suffix}`);
   const fonts = stageFonts(config, resolve(stagingRoot, "fonts"));
-  await compileExecutable(config, options, executablePath, fonts, modules);
+  await compileExecutable(config, options, executablePath, fonts);
   if (info.platform !== "windows") chmodSync(executablePath, 0o755);
   const result: StagedBuild = {
     artifactPath: executablePath,
+    extraArtifacts: [resolve(stagingRoot, sharedLibraryName(options.target))],
     executablePath,
     target: options.target,
     mode: options.mode,
@@ -414,7 +406,7 @@ async function buildExecutable(
         });
   return {
     ...result,
-    ...(packaged.artifacts.length > 0 ? { extraArtifacts: packaged.artifacts } : {}),
+    extraArtifacts: [...(result.extraArtifacts ?? []), ...packaged.artifacts],
     ...(packaged.notes.length > 0 ? { notes: packaged.notes } : {}),
   };
 }
@@ -424,7 +416,6 @@ async function compileExecutable(
   options: BuildProjectOptions,
   executablePath: string,
   fonts: string[],
-  modules: BuiltNativeModule[],
 ): Promise<void> {
   const started = performance.now();
   await compileNativeApplication({
@@ -433,8 +424,6 @@ async function compileExecutable(
     target: options.target,
     executablePath,
     fonts,
-    extraLibraries: modules.map((module) => module.archivePath),
-    extraFunctions: modules.flatMap((module) => module.ffiFunctions),
   });
   console.log(`[quickgui] Compiled ${basename(executablePath)} in ${Math.round(performance.now() - started)} ms`);
 }
@@ -561,8 +550,8 @@ function validateInputs(
   config: ResolvedQuickGuiConfig,
   platform: "darwin" | "linux" | "windows",
 ): void {
-  if (!existsSync(config.entry) || !statSync(config.entry).isFile()) {
-    throw new CliError(`Application entrypoint not found: ${config.entry}`);
+  if (!existsSync(config.entry)) {
+    throw new CliError(`Go application package not found: ${config.entry}`);
   }
   for (const resource of config.resources) {
     if (!existsSync(resource)) throw new CliError(`Resource not found: ${resource}`);

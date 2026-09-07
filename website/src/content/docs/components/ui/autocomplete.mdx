@@ -2,81 +2,62 @@ Filters suggestions for free-form text without requiring a selected value.
 
 ## Import
 
-Import `Autocomplete` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Autocomplete } from "@quickgui/ui/select";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"fmt"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Autocomplete.Root
-  ariaLabel="Search commands"
-  items={commands}
-  inputValue={query()}
-  filterMode="fuzzy"
-  onInputValueChange={setQuery}
-  onCommit={(details) => run(details.inputValue ?? "")}
-/>
+```go
+func AutocompleteExample() {
+	ui.Autocomplete.Root(ui.AutocompleteRootProps{
+		PickerInputProps: ui.PickerInputProps{
+			PickerSourceProps: ui.PickerSourceProps{Items: func() []ui.OptionDeclaration {
+				return []ui.OptionDeclaration{{Value: "go", Label: "Go"}, {Value: "swift", Label: "Swift"}}
+			}},
+			Placeholder:        "Find a language",
+			OnInputValueChange: func(query string, _ *native.Event) { fmt.Println(query) },
+		},
+	})
+}
 ```
 
 ## Anatomy
 
-- `Autocomplete.Root`
-- `Autocomplete.Input`
-- `Autocomplete.Option`
-- `Autocomplete.Label`
-- `Autocomplete.Value`
-- `Autocomplete.Icon`
-- `Autocomplete.InputGroup`
-- `Autocomplete.Clear`
-- `Autocomplete.Portal`
-- `Autocomplete.Positioner`
-- `Autocomplete.Popup`
-- `Autocomplete.Arrow`
-- `Autocomplete.Status`
-- `Autocomplete.Empty`
-- `Autocomplete.List`
-- `Autocomplete.Item`
-- `Autocomplete.ItemIndicator`
-- `Autocomplete.Group`
-- `Autocomplete.GroupLabel`
-- `Autocomplete.Collection`
-- `Autocomplete.Separator`
-
-```tsx
-<Autocomplete.Root>
-  <Autocomplete.Input />
-  <Autocomplete.Option />
-  <Autocomplete.Label />
-  <Autocomplete.Value />
-  <Autocomplete.Icon />
-  <Autocomplete.InputGroup />
-  <Autocomplete.Clear />
-  <Autocomplete.Portal />
-  <Autocomplete.Positioner />
-  <Autocomplete.Popup />
-  <Autocomplete.Arrow />
-  <Autocomplete.Status />
-  <Autocomplete.Empty />
-  <Autocomplete.List />
-  <Autocomplete.Item />
-  <Autocomplete.ItemIndicator />
-  <Autocomplete.Group />
-  <Autocomplete.GroupLabel />
-  <Autocomplete.Collection />
-  <Autocomplete.Separator />
-</Autocomplete.Root>
-```
+- `ui.Autocomplete.Root`
+- `ui.Autocomplete.Input`
+- `ui.Autocomplete.Option`
+- `ui.Autocomplete.Label`
+- `ui.Autocomplete.Value`
+- `ui.Autocomplete.Icon`
+- `ui.Autocomplete.InputGroup`
+- `ui.Autocomplete.Clear`
+- `ui.Autocomplete.Portal`
+- `ui.Autocomplete.Positioner`
+- `ui.Autocomplete.Popup`
+- `ui.Autocomplete.Arrow`
+- `ui.Autocomplete.Status`
+- `ui.Autocomplete.Empty`
+- `ui.Autocomplete.List`
+- `ui.Autocomplete.Item`
+- `ui.Autocomplete.ItemIndicator`
+- `ui.Autocomplete.Group`
+- `ui.Autocomplete.GroupLabel`
+- `ui.Autocomplete.Collection`
+- `ui.Autocomplete.Separator`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `items` | Bounded declaration model used for options or keyboard navigation. |
-| `inputValue` | Editable query text used by a combobox or autocomplete. |
-| `filterMode` | Core-owned contains, prefix, fuzzy, or disabled filtering. |
-| `onInputValueChange` | Reports the editable query text retained by the core. |
-| `onCommit` | Reports one explicit commit boundary and its final value details. |
-
+| `Items` | Bounded declaration model used for options or keyboard navigation. |
+| `InputValue` | Editable query text used by a combobox or autocomplete. |
+| `FilterMode` | Core-owned contains, prefix, fuzzy, or disabled filtering. |
+| `OnInputValueChange` | Reports the editable query text retained by the core. |
+| `OnCommit` | Reports one explicit commit boundary and its final value details. |

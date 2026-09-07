@@ -2,62 +2,64 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `Slider`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { Slider } from "@quickgui/ui/range";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<Slider.Root
-  value={[volume()]}
-  min={0}
-  max={100}
-  step={1}
-  onValueChange={(values) => setVolume(values[0] ?? 0)}
->
-  <Slider.Label><Text>Volume</Text></Slider.Label>
-  <Slider.Control>
-    <Slider.Track><Slider.Indicator /></Slider.Track>
-    <Slider.Thumb index={0} />
-  </Slider.Control>
-  <Slider.Value />
-</Slider.Root>
+```go
+func SliderExample() {
+	volume, setVolume := ui.CreateSignal([]float64{40})
+	ui.Slider.Root(
+		ui.SliderRootProps{
+			Value:         volume,
+			Min:           0,
+			Max:           100,
+			Step:          1,
+			OnValueChange: func(next []float64, _ *native.Event) { setVolume(next) },
+		},
+		func() {
+			ui.Slider.Label(ui.PartProps{}, "Volume")
+			ui.Slider.Control(
+				ui.PartProps{Style: ui.Style{Width: 240, Height: 24}},
+				func() {
+					ui.Slider.Track(
+						ui.PartProps{},
+						func() { ui.Slider.Indicator(ui.PartProps{}) },
+					)
+					ui.Slider.Thumb(ui.SliderThumbProps{})
+				},
+			)
+			ui.Slider.Value(ui.PartProps{})
+		},
+	)
+}
 ```
 
 ## 结构
 
-- `Slider.Root`
-- `Slider.Label`
-- `Slider.Value`
-- `Slider.Control`
-- `Slider.Track`
-- `Slider.Range`
-- `Slider.Indicator`
-- `Slider.Thumb`
-
-```tsx
-<Slider.Root>
-  <Slider.Label />
-  <Slider.Value />
-  <Slider.Control />
-  <Slider.Track />
-  <Slider.Range />
-  <Slider.Indicator />
-  <Slider.Thumb />
-</Slider.Root>
-```
+- `ui.Slider.Root`
+- `ui.Slider.Label`
+- `ui.Slider.Value`
+- `ui.Slider.Control`
+- `ui.Slider.Track`
+- `ui.Slider.Range`
+- `ui.Slider.Indicator`
+- `ui.Slider.Thumb`
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `value` | 受控值，具体类型取决于该组件的约定。 |
-| `defaultValue` | 组件自行管理状态时的初始值。 |
-| `min` | 可接受的最小值。 |
-| `max` | 可接受的最大值。 |
-| `step` | 键盘、指针或原生控件输入使用的步长。 |
-| `onValueChange` | 报告核心接受的值。 |
-
+| `Value` | 受控值，具体类型取决于该组件的约定。 |
+| `DefaultValue` | 组件自行管理状态时的初始值。 |
+| `Min` | 可接受的最小值。 |
+| `Max` | 可接受的最大值。 |
+| `Step` | 键盘、指针或原生控件输入使用的步长。 |
+| `OnValueChange` | 报告核心接受的值。 |

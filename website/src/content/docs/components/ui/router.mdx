@@ -2,45 +2,55 @@ A QuickGUI UI projection of QuickGUI core routing with nested layouts and bounde
 
 ## Import
 
-Import `Router` from `@quickgui/ui/router`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Router } from "@quickgui/ui/router";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-import { Router, route } from "@quickgui/ui/router";
-
-<Router initialPath="/" routes={[
-  route("/", Shell, [route("", Home), route("projects/:id", Project)]),
-]} />;
+```go
+func RouterExample() {
+	ui.Router(ui.RouterProps{
+		InitialPath: "/",
+		Routes: []*ui.RouteDeclaration{
+			ui.Route(
+				"/",
+				func() {
+					ui.Link(
+						ui.LinkProps{Href: "/settings"},
+						"Settings",
+					)
+				},
+			),
+			ui.Route(
+				"/settings",
+				func() { ui.Text("Settings") },
+			),
+		},
+		Fallback: func() { ui.Text("Page not found") },
+	})
+}
 ```
 
 ## Anatomy
 
-- `Router`
-- `route` / `layout`
-- `Link`
-- `Outlet`
-
-```tsx
-import { Router, route } from "@quickgui/ui/router";
-
-<Router initialPath="/" routes={[
-  route("/", Shell, [route("", Home), route("projects/:id", Project)]),
-]} />;
-```
+- `ui.Router`
+- `ui.Route`
+- `ui.Layout`
+- `ui.Link`
+- `ui.Outlet`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `initialPath` | Initial destination for the bounded in-memory history. |
-| `fallback` | Content rendered when no route matches. |
-| `routes` | Static route declarations built with `route` and `layout`. |
-| `path` | Absolute or parent-relative route pattern. |
-| `component` | Component rendered when a route wins. |
-| `href` | Destination resolved by the QuickGUI router. |
-
+| `InitialPath` | Initial destination for the bounded in-memory history. |
+| `Fallback` | Content rendered when no route matches. |
+| `Routes` | Static route declarations built with `ui.Route` and `ui.Layout`. |
+| `Path` | Absolute or parent-relative route pattern. |
+| `Component` | Component rendered when a route wins. |
+| `Href` | Destination resolved by the QuickGUI router. |

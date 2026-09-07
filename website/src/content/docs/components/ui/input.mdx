@@ -2,29 +2,35 @@ A controlled, core-owned text editor with native keyboard and text services.
 
 ## Import
 
-Import `Input` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Input } from "@quickgui/ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Input
-  value={name()}
-  placeholder="Your name"
-  onInput={(event) => setName(event.value ?? "")}
-/>
+```go
+func InputExample() {
+	value, setValue := ui.CreateSignal("")
+	ui.Input(
+		ui.Value(value),
+		ui.Placeholder("Write here"),
+		ui.OnInput(func(event *native.Event) { setValue(event.Value) }),
+		ui.Width(320),
+		ui.Height(32),
+	)
+}
 ```
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `value` | Controlled value. The precise value type follows this component’s contract. |
-| `placeholder` | Text shown while the editable value is empty. |
-| `multiline` | Enables multiline text editing. |
-| `onInput` | Reports native editing input. |
-| `onChange` | Reports a committed native value change. |
-
+| `Value` | Controlled value. The precise value type follows this component’s contract. |
+| `Placeholder` | Text shown while the editable value is empty. |
+| `Multiline` | Enables multiline text editing. |
+| `OnInput` | Reports native editing input. |

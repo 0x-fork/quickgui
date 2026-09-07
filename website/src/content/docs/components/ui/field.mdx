@@ -2,51 +2,55 @@ Connects one control to its label, description, validation state, and error mess
 
 ## Import
 
-Import `Field` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Field } from "@quickgui/ui/field";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Field.Root required invalid={name().length === 0} validationMessage="Enter a name">
-  <Field.Label><Text>Name</Text></Field.Label>
-  <Field.Control value={name()} onInput={(event) => setName(event.value ?? "")} />
-  <Field.Description><Text>Shown on your profile.</Text></Field.Description>
-  <Field.Error><Text>Enter a name.</Text></Field.Error>
-</Field.Root>
+```go
+func FieldExample() {
+	email, setEmail := ui.CreateSignal("")
+	ui.Field.Root(
+		ui.FieldRootProps{
+			Required: true,
+			Filled:   func() bool { return email() != "" },
+		},
+		func() {
+			ui.Field.Label(ui.FieldLabelProps{}, "Email")
+			ui.Field.Control(ui.FieldControlProps{InputPartProps: ui.InputPartProps{
+				Value:       email,
+				Placeholder: "you@example.com",
+				OnInput:     func(event *native.Event) { setEmail(event.Value) },
+			}})
+			ui.Field.Description(ui.PartProps{}, "Used for receipts")
+			ui.Field.Error(ui.PartProps{}, "Enter a valid email address")
+		},
+	)
+}
 ```
 
 ## Anatomy
 
-- `Field.Root`
-- `Field.Item`
-- `Field.Label`
-- `Field.Control`
-- `Field.Validity`
-- `Field.Description`
-- `Field.Error`
-
-```tsx
-<Field.Root>
-  <Field.Item />
-  <Field.Label />
-  <Field.Control />
-  <Field.Validity />
-  <Field.Description />
-  <Field.Error />
-</Field.Root>
-```
+- `ui.Field.Root`
+- `ui.Field.Item`
+- `ui.Field.Label`
+- `ui.Field.Control`
+- `ui.Field.Validity`
+- `ui.Field.Description`
+- `ui.Field.Error`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `invalid` | Projects invalid state to the field and its parts. |
-| `required` | Marks the value as required for validation and form submission. |
-| `validationMessage` | Bounded message exposed to error content and accessibility. |
-| `validationMode` | Selects which interaction boundary triggers validation. |
-| `onValidationChange` | Reports the validation trigger and timing selected by the core. |
-
+| `Invalid` | Projects invalid state to the field and its parts. |
+| `Required` | Marks the value as required for validation and form submission. |
+| `ValidationMessage` | Bounded message exposed to error content and accessibility. |
+| `ValidationMode` | Selects which interaction boundary triggers validation. |
+| `OnValidationChange` | Reports the validation trigger and timing selected by the core. |

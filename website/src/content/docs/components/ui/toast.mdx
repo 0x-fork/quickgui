@@ -2,67 +2,72 @@ Presents timed, stacked notifications with action, close, and swipe behavior.
 
 ## Import
 
-Import `Toast` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Toast } from "@quickgui/ui/toast";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-const toast = useToastManager();
-
-toast.add({ id: "saved", title: "Saved", description: "Your changes are live." });
-
-<Toast.Provider timeout={5000} limit={3}>
-  <Toast.Portal>
-    <Toast.Viewport toasts={toast.toasts()} onDismiss={toast.dismiss}>
-      <For each={toast.toasts()}>{(item) =>
-        <Toast.Root toastId={item.id}>
-          <Toast.Content><Toast.Title /><Toast.Description /></Toast.Content>
-          <Toast.Close><Text>Close</Text></Toast.Close>
-        </Toast.Root>
-      }</For>
-    </Toast.Viewport>
-  </Toast.Portal>
-</Toast.Provider>
+```go
+func ToastExample() {
+	ui.Toast.Provider(
+		ui.ToastProviderProps{Timeout: 5000, Limit: 3},
+		func() {
+			manager := ui.UseToastManager()
+			ui.Button(
+				ui.OnClick(func() { manager.Add(ui.ToastRequest{Title: "Saved", Type: "success"}) }),
+				"Save",
+			)
+			ui.Toast.Viewport(
+				ui.ToastViewportProps{},
+				func() {
+					ui.For(
+						manager.Toasts,
+						func(toast ui.ToastDeclaration, _ func() int) {
+							ui.Toast.Root(
+								ui.ToastPartProps{ToastID: toast.ID},
+								func() {
+									ui.Toast.Title(
+										ui.ToastPartProps{ToastID: toast.ID},
+										toast.Title,
+									)
+									ui.Toast.Close(ui.ToastPartProps{ToastID: toast.ID}, "Dismiss")
+								},
+							)
+						},
+						func(toast ui.ToastDeclaration) any { return toast.ID },
+						nil,
+					)
+				},
+			)
+		},
+	)
+}
 ```
 
 ## Anatomy
 
-- `Toast.Provider`
-- `Toast.Portal`
-- `Toast.Viewport`
-- `Toast.Positioner`
-- `Toast.Root`
-- `Toast.Content`
-- `Toast.Title`
-- `Toast.Description`
-- `Toast.Action`
-- `Toast.Close`
-
-```tsx
-<Toast.Root>
-  <Toast.Provider />
-  <Toast.Portal />
-  <Toast.Viewport />
-  <Toast.Positioner />
-  <Toast.Content />
-  <Toast.Title />
-  <Toast.Description />
-  <Toast.Action />
-  <Toast.Close />
-</Toast.Root>
-```
+- `ui.Toast.Provider`
+- `ui.Toast.Portal`
+- `ui.Toast.Viewport`
+- `ui.Toast.Positioner`
+- `ui.Toast.Root`
+- `ui.Toast.Content`
+- `ui.Toast.Title`
+- `ui.Toast.Description`
+- `ui.Toast.Action`
+- `ui.Toast.Close`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `toasts` | Complete declared toast queue rendered by the viewport. |
-| `toastId` | Stable queue identifier associated with one rendered toast. |
-| `timeout` | Inherited auto-dismiss duration or warm-provider timeout. |
-| `swipeDirection` | Edge toward which a swipe dismisses or moves the surface. |
-| `onDismiss` | Reports toast identifiers dismissed by the core. |
-
+| `Toasts` | Complete declared toast queue rendered by the viewport. |
+| `ToastID` | Stable queue identifier associated with one rendered toast. |
+| `Timeout` | Inherited auto-dismiss duration or warm-provider timeout. |
+| `SwipeDirection` | Edge toward which a swipe dismisses or moves the surface. |
+| `OnDismiss` | Reports toast identifiers dismissed by the core. |

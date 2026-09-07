@@ -1,63 +1,118 @@
-QuickGUI has in-window overlays, native child-window popovers, and operating-system dialogs. Choose the surface based on what may escape the current window and who owns its behavior.
+Use a QuickGUI overlay for application-styled content, or a native dialog for platform file picking and alerts.
 
 ## Popover
 
-`Popover` stays in the current retained window. Compose its trigger, portal, positioner, popup, and optional arrow or backdrop.
+A popover composes a trigger, positioner, and popup. The side is a preference; the core resolves collisions. Read the result through `ui.UsePopoverPlacement` inside the root.
 
-```tsx
-<Popover.Root open={open()} onOpenChange={setOpen}>
-  <Popover.Trigger><Text>Open</Text></Popover.Trigger>
-  <Popover.Portal>
-    <Popover.Positioner side="bottom" sideOffset={8}>
-      <Popover.Popup><Popover.Arrow /><Settings /></Popover.Popup>
-    </Popover.Positioner>
-  </Popover.Portal>
-</Popover.Root>
+```go
+func PopoverExample() {
+	ui.Popover.Root(
+		ui.PopoverRootProps{},
+		func() {
+			ui.Popover.Trigger(ui.PopoverTriggerProps{}, "Account")
+			ui.Popover.Positioner(
+				ui.PopoverPositionerProps{},
+				func() {
+					ui.Popover.Popup(
+						ui.PopoverPopupProps{PartProps: ui.PartProps{Style: ui.Style{
+							Width:   240,
+							Padding: 16,
+						}}},
+						func() {
+							ui.Popover.Title(ui.PartProps{}, "Account")
+							ui.Popover.Close(ui.PartProps{}, "Done")
+						},
+					)
+				},
+			)
+		},
+	)
+}
 ```
-
-The core flips and re-aligns a preferred placement when it would collide with the viewport.
 
 ## Dialog
 
-`Dialog` contains focus, restores previous focus on dismissal, and holds closing content mounted for an exact `exitDuration`.
+Create modal content under `Dialog.Portal`. `Dialog.Title` and `Dialog.Description` provide its accessible name and description. `AlertDialog` adds confirmation semantics. Controlled roots receive both the next open state and its reason.
 
-```tsx
-<Dialog.Root open={open()} onOpenChange={setOpen} exitDuration={160}>
-  <Dialog.Trigger><Text>Edit profile</Text></Dialog.Trigger>
-  <Dialog.Portal>
-    <Dialog.Backdrop />
-    <Dialog.Viewport>
-      <Dialog.Popup>
-        <Dialog.Title><Text>Edit profile</Text></Dialog.Title>
-        <Dialog.Close><Text>Done</Text></Dialog.Close>
-      </Dialog.Popup>
-    </Dialog.Viewport>
-  </Dialog.Portal>
-</Dialog.Root>
+```go
+func DialogExample() {
+	ui.Dialog.Root(
+		ui.DialogRootProps{},
+		func() {
+			ui.Dialog.Trigger(ui.PartProps{}, "Open dialog")
+			ui.Dialog.Portal(
+				ui.PartProps{},
+				func() {
+					ui.Dialog.Backdrop(ui.PartProps{})
+					ui.Dialog.Viewport(
+						ui.PartProps{},
+						func() {
+							ui.Dialog.Popup(
+								ui.DialogPopupProps{},
+								func() {
+									ui.Dialog.Title(ui.PartProps{}, "Confirm action")
+									ui.Dialog.Description(
+										ui.PartProps{},
+										"Review the details before continuing.",
+									)
+									ui.Dialog.Close(ui.PartProps{}, "Cancel")
+								},
+							)
+						},
+					)
+				},
+			)
+		},
+	)
+}
 ```
-
-Use `AlertDialog` for consequential confirmation. It refuses backdrop dismissal by default.
 
 ## System popover
 
-`SystemPopover` creates a native child window, so its content can extend beyond the owner window.
+`ui.SystemPopover` hosts its body in an operating-system popover. Specify its logical width and height, then declare ordinary QuickGUI children.
 
-```tsx
-<SystemPopover.Root>
-  <SystemPopover.Trigger><Text>Show details</Text></SystemPopover.Trigger>
-  <SystemPopover.Content width={320} height={180} placement="bottom">
-    <Details />
-  </SystemPopover.Content>
-</SystemPopover.Root>
+```go
+func SystemPopoverExample() {
+	ui.SystemPopover.Root(
+		ui.PopoverRootProps{},
+		func() {
+			ui.SystemPopover.Trigger(ui.PopoverTriggerProps{}, "Account")
+			ui.SystemPopover.Content(
+				ui.PopoverContentProps{
+					Width:     240,
+					Height:    120,
+					Placement: "bottom-start",
+				},
+				"Account settings",
+			)
+		},
+	)
+}
 ```
 
 ## Native dialogs
 
-File pickers, message boxes, and similar operating-system dialogs come from `@quickgui/native`. Their results are Promise-based.
+Native dialogs use asynchronous callbacks. Capture the parent window while rendering and pass it explicitly to the request. A canceled open panel returns `Canceled: true`.
 
-```tsx
-const result = await dialog.open({
-  title: "Choose a project",
-  properties: ["openDirectory"],
-});
+```go
+func OpenFolderButton() {
+	window := native.CurrentWindow()
+	ui.Button(
+		ui.OnClick(func() {
+			native.ShowOpenDialog(
+				native.OpenDialogOptions{
+					Window:     window,
+					Title:      "Open folder",
+					Properties: []string{"openDirectory"},
+				},
+				func(result native.OpenDialogResult, err error) {
+					if err == nil && !result.Canceled {
+						fmt.Println(result.FilePaths)
+					}
+				},
+			)
+		}),
+		"Open folder",
+	)
+}
 ```

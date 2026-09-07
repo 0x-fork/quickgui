@@ -2,33 +2,34 @@
 
 ## インポート
 
-`@quickgui/ui` から `View` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { View } from "@quickgui/ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<View
-  style={{
-    display: "flex",
-    flexDirection: "column",
-    gap: 12,
-    padding: 16,
-  }}
->
-  <Text>Content</Text>
-</View>
+```go
+func ViewExample() {
+	ui.View(
+		ui.Padding(20),
+		ui.Gap(12),
+		func() {
+			ui.Text("Hello from Go")
+			ui.Button(ui.OnClick(func() {}), "Continue")
+		},
+	)
+}
 ```
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `style` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
+| `WithStyle` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
 | `children` | コンポーネント内にマウントする内容です。 |
-| `onClick` | コアがアクティブ化を解決した後に実行します。 |
-| `ref` | 保持されたネイティブノードを受け取ります。 |
-
+| `OnClick` | コアがアクティブ化を解決した後に実行します。 |
+| `Ref` | 保持されたネイティブノードを受け取ります。 |

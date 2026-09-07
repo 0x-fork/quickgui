@@ -2,33 +2,34 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `View`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { View } from "@quickgui/ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<View
-  style={{
-    display: "flex",
-    flexDirection: "column",
-    gap: 12,
-    padding: 16,
-  }}
->
-  <Text>Content</Text>
-</View>
+```go
+func ViewExample() {
+	ui.View(
+		ui.Padding(20),
+		ui.Gap(12),
+		func() {
+			ui.Text("Hello from Go")
+			ui.Button(ui.OnClick(func() {}), "Continue")
+		},
+	)
+}
 ```
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `style` | QuickGUI 的布局、绘制、排版和交互状态样式。 |
+| `WithStyle` | QuickGUI 的布局、绘制、排版和交互状态样式。 |
 | `children` | 挂载在组件内部的内容。 |
-| `onClick` | 在核心完成激活判定后运行。 |
-| `ref` | 接收保留式原生节点。 |
-
+| `OnClick` | 在核心完成激活判定后运行。 |
+| `Ref` | 接收保留式原生节点。 |

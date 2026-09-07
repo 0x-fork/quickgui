@@ -1,62 +1,78 @@
-SwiftUI modifiers let QuickGUI UI declare native appearance while reverse hosting lets SwiftUI content contain an ordinary QuickGUI subtree.
+SwiftUI modifiers style native controls. Reverse hosting puts an ordinary QuickGUI subtree inside SwiftUI.
 
 ## Modifiers
 
-Import modifier factories from `@quickgui/ui/swift-ui/modifiers` and apply them in order.
+Apply modifier factories from `ui.SwiftUI` in order through `Modifiers`. Available factories include ButtonStyle, ButtonBorderShape, ControlSize, LabelStyle, Tint, and Disabled.
 
-```tsx
-import { Button, Host } from "@quickgui/ui/swift-ui";
-import { buttonStyle, controlSize, tint } from "@quickgui/ui/swift-ui/modifiers";
-
-<Host matchContents>
-  <Button
-    label="Create project"
-    modifiers={[
-      buttonStyle("borderedProminent"),
-      controlSize("large"),
-      tint("#f97316"),
-    ]}
-  />
-</Host>
+```go
+ui.SwiftUI.Button(ui.SwiftUIButtonProps{
+	Label: "Create project",
+	Modifiers: []ui.SwiftUIModifier{
+		ui.SwiftUI.ButtonStyle("borderedProminent"),
+		ui.SwiftUI.ControlSize("large"),
+		ui.SwiftUI.Tint("#f97316"),
+	},
+})
 ```
-
-Available factories include `buttonStyle`, `buttonBorderShape`, `controlSize`, `labelStyle`, `tint`, and `disabled`.
 
 ## Liquid Glass
 
-On systems that provide it, the SwiftUI button bridge can request the native glass button style. The operating system remains responsible for the final rendering.
-
-```tsx
-<Button label="Continue" modifiers={[buttonStyle("glass")]} />
-```
+On supported systems, request the native glass button style with `ui.SwiftUI.ButtonStyle("glass")`. macOS owns the final appearance.
 
 ## Reverse hosting
 
-`QuickGUIHostView` mounts one ordinary QuickGUI subtree back inside a SwiftUI hierarchy.
+`ui.SwiftUI.QuickGUIHostView` owns a QuickGUI subtree inside the native hierarchy. Provide its size and declare children in a callback so they mount under the embedded window’s lifecycle.
 
-```tsx
-<Host matchContents>
-  <QuickGUIHostView width={320} height={180}>
-    <View style={{ width: 320, height: 180, padding: 16 }}>
-      <Text>QuickGUI content inside SwiftUI</Text>
-    </View>
-  </QuickGUIHostView>
-</Host>
+```go
+func SwiftUiQuickguiHostViewExample() {
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.QuickGUIHostView(
+				ui.SwiftUIQuickGUIHostViewProps{Width: 320, Height: 180},
+				func() {
+					ui.View(
+						ui.Width("100%"),
+						ui.Height("100%"),
+						ui.Padding(16),
+						"QuickGUI inside SwiftUI",
+					)
+				},
+			)
+		},
+	)
+}
 ```
 
 ## SwiftUI popover
 
-The SwiftUI `Popover` composes a native SwiftUI trigger. Its content can use `QuickGUIHostView` when the popover body is built with ordinary QuickGUI components.
+The SwiftUI popover composes a native trigger through `Render`. Its content can reverse-host interactive QuickGUI components.
 
-```tsx
-<Host matchContents>
-  <Popover.Root isPresented={open()} onIsPresentedChange={setOpen}>
-    <Popover.Trigger><Button label="Open" /></Popover.Trigger>
-    <Popover.Content>
-      <QuickGUIHostView width={280} height={140}>
-        <SettingsPanel />
-      </QuickGUIHostView>
-    </Popover.Content>
-  </Popover.Root>
-</Host>
+```go
+func SwiftUiPopoverExample() {
+	open, setOpen := ui.CreateSignal(false)
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.Popover.Root(
+				ui.SwiftUIPopoverProps{
+					IsPresented:         open,
+					OnIsPresentedChange: setOpen,
+				},
+				func() {
+					ui.SwiftUI.Popover.Trigger(ui.SwiftUIPopoverTriggerProps{Render: func() { ui.SwiftUI.Button(ui.SwiftUIButtonProps{Label: "Account"}) }})
+					ui.SwiftUI.Popover.Content(
+						ui.SwiftUIPopoverContentProps{},
+						func() {
+							ui.SwiftUI.QuickGUIHostView(
+								ui.SwiftUIQuickGUIHostViewProps{Width: 240, Height: 120},
+								"Account settings",
+							)
+						},
+					)
+				},
+			)
+		},
+	)
+}
 ```

@@ -2,50 +2,66 @@ Composes a scrollable viewport with caller-styled scrollbars, thumbs, and corner
 
 ## Import
 
-Import `ScrollArea` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { ScrollArea } from "@quickgui/ui/base-ui";
+```go
+import (
+	"fmt"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<ScrollArea.Root
-  viewportSize={{ width: 320, height: 240 }}
-  contentSize={{ width: 320, height: 1200 }}
-  onScrollStateChange={setScrollState}
->
-  <ScrollArea.Viewport><ScrollArea.Content><LongList /></ScrollArea.Content></ScrollArea.Viewport>
-  <ScrollArea.Scrollbar orientation="vertical"><ScrollArea.Thumb /></ScrollArea.Scrollbar>
-</ScrollArea.Root>
+```go
+func ScrollAreaExample() {
+	ui.ScrollArea.Root(
+		ui.ScrollAreaRootProps{
+			ViewportSize: func() ui.Extent { return ui.Extent{Width: 320, Height: 160} },
+			ContentSize:  func() ui.Extent { return ui.Extent{Width: 320, Height: 880} },
+		},
+		func() {
+			state := ui.UseScrollAreaState()
+			ui.ScrollArea.Viewport(
+				ui.PartProps{Style: ui.Style{
+					Width:    320,
+					Height:   160,
+					Overflow: "hidden",
+				}},
+				func() {
+					ui.ScrollArea.Content(
+						ui.PartProps{Style: func() ui.Style { return ui.Style{Transform: fmt.Sprintf("translateY(%gpx)", -state().Offset.Y)} }},
+						func() {
+							for index := range 40 {
+								ui.Text(ui.Height(22), fmt.Sprintf("Row %d", index))
+							}
+						},
+					)
+				},
+			)
+			ui.ScrollArea.Scrollbar(
+				ui.ScrollAreaScrollbarProps{Orientation: "vertical"},
+				func() { ui.ScrollArea.Thumb(ui.ScrollAreaThumbProps{Orientation: "vertical"}) },
+			)
+		},
+	)
+}
 ```
 
 ## Anatomy
 
-- `ScrollArea.Root`
-- `ScrollArea.Viewport`
-- `ScrollArea.Content`
-- `ScrollArea.Scrollbar`
-- `ScrollArea.Thumb`
-- `ScrollArea.Corner`
-
-```tsx
-<ScrollArea.Root>
-  <ScrollArea.Viewport />
-  <ScrollArea.Content />
-  <ScrollArea.Scrollbar />
-  <ScrollArea.Thumb />
-  <ScrollArea.Corner />
-</ScrollArea.Root>
-```
+- `ui.ScrollArea.Root`
+- `ui.ScrollArea.Viewport`
+- `ui.ScrollArea.Content`
+- `ui.ScrollArea.Scrollbar`
+- `ui.ScrollArea.Thumb`
+- `ui.ScrollArea.Corner`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `viewportSize` | Declared scroll viewport extent. |
-| `contentSize` | Declared scroll content extent. |
-| `overflowEdgeThreshold` | Distance from an edge that still counts as being at that edge. |
-| `onScrollStateChange` | Reports clamped offset and derived overflow state. |
-
+| `ViewportSize` | Declared scroll viewport extent. |
+| `ContentSize` | Declared scroll content extent. |
+| `OverflowEdgeThreshold` | Distance from an edge that still counts as being at that edge. |
+| `OnScrollStateChange` | Reports clamped offset and derived overflow state. |

@@ -2,31 +2,43 @@ Reverse-hosts one ordinary QuickGUI subtree inside a SwiftUI hierarchy.
 
 ## Import
 
-Import `QuickGUIHostView` from `@quickgui/ui/swift-ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Host, QuickGUIHostView } from "@quickgui/ui/swift-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Host matchContents>
-  <QuickGUIHostView width={280} height={120}>
-    <View style={{ width: 280, height: 120, padding: 16 }}>
-      <Text>Ordinary QuickGUI content</Text>
-    </View>
-  </QuickGUIHostView>
-</Host>
+```go
+func SwiftUiQuickguiHostViewExample() {
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.QuickGUIHostView(
+				ui.SwiftUIQuickGUIHostViewProps{Width: 320, Height: 180},
+				func() {
+					ui.View(
+						ui.Width("100%"),
+						ui.Height("100%"),
+						ui.Padding(16),
+						"QuickGUI inside SwiftUI",
+					)
+				},
+			)
+		},
+	)
+}
 ```
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `width` | Declared logical width. |
-| `height` | Declared logical height. |
-| `matchContents` | Uses the hosted subtree’s intrinsic width, height, or both. |
-| `background` | Clear color for the reverse-hosted QuickGUI WGPU surface. |
+| `Width` | Declared logical width. |
+| `Height` | Declared logical height. |
+| `MatchContents` | Uses the hosted subtree’s intrinsic width, height, or both. |
+| `Background` | Clear color for the reverse-hosted QuickGUI WGPU surface. |
 | `children` | Content mounted inside the component. |
-

@@ -2,35 +2,40 @@
 
 ## 导入
 
-从 `@quickgui/ui/swift-ui` 导入 `Gauge`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { Host, Gauge } from "@quickgui/ui/swift-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<Host matchContents>
-  <Gauge
-    value={storageUsed()}
-    min={0}
-    max={100}
-    label="Storage"
-    currentValueLabel={String(storageUsed()) + "%"}
-    style="accessoryCircularCapacity"
-  />
-</Host>
+```go
+func SwiftUiGaugeExample() {
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.Gauge(ui.SwiftUIGaugeProps{
+				Value: 60,
+				Min:   0,
+				Max:   100,
+				Label: "Capacity",
+				Style: "accessoryLinearCapacity",
+			})
+		},
+	)
+}
 ```
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `value` | 受控值，具体类型取决于该组件的约定。 |
-| `min` | 可接受的最小值。 |
-| `max` | 可接受的最大值。 |
-| `label` | 原生 SwiftUI 控件的可见标签。 |
-| `currentValueLabel` | 当前原生进度或仪表值的易读标签。 |
-| `style` | QuickGUI 的布局、绘制、排版和交互状态样式。 |
-
+| `Value` | 受控值，具体类型取决于该组件的约定。 |
+| `Min` | 可接受的最小值。 |
+| `Max` | 可接受的最大值。 |
+| `Label` | 原生 SwiftUI 控件的可见标签。 |
+| `CurrentValueLabel` | 当前原生进度或仪表值的易读标签。 |
+| `Style` | 此控件的原生 SwiftUI 展示样式。 |

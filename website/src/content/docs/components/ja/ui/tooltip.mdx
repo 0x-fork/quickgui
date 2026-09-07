@@ -2,54 +2,58 @@
 
 ## インポート
 
-`@quickgui/ui` から `Tooltip` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Tooltip } from "@quickgui/ui/tooltip";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<Tooltip.Provider delay={600} closeDelay={100}>
-  <Tooltip.Root>
-    <Tooltip.Trigger><Text>?</Text></Tooltip.Trigger>
-    <Tooltip.Portal>
-      <Tooltip.Positioner side="top"><Tooltip.Popup><Text>Keyboard shortcuts</Text></Tooltip.Popup></Tooltip.Positioner>
-    </Tooltip.Portal>
-  </Tooltip.Root>
-</Tooltip.Provider>
+```go
+func TooltipExample() {
+	ui.Tooltip.Provider(
+		ui.TooltipProviderProps{Delay: 500},
+		func() {
+			ui.Tooltip.Root(
+				ui.TooltipRootProps{Side: "top"},
+				func() {
+					ui.Tooltip.Trigger(ui.TooltipTriggerProps{}, "Hover me")
+					ui.Tooltip.Positioner(
+						ui.TooltipPositionerProps{},
+						func() {
+							ui.Tooltip.Popup(
+								ui.PartProps{},
+								"Helpful information",
+							)
+						},
+					)
+				},
+			)
+		},
+	)
+}
 ```
 
 ## 構成
 
-- `Tooltip.Provider`
-- `Tooltip.Root`
-- `Tooltip.Trigger`
-- `Tooltip.Portal`
-- `Tooltip.Positioner`
-- `Tooltip.Popup`
-- `Tooltip.Arrow`
-
-```tsx
-<Tooltip.Root>
-  <Tooltip.Provider />
-  <Tooltip.Trigger />
-  <Tooltip.Portal />
-  <Tooltip.Positioner />
-  <Tooltip.Popup />
-  <Tooltip.Arrow />
-</Tooltip.Root>
-```
+- `ui.Tooltip.Provider`
+- `ui.Tooltip.Root`
+- `ui.Tooltip.Trigger`
+- `ui.Tooltip.Portal`
+- `ui.Tooltip.Positioner`
+- `ui.Tooltip.Popup`
+- `ui.Tooltip.Arrow`
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `open` | 制御された開閉状態です。 |
-| `defaultOpen` | コンポーネント自身が開閉状態を管理するときの初期状態です。 |
-| `delay` | 開くまでの、コアが管理する遅延時間（ミリ秒）です。 |
-| `closeDelay` | 閉じるまでの、コアが管理する遅延時間（ミリ秒）です。 |
-| `side` | 衝突処理前に優先する配置方向です。 |
-| `hoverable` | 閉じずにポインターを Tooltip 内へ移動できるようにします。 |
-
+| `Open` | 制御された開閉状態です。 |
+| `DefaultOpen` | コンポーネント自身が開閉状態を管理するときの初期状態です。 |
+| `Delay` | 開くまでの、コアが管理する遅延時間（ミリ秒）です。 |
+| `CloseDelay` | 閉じるまでの、コアが管理する遅延時間（ミリ秒）です。 |
+| `Side` | 衝突処理前に優先する配置方向です。 |
+| `Hoverable` | 閉じずにポインターを Tooltip 内へ移動できるようにします。 |

@@ -3,7 +3,7 @@ import { defineConfig } from "@quickgui/cli";
 export default defineConfig({
   name: "Herdr GUI",
   identifier: "dev.quickgui.herdr-gui-example",
-  entry: "app.tsx",
+  entry: ".",
   fonts: [
     "assets/JetBrainsMonoNerdFontMono-Regular.ttf",
     "assets/JetBrainsMonoNerdFontMono-Bold.ttf",

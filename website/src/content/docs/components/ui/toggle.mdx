@@ -2,38 +2,40 @@ A pressable control that retains an on or off pressed state.
 
 ## Import
 
-Import `Toggle` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Toggle } from "@quickgui/ui/controls";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Toggle.Root pressed={bold()} onPressedChange={setBold}>
-  <Text>B</Text>
-  <Toggle.Indicator />
-</Toggle.Root>
+```go
+func ToggleExample() {
+	on, setOn := ui.CreateSignal(false)
+	ui.Toggle.Root(
+		ui.ToggleProps{
+			Pressed:         on,
+			OnPressedChange: func(next bool, _ *native.Event) { setOn(next) },
+		},
+		func() { ui.Toggle.Indicator(ui.PartProps{}); ui.Text("Notifications") },
+	)
+}
 ```
 
 ## Anatomy
 
-- `Toggle.Root`
-- `Toggle.Indicator`
-
-```tsx
-<Toggle.Root>
-  <Toggle.Indicator />
-</Toggle.Root>
-```
+- `ui.Toggle.Root`
+- `ui.Toggle.Indicator`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `pressed` | Controlled pressed state. |
-| `defaultPressed` | Initial pressed state when the component owns it. |
-| `onPressedChange` | Reports the pressed state accepted by the core. |
-| `disabled` | Prevents interaction and exposes the disabled state. |
-
+| `Pressed` | Controlled pressed state. |
+| `DefaultPressed` | Initial pressed state when the component owns it. |
+| `OnPressedChange` | Reports the pressed state accepted by the core. |
+| `Disabled` | Prevents interaction and exposes the disabled state. |

@@ -2,25 +2,31 @@ The NSHostingView-backed leaf that mounts one SwiftUI component tree inside Quic
 
 ## Import
 
-Import `Host` from `@quickgui/ui/swift-ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Host } from "@quickgui/ui/swift-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Host matchContents>
-  <Button label="Continue" />
-</Host>
+```go
+func SwiftUiHostExample() {
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.Button(ui.SwiftUIButtonProps{Label: "Continue"})
+		},
+	)
+}
 ```
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `matchContents` | Uses the hosted subtree’s intrinsic width, height, or both. |
-| `style` | QuickGUI layout, paint, typography, and interaction-state styles. |
+| `MatchContents` | Uses the hosted subtree’s intrinsic width, height, or both. |
+| `Style` | QuickGUI layout, paint, typography, and interaction-state styles. |
 | `children` | Content mounted inside the component. |
-

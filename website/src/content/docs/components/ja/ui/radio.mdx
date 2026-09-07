@@ -2,42 +2,47 @@
 
 ## インポート
 
-`@quickgui/ui` から `Radio` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Radio } from "@quickgui/ui/controls";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<Radio.Root
-  value="system"
-  checked={theme() === "system"}
-  onCheckedChange={() => setTheme("system")}
->
-  <Radio.Indicator />
-  <Text>System</Text>
-</Radio.Root>
+```go
+func RadioExample() {
+	value, setValue := ui.CreateSignal("system")
+	ui.RadioGroup.Root(
+		ui.RadioGroupProps{
+			Value:         func() *string { current := value(); return &current },
+			OnValueChange: func(next string, _ *native.Event) { setValue(next) },
+		},
+		func() {
+			for _, option := range []string{"light", "dark", "system"} {
+				ui.Radio.Root(
+					ui.RadioProps{Value: option},
+					func() { ui.Radio.Indicator(ui.PartProps{}); ui.Text(option) },
+				)
+			}
+		},
+	)
+}
 ```
 
 ## 構成
 
-- `Radio.Root`
-- `Radio.Indicator`
-
-```tsx
-<Radio.Root>
-  <Radio.Indicator />
-</Radio.Root>
-```
+- `ui.Radio.Root`
+- `ui.Radio.Indicator`
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
-| `checked` | 制御されたチェック状態です。 |
-| `onCheckedChange` | コアが受け入れたチェック状態を通知します。 |
-| `disabled` | 操作を無効にし、無効状態を公開します。 |
-
+| `Value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `Checked` | 制御されたチェック状態です。 |
+| `OnCheckedChange` | コアが受け入れたチェック状態を通知します。 |
+| `Disabled` | 操作を無効にし、無効状態を公開します。 |

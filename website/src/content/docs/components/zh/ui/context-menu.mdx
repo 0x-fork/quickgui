@@ -2,37 +2,40 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `ContextMenu`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { ContextMenu } from "@quickgui/ui/menu";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"fmt"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<ContextMenu.Root items={menuItems} onSelect={({ value }) => runCommand(value)}>
-  <ContextMenu.Trigger><ProjectRow /></ContextMenu.Trigger>
-</ContextMenu.Root>
+```go
+func ContextMenuExample() {
+	ui.ContextMenu.Root(
+		ui.ContextMenuRootProps{
+			Items:    func() []ui.MenuItemDeclaration { return []ui.MenuItemDeclaration{{ID: "copy", Label: "Copy"}} },
+			OnSelect: func(item ui.MenuSelectDetails, _ *native.Event) { fmt.Println(item.ID) },
+		},
+		func() { ui.ContextMenu.Trigger(ui.ContextMenuTriggerProps{}, "Right-click here") },
+	)
+}
 ```
 
 ## 结构
 
-- `ContextMenu.Root`
-- `ContextMenu.Trigger`
-
-```tsx
-<ContextMenu.Root>
-  <ContextMenu.Trigger />
-</ContextMenu.Root>
-```
+- `ui.ContextMenu.Root`
+- `ui.ContextMenu.Trigger`
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `items` | 用于选项或键盘导航的有限声明模型。 |
-| `appearance` | 核心绘制的原生菜单或选择器所用的结构颜色和几何属性。 |
-| `onSelect` | 报告核心选中的菜单项。 |
-| `loop` | 到达菜单层级末端时循环高亮导航。 |
-
+| `Items` | 用于选项或键盘导航的有限声明模型。 |
+| `Appearance` | 核心绘制的原生菜单或选择器所用的结构颜色和几何属性。 |
+| `OnSelect` | 报告核心选中的菜单项。 |
+| `Loop` | 到达菜单层级末端时循环高亮导航。 |

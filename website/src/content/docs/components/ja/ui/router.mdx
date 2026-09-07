@@ -2,45 +2,55 @@ QuickGUI コアのルーティングを QuickGUI UI に投影し、ネストさ�
 
 ## インポート
 
-`@quickgui/ui` から `Router` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Router } from "@quickgui/ui/router";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-import { Router, route } from "@quickgui/ui/router";
-
-<Router initialPath="/" routes={[
-  route("/", Shell, [route("", Home), route("projects/:id", Project)]),
-]} />;
+```go
+func RouterExample() {
+	ui.Router(ui.RouterProps{
+		InitialPath: "/",
+		Routes: []*ui.RouteDeclaration{
+			ui.Route(
+				"/",
+				func() {
+					ui.Link(
+						ui.LinkProps{Href: "/settings"},
+						"Settings",
+					)
+				},
+			),
+			ui.Route(
+				"/settings",
+				func() { ui.Text("Settings") },
+			),
+		},
+		Fallback: func() { ui.Text("Page not found") },
+	})
+}
 ```
 
 ## 構成
 
-- `Router`
-- `route` / `layout`
-- `Link`
-- `Outlet`
-
-```tsx
-import { Router, route } from "@quickgui/ui/router";
-
-<Router initialPath="/" routes={[
-  route("/", Shell, [route("", Home), route("projects/:id", Project)]),
-]} />;
-```
+- `ui.Router`
+- `ui.Route`
+- `ui.Layout`
+- `ui.Link`
+- `ui.Outlet`
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `initialPath` | 上限付きメモリ履歴の初期移動先です。 |
-| `fallback` | どのルートにも一致しないときに描画する内容です。 |
-| `routes` | Static route declarations built with `route` and `layout`. |
-| `path` | 絶対または親からの相対ルートパターンです。 |
-| `component` | ルートが一致したときに描画するコンポーネントです。 |
-| `href` | QuickGUI Router が解決する移動先です。 |
-
+| `InitialPath` | 上限付きメモリ履歴の初期移動先です。 |
+| `Fallback` | どのルートにも一致しないときに描画する内容です。 |
+| `Routes` | `ui.Route` と `ui.Layout` で作成する静的ルート宣言です。 |
+| `Path` | 絶対または親からの相対ルートパターンです。 |
+| `Component` | ルートが一致したときに描画するコンポーネントです。 |
+| `Href` | QuickGUI Router が解決する移動先です。 |

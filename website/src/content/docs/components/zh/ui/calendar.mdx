@@ -2,45 +2,49 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `Calendar`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { Calendar } from "@quickgui/ui/date-time";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<Calendar.Root value={date()} onValueChange={setDate} onMonthChange={setMonth}>
-  <For each={weeks()}>{(week, weekIndex) =>
-    <Calendar.Week itemIndex={weekIndex()}>
-      <For each={week}>{(day) => <Calendar.Day day={day} />}</For>
-    </Calendar.Week>
-  }</For>
-</Calendar.Root>
+```go
+func CalendarExample(weeks [][]string) {
+	ui.Calendar.Root(
+		ui.CalendarRootProps{DefaultValue: "2026-09-03"},
+		func() {
+			for index, week := range weeks {
+				ui.Calendar.Week(
+					ui.CalendarWeekProps{Index: &index},
+					func() {
+						for _, day := range week {
+							ui.Calendar.Day(ui.CalendarDayProps{Day: day}, day)
+						}
+					},
+				)
+			}
+		},
+	)
+}
 ```
 
 ## 结构
 
-- `Calendar.Root`
-- `Calendar.Week`
-- `Calendar.Day`
-
-```tsx
-<Calendar.Root>
-  <Calendar.Week />
-  <Calendar.Day />
-</Calendar.Root>
-```
+- `ui.Calendar.Root`
+- `ui.Calendar.Week`
+- `ui.Calendar.Day`
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `value` | 受控值，具体类型取决于该组件的约定。 |
-| `defaultValue` | 组件自行管理状态时的初始值。 |
-| `min` | 可接受的最小值。 |
-| `max` | 可接受的最大值。 |
-| `firstWeekday` | 第一列对应的星期；周一为 0，周日为 6。 |
-| `onValueChange` | 报告核心接受的值。 |
-
+| `Value` | 受控值，具体类型取决于该组件的约定。 |
+| `DefaultValue` | 组件自行管理状态时的初始值。 |
+| `Min` | 可接受的最小值。 |
+| `Max` | 可接受的最大值。 |
+| `FirstWeekday` | 第一列对应的星期；周一为 0，周日为 6。 |
+| `OnValueChange` | 报告核心接受的值。 |

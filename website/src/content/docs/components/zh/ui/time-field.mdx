@@ -2,42 +2,40 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `TimeField`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { TimeField } from "@quickgui/ui/date-time";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<TimeField.Root value={time()} showSeconds onValueChange={setTime}>
-  <TimeField.Segment segment="hour" />
-  <Text>:</Text>
-  <TimeField.Segment segment="minute" />
-  <Text>:</Text>
-  <TimeField.Segment segment="second" />
-</TimeField.Root>
+```go
+func TimeFieldExample() {
+	ui.TimeField.Root(
+		ui.TimeFieldRootProps{DefaultValue: "09:30", Hour12: true},
+		func() {
+			for _, segment := range []string{"hour", "minute", "period"} {
+				ui.TimeField.Segment(ui.TimeFieldSegmentProps{Segment: segment})
+			}
+		},
+	)
+}
 ```
 
 ## 结构
 
-- `TimeField.Root`
-- `TimeField.Segment`
-
-```tsx
-<TimeField.Root>
-  <TimeField.Segment />
-</TimeField.Root>
-```
+- `ui.TimeField.Root`
+- `ui.TimeField.Segment`
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `value` | 受控值，具体类型取决于该组件的约定。 |
-| `defaultValue` | 组件自行管理状态时的初始值。 |
-| `hour12` | 添加上午/下午分段，并使用 12 小时制。 |
-| `showSeconds` | 挂载秒数分段。 |
-| `onValueChange` | 报告核心接受的值。 |
-
+| `Value` | 受控值，具体类型取决于该组件的约定。 |
+| `DefaultValue` | 组件自行管理状态时的初始值。 |
+| `Hour12` | 添加上午/下午分段，并使用 12 小时制。 |
+| `ShowSeconds` | 挂载秒数分段。 |
+| `OnValueChange` | 报告核心接受的值。 |

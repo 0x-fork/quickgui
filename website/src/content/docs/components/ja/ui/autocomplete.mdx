@@ -2,81 +2,62 @@
 
 ## インポート
 
-`@quickgui/ui` から `Autocomplete` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Autocomplete } from "@quickgui/ui/select";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"fmt"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<Autocomplete.Root
-  ariaLabel="Search commands"
-  items={commands}
-  inputValue={query()}
-  filterMode="fuzzy"
-  onInputValueChange={setQuery}
-  onCommit={(details) => run(details.inputValue ?? "")}
-/>
+```go
+func AutocompleteExample() {
+	ui.Autocomplete.Root(ui.AutocompleteRootProps{
+		PickerInputProps: ui.PickerInputProps{
+			PickerSourceProps: ui.PickerSourceProps{Items: func() []ui.OptionDeclaration {
+				return []ui.OptionDeclaration{{Value: "go", Label: "Go"}, {Value: "swift", Label: "Swift"}}
+			}},
+			Placeholder:        "Find a language",
+			OnInputValueChange: func(query string, _ *native.Event) { fmt.Println(query) },
+		},
+	})
+}
 ```
 
 ## 構成
 
-- `Autocomplete.Root`
-- `Autocomplete.Input`
-- `Autocomplete.Option`
-- `Autocomplete.Label`
-- `Autocomplete.Value`
-- `Autocomplete.Icon`
-- `Autocomplete.InputGroup`
-- `Autocomplete.Clear`
-- `Autocomplete.Portal`
-- `Autocomplete.Positioner`
-- `Autocomplete.Popup`
-- `Autocomplete.Arrow`
-- `Autocomplete.Status`
-- `Autocomplete.Empty`
-- `Autocomplete.List`
-- `Autocomplete.Item`
-- `Autocomplete.ItemIndicator`
-- `Autocomplete.Group`
-- `Autocomplete.GroupLabel`
-- `Autocomplete.Collection`
-- `Autocomplete.Separator`
-
-```tsx
-<Autocomplete.Root>
-  <Autocomplete.Input />
-  <Autocomplete.Option />
-  <Autocomplete.Label />
-  <Autocomplete.Value />
-  <Autocomplete.Icon />
-  <Autocomplete.InputGroup />
-  <Autocomplete.Clear />
-  <Autocomplete.Portal />
-  <Autocomplete.Positioner />
-  <Autocomplete.Popup />
-  <Autocomplete.Arrow />
-  <Autocomplete.Status />
-  <Autocomplete.Empty />
-  <Autocomplete.List />
-  <Autocomplete.Item />
-  <Autocomplete.ItemIndicator />
-  <Autocomplete.Group />
-  <Autocomplete.GroupLabel />
-  <Autocomplete.Collection />
-  <Autocomplete.Separator />
-</Autocomplete.Root>
-```
+- `ui.Autocomplete.Root`
+- `ui.Autocomplete.Input`
+- `ui.Autocomplete.Option`
+- `ui.Autocomplete.Label`
+- `ui.Autocomplete.Value`
+- `ui.Autocomplete.Icon`
+- `ui.Autocomplete.InputGroup`
+- `ui.Autocomplete.Clear`
+- `ui.Autocomplete.Portal`
+- `ui.Autocomplete.Positioner`
+- `ui.Autocomplete.Popup`
+- `ui.Autocomplete.Arrow`
+- `ui.Autocomplete.Status`
+- `ui.Autocomplete.Empty`
+- `ui.Autocomplete.List`
+- `ui.Autocomplete.Item`
+- `ui.Autocomplete.ItemIndicator`
+- `ui.Autocomplete.Group`
+- `ui.Autocomplete.GroupLabel`
+- `ui.Autocomplete.Collection`
+- `ui.Autocomplete.Separator`
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `items` | 選択肢やキーボードナビゲーションに使う、上限付きの宣言モデルです。 |
-| `inputValue` | Combobox または Autocomplete が使う、編集可能な検索テキストです。 |
-| `filterMode` | コアが管理する、部分一致、前方一致、あいまい一致、または無効の絞り込みです。 |
-| `onInputValueChange` | コアが保持した編集可能な検索テキストを通知します。 |
-| `onCommit` | 明示的なコミット境界と最終値の詳細を通知します。 |
-
+| `Items` | 選択肢やキーボードナビゲーションに使う、上限付きの宣言モデルです。 |
+| `InputValue` | Combobox または Autocomplete が使う、編集可能な検索テキストです。 |
+| `FilterMode` | コアが管理する、部分一致、前方一致、あいまい一致、または無効の絞り込みです。 |
+| `OnInputValueChange` | コアが保持した編集可能な検索テキストを通知します。 |
+| `OnCommit` | 明示的なコミット境界と最終値の詳細を通知します。 |

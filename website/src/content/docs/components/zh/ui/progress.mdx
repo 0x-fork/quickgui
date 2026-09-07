@@ -2,46 +2,46 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `Progress`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { Progress } from "@quickgui/ui/gauges";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<Progress.Root value={completed()} max={total()} format="fraction">
-  <Progress.Label><Text>Exporting</Text></Progress.Label>
-  <Progress.Track><Progress.Indicator /></Progress.Track>
-  <Progress.Value />
-</Progress.Root>
+```go
+func ProgressExample(progress func() *float64) {
+	ui.Progress.Root(
+		ui.ProgressProps{Value: progress, Max: 100},
+		func() {
+			ui.Progress.Label(ui.PartProps{}, "Uploading")
+			ui.Progress.Track(
+				ui.PartProps{},
+				func() { ui.Progress.Indicator(ui.PartProps{}) },
+			)
+			ui.Progress.Value(ui.PartProps{})
+		},
+	)
+}
 ```
 
 ## 结构
 
-- `Progress.Root`
-- `Progress.Track`
-- `Progress.Indicator`
-- `Progress.Label`
-- `Progress.Value`
-
-```tsx
-<Progress.Root>
-  <Progress.Track />
-  <Progress.Indicator />
-  <Progress.Label />
-  <Progress.Value />
-</Progress.Root>
-```
+- `ui.Progress.Root`
+- `ui.Progress.Track`
+- `ui.Progress.Indicator`
+- `ui.Progress.Label`
+- `ui.Progress.Value`
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `value` | 受控值，具体类型取决于该组件的约定。 |
-| `max` | 可接受的最大值。 |
-| `indeterminate` | 表示完成量未知的进度。 |
-| `valueText` | 辅助技术优先使用的易读值。 |
-| `onStatusChange` | 报告派生状态、格式化值和完成比例。 |
-
+| `Value` | 受控值，具体类型取决于该组件的约定。 |
+| `Max` | 可接受的最大值。 |
+| `Indeterminate` | 表示完成量未知的进度。 |
+| `ValueText` | 辅助技术优先使用的易读值。 |
+| `OnStatusChange` | 报告派生状态、格式化值和完成比例。 |

@@ -2,67 +2,72 @@
 
 ## インポート
 
-`@quickgui/ui` から `Toast` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Toast } from "@quickgui/ui/toast";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-const toast = useToastManager();
-
-toast.add({ id: "saved", title: "Saved", description: "Your changes are live." });
-
-<Toast.Provider timeout={5000} limit={3}>
-  <Toast.Portal>
-    <Toast.Viewport toasts={toast.toasts()} onDismiss={toast.dismiss}>
-      <For each={toast.toasts()}>{(item) =>
-        <Toast.Root toastId={item.id}>
-          <Toast.Content><Toast.Title /><Toast.Description /></Toast.Content>
-          <Toast.Close><Text>Close</Text></Toast.Close>
-        </Toast.Root>
-      }</For>
-    </Toast.Viewport>
-  </Toast.Portal>
-</Toast.Provider>
+```go
+func ToastExample() {
+	ui.Toast.Provider(
+		ui.ToastProviderProps{Timeout: 5000, Limit: 3},
+		func() {
+			manager := ui.UseToastManager()
+			ui.Button(
+				ui.OnClick(func() { manager.Add(ui.ToastRequest{Title: "Saved", Type: "success"}) }),
+				"Save",
+			)
+			ui.Toast.Viewport(
+				ui.ToastViewportProps{},
+				func() {
+					ui.For(
+						manager.Toasts,
+						func(toast ui.ToastDeclaration, _ func() int) {
+							ui.Toast.Root(
+								ui.ToastPartProps{ToastID: toast.ID},
+								func() {
+									ui.Toast.Title(
+										ui.ToastPartProps{ToastID: toast.ID},
+										toast.Title,
+									)
+									ui.Toast.Close(ui.ToastPartProps{ToastID: toast.ID}, "Dismiss")
+								},
+							)
+						},
+						func(toast ui.ToastDeclaration) any { return toast.ID },
+						nil,
+					)
+				},
+			)
+		},
+	)
+}
 ```
 
 ## 構成
 
-- `Toast.Provider`
-- `Toast.Portal`
-- `Toast.Viewport`
-- `Toast.Positioner`
-- `Toast.Root`
-- `Toast.Content`
-- `Toast.Title`
-- `Toast.Description`
-- `Toast.Action`
-- `Toast.Close`
-
-```tsx
-<Toast.Root>
-  <Toast.Provider />
-  <Toast.Portal />
-  <Toast.Viewport />
-  <Toast.Positioner />
-  <Toast.Content />
-  <Toast.Title />
-  <Toast.Description />
-  <Toast.Action />
-  <Toast.Close />
-</Toast.Root>
-```
+- `ui.Toast.Provider`
+- `ui.Toast.Portal`
+- `ui.Toast.Viewport`
+- `ui.Toast.Positioner`
+- `ui.Toast.Root`
+- `ui.Toast.Content`
+- `ui.Toast.Title`
+- `ui.Toast.Description`
+- `ui.Toast.Action`
+- `ui.Toast.Close`
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `toasts` | ビューポートが描画する、宣言済み Toast キュー全体です。 |
-| `toastId` | 描画された 1 つの Toast に対応する、安定したキュー ID です。 |
-| `timeout` | 継承する自動消去時間、またはウォームアップ済み Provider のタイムアウトです。 |
-| `swipeDirection` | スワイプでサーフェスを閉じる、または移動する方向の端です。 |
-| `onDismiss` | コアが閉じた Toast ID を通知します。 |
-
+| `Toasts` | ビューポートが描画する、宣言済み Toast キュー全体です。 |
+| `ToastID` | 描画された 1 つの Toast に対応する、安定したキュー ID です。 |
+| `Timeout` | 継承する自動消去時間、またはウォームアップ済み Provider のタイムアウトです。 |
+| `SwipeDirection` | スワイプでサーフェスを閉じる、または移動する方向の端です。 |
+| `OnDismiss` | コアが閉じた Toast ID を通知します。 |

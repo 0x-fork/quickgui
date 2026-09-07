@@ -2,42 +2,52 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `Splitter`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { Splitter } from "@quickgui/ui/range";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<Splitter.Root value={sizes()} panes={[{ min: 180 }, { min: 280 }]} onSizesChange={setSizes}>
-  <Splitter.Pane itemIndex={0}><Sidebar /></Splitter.Pane>
-  <Splitter.Handle itemIndex={0} />
-  <Splitter.Pane itemIndex={1}><Editor /></Splitter.Pane>
-</Splitter.Root>
+```go
+func SplitterExample() {
+	ui.Splitter.Root(
+		ui.SplitterRootProps{
+			DefaultValue: []float64{240, 400},
+			Panes:        []ui.SplitterPaneDeclaration{{}, {}},
+			PartProps:    ui.PartProps{Style: ui.Style{Display: "flex", Height: 240}},
+		},
+		func() {
+			first, second := 0, 1
+			ui.Splitter.Pane(ui.SplitterPaneProps{Index: &first}, "Sidebar")
+			ui.Splitter.Handle(ui.SplitterPaneProps{
+				Index: &first,
+				PartProps: ui.PartProps{Style: ui.Style{
+					Width:  6,
+					Cursor: "col-resize",
+				}},
+			})
+			ui.Splitter.Pane(ui.SplitterPaneProps{Index: &second}, "Content")
+		},
+	)
+}
 ```
 
 ## 结构
 
-- `Splitter.Root`
-- `Splitter.Pane`
-- `Splitter.Handle`
-
-```tsx
-<Splitter.Root>
-  <Splitter.Pane />
-  <Splitter.Handle />
-</Splitter.Root>
-```
+- `ui.Splitter.Root`
+- `ui.Splitter.Pane`
+- `ui.Splitter.Handle`
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `value` | 受控值，具体类型取决于该组件的约定。 |
-| `defaultValue` | 组件自行管理状态时的初始值。 |
-| `panes` | 每个面板的最小尺寸和折叠声明。 |
-| `orientation` | 水平或垂直布局，以及对应的键盘方向。 |
-| `onSizesChange` | 在核心调整大小后报告完整的面板尺寸集合。 |
-
+| `Value` | 受控值，具体类型取决于该组件的约定。 |
+| `DefaultValue` | 组件自行管理状态时的初始值。 |
+| `Panes` | 每个面板的最小尺寸和折叠声明。 |
+| `Orientation` | 水平或垂直布局，以及对应的键盘方向。 |
+| `OnSizesChange` | 在核心调整大小后报告完整的面板尺寸集合。 |

@@ -2,95 +2,70 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `Combobox`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { Combobox } from "@quickgui/ui/select";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<Combobox.Root
-  ariaLabel="Framework"
-  items={frameworks}
-  value={framework()}
-  inputValue={query()}
-  filterMode="fuzzy"
-  onValueChange={setFramework}
-  onInputValueChange={setQuery}
-/>
+```go
+func ComboboxExample() {
+	value, setValue := ui.CreateSignal[*string](nil)
+	ui.Combobox.Root(ui.ComboboxRootProps{
+		PickerInputProps: ui.PickerInputProps{
+			PickerSourceProps: ui.PickerSourceProps{Items: func() []ui.OptionDeclaration {
+				return []ui.OptionDeclaration{{Value: "go", Label: "Go"}, {Value: "swift", Label: "Swift"}}
+			}},
+			Placeholder: "Choose a language",
+		},
+		Value:         value,
+		OnValueChange: func(next *string, _ *native.Event) { setValue(next) },
+	})
+}
 ```
 
 ## 结构
 
-- `Combobox.Root`
-- `Combobox.Input`
-- `Combobox.Option`
-- `Combobox.Label`
-- `Combobox.Value`
-- `Combobox.Icon`
-- `Combobox.InputGroup`
-- `Combobox.Clear`
-- `Combobox.Trigger`
-- `Combobox.Chips`
-- `Combobox.Chip`
-- `Combobox.ChipRemove`
-- `Combobox.Backdrop`
-- `Combobox.Portal`
-- `Combobox.Positioner`
-- `Combobox.Popup`
-- `Combobox.Arrow`
-- `Combobox.Status`
-- `Combobox.Empty`
-- `Combobox.List`
-- `Combobox.Row`
-- `Combobox.Item`
-- `Combobox.ItemIndicator`
-- `Combobox.Group`
-- `Combobox.GroupLabel`
-- `Combobox.Collection`
-- `Combobox.Separator`
-
-```tsx
-<Combobox.Root>
-  <Combobox.Input />
-  <Combobox.Option />
-  <Combobox.Label />
-  <Combobox.Value />
-  <Combobox.Icon />
-  <Combobox.InputGroup />
-  <Combobox.Clear />
-  <Combobox.Trigger />
-  <Combobox.Chips />
-  <Combobox.Chip />
-  <Combobox.ChipRemove />
-  <Combobox.Backdrop />
-  <Combobox.Portal />
-  <Combobox.Positioner />
-  <Combobox.Popup />
-  <Combobox.Arrow />
-  <Combobox.Status />
-  <Combobox.Empty />
-  <Combobox.List />
-  <Combobox.Row />
-  <Combobox.Item />
-  <Combobox.ItemIndicator />
-  <Combobox.Group />
-  <Combobox.GroupLabel />
-  <Combobox.Collection />
-  <Combobox.Separator />
-</Combobox.Root>
-```
+- `ui.Combobox.Root`
+- `ui.Combobox.Input`
+- `ui.Combobox.Option`
+- `ui.Combobox.Label`
+- `ui.Combobox.Value`
+- `ui.Combobox.Icon`
+- `ui.Combobox.InputGroup`
+- `ui.Combobox.Clear`
+- `ui.Combobox.Trigger`
+- `ui.Combobox.Chips`
+- `ui.Combobox.Chip`
+- `ui.Combobox.ChipRemove`
+- `ui.Combobox.Backdrop`
+- `ui.Combobox.Portal`
+- `ui.Combobox.Positioner`
+- `ui.Combobox.Popup`
+- `ui.Combobox.Arrow`
+- `ui.Combobox.Status`
+- `ui.Combobox.Empty`
+- `ui.Combobox.List`
+- `ui.Combobox.Row`
+- `ui.Combobox.Item`
+- `ui.Combobox.ItemIndicator`
+- `ui.Combobox.Group`
+- `ui.Combobox.GroupLabel`
+- `ui.Combobox.Collection`
+- `ui.Combobox.Separator`
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `items` | 用于选项或键盘导航的有限声明模型。 |
-| `value` | 受控值，具体类型取决于该组件的约定。 |
-| `inputValue` | Combobox 或 Autocomplete 使用的可编辑查询文本。 |
-| `multiple` | 允许选择或打开多个值。 |
-| `filterMode` | 由核心管理的包含、前缀、模糊或禁用筛选模式。 |
-| `onValueChange` | 报告核心接受的值。 |
-
+| `Items` | 用于选项或键盘导航的有限声明模型。 |
+| `Value` | 受控值，具体类型取决于该组件的约定。 |
+| `InputValue` | Combobox 或 Autocomplete 使用的可编辑查询文本。 |
+| `Multiple` | 允许选择或打开多个值。 |
+| `FilterMode` | 由核心管理的包含、前缀、模糊或禁用筛选模式。 |
+| `OnValueChange` | 报告核心接受的值。 |

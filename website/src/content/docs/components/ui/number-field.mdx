@@ -2,54 +2,58 @@ A numeric editor with increment, decrement, and drag-to-scrub parts.
 
 ## Import
 
-Import `NumberField` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { NumberField } from "@quickgui/ui/number-field";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<NumberField.Root value={copies()} min={1} max={20} onValueChange={setCopies}>
-  <NumberField.ScrubArea><Text>Copies</Text></NumberField.ScrubArea>
-  <NumberField.Group>
-    <NumberField.Decrement><Text>−</Text></NumberField.Decrement>
-    <NumberField.Input />
-    <NumberField.Increment><Text>+</Text></NumberField.Increment>
-  </NumberField.Group>
-</NumberField.Root>
+```go
+func NumberFieldExample() {
+	value, setValue := ui.CreateSignal(8.0)
+	ui.NumberField.Root(
+		ui.NumberFieldRootProps{
+			Value: func() *float64 { current := value(); return &current },
+			Min:   0,
+			Max:   100,
+			Step:  1,
+			OnValueChange: func(next *float64, valid bool, _ *native.Event) {
+				if valid && next != nil {
+					setValue(*next)
+				}
+			},
+		},
+		func() {
+			ui.NumberField.Decrement(ui.PartProps{}, "−")
+			ui.NumberField.Input(ui.NumberFieldInputProps{})
+			ui.NumberField.Increment(ui.PartProps{}, "+")
+		},
+	)
+}
 ```
 
 ## Anatomy
 
-- `NumberField.Root`
-- `NumberField.Group`
-- `NumberField.Input`
-- `NumberField.Increment`
-- `NumberField.Decrement`
-- `NumberField.ScrubArea`
-- `NumberField.ScrubAreaCursor`
-
-```tsx
-<NumberField.Root>
-  <NumberField.Group />
-  <NumberField.Input />
-  <NumberField.Increment />
-  <NumberField.Decrement />
-  <NumberField.ScrubArea />
-  <NumberField.ScrubAreaCursor />
-</NumberField.Root>
-```
+- `ui.NumberField.Root`
+- `ui.NumberField.Group`
+- `ui.NumberField.Input`
+- `ui.NumberField.Increment`
+- `ui.NumberField.Decrement`
+- `ui.NumberField.ScrubArea`
+- `ui.NumberField.ScrubAreaCursor`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `value` | Controlled value. The precise value type follows this component’s contract. |
-| `defaultValue` | Initial value when the component owns its state. |
-| `min` | Minimum accepted value. |
-| `max` | Maximum accepted value. |
-| `step` | Increment used by keyboard, pointer, or native control input. |
-| `onValueChange` | Reports the value accepted by the core. |
-
+| `Value` | Controlled value. The precise value type follows this component’s contract. |
+| `DefaultValue` | Initial value when the component owns its state. |
+| `Min` | Minimum accepted value. |
+| `Max` | Maximum accepted value. |
+| `Step` | Increment used by keyboard, pointer, or native control input. |
+| `OnValueChange` | Reports the value accepted by the core. |

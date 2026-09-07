@@ -1,55 +1,50 @@
-QuickGUI は scriptc で TypeScript と TSX をネイティブコードにコンパイルします。TypeScript 7 が JSX を変換し、Rust コアがレイアウト、描画、入力、プラットフォームのメインスレッドを管理します。Bun は開発ツールにのみ使用します。
+QuickGUI プロジェクトではアプリコードを Go モジュールに置き、小さな Bun パッケージで開発コマンドを提供します。
 
 ## 生成されるファイル
 
+CLI は次のファイルを生成します。依存関係を解決したら `go.sum` もコミットします。
+
 ```text
 my-app/
-├── src/
-│   └── app.tsx
-├── package.json
+├── main.go
+├── go.mod
+├── go.sum
 ├── quickgui.config.ts
-└── tsconfig.json
+├── package.json
+└── README.md
 ```
-
-アプリの UI は `src/` に置きます。ほかのファイルやディレクトリを本番バンドルへ含めるには、`resources` オプションを使います。
 
 ## アプリケーションのエントリ
 
-エントリモジュールはネイティブアプリの準備を待ち、ウィンドウを作成して、QuickGUI UI ルートを `createRenderer` に渡します。
+`main.go` で `native.Run` を開始し、ウィンドウを作成します。コンポーネントと子要素ブロックは同じ `func()` を使い、ノードを返さずに子を順番に宣言します。大きなアプリは通常の Go パッケージに分割できます。
 
-```tsx
-await app.whenReady();
-
-new Window({
-  title: "Notes",
-  renderer: createRenderer(() => <NotesApp />),
-});
+```go
+func ViewExample() {
+	ui.View(
+		ui.Padding(20),
+		ui.Gap(12),
+		func() {
+			ui.Text("Hello from Go")
+			ui.Button(ui.OnClick(func() {}), "Continue")
+		},
+	)
+}
 ```
-
-アプリでは scriptc が対応する TypeScript と Node 互換 API のサブセットを使います。Bun のアプリ API や JavaScript エンジンを必要とするパッケージには対応しません。ネイティブウィンドウの操作と結果は非同期です。
 
 ## 設定
 
-`quickgui.config.ts` は、コンパイルとパッケージ化の対象を CLI に伝えます。
+`entry` はビルドする Go パッケージです。設定ファイルは Bun CLI が評価し、実行中のアプリには含まれません。
 
-```tsx
+```ts
 import { defineConfig } from "@quickgui/cli";
 
 export default defineConfig({
-  entry: "src/app.tsx",
-  name: "Notes",
-  identifier: "dev.example.notes",
-  resources: ["assets"],
+  name: "My App",
+  identifier: "com.example.my-app",
+  entry: ".",
 });
 ```
 
-リリース専用のオプションには、アイコン、署名、公証、Mac App Store、アップデーターマニフェストがあります。
-
 ## パッケージ
 
-| パッケージ | 用途 |
-| --- | --- |
-| `@quickgui/native` | アプリケーション、ウィンドウ、メニュー、ダイアログ、通知、ネイティブサービス |
-| `@quickgui/ui` | QuickGUI UI レンダラー、プリミティブ、コンポーネント、ルーティング |
-| `@quickgui/ui/swift-ui` | macOS 上で QuickGUI UI からホストするネイティブ SwiftUI コントロール |
-| `@quickgui/cli` | プロジェクト作成、開発、本番パッケージ化 |
+ウィンドウとプラットフォームサービスには `github.com/egoist/quickgui/go/native`、UI には `github.com/egoist/quickgui/go/ui`、所有者とコンテキストには `github.com/egoist/quickgui/go/reactive` を使います。`@quickgui/cli` は開発依存です。Go SDK と CLI は互換性のあるリリースに固定してください。

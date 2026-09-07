@@ -1,50 +1,55 @@
-SwiftUI ブリッジは、macOS 上で QuickGUI UI が描画する QuickGUI ウィンドウの中に、本物のネイティブ SwiftUI コントロールをマウントします。
+`ui.SwiftUI` は Go アプリに本物の macOS コントロールを埋め込みます。通常の QuickGUI コンポーネントはこれを使わずに動作します。
 
 ## Host
 
-`Host` は `NSHostingView` を基盤とする、保持型 QuickGUI レイアウトの 1 つのリーフです。その下に SwiftUI ブリッジコンポーネントを置きます。
+コントロールは `ui.SwiftUI.Host` の中で作成します。Host はネイティブビューの境界を定義し、内容に応じてサイズを決められます。
 
-```tsx
-import { Host, Button, Toggle } from "@quickgui/ui/swift-ui";
-
-<Host matchContents>
-  <Button label="Continue" onPress={continueFlow} />
-</Host>
+```go
+func SwiftUiHostExample() {
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.Button(ui.SwiftUIButtonProps{Label: "Continue"})
+		},
+	)
+}
 ```
 
 ## ネイティブコントロール
 
-ブリッジは `Button`、`Slider`、`Toggle`、`ProgressView`、`Stepper`、`TextField`、`SecureField`、`Picker`、`SegmentedControl`、`DatePicker`、`ColorPicker`、`Gauge` を公開します。サイドバーから、それぞれのリファレンスページを開けます。
+Button、Slider、Toggle、ProgressView、Stepper、TextField、SecureField、Picker、SegmentedControl、DatePicker、ColorPicker、Gauge が使えます。プラットフォームの外観は macOS が提供します。
 
 ## 制御値
 
-値は引き続き QuickGUI UI が制御します。ネイティブ側の変更は対応するコールバックから届きます。
+アクセサーをバインドし、ネイティブコールバックが返した値を保存します。SwiftUI コントロールと QuickGUI ノードは同じシグナルを共有できます。DatePicker はミリ秒単位の Unix タイムスタンプを使います。
 
-```tsx
-<Host matchContents={{ vertical: true }} style={{ width: 340 }}>
-  <Slider
-    value={volume()}
-    min={0}
-    max={1}
-    step={0.05}
-    label="Volume"
-    onValueChange={setVolume}
-  />
-</Host>
+```go
+func SwiftUiToggleExample() {
+	on, setOn := ui.CreateSignal(true)
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.Toggle(ui.SwiftUIToggleProps{
+				IsOn:         on,
+				Label:        "Notifications",
+				OnIsOnChange: func(next bool, _ *native.Event) { setOn(next) },
+			})
+		},
+	)
+}
 ```
 
 ## サイズ
 
-既定では、QuickGUI はほかの保持ノードと同じように `Host` をレイアウトします。両軸で SwiftUI 固有のサイズを使うには `matchContents` を指定します。`{ horizontal: true }` または `{ vertical: true }` で片方だけを選ぶこともできます。
+`MatchContents: true` は両軸を固有サイズにします。固有の高さとアプリ指定の幅を組み合わせる場合は `ui.SwiftUIMatchContents{Vertical: true}` を使い、`PartProps.Style` で幅を設定します。
 
-```tsx
-<Host matchContents={{ vertical: true }} style={{ width: 360 }}>
-  <Picker selection={theme()} options={themes} onSelectionChange={setTheme} />
-</Host>
+```go
+ui.SwiftUIHostProps{
+	MatchContents: ui.SwiftUIMatchContents{Vertical: true},
+	PartProps:     ui.PartProps{Style: ui.Style{Width: 320}},
+}
 ```
 
 ## 対応プラットフォーム
 
-<Note title="macOS のみ">
-  SwiftUI ホスティングは macOS 向けのブリッジです。クロスプラットフォーム UI には、通常の `@quickgui/ui` コンポーネントを使ってください。
-</Note>
+SwiftUI ホスティングには macOS が必要です。ビルド済みのネイティブホストにブリッジが含まれ、Go アプリは引き続き CGO なしでビルドできます。ネイティブスタイルは OS バージョンにより異なる場合があります。

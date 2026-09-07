@@ -2,40 +2,39 @@ Shows an image with a fallback that appears when the image is unavailable.
 
 ## Import
 
-Import `Avatar` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Avatar } from "@quickgui/ui/base-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Avatar.Root ariaLabel="Ada Lovelace" onLoadingStatusChange={setStatus}>
-  <Avatar.Image src="assets/ada.png" fit="cover" />
-  <Avatar.Fallback delay={120}><Text>AL</Text></Avatar.Fallback>
-</Avatar.Root>
+```go
+func AvatarExample(path string) {
+	ui.Avatar.Root(
+		ui.AvatarRootProps{PartProps: ui.PartProps{AriaLabel: "Ada Lovelace"}},
+		func() {
+			ui.Avatar.Image(ui.AvatarImageProps{Src: path})
+			ui.Avatar.Fallback(ui.AvatarFallbackProps{}, "AL")
+		},
+	)
+}
 ```
 
 ## Anatomy
 
-- `Avatar.Root`
-- `Avatar.Image`
-- `Avatar.Fallback`
-
-```tsx
-<Avatar.Root>
-  <Avatar.Image />
-  <Avatar.Fallback />
-</Avatar.Root>
-```
+- `ui.Avatar.Root`
+- `ui.Avatar.Image`
+- `ui.Avatar.Fallback`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `ariaLabel` | Accessible name for a component whose visible parts may change. |
-| `src` | Filesystem path, file URL, or base64 data URL for an avatar image. |
-| `delay` | Core-owned delay in milliseconds before opening. |
-| `onLoadingStatusChange` | Reports every avatar image load-state transition. |
-
+| `AriaLabel` | Accessible name for a component whose visible parts may change. |
+| `Src` | Filesystem path, file URL, or base64 data URL for an avatar image. |
+| `Delay` | Core-owned delay in milliseconds before opening. |
+| `OnLoadingStatusChange` | Reports every avatar image load-state transition. |

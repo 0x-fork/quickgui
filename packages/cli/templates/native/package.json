@@ -4,15 +4,11 @@
   "type": "module",
   "scripts": {
     "dev": "quickgui dev",
-    "build": "quickgui build"
+    "build": "quickgui build",
+    "fmt": "quickgui fmt"
   },
-  "dependencies": {
-    "@quickgui/native": "^0.1.3",
-    "@quickgui/ui": "^0.1.3"
-  },
+  "dependencies": {},
   "devDependencies": {
-    "@quickgui/cli": "^0.1.3",
-    "@types/node": "^24.0.0",
-    "typescript": "7.0.2"
+    "@quickgui/cli": "^0.1.3"
   }
 }

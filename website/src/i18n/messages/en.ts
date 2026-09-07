@@ -1,102 +1,94 @@
 export const en = {
-  meta: {
-    title: 'QuickGUI — Build native desktop apps. Skip the webview.',
-    description:
-      'QuickGUI is a GPU-accelerated GUI framework for building native desktop apps in Rust or TypeScript. Familiar Flexbox and Grid layout, real text, built-in accessibility — and zero CPU while your app is idle.',
+  "meta": {
+    "title": "QuickGUI — Build native desktop apps with Go.",
+    "description": "Build native desktop apps with Go. Fast builds, fine-grained reactivity, GPU rendering, familiar layouts, and accessible components. No CGO required."
   },
-  common: {
-    skipToContent: 'Skip to content',
-    getStarted: 'Get started',
-    copy: 'Copy “{{text}}”',
-    copied: 'Copied',
-    language: 'Language',
+  "common": {
+    "skipToContent": "Skip to content",
+    "getStarted": "Get started",
+    "copy": "Copy “{{text}}”",
+    "copied": "Copied",
+    "language": "Language"
   },
-  nav: {
-    features: 'Features',
-    code: 'Code',
-    quickstart: 'Quickstart',
-    docs: 'Docs',
+  "nav": {
+    "features": "Features",
+    "code": "Code",
+    "quickstart": "Quickstart",
+    "docs": "Docs"
   },
-  hero: {
-    badge: 'v{{version}} on crates.io',
-    titleLine1: 'Build native desktop apps.',
-    titleLine2: 'Skip the webview.',
-    sub: 'A GPU-accelerated GUI framework for native desktop apps, in Rust or TypeScript. Familiar layout, real text, built-in accessibility — and zero CPU while your app is idle.',
+  "hero": {
+    "badge": "Go · No CGO required",
+    "titleLine1": "Build native desktop apps.",
+    "titleLine2": "With Go.",
+    "sub": "Write ordinary Go with fast builds and fine-grained reactivity. Compose GPU-rendered native interfaces with familiar layouts and accessible components. No CGO required."
   },
-  features: {
-    title: 'Everything a desktop app needs.',
-    items: {
-      idle: {
-        title: 'Zero CPU when idle',
-        body: 'If nothing changes on screen, nothing runs. Idle windows draw no frames and stay off the battery.',
+  "features": {
+    "title": "Everything a desktop app needs.",
+    "items": {
+      "idle": {
+        "title": "Idle windows stay idle",
+        "body": "Clean windows sleep until something changes. Signals update the affected properties, and event updates are batched into one redraw."
       },
-      fast: {
-        title: 'Fast by default',
-        body: 'Rendering happens on the GPU, and only the part of the window that changed is redrawn.',
+      "fast": {
+        "title": "Fast Go builds",
+        "body": "Edit your app and rebuild just the Go code. The native runtime is bundled, and your application builds with CGO disabled."
       },
-      layout: {
-        title: 'Layout you already know',
-        body: 'Flexbox and CSS Grid, with Tailwind-style shorthands. If you can lay out a web page, you can lay out a window.',
+      "layout": {
+        "title": "Layout you already know",
+        "body": "Flexbox and CSS Grid with familiar style options. Compose layouts directly in Go and reuse styles across components."
       },
-      components: {
-        title: 'Components included',
-        body: 'A large collection of accessible, unstyled components — menus, dialogs, popovers, selects, comboboxes, tabs, tables, trees — ready to make yours.',
+      "components": {
+        "title": "Components included",
+        "body": "A large collection of accessible, unstyled components — menus, dialogs, popovers, selects, comboboxes, tabs, tables, trees — ready to make yours."
       },
-      text: {
-        title: 'Text that just works',
-        body: 'Selection, editing, undo, input methods, emoji, and right-to-left scripts behave like they do in every native app.',
+      "text": {
+        "title": "Text that just works",
+        "body": "Selection, editing, undo, input methods, emoji, and right-to-left scripts behave like they do in every native app."
       },
-      a11y: {
-        title: 'Accessible by default',
-        body: 'Screen readers see real buttons, lists, and text — no extra code required.',
+      "a11y": {
+        "title": "Accessible by default",
+        "body": "Screen readers see real buttons, lists, and text — no extra code required."
       },
-      lists: {
-        title: 'Smooth at any size',
-        body: 'Tables and lists with a million rows scroll without dropping frames.',
+      "lists": {
+        "title": "Long lists, small visible trees",
+        "body": "Virtualized tables mount the visible rows as you scroll, keeping large histories and data views manageable."
       },
-      native: {
-        title: 'Feels native, because it is',
-        body: 'Real windows with native menus, dialogs, tray icons, and notifications — not a browser in a costume.',
+      "native": {
+        "title": "Native desktop features",
+        "body": "Real windows, system menus, file dialogs, tray icons, and notifications are part of your application."
       },
-      cli: {
-        title: 'One CLI, dev to release',
-        body: 'quickgui dev runs your app and reloads as you edit; quickgui build hands you a signed, installable release.',
-      },
-    },
+      "cli": {
+        "title": "One CLI, dev to release",
+        "body": "quickgui dev runs your app and reloads as you edit; quickgui build hands you a signed, installable release."
+      }
+    }
   },
-  code: {
-    title: 'Write it in Rust or TypeScript.',
-    lead: 'Use whichever you like — both produce the same native app, with no webview.',
+  "code": {
+    "title": "Ordinary Go. Reactive components.",
+    "lead": "Declare children in a function block. Signals update the bindings that use them, while the rest of the component stays mounted."
   },
-  swiftUi: {
-    title: 'Use native SwiftUI in QuickGUI.',
-    lead: 'Embed real SwiftUI controls directly in your QuickGUI UI app on macOS.',
+  "swiftUi": {
+    "title": "Use native SwiftUI in QuickGUI.",
+    "lead": "Embed real SwiftUI controls in your Go application on macOS, alongside your QuickGUI components."
   },
-  quickstart: {
-    title: 'Start in a minute.',
-    rust: {
-      addCrate: 'Add the crate',
-      write: 'Write a view',
-      writeBody: 'The counter above is a complete main.rs — copy it in.',
-      run: 'Run it',
-    },
-    ui: {
-      create: 'Create an app',
-      ship: 'Ship it',
-      note: 'You get a real, signed, self-contained app — installer included.',
-    },
+  "quickstart": {
+    "title": "From your first window to a release.",
+    "create": "Create and run",
+    "edit": "Format and build",
+    "ship": "Sign and package",
+    "note": "Install Go 1.23+ and Bun. On macOS, you also need Xcode Command Line Tools. Signing and notarization use your own Apple developer credentials."
   },
-  platforms: {
-    available: 'available now',
-    soon: 'in progress',
+  "platforms": {
+    "available": "available now",
+    "soon": "in progress"
   },
-  cta: {
-    title: 'Build something native.',
-    body: 'Write a view, ship a real app — and let idle windows actually idle.',
-    docs: 'Read the docs',
-    star: 'Star on GitHub',
+  "cta": {
+    "title": "Build something native.",
+    "body": "Write a Go component and ship a native app with a bundled runtime.",
+    "docs": "Read the docs",
+    "star": "Star on GitHub"
   },
-  footer: {
-    license: 'MIT or Apache-2.0',
-  },
+  "footer": {
+    "license": "MIT or Apache-2.0"
+  }
 }

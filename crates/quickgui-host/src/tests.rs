@@ -4,6 +4,16 @@ use quickgui::{
 };
 
 #[test]
+fn go_mutation_fixture_uses_native_text_and_color_encoding() {
+    let bytes = include_bytes!("../../../go/testdata/text.qgmb");
+    let mut tree = NativeTree::default();
+    apply_mutations(&mut tree, decode_batch(bytes).unwrap()).unwrap();
+    let node = tree.nodes.get(&1).unwrap();
+    assert_eq!(node.text.as_ref(), "Hello 世界");
+    assert_eq!(node.color(property::COLOR), Some(Color::rgba8(0x12, 0x34, 0x56, 0x78)));
+}
+
+#[test]
 fn hosted_void_mutations_are_fire_and_forget_host_commands() {
     let host = HostCoordinator::new();
     host.enqueue(HostCommand::Mutation {
@@ -9121,4 +9131,31 @@ fn a_controlled_splitter_keeps_the_handle_under_the_pointer_while_declarations_l
         (handle_bounds.x - 100.0).abs() < 0.5,
         "the new declaration moved the handle to {handle_bounds:?}"
     );
+}
+
+#[test]
+fn packaged_fonts_resolve_against_resources_and_preserve_absolute_paths() {
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let root = std::env::temp_dir().join(format!("quickgui-fonts-{}-{unique}", std::process::id()));
+    let resources = root.join("Resources");
+    std::fs::create_dir_all(resources.join("fonts")).unwrap();
+    std::fs::write(resources.join("fonts/bundled.ttf"), b"bundled font").unwrap();
+    let external = root.join("external.ttf");
+    std::fs::write(&external, b"external font").unwrap();
+    let options = NativeAppOptions {
+        resource_dir: Some(resources.to_string_lossy().into_owned()),
+        fonts: Some(vec![
+            "fonts/bundled.ttf".into(),
+            external.to_string_lossy().into_owned(),
+        ]),
+        ..NativeAppOptions::default()
+    };
+    let fonts = crate::runtime::native_font_data(&options).unwrap();
+    std::fs::remove_dir_all(root).unwrap();
+    assert_eq!(fonts.len(), 2);
+    assert_eq!(fonts[0].as_ref(), b"bundled font");
+    assert_eq!(fonts[1].as_ref(), b"external font");
 }

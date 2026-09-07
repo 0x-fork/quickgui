@@ -2,39 +2,41 @@ A binary or indeterminate choice with a separately styled indicator.
 
 ## Import
 
-Import `Checkbox` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Checkbox } from "@quickgui/ui/controls";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Checkbox.Root checked={checked()} onCheckedChange={setChecked}>
-  <Checkbox.Indicator><Text>✓</Text></Checkbox.Indicator>
-  <Text>Remember this device</Text>
-</Checkbox.Root>
+```go
+func CheckboxExample() {
+	checked, setChecked := ui.CreateSignal(false)
+	ui.Checkbox.Root(
+		ui.CheckboxProps{
+			Checked:         func() ui.CheckedState { return checked() },
+			OnCheckedChange: func(next bool, _ *native.Event) { setChecked(next) },
+		},
+		func() { ui.Checkbox.Indicator(ui.PartProps{}, "✓"); ui.Text("Remember me") },
+	)
+}
 ```
 
 ## Anatomy
 
-- `Checkbox.Root`
-- `Checkbox.Indicator`
-
-```tsx
-<Checkbox.Root>
-  <Checkbox.Indicator />
-</Checkbox.Root>
-```
+- `ui.Checkbox.Root`
+- `ui.Checkbox.Indicator`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `checked` | Controlled checked state. |
-| `defaultChecked` | Initial checked state when the component owns it. |
-| `onCheckedChange` | Reports the checked state accepted by the core. |
-| `readOnly` | Prevents value changes while leaving the control focusable. |
-| `disabled` | Prevents interaction and exposes the disabled state. |
-
+| `Checked` | Controlled checked state. |
+| `DefaultChecked` | Initial checked state when the component owns it. |
+| `OnCheckedChange` | Reports the checked state accepted by the core. |
+| `ReadOnly` | Prevents value changes while leaving the control focusable. |
+| `Disabled` | Prevents interaction and exposes the disabled state. |

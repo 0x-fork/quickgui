@@ -2,30 +2,35 @@ The multiline text-editing primitive, with the same controlled value contract as
 
 ## Import
 
-Import `TextArea` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { TextArea } from "@quickgui/ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<TextArea
-  value={notes()}
-  placeholder="Release notes"
-  onInput={(event) => setNotes(event.value ?? "")}
-  style={{ width: 360, height: 140 }}
-/>
+```go
+func TextAreaExample() {
+	value, setValue := ui.CreateSignal("")
+	ui.TextArea(
+		ui.Value(value),
+		ui.Placeholder("Write here"),
+		ui.OnInput(func(event *native.Event) { setValue(event.Value) }),
+		ui.Width(320),
+		ui.Height(96),
+	)
+}
 ```
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `value` | Controlled value. The precise value type follows this component’s contract. |
-| `placeholder` | Text shown while the editable value is empty. |
-| `onInput` | Reports native editing input. |
-| `onChange` | Reports a committed native value change. |
-| `style` | QuickGUI layout, paint, typography, and interaction-state styles. |
-
+| `Value` | Controlled value. The precise value type follows this component’s contract. |
+| `Placeholder` | Text shown while the editable value is empty. |
+| `OnInput` | Reports native editing input. |
+| `WithStyle` | QuickGUI layout, paint, typography, and interaction-state styles. |

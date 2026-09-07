@@ -2,41 +2,45 @@
 
 ## インポート
 
-`@quickgui/ui` から `CheckboxGroup` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { CheckboxGroup } from "@quickgui/ui/controls";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<CheckboxGroup.Root
-  allValues={["email", "push"]}
-  value={channels()}
-  onValueChange={setChannels}
->
-  <Checkbox.Root parent><Text>All notifications</Text></Checkbox.Root>
-  <Checkbox.Root value="email"><Text>Email</Text></Checkbox.Root>
-  <Checkbox.Root value="push"><Text>Push</Text></Checkbox.Root>
-</CheckboxGroup.Root>
+```go
+func CheckboxGroupExample() {
+	values, setValues := ui.CreateSignal([]string{"email"})
+	ui.CheckboxGroup.Root(
+		ui.CheckboxGroupProps{
+			AllValues:     []string{"email", "push"},
+			Value:         values,
+			OnValueChange: func(next []string, _ *native.Event) { setValues(next) },
+		},
+		func() {
+			ui.Checkbox.Root(ui.CheckboxProps{Parent: true}, "All notifications")
+			ui.Checkbox.Root(ui.CheckboxProps{Value: "email"}, "Email")
+			ui.Checkbox.Root(ui.CheckboxProps{Value: "push"}, "Push")
+		},
+	)
+}
 ```
 
 ## 構成
 
-- `CheckboxGroup.Root`
-
-```tsx
-<CheckboxGroup.Root>{/* content */}</CheckboxGroup.Root>
-```
+- `ui.CheckboxGroup.Root`
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `allValues` | 親チェックボックスの状態導出に使う、完全で順序付きの値集合です。 |
-| `value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
-| `defaultValue` | コンポーネント自身が状態を管理するときの初期値です。 |
-| `onValueChange` | コアが受け入れた値を通知します。 |
-| `disabled` | 操作を無効にし、無効状態を公開します。 |
-
+| `AllValues` | 親チェックボックスの状態導出に使う、完全で順序付きの値集合です。 |
+| `Value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `DefaultValue` | コンポーネント自身が状態を管理するときの初期値です。 |
+| `OnValueChange` | コアが受け入れた値を通知します。 |
+| `Disabled` | 操作を無効にし、無効状態を公開します。 |

@@ -1,55 +1,50 @@
-QuickGUI compiles TypeScript and TSX to native code with scriptc. TypeScript 7 lowers JSX; the Rust core owns layout, rendering, input, and the platform main thread. Bun runs the development tools.
+A QuickGUI project keeps application code in a Go module and development commands in a small Bun package.
 
 ## Generated files
 
+The CLI generates these files. Commit `go.sum` after resolving dependencies.
+
 ```text
 my-app/
-├── src/
-│   └── app.tsx
-├── package.json
+├── main.go
+├── go.mod
+├── go.sum
 ├── quickgui.config.ts
-└── tsconfig.json
+├── package.json
+└── README.md
 ```
-
-Put application UI in `src/`. Add files and directories to production bundles through the `resources` option.
 
 ## Application entry
 
-The entry module waits for the native app, creates windows, and passes a QuickGUI UI root to `createRenderer`.
+`main.go` starts `native.Run` and creates a window. Components and children blocks share the `func()` signature and declare their children in order, without returning a node. Split larger applications into ordinary Go packages.
 
-```tsx
-await app.whenReady();
-
-new Window({
-  title: "Notes",
-  renderer: createRenderer(() => <NotesApp />),
-});
+```go
+func ViewExample() {
+	ui.View(
+		ui.Padding(20),
+		ui.Gap(12),
+		func() {
+			ui.Text("Hello from Go")
+			ui.Button(ui.OnClick(func() {}), "Continue")
+		},
+	)
+}
 ```
-
-Application modules use the subset of TypeScript and Node-compatible APIs supported by scriptc. Bun application APIs and packages that require a JavaScript engine are not supported. Native window operations and results remain asynchronous.
 
 ## Configuration
 
-`quickgui.config.ts` tells the CLI what to compile and package.
+`entry` is the Go package to build. The configuration file is evaluated by the Bun CLI. It is not part of the running application.
 
-```tsx
+```ts
 import { defineConfig } from "@quickgui/cli";
 
 export default defineConfig({
-  entry: "src/app.tsx",
-  name: "Notes",
-  identifier: "dev.example.notes",
-  resources: ["assets"],
+  name: "My App",
+  identifier: "com.example.my-app",
+  entry: ".",
 });
 ```
 
-Release-only options cover icons, signing, notarization, the Mac App Store, and updater manifests.
-
 ## Packages
 
-| Package | Purpose |
-| --- | --- |
-| `@quickgui/native` | Application, windows, menus, dialogs, notifications, and native services |
-| `@quickgui/ui` | QuickGUI UI renderer, primitives, components, and routing |
-| `@quickgui/ui/swift-ui` | Native SwiftUI controls hosted from QuickGUI UI on macOS |
-| `@quickgui/cli` | Project creation, development, and production packaging |
+Use `github.com/egoist/quickgui/go/native` for windows and platform services, `github.com/egoist/quickgui/go/ui` for UI, and `github.com/egoist/quickgui/go/reactive` for owners and contexts. `@quickgui/cli` is a development dependency. Pin the Go SDK and CLI to compatible release versions.

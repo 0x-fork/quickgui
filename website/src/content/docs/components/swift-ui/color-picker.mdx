@@ -2,31 +2,39 @@ A native SwiftUI color well that returns CSS-style RGBA color strings.
 
 ## Import
 
-Import `ColorPicker` from `@quickgui/ui/swift-ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Host, ColorPicker } from "@quickgui/ui/swift-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Host matchContents>
-  <ColorPicker
-    label="Accent"
-    selection={accent()}
-    supportsOpacity
-    onSelectionChange={setAccent}
-  />
-</Host>
+```go
+func SwiftUiColorPickerExample() {
+	value, setValue := ui.CreateSignal("#2563ebff")
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.ColorPicker(ui.SwiftUIColorPickerProps{
+				Selection:         value,
+				Label:             "Accent",
+				SupportsOpacity:   true,
+				OnSelectionChange: func(next string, _ *native.Event) { setValue(next) },
+			})
+		},
+	)
+}
 ```
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `selection` | Controlled selection for a table, native picker, or color control. |
-| `label` | Visible native SwiftUI control label. |
-| `supportsOpacity` | Allows alpha selection in the native color panel. |
-| `onSelectionChange` | Reports the selected native picker option or color. |
-
+| `Selection` | Controlled selection for a table, native picker, or color control. |
+| `Label` | Visible native SwiftUI control label. |
+| `SupportsOpacity` | Allows alpha selection in the native color panel. |
+| `OnSelectionChange` | Reports the selected native picker option or color. |

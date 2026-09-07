@@ -1,79 +1,98 @@
-QuickGUI は型付きの `style` オブジェクトで、保持型ネイティブノードをスタイルします。見慣れた名前ですが、値を解決するのはブラウザーではなく QuickGUI です。
+プリミティブにはスタイルオプションと子要素を直接渡せます。複合パーツは `ui.PartProps` を通して `ui.Style` を受け取ります。
 
 ## `style` プロパティ
 
-```tsx
-<View
-  style={{
-    width: 360,
-    padding: 20,
-    borderRadius: 14,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#e4e4e7",
-  }}
->
-  <Text style={{ color: "#18181b", fontSize: 15 }}>Settings</Text>
-</View>
-```
+短い宣言には関数形式のオプションを使い、スタイルレコードは `ui.WithStyle(style)` で再利用します。数値の長さは論理ピクセル、文字列ではパーセントも指定できます。ゼロは有効な値で、`nil` は省略です。`bun run fmt` で長い呼び出しの改行を整えます。
 
-数値は論理ピクセルです。パーセント文字列は、親で利用可能なサイズを基準に解決されます。
+```go
+func Card() {
+	ui.View(
+		ui.Padding(20),
+		ui.BorderRadius(12),
+		ui.BackgroundColor("#111827"),
+		ui.Text(ui.Color("#e2e8f0"), "Hello"),
+	)
+}
+```
 
 ## Flexbox
 
-Flexbox は、行、列、配置、間隔、折り返し、可変サイズに使う既定のレイアウト手段です。
+`Display("flex")` を指定し、方向、サイズ、配置を設定します。スクロールする flex の子には通常 `MinHeight(0)` または `MinWidth(0)` が必要です。
 
-```tsx
-<View style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 10 }}>
-  <Avatar.Root>{/* … */}</Avatar.Root>
-  <View style={{ flex: 1 }}><Text>Ada Lovelace</Text></View>
-  <Button><Text>Follow</Text></Button>
-</View>
+```go
+func Row() {
+	ui.View(
+		ui.Display("flex"),
+		ui.Gap(12),
+		ui.AlignItems("center"),
+		func() {
+			ui.Text(ui.Flex(1), ui.MinWidth(0), "Flexible content")
+			ui.Button(ui.FlexShrink(0), "Action")
+		},
+	)
+}
 ```
 
 ## グリッド
 
-CSS Grid 形式のトラックを使って、2 次元レイアウトを作れます。
+Grid では使い慣れたトラック文字列を使います。自動配置だけでは足りない場合は子の位置を明示できます。
 
-```tsx
-<View
-  style={{
-    display: "grid",
-    gridTemplateColumns: "220px 1fr",
-    gridTemplateRows: "auto 1fr",
-    gap: 12,
-  }}
->
-  <Sidebar />
-  <Editor />
-</View>
+```go
+func Grid() {
+	ui.View(
+		ui.Display("grid"),
+		ui.GridTemplateColumns("220px 1fr"),
+		ui.Gap(16),
+		func() {
+			ui.Text("Sidebar")
+			ui.Text("Content")
+		},
+	)
+}
 ```
 
 ## テキストと色
 
-テキストは保持型ツリーを通してタイポグラフィと色を継承します。色には CSS 形式の文字列、フォントにはシステムフォントファミリーを使います。
-
-```tsx
-<Text style={{ color: "#6b7280", fontSize: 13, lineHeight: 18, fontWeight: 500 }}>
-  Last saved just now
-</Text>
-```
+文字スタイルはノードツリー内で継承されます。色は16進数、`rgb()`/`rgba()`、またはパックした RGBA 値を使えます。色や数値のアクセサーを渡すと描画やサイズがリアクティブに変わります。
 
 ## インタラクション状態
 
-ホバー、アクティブ、フォーカス、無効、選択済みの描画をノード上に直接宣言します。コアが状態を適用するため、JavaScript との往復は発生しません。
+`ui.Hover`、`ui.Active`、`ui.Focus` でインタラクションのスタイルを指定します。`ui.When` はリアクティブな条件が真の間オプションを適用し、偽になると以前の値を復元します。無効・選択状態のスタイルには `ui.DisabledStyle` と `ui.SelectedStyle` を使います。子要素はマウントされたままです。
 
-```tsx
-<Button
-  style={{
-    backgroundColor: "#ffffff",
-    outlineOffset: 2,
-    hover: { backgroundColor: "#f4f4f5" },
-    active: { backgroundColor: "#e4e4e7" },
-    focus: { outline: "2px solid #f97316" },
-    disabled: { opacity: 0.5 },
-  }}
->
-  <Text>Continue</Text>
-</Button>
+```go
+func SelectableButton() {
+	selected, setSelected := ui.CreateSignal(false)
+	ui.Button(
+		ui.BackgroundColor("#e5e7eb"),
+		ui.When(selected, ui.BackgroundColor("#2563eb"), ui.Color("white")),
+		ui.Hover(ui.Opacity(0.85)),
+		ui.OnClick(func() { setSelected(!selected()) }),
+		"Toggle selection",
+	)
+}
 ```
+
+## グループと名前付きグループのホバー
+
+`ui.Group(true)` は名前なしのホバーグループ、`ui.Group("card")` は名前付きグループを作ります。子孫の `ui.GroupHover(...)` は、名前の有無にかかわらず最も近い祖先グループを参照します。`ui.GroupHoverNamed("card", ...)` は、別名のグループを飛び越えて同名の最も近い祖先を参照します。
+
+```go
+func GroupExample() {
+	ui.View(ui.Group("card"), ui.Padding(20), func() {
+		ui.Text(
+			ui.Color("#64748b"),
+			ui.GroupHover(ui.Color("#2563eb")),
+			"Changes when the card is hovered",
+		)
+		ui.View(ui.Group("toolbar"), func() {
+			ui.Text(
+				ui.GroupHoverNamed("card", ui.Color("#2563eb")),
+				ui.GroupHoverNamed("toolbar", ui.Opacity(0.8)),
+				"Follows the card and the nested toolbar",
+			)
+		})
+	})
+}
+```
+
+グループの余白や子孫を含む領域にポインターが入ると、そのルールが有効になります。名前なしのルールは入れ子のグループを参照し、名前付きのルールは外側のグループも参照できます。一致する祖先がなければ効果はありません。複数のグループルールは宣言順に適用され、同じプロパティには要素自身の `ui.Hover(...)` が優先されます。色、不透明度、アウトライン、変形などの描画プロパティを使ってください。ネイティブ側が処理するため、コンポーネントの再実行やレイアウト変更は発生しません。

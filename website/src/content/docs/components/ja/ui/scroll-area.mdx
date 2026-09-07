@@ -2,50 +2,66 @@
 
 ## インポート
 
-`@quickgui/ui` から `ScrollArea` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { ScrollArea } from "@quickgui/ui/base-ui";
+```go
+import (
+	"fmt"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<ScrollArea.Root
-  viewportSize={{ width: 320, height: 240 }}
-  contentSize={{ width: 320, height: 1200 }}
-  onScrollStateChange={setScrollState}
->
-  <ScrollArea.Viewport><ScrollArea.Content><LongList /></ScrollArea.Content></ScrollArea.Viewport>
-  <ScrollArea.Scrollbar orientation="vertical"><ScrollArea.Thumb /></ScrollArea.Scrollbar>
-</ScrollArea.Root>
+```go
+func ScrollAreaExample() {
+	ui.ScrollArea.Root(
+		ui.ScrollAreaRootProps{
+			ViewportSize: func() ui.Extent { return ui.Extent{Width: 320, Height: 160} },
+			ContentSize:  func() ui.Extent { return ui.Extent{Width: 320, Height: 880} },
+		},
+		func() {
+			state := ui.UseScrollAreaState()
+			ui.ScrollArea.Viewport(
+				ui.PartProps{Style: ui.Style{
+					Width:    320,
+					Height:   160,
+					Overflow: "hidden",
+				}},
+				func() {
+					ui.ScrollArea.Content(
+						ui.PartProps{Style: func() ui.Style { return ui.Style{Transform: fmt.Sprintf("translateY(%gpx)", -state().Offset.Y)} }},
+						func() {
+							for index := range 40 {
+								ui.Text(ui.Height(22), fmt.Sprintf("Row %d", index))
+							}
+						},
+					)
+				},
+			)
+			ui.ScrollArea.Scrollbar(
+				ui.ScrollAreaScrollbarProps{Orientation: "vertical"},
+				func() { ui.ScrollArea.Thumb(ui.ScrollAreaThumbProps{Orientation: "vertical"}) },
+			)
+		},
+	)
+}
 ```
 
 ## 構成
 
-- `ScrollArea.Root`
-- `ScrollArea.Viewport`
-- `ScrollArea.Content`
-- `ScrollArea.Scrollbar`
-- `ScrollArea.Thumb`
-- `ScrollArea.Corner`
-
-```tsx
-<ScrollArea.Root>
-  <ScrollArea.Viewport />
-  <ScrollArea.Content />
-  <ScrollArea.Scrollbar />
-  <ScrollArea.Thumb />
-  <ScrollArea.Corner />
-</ScrollArea.Root>
-```
+- `ui.ScrollArea.Root`
+- `ui.ScrollArea.Viewport`
+- `ui.ScrollArea.Content`
+- `ui.ScrollArea.Scrollbar`
+- `ui.ScrollArea.Thumb`
+- `ui.ScrollArea.Corner`
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `viewportSize` | 宣言されたスクロールビューポートの範囲です。 |
-| `contentSize` | 宣言されたスクロール内容の範囲です。 |
-| `overflowEdgeThreshold` | その端にいるとみなす最大距離です。 |
-| `onScrollStateChange` | 制限適用後のオフセットと、そこから得たオーバーフロー状態を通知します。 |
-
+| `ViewportSize` | 宣言されたスクロールビューポートの範囲です。 |
+| `ContentSize` | 宣言されたスクロール内容の範囲です。 |
+| `OverflowEdgeThreshold` | その端にいるとみなす最大距離です。 |
+| `OnScrollStateChange` | 制限適用後のオフセットと、そこから得たオーバーフロー状態を通知します。 |

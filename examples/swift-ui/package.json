@@ -6,10 +6,7 @@
     "dev": "quickgui dev",
     "build": "quickgui build"
   },
-  "dependencies": {
-    "@quickgui/native": "workspace:*",
-    "@quickgui/ui": "workspace:*"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@quickgui/cli": "workspace:*"
   }

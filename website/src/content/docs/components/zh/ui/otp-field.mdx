@@ -2,41 +2,49 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `OtpField`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { OtpField } from "@quickgui/ui/base-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"fmt"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<OtpField.Root value={code()} length={6} onValueChange={setCode} onComplete={verify}>
-  <For each={[0, 1, 2, 3, 4, 5]}>{(index) =>
-    <OtpField.Input index={index} />
-  }</For>
-</OtpField.Root>
+```go
+func OtpFieldExample() {
+	code, setCode := ui.CreateSignal("")
+	ui.OtpField.Root(
+		ui.OtpFieldRootProps{
+			Value:          code,
+			Length:         6,
+			ValidationType: "numeric",
+			OnValueChange:  func(next string, _ *native.Event) { setCode(next) },
+			OnComplete:     func(value string, _ *native.Event) { fmt.Println("Complete:", value) },
+		},
+		func() {
+			for index := range 6 {
+				ui.OtpField.Input(ui.OtpFieldInputProps{Index: index})
+			}
+		},
+	)
+}
 ```
 
 ## 结构
 
-- `OtpField.Root`
-- `OtpField.Input`
-- `OtpField.Separator`
-
-```tsx
-<OtpField.Root>
-  <OtpField.Input />
-  <OtpField.Separator />
-</OtpField.Root>
-```
+- `ui.OtpField.Root`
+- `ui.OtpField.Input`
+- `ui.OtpField.Separator`
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `value` | 受控值，具体类型取决于该组件的约定。 |
-| `length` | 一次性验证码输入格数量，上限为 12。 |
-| `onValueChange` | 报告核心接受的值。 |
-| `disabled` | 禁止交互，并暴露禁用状态。 |
-
+| `Value` | 受控值，具体类型取决于该组件的约定。 |
+| `Length` | 一次性验证码输入格数量，上限为 12。 |
+| `OnValueChange` | 报告核心接受的值。 |
+| `Disabled` | 禁止交互，并暴露禁用状态。 |

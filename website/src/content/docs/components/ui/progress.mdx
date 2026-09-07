@@ -2,46 +2,46 @@ Represents determinate or indeterminate task progress with composable labels and
 
 ## Import
 
-Import `Progress` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Progress } from "@quickgui/ui/gauges";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Progress.Root value={completed()} max={total()} format="fraction">
-  <Progress.Label><Text>Exporting</Text></Progress.Label>
-  <Progress.Track><Progress.Indicator /></Progress.Track>
-  <Progress.Value />
-</Progress.Root>
+```go
+func ProgressExample(progress func() *float64) {
+	ui.Progress.Root(
+		ui.ProgressProps{Value: progress, Max: 100},
+		func() {
+			ui.Progress.Label(ui.PartProps{}, "Uploading")
+			ui.Progress.Track(
+				ui.PartProps{},
+				func() { ui.Progress.Indicator(ui.PartProps{}) },
+			)
+			ui.Progress.Value(ui.PartProps{})
+		},
+	)
+}
 ```
 
 ## Anatomy
 
-- `Progress.Root`
-- `Progress.Track`
-- `Progress.Indicator`
-- `Progress.Label`
-- `Progress.Value`
-
-```tsx
-<Progress.Root>
-  <Progress.Track />
-  <Progress.Indicator />
-  <Progress.Label />
-  <Progress.Value />
-</Progress.Root>
-```
+- `ui.Progress.Root`
+- `ui.Progress.Track`
+- `ui.Progress.Indicator`
+- `ui.Progress.Label`
+- `ui.Progress.Value`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `value` | Controlled value. The precise value type follows this component’s contract. |
-| `max` | Maximum accepted value. |
-| `indeterminate` | Represents progress whose completed amount is unknown. |
-| `valueText` | Human-readable value preferred by assistive technology. |
-| `onStatusChange` | Reports the derived status, formatted value, and completion ratio. |
-
+| `Value` | Controlled value. The precise value type follows this component’s contract. |
+| `Max` | Maximum accepted value. |
+| `Indeterminate` | Represents progress whose completed amount is unknown. |
+| `ValueText` | Human-readable value preferred by assistive technology. |
+| `OnStatusChange` | Reports the derived status, formatted value, and completion ratio. |

@@ -2,37 +2,40 @@
 
 ## インポート
 
-`@quickgui/ui` から `Switch` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Switch } from "@quickgui/ui/controls";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<Switch.Root checked={enabled()} onCheckedChange={setEnabled}>
-  <Switch.Thumb />
-</Switch.Root>
+```go
+func SwitchExample() {
+	on, setOn := ui.CreateSignal(false)
+	ui.Switch.Root(
+		ui.SwitchProps{
+			Checked:         on,
+			OnCheckedChange: func(next bool, _ *native.Event) { setOn(next) },
+		},
+		func() { ui.Switch.Thumb(ui.PartProps{}); ui.Text("Notifications") },
+	)
+}
 ```
 
 ## 構成
 
-- `Switch.Root`
-- `Switch.Thumb`
-
-```tsx
-<Switch.Root>
-  <Switch.Thumb />
-</Switch.Root>
-```
+- `ui.Switch.Root`
+- `ui.Switch.Thumb`
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `checked` | 制御されたチェック状態です。 |
-| `defaultChecked` | コンポーネント自身が状態を管理するときの初期チェック状態です。 |
-| `onCheckedChange` | コアが受け入れたチェック状態を通知します。 |
-| `disabled` | 操作を無効にし、無効状態を公開します。 |
-
+| `Checked` | 制御されたチェック状態です。 |
+| `DefaultChecked` | コンポーネント自身が状態を管理するときの初期チェック状態です。 |
+| `OnCheckedChange` | コアが受け入れたチェック状態を通知します。 |
+| `Disabled` | 操作を無効にし、無効状態を公開します。 |

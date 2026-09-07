@@ -2,54 +2,47 @@
 
 ## インポート
 
-`@quickgui/ui` から `Toolbar` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Toolbar } from "@quickgui/ui/toolbar";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<Toolbar.Root
-  items={[{ value: "back" }, { value: "forward" }, { value: "search" }]}
-  active={active()}
-  onActiveChange={setActive}
->
-  <Toolbar.Button partValue="back"><Text>Back</Text></Toolbar.Button>
-  <Toolbar.Button partValue="forward"><Text>Forward</Text></Toolbar.Button>
-  <Toolbar.Input partValue="search" placeholder="Search" />
-</Toolbar.Root>
+```go
+func ToolbarExample() {
+	ui.Toolbar.Root(
+		ui.ToolbarRootProps{
+			Items:         []ui.ComponentItem{{Value: "select"}, {Value: "draw"}},
+			DefaultActive: "select",
+		},
+		func() {
+			ui.Toolbar.Item(ui.ToolbarItemProps{Value: "select"}, "Select")
+			ui.Toolbar.Item(ui.ToolbarItemProps{Value: "draw"}, "Draw")
+		},
+	)
+}
 ```
 
 ## 構成
 
-- `Toolbar.Root`
-- `Toolbar.Item`
-- `Toolbar.Button`
-- `Toolbar.Link`
-- `Toolbar.Input`
-- `Toolbar.Group`
-- `Toolbar.Separator`
-
-```tsx
-<Toolbar.Root>
-  <Toolbar.Item />
-  <Toolbar.Button />
-  <Toolbar.Link />
-  <Toolbar.Input />
-  <Toolbar.Group />
-  <Toolbar.Separator />
-</Toolbar.Root>
-```
+- `ui.Toolbar.Root`
+- `ui.Toolbar.Item`
+- `ui.Toolbar.Button`
+- `ui.Toolbar.Link`
+- `ui.Toolbar.Input`
+- `ui.Toolbar.Group`
+- `ui.Toolbar.Separator`
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `items` | 選択肢やキーボードナビゲーションに使う、上限付きの宣言モデルです。 |
-| `active` | アクティブ状態またはロービングフォーカス状態を持つ、制御された項目です。 |
-| `defaultActive` | 非制御コンポーネントの初期アクティブ項目です。 |
-| `orientation` | 水平または垂直のレイアウトと、それに対応するキーボード方向です。 |
-| `onActiveChange` | ロービングフォーカス状態を現在持つ項目を通知します。 |
-
+| `Items` | 選択肢やキーボードナビゲーションに使う、上限付きの宣言モデルです。 |
+| `Active` | アクティブ状態またはロービングフォーカス状態を持つ、制御された項目です。 |
+| `DefaultActive` | 非制御コンポーネントの初期アクティブ項目です。 |
+| `Orientation` | 水平または垂直のレイアウトと、それに対応するキーボード方向です。 |
+| `OnActiveChange` | ロービングフォーカス状態を現在持つ項目を通知します。 |

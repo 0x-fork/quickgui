@@ -8,3 +8,8 @@ dist
 .quickgui
 *.node
 worktrees/
+
+# Generated native host assets are staged by build:native.
+packages/native/lib/**/*.dylib
+packages/native/lib/**/*.so
+packages/native/lib/**/*.dll

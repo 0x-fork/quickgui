@@ -2,36 +2,41 @@
 
 ## インポート
 
-`@quickgui/ui/swift-ui` から `DatePicker` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Host, DatePicker } from "@quickgui/ui/swift-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+	"time"
+)
 ```
 
 ## 使い方
 
-```tsx
-const [scheduledAt, setScheduledAt] = createSignal(Date.now());
-
-<Host matchContents>
-  <DatePicker
-    label="Schedule"
-    value={scheduledAt()}
-    displayedComponents="dateAndTime"
-    style="field"
-    onValueChange={setScheduledAt}
-  />
-</Host>
+```go
+func SwiftUiDatePickerExample() {
+	value, setValue := ui.CreateSignal(float64(time.Now().UnixMilli()))
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.DatePicker(ui.SwiftUIDatePickerProps{
+				Value:               value,
+				DisplayedComponents: "dateAndTime",
+				OnValueChange:       func(next float64, _ *native.Event) { setValue(next) },
+			})
+		},
+	)
+}
 ```
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
-| `min` | 受け入れる最小値です。 |
-| `max` | 受け入れる最大値です。 |
-| `displayedComponents` | 日付、時刻、または日付と時刻の両方のフィールドを選びます。 |
-| `style` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
-| `onValueChange` | コアが受け入れた値を通知します。 |
-
+| `Value` | ミリ秒単位の Unix タイムスタンプです。`Min` と `Max` も同じ単位です。 |
+| `Min` | 受け入れる最小値です。 |
+| `Max` | 受け入れる最大値です。 |
+| `DisplayedComponents` | 日付、時刻、または日付と時刻の両方のフィールドを選びます。 |
+| `Style` | `automatic`、`field`、`stepperField`、`graphical` のいずれかです。 |
+| `OnValueChange` | コアが受け入れた値を通知します。 |

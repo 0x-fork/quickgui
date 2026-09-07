@@ -3,91 +3,33 @@ import { CodeBlock } from '../code-block'
 import { SectionHeading } from '../section-heading'
 import type { HighlightedSnippets } from '../../lib/snippets'
 
-function Step({
-  number,
-  title,
-  children,
-}: {
-  number: string
-  title: string
-  children?: React.ReactNode
-}) {
-  return (
-    <div>
-      <div className="flex items-baseline gap-3">
-        <span className="font-mono text-xs text-peach">{number}</span>
-        <h4 className="text-[15px] font-medium">{title}</h4>
-      </div>
-      {children ? <div className="mt-4">{children}</div> : null}
-    </div>
-  )
-}
-
-function Shell({ html }: { html: string }) {
-  return (
-    <div className="overflow-hidden border border-border bg-card-2">
-      <CodeBlock html={html} />
-    </div>
-  )
-}
-
-export function Quickstart({
-  highlighted,
-}: {
-  highlighted: HighlightedSnippets
-}) {
+export function Quickstart({ highlighted }: { highlighted: HighlightedSnippets }) {
   const { t } = useTranslation()
+  const steps = [
+    { key: 'create', snippet: 'cliInit' },
+    { key: 'edit', snippet: 'cliFormat' },
+    { key: 'ship', snippet: 'cliBuild' },
+  ] as const
 
   return (
     <section id="quickstart" className="border-b border-border">
       <SectionHeading title={t('quickstart.title')} />
-
-      <div className="grid gap-px bg-border lg:grid-cols-2">
-        <div className="space-y-9 bg-background p-8 sm:p-12">
-          <div className="flex items-center gap-2.5">
-            <span
-              className="i-simple-icons-rust size-5 text-foreground"
-              aria-hidden
-            />
-            <h3 className="text-lg font-semibold tracking-tight">Rust</h3>
+      <div className="grid gap-px bg-border lg:grid-cols-3">
+        {steps.map((step, index) => (
+          <div key={step.key} className="min-w-0 space-y-5 bg-background p-6 sm:p-8">
+            <div className="flex items-baseline gap-3">
+              <span className="font-mono text-xs text-peach">0{index + 1}</span>
+              <h3 className="text-[15px] font-medium">{t(`quickstart.${step.key}`)}</h3>
+            </div>
+            <div className="overflow-hidden border border-border bg-card-2">
+              <CodeBlock html={highlighted[step.snippet]} />
+            </div>
           </div>
-
-          <Step number="01" title={t('quickstart.rust.addCrate')}>
-            <Shell html={highlighted.cargoAdd} />
-          </Step>
-          <Step number="02" title={t('quickstart.rust.write')}>
-            <p className="text-[15px] leading-relaxed text-muted-foreground">
-              {t('quickstart.rust.writeBody')}
-            </p>
-          </Step>
-          <Step number="03" title={t('quickstart.rust.run')}>
-            <Shell html={highlighted.cargoRun} />
-          </Step>
-        </div>
-
-        <div className="space-y-9 bg-background p-8 sm:p-12">
-          <div className="flex items-center gap-2.5">
-            <span
-              className="i-simple-icons size-5 text-foreground"
-              aria-hidden
-            />
-            <h3 className="text-lg font-semibold tracking-tight">
-              TypeScript · QuickGUI UI
-            </h3>
-          </div>
-
-          <Step number="01" title={t('quickstart.ui.create')}>
-            <Shell html={highlighted.cliInit} />
-          </Step>
-          <Step number="02" title={t('quickstart.ui.ship')}>
-            <Shell html={highlighted.cliBuild} />
-          </Step>
-
-          <p className="text-[15px] leading-relaxed text-muted-foreground">
-            {t('quickstart.ui.note')}
-          </p>
-        </div>
+        ))}
       </div>
+      <p className="border-t border-border px-6 py-5 text-sm leading-relaxed text-muted-foreground sm:px-8">
+        {t('quickstart.note')}
+      </p>
     </section>
   )
 }

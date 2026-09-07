@@ -2,35 +2,39 @@ A native segmented picker with value-selection and neutral Xcode-style tab roles
 
 ## Import
 
-Import `SegmentedControl` from `@quickgui/ui/swift-ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Host, SegmentedControl } from "@quickgui/ui/swift-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Host matchContents>
-  <SegmentedControl
-    role="tabs"
-    selection={layout()}
-    options={[
-      { value: "list", label: "List" },
-      { value: "grid", label: "Grid" },
-    ]}
-    onSelectionChange={setLayout}
-  />
-</Host>
+```go
+func SwiftUiSegmentedControlExample() {
+	value, setValue := ui.CreateSignal("list")
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.SegmentedControl(ui.SwiftUISegmentedControlProps{
+				Selection:         value,
+				Options:           []ui.SwiftUIPickerOption{{Value: "list", Label: "List"}, {Value: "grid", Label: "Grid"}},
+				OnSelectionChange: func(next string, _ *native.Event) { setValue(next) },
+			})
+		},
+	)
+}
 ```
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `selection` | Controlled selection for a table, native picker, or color control. |
-| `options` | Ordered native picker options. |
-| `label` | Visible native SwiftUI control label. |
-| `role` | Accessibility role exposed by the retained node. |
-| `onSelectionChange` | Reports the selected native picker option or color. |
-
+| `Selection` | Controlled selection for a table, native picker, or color control. |
+| `Options` | Ordered native picker options. |
+| `Label` | Visible native SwiftUI control label. |
+| `Role` | Accessibility role exposed by the retained node. |
+| `OnSelectionChange` | Reports the selected native picker option or color. |

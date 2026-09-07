@@ -65,6 +65,10 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: '**/go.sum'
       - name: Verify tagged release metadata
         id: release
         run: scripts/release-metadata.sh "$GITHUB_OUTPUT"
@@ -109,6 +113,19 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
           QUICKGUI_RELEASE_ALLOW_DIRTY: 1
         run: scripts/release-crates.sh --publish
+      - name: Publish Go module tag
+        env:
+          RELEASE_SHA: ${{ steps.source.outputs.sha }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          go_tag="go/v$RELEASE_VERSION"
+          if git ls-remote --exit-code --tags origin "refs/tags/$go_tag" >/dev/null 2>&1; then
+            git fetch origin "refs/tags/$go_tag:refs/tags/$go_tag"
+            test "$(git rev-list -n 1 "$go_tag")" = "$RELEASE_SHA"
+          else
+            git tag "$go_tag" "$RELEASE_SHA"
+            git push origin "refs/tags/$go_tag"
+          fi
       - name: Publish npm packages
         run: scripts/release-npm.sh --publish target/npm-release
       - name: Verify public registry installs

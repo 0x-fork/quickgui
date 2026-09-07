@@ -2,42 +2,52 @@ Creates resizable panes with pointer and keyboard-operated handles.
 
 ## Import
 
-Import `Splitter` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Splitter } from "@quickgui/ui/range";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Splitter.Root value={sizes()} panes={[{ min: 180 }, { min: 280 }]} onSizesChange={setSizes}>
-  <Splitter.Pane itemIndex={0}><Sidebar /></Splitter.Pane>
-  <Splitter.Handle itemIndex={0} />
-  <Splitter.Pane itemIndex={1}><Editor /></Splitter.Pane>
-</Splitter.Root>
+```go
+func SplitterExample() {
+	ui.Splitter.Root(
+		ui.SplitterRootProps{
+			DefaultValue: []float64{240, 400},
+			Panes:        []ui.SplitterPaneDeclaration{{}, {}},
+			PartProps:    ui.PartProps{Style: ui.Style{Display: "flex", Height: 240}},
+		},
+		func() {
+			first, second := 0, 1
+			ui.Splitter.Pane(ui.SplitterPaneProps{Index: &first}, "Sidebar")
+			ui.Splitter.Handle(ui.SplitterPaneProps{
+				Index: &first,
+				PartProps: ui.PartProps{Style: ui.Style{
+					Width:  6,
+					Cursor: "col-resize",
+				}},
+			})
+			ui.Splitter.Pane(ui.SplitterPaneProps{Index: &second}, "Content")
+		},
+	)
+}
 ```
 
 ## Anatomy
 
-- `Splitter.Root`
-- `Splitter.Pane`
-- `Splitter.Handle`
-
-```tsx
-<Splitter.Root>
-  <Splitter.Pane />
-  <Splitter.Handle />
-</Splitter.Root>
-```
+- `ui.Splitter.Root`
+- `ui.Splitter.Pane`
+- `ui.Splitter.Handle`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `value` | Controlled value. The precise value type follows this component’s contract. |
-| `defaultValue` | Initial value when the component owns its state. |
-| `panes` | Per-pane minimum size and collapse declarations. |
-| `orientation` | Horizontal or vertical layout and keyboard direction. |
-| `onSizesChange` | Reports the complete pane-size set after the core resizes it. |
-
+| `Value` | Controlled value. The precise value type follows this component’s contract. |
+| `DefaultValue` | Initial value when the component owns its state. |
+| `Panes` | Per-pane minimum size and collapse declarations. |
+| `Orientation` | Horizontal or vertical layout and keyboard direction. |
+| `OnSizesChange` | Reports the complete pane-size set after the core resizes it. |

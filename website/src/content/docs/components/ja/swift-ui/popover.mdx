@@ -2,48 +2,55 @@
 
 ## インポート
 
-`@quickgui/ui/swift-ui` から `Popover` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Host, Popover } from "@quickgui/ui/swift-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<Popover.Root
-  isPresented={open()}
-  onIsPresentedChange={setOpen}
-  attachmentAnchor="bottom"
-  arrowEdge="top"
->
-  <Popover.Trigger><Button label="Open" /></Popover.Trigger>
-  <Popover.Content>
-    <QuickGUIHostView width={280} height={120}>
-      <SettingsPanel />
-    </QuickGUIHostView>
-  </Popover.Content>
-</Popover.Root>
+```go
+func SwiftUiPopoverExample() {
+	open, setOpen := ui.CreateSignal(false)
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.Popover.Root(
+				ui.SwiftUIPopoverProps{
+					IsPresented:         open,
+					OnIsPresentedChange: setOpen,
+				},
+				func() {
+					ui.SwiftUI.Popover.Trigger(ui.SwiftUIPopoverTriggerProps{Render: func() { ui.SwiftUI.Button(ui.SwiftUIButtonProps{Label: "Account"}) }})
+					ui.SwiftUI.Popover.Content(
+						ui.SwiftUIPopoverContentProps{},
+						func() {
+							ui.SwiftUI.QuickGUIHostView(
+								ui.SwiftUIQuickGUIHostViewProps{Width: 240, Height: 120},
+								"Account settings",
+							)
+						},
+					)
+				},
+			)
+		},
+	)
+}
 ```
 
 ## 構成
 
-- `Popover.Trigger`
-- `Popover.Content`
-
-```tsx
-<Popover.Root isPresented={open()} onIsPresentedChange={setOpen}>
-  <Popover.Trigger><Button label="Open" /></Popover.Trigger>
-  <Popover.Content>{/* SwiftUI-hosted content */}</Popover.Content>
-</Popover.Root>
-```
+- `ui.SwiftUI.Popover.Trigger`
+- `ui.SwiftUI.Popover.Content`
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `isPresented` | 制御されたネイティブ SwiftUI Popover の表示状態です。 |
-| `onIsPresentedChange` | ネイティブ SwiftUI Popover の表示状態変更を通知します。 |
-| `attachmentAnchor` | 組み合わせた SwiftUI トリガー上のアンカーポイントです。 |
-| `arrowEdge` | ネイティブ SwiftUI Popover の矢印を置く優先辺です。 |
-
+| `IsPresented` | 制御されたネイティブ SwiftUI Popover の表示状態です。 |
+| `OnIsPresentedChange` | ネイティブ SwiftUI Popover の表示状態変更を通知します。 |
+| `AttachmentAnchor` | 組み合わせた SwiftUI トリガー上のアンカーポイントです。 |
+| `ArrowEdge` | ネイティブ SwiftUI Popover の矢印を置く優先辺です。 |

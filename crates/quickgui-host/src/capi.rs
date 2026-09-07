@@ -1,4 +1,4 @@
-//! The C ABI a natively compiled QuickGUI application calls, plus the process entry point.
+//! The shared-library C ABI loaded by the purego frontend.
 //!
 //! Every function that reaches the platform application thread is fire-and-forget: it enqueues a
 //! bounded host command and returns immediately. Results, lifecycle outcomes, and request
@@ -7,23 +7,8 @@
 //! call-scoped reply callback because they never touch the application runtime.
 
 use std::ffi::{CStr, c_char, c_int, c_void};
-use std::sync::mpsc;
 
 use super::*;
-
-/// Stack reserved for the application thread. The compiled program runs its own stackful fibers
-/// on separate allocations, but its main fiber lives on this thread's stack.
-const APPLICATION_STACK_BYTES: usize = 64 * 1024 * 1024;
-/// Longest wait for the application thread to unwind after the native loop has exited.
-const APPLICATION_EXIT_GRACE: Duration = Duration::from_secs(5);
-
-// The test harness defines its own `main`, so the program entry exists only in a real host.
-#[cfg(not(test))]
-unsafe extern "C" {
-    /// The compiled application's program entry, defined by the scriptc program object.
-    #[link_name = "main"]
-    fn application_main(argc: c_int, argv: *mut *mut c_char) -> c_int;
-}
 
 /// Borrow one length-delimited span passed across the boundary. An empty span may be null.
 ///
@@ -106,36 +91,11 @@ impl Drop for HostAutoreleasePool {
     }
 }
 
-/// The process entry point of a natively compiled application.
-///
-/// The platform application loop must own the process main thread, so the linker names this
-/// function as the executable entry. It runs the compiled program's `main` on a dedicated
-/// application thread and keeps the main thread for AppKit/Winit until the application exits.
-///
-/// # Safety
-/// Called by the C runtime with the process arguments.
-#[cfg(not(test))]
+/// Run AppKit/Winit on the process main thread, locked by Go's runtime.LockOSThread.
+/// The Go UI goroutine independently submits commands through the nonblocking C ABI.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn quickgui_main(argc: c_int, argv: *mut *mut c_char) -> c_int {
-    let (exit_sender, exit_receiver) = mpsc::channel::<i32>();
-    let argv_address = argv as usize;
-    let spawned = std::thread::Builder::new()
-        .name("quickgui-app".to_owned())
-        .stack_size(APPLICATION_STACK_BYTES)
-        .spawn(move || {
-            // SAFETY: the program entry receives the untouched process arguments exactly once.
-            let code = unsafe { application_main(argc, argv_address as *mut *mut c_char) };
-            let _ = HOST.enqueue(HostCommand::ScriptExited { code });
-            let _ = exit_sender.send(code);
-        });
-    if let Err(error) = spawned {
-        eprintln!("quickgui: could not start the application thread: {error}");
-        return 1;
-    }
-    let code = run_host(ready_notifier());
-    // Give the application thread a bounded chance to run its quit listeners and unwind.
-    let _ = exit_receiver.recv_timeout(APPLICATION_EXIT_GRACE);
-    std::process::exit(code);
+pub extern "C" fn quickgui_run_host() -> c_int {
+    run_host(ready_notifier())
 }
 
 /// Run the native host loop on the current (main) thread until the application exits.
@@ -529,24 +489,6 @@ pub unsafe extern "C" fn quickgui_invoke(
     }
 }
 
-/// Deliver the encoded result of an asynchronous native-module call as one `module-result` event
-/// carrying `request`. Called by the module runtime from the thread that ran the function.
-///
-/// # Safety
-/// `data` is readable for `data_length` bytes.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quickgui_module_complete(
-    request: u32,
-    data: *const u8,
-    data_length: usize,
-) {
-    // SAFETY: forwarded under the caller contract.
-    let bytes = unsafe { span(data, data_length) }.to_vec();
-    let mut event = NativeEvent::reply("module-result", request, None, None);
-    event.data = Some(bytes);
-    HOST.publish_events([event]);
-}
-
 /// Answer one CPU-only service synchronously. The reply callback receives one JSON document of
 /// the form `{"ok":true,"value":...}` or `{"ok":false,"error":"..."}` before this call returns.
 ///
@@ -809,18 +751,7 @@ pub(super) fn run_app_host_loop(
                     }
                     return Ok(0);
                 }
-                HostCommand::ScriptExited { code } => {
-                    // The program returned. Without a running application there is nothing to
-                    // wait for; with one, its native loop ends with the program's status.
-                    if runtime
-                        .as_ref()
-                        .is_none_or(|runtime| runtime.runner.is_none())
-                    {
-                        return Ok(code.max(0));
-                    }
-                    HOST.publish_exit(code.max(0));
-                    return Ok(code.max(0));
-                }
+
             }
         }
 

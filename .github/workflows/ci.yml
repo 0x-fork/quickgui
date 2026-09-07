@@ -25,6 +25,30 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
+  go-and-cli:
+    name: Go and TypeScript CLI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: '**/go.sum'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - run: bun install --frozen-lockfile
+      - run: bun run test:js
+      - run: bun run typecheck:js
+      - run: bash scripts/check-go.sh
+      - name: Compile CGO-free SDK for other platforms
+        run: |
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go -C go build ./...
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go -C go build ./...
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go -C go build ./...
+
   macos-quality:
     name: macOS quality gate
     runs-on: macos-latest

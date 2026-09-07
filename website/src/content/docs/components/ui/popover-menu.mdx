@@ -2,45 +2,47 @@ A compact model-driven menu rendered in a native popover window.
 
 ## Import
 
-Import `PopoverMenu` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { PopoverMenu } from "@quickgui/ui/menu";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"fmt"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<PopoverMenu.Root
-  items={menuItems}
-  appearance={menuAppearance}
-  onSelect={({ value }) => runCommand(value)}
->
-  <PopoverMenu.Trigger><Text>Actions</Text></PopoverMenu.Trigger>
-  <PopoverMenu.Popup />
-</PopoverMenu.Root>
+```go
+func PopoverMenuExample() {
+	ui.PopoverMenu.Root(
+		ui.PopoverMenuRootProps{
+			Items: func() []ui.MenuItemDeclaration {
+				return []ui.MenuItemDeclaration{{ID: "copy", Label: "Copy"}, {ID: "paste", Label: "Paste"}}
+			},
+			OnSelect: func(item ui.MenuSelectDetails, _ *native.Event) { fmt.Println(item.ID) },
+		},
+		func() {
+			ui.PopoverMenu.Trigger(ui.PartProps{}, "Edit")
+			ui.PopoverMenu.Popup(ui.PopoverMenuPopupProps{})
+		},
+	)
+}
 ```
 
 ## Anatomy
 
-- `PopoverMenu.Root`
-- `PopoverMenu.Trigger`
-- `PopoverMenu.Popup`
-
-```tsx
-<PopoverMenu.Root>
-  <PopoverMenu.Trigger />
-  <PopoverMenu.Popup />
-</PopoverMenu.Root>
-```
+- `ui.PopoverMenu.Root`
+- `ui.PopoverMenu.Trigger`
+- `ui.PopoverMenu.Popup`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `items` | Bounded declaration model used for options or keyboard navigation. |
-| `appearance` | Structural colors and geometry for a core-painted native menu or picker. |
-| `open` | Controlled open state. |
-| `onOpenChange` | Reports an open or close decision from the core. |
-| `onSelect` | Reports the menu entry selected by the core. |
-
+| `Items` | Bounded declaration model used for options or keyboard navigation. |
+| `Appearance` | Structural colors and geometry for a core-painted native menu or picker. |
+| `Open` | Controlled open state. |
+| `OnOpenChange` | Reports an open or close decision from the core. |
+| `OnSelect` | Reports the menu entry selected by the core. |

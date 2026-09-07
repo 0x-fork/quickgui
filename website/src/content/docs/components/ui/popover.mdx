@@ -2,64 +2,64 @@ Places caller-styled content beside an anchor inside the current window.
 
 ## Import
 
-Import `Popover` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Popover } from "@quickgui/ui/popover";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Popover.Root open={open()} onOpenChange={setOpen}>
-  <Popover.Trigger><Text>Open</Text></Popover.Trigger>
-  <Popover.Portal>
-    <Popover.Positioner side="bottom" sideOffset={8}>
-      <Popover.Popup><Popover.Arrow /><Text>Popover content</Text></Popover.Popup>
-    </Popover.Positioner>
-  </Popover.Portal>
-</Popover.Root>
+```go
+func PopoverExample() {
+	ui.Popover.Root(
+		ui.PopoverRootProps{},
+		func() {
+			ui.Popover.Trigger(ui.PopoverTriggerProps{}, "Account")
+			ui.Popover.Positioner(
+				ui.PopoverPositionerProps{},
+				func() {
+					ui.Popover.Popup(
+						ui.PopoverPopupProps{PartProps: ui.PartProps{Style: ui.Style{
+							Width:   240,
+							Padding: 16,
+						}}},
+						func() {
+							ui.Popover.Title(ui.PartProps{}, "Account")
+							ui.Popover.Close(ui.PartProps{}, "Done")
+						},
+					)
+				},
+			)
+		},
+	)
+}
 ```
 
 ## Anatomy
 
-- `Popover.Root`
-- `Popover.Trigger`
-- `Popover.Content`
-- `Popover.Portal`
-- `Popover.Backdrop`
-- `Popover.Positioner`
-- `Popover.Popup`
-- `Popover.Arrow`
-- `Popover.Viewport`
-- `Popover.Title`
-- `Popover.Description`
-- `Popover.Close`
-
-```tsx
-<Popover.Root>
-  <Popover.Trigger />
-  <Popover.Content />
-  <Popover.Portal />
-  <Popover.Backdrop />
-  <Popover.Positioner />
-  <Popover.Popup />
-  <Popover.Arrow />
-  <Popover.Viewport />
-  <Popover.Title />
-  <Popover.Description />
-  <Popover.Close />
-</Popover.Root>
-```
+- `ui.Popover.Root`
+- `ui.Popover.Trigger`
+- `ui.Popover.Content`
+- `ui.Popover.Portal`
+- `ui.Popover.Backdrop`
+- `ui.Popover.Positioner`
+- `ui.Popover.Popup`
+- `ui.Popover.Arrow`
+- `ui.Popover.Viewport`
+- `ui.Popover.Title`
+- `ui.Popover.Description`
+- `ui.Popover.Close`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `open` | Controlled open state. |
-| `defaultOpen` | Initial state when the component owns whether it is open. |
-| `onOpenChange` | Reports an open or close decision from the core. |
-| `side` | Preferred placement side before collision handling. |
-| `align` | Preferred alignment on the placement cross-axis. |
-| `modal` | Contains focus and blocks interaction behind the surface. |
-
+| `Open` | Controlled open state. |
+| `DefaultOpen` | Initial state when the component owns whether it is open. |
+| `OnOpenChange` | Reports an open or close decision from the core. |
+| `Side` | Preferred placement side before collision handling. |
+| `Align` | Preferred alignment on the placement cross-axis. |
+| `Modal` | Contains focus and blocks interaction behind the surface. |

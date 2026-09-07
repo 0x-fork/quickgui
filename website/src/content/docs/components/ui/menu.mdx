@@ -2,81 +2,75 @@ A fully composable menu with submenus, groups, links, checkbox items, and radio 
 
 ## Import
 
-Import `Menu` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Menu } from "@quickgui/ui/menu";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"fmt"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Menu.Root open={open()} onOpenChange={setOpen}>
-  <Menu.Trigger><Text>File</Text></Menu.Trigger>
-  <Menu.Portal>
-    <Menu.Positioner side="bottom">
-      <Menu.Popup>
-        <Menu.Item value="new"><Text>New</Text></Menu.Item>
-        <Menu.Separator />
-        <Menu.CheckboxItem value="sidebar" checked={sidebar()}><Text>Sidebar</Text></Menu.CheckboxItem>
-      </Menu.Popup>
-    </Menu.Positioner>
-  </Menu.Portal>
-</Menu.Root>
+```go
+func MenuExample() {
+	ui.Menu.Root(
+		ui.MenuRootProps{},
+		func() {
+			ui.Menu.Trigger(ui.MenuTriggerProps{}, "Actions")
+			ui.Menu.Positioner(
+				ui.MenuPositionerProps{},
+				func() {
+					ui.Menu.Popup(
+						ui.PartProps{},
+						func() {
+							ui.Menu.Item(
+								ui.MenuItemProps{
+									Value:     "copy",
+									Label:     "Copy",
+									PartProps: ui.PartProps{OnClick: func(*native.Event) { fmt.Println("Copy") }},
+								},
+								"Copy",
+							)
+						},
+					)
+				},
+			)
+		},
+	)
+}
 ```
 
 ## Anatomy
 
-- `Menu.Root`
-- `Menu.Trigger`
-- `Menu.Portal`
-- `Menu.Backdrop`
-- `Menu.Positioner`
-- `Menu.Popup`
-- `Menu.Arrow`
-- `Menu.Item`
-- `Menu.LinkItem`
-- `Menu.SubmenuRoot`
-- `Menu.SubmenuTrigger`
-- `Menu.Group`
-- `Menu.GroupLabel`
-- `Menu.RadioGroup`
-- `Menu.RadioItem`
-- `Menu.RadioItemIndicator`
-- `Menu.CheckboxItem`
-- `Menu.CheckboxItemIndicator`
-- `Menu.Separator`
-
-```tsx
-<Menu.Root>
-  <Menu.Trigger />
-  <Menu.Portal />
-  <Menu.Backdrop />
-  <Menu.Positioner />
-  <Menu.Popup />
-  <Menu.Arrow />
-  <Menu.Item />
-  <Menu.LinkItem />
-  <Menu.SubmenuRoot />
-  <Menu.SubmenuTrigger />
-  <Menu.Group />
-  <Menu.GroupLabel />
-  <Menu.RadioGroup />
-  <Menu.RadioItem />
-  <Menu.RadioItemIndicator />
-  <Menu.CheckboxItem />
-  <Menu.CheckboxItemIndicator />
-  <Menu.Separator />
-</Menu.Root>
-```
+- `ui.Menu.Root`
+- `ui.Menu.Trigger`
+- `ui.Menu.Portal`
+- `ui.Menu.Backdrop`
+- `ui.Menu.Positioner`
+- `ui.Menu.Popup`
+- `ui.Menu.Arrow`
+- `ui.Menu.Item`
+- `ui.Menu.LinkItem`
+- `ui.Menu.SubmenuRoot`
+- `ui.Menu.SubmenuTrigger`
+- `ui.Menu.Group`
+- `ui.Menu.GroupLabel`
+- `ui.Menu.RadioGroup`
+- `ui.Menu.RadioItem`
+- `ui.Menu.RadioItemIndicator`
+- `ui.Menu.CheckboxItem`
+- `ui.Menu.CheckboxItemIndicator`
+- `ui.Menu.Separator`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `open` | Controlled open state. |
-| `defaultOpen` | Initial state when the component owns whether it is open. |
-| `onOpenChange` | Reports an open or close decision from the core. |
-| `orientation` | Horizontal or vertical layout and keyboard direction. |
-| `loopFocus` | Wraps keyboard highlight at the ends of the current menu level. |
-
+| `Open` | Controlled open state. |
+| `DefaultOpen` | Initial state when the component owns whether it is open. |
+| `OnOpenChange` | Reports an open or close decision from the core. |
+| `Orientation` | Horizontal or vertical layout and keyboard direction. |
+| `LoopFocus` | Wraps keyboard highlight at the ends of the current menu level. |

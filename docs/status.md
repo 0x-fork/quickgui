@@ -100,104 +100,11 @@ Implemented now:
 - element geometry on captured pointer events: `PointerEvent::size` carries the captured element's
   own laid-out size, so slider, splitter, and custom drag arithmetic uses the extent layout already
   decided instead of re-deriving it;
-- nested interaction-state styling in `@quickgui/ui`, at protocol v30: `style.hover`,
-  `active`, `focus`, `disabled`, `invalid`, `dragging`, `dragOver`, `groupHover`, `groupActive`,
-  and `focusWithin` objects carrying every property the core's `ElementStateStyle` can swap, group
-  states listing one entry per group they follow, a boolean or named `group` prop marking the group
-  over the core's new `Element::group`, `group_hover`, `group_active`, and `focus_within` (and the
-  `_named` forms for `group/name` targeting), one bounded JSON
-  declaration per state, and the flat `hover*`/`active*`/`focus*` names kept as deprecated aliases;
-- JavaScript bindings for the Base UI-aligned menu, select, and combobox parts and props, at
-  protocol v28: a compound `Menu` (`Root`/`Trigger`/`Portal`/`Backdrop`/`Positioner`/`Popup`/
-  `Arrow`/`Item`/`LinkItem`/`SubmenuRoot`/`SubmenuTrigger`/`Group`/`GroupLabel`/`RadioGroup`/
-  `RadioItem`/`RadioItemIndicator`/`CheckboxItem`/`CheckboxItemIndicator`/`Separator`) whose rows
-  are ordinary application-styled child nodes over the core's `MenuState` and `PopoverMenu` model,
-  with `modal`, `orientation`, `loopFocus`, `closeParentOnEsc`, `disabled`, Trigger `openOnHover`/
-  `delay`/`closeDelay`, `href` through the core's own open-URL path, and `useMenuState()` /
-  `useMenuItemState()` reporting the core's `MenuPartState` and `MenuItemPartState`;
-  `ContextMenu.Root` accepting exactly the same row components as a bounded model its cursor-point
-  surface paints; `Select.Label`/`Value`/`Icon`/`Backdrop`/`Portal`/`Positioner`/`Popup`/`Arrow`/
-  `List`/`Item`/`ItemText`/`ItemIndicator`/`Group`/`GroupLabel`/`Separator`/`ScrollUpArrow`/
-  `ScrollDownArrow` with `multiple`, `required`, `readOnly`, `modal`, `alignItemWithTrigger`, the
-  `items` map form, and `useSelectState()`; and `Combobox`/`Autocomplete` `Label`/`Value`/`Icon`/
-  `Input`/`InputGroup`/`Clear`/`Trigger`/`Chips`/`Chip`/`ChipRemove`/`Status`/`Empty` and the
-  declaration-only popup parts, with `multiple` chips, the `filter` policy (`contains`,
-  `startsWith`, `fuzzy`, `none`), `autoHighlight`, `openOnInputClick`, `highlightItemOnHover`,
-  `loopFocus`, `readOnly`, `required`, and `useComboboxState()` / `useComboboxChips()`;
-- JavaScript bindings for the Base UI-aligned compound parts and props, at protocol v25: the
-  `Popover` compound (`Portal`/`Backdrop`/`Positioner`/`Popup`/`Arrow`/`Viewport`/`Title`/
-  `Description`/`Close`) with `side`, `align`, `sideOffset`, `alignOffset`, `collisionPadding`,
-  `sticky`, `anchor` (a node or one `{ x, y }` point), `modal`, and Trigger `openOnHover`/`delay`/
-  `closeDelay`; a compound `Tooltip` (`Provider`/`Root`/`Trigger`/`Portal`/`Positioner`/`Popup`/
-  `Arrow`) with `timeout`, `hoverable`, `trackCursorAxis`, and `closeOnClick`, beside the unchanged
-  framework-owned `tooltip` prop; `Slider.Label`/`Value`/`Control`/`Indicator` with
-  `minStepsBetweenValues`, `thumbAlignment`, `format`, `onValueCommitted`, and the core's own
-  `dragging` flag; `NumberField.Group`/`ScrubArea`/`ScrubAreaCursor` with `smallStep`, `largeStep`,
-  `snapOnStep`, `allowWheelScrub`, `readOnly`, `required`, and a `scrubbing` state;
-  `Progress`/`Meter` `Track`/`Label`/`Value` with `format` and a reported `status`; a `Toast`
-  provider, portal, positioner, and content with `timeout`, `limit`, `expanded`, `swipeDirection`,
-  per-toast `index`/`offset`/`type`, and a `useToastManager()` API over the declared list; tab
-  `activationDirection` and indicator geometry; `Toolbar.Button`/`Link`/`Input`/`Group`/`Separator`
-  with `focusableWhenDisabled`; `Field.Item`/`Validity` with `validationMode` and
-  `validationDebounceTime`; `readOnly` on every selection control and a registry-free parent
-  checkbox; and `Dialog.Viewport` with `onOpenChangeComplete`. A declared side or alignment is only
-  a preference, so the resolved placement the retained tree published during paint is reported back
-  and exposed as a signal-friendly accessor (`usePopoverPlacement`, `useTooltipPlacement`,
-  `useSliderState`, `useNumberFieldState`, `useGaugeState`, `useTabsState`), which is how an
-  application styles from the real placement the way Base UI styles from `data-side`;
-- JavaScript bindings for the Base UI parity components, at protocol v31: QuickGUI UI `Separator`,
-  `Avatar` (`Root`/`Image`/`Fallback`), `CheckboxGroup` with `Checkbox.Root value`/`parent`
-  members, `PreviewCard`, `ScrollArea`, `OtpField`, and `NavigationMenu`, each using Base
-  UI's own compound and prop names. Every root allocates one bounded scope internally, so the parts
-  of an instance resolve to the core's derived identities with no registry; the core keeps the
-  avatar load status, the checked value set, the hover and close deadlines, the clamped scroll
-  offsets and derived overflow flags, every OTP slot and its completion edge, and the navigation menu's open item, roving Tab stop, and activation
-  direction, and reports each of them as one asynchronous `componentchange` event. A part whose
-  activation, editing, gesture, or dismissal the core owns ignores a declared listener for that same
-  edge rather than registering it twice, and a malformed declaration declares nothing instead of
-  reaching a core constructor that would panic on it;
-- JavaScript bindings for the extended styling surface, at protocol v23: extended text styling
-  (`letterSpacing`, `wordSpacing`, `textTransform`, `textShadow`, the `textDecoration` family,
-  `wordBreak`, `overflowWrap`, `hyphens`, `textDirection`, and logical `textAlign: "start"|"end"`),
-  direction-relative layout (`direction` plus `paddingStart`/`End`, `marginStart`/`End`, and
-  `borderStartWidth`/`EndWidth`), `position: "sticky"` insets, `overflowX: "scroll"`, scroll
-  snapping (`scrollSnapType`, `scrollSnapAlign`, `scrollSnapStop`), CSS and object-form gradients,
-  per-corner `borderRadius`, `borderStyle`, the `outline` ring, raster `backgroundImage` with its
-  size, repeat, and position, CSS `filter` and `backdropFilter` chains, `transform` with
-  `transformOrigin`, `mixBlendMode`, and hover/active/focus gradient, outline, and transform
-  variants. Every declaration is parsed once in Rust into the core's own bounded value type, and a
-  declaration the grammar does not cover declares nothing rather than reaching the core;
-- JavaScript bindings for the declared option sources: QuickGUI UI `Select`, `Combobox`, and
-  `Autocomplete` compound parts declaring a bounded option source — one `items` array or child
-  `Option` nodes — the controlled value, the controlled input text, the filter mode, and one
-  bounded `appearance` block the Rust core renders every popover row from in its own native window,
-  so filtering, highlight movement, typeahead, surface placement, dismissal, and commit policy stay
-  in the core and travel back as asynchronous `componentchange` and `commit` payloads;
-- JavaScript bindings for the virtual collections: QuickGUI UI `Table` (`Root`/`Header`/`Row`/`Cell`) and
-  `Tree` (`Root`/`Row`) declaring columns with sort state and widths, `rowCount`, selection mode
-  and controlled selection ranges, the inline-edit position, a tree node source with lazy `pending`
-  branches, controlled expansion and selection, and an atomically validated `setChildren` splice,
-  with the core owning the virtual window it reports through `onVisibleRangeChange`, column
-  resize and reorder, keyboard navigation, and the inline-edit lifetime;
-- JavaScript bindings for the remaining stateful field components: QuickGUI UI `NumberField`,
-  `DateField`, `TimeField`, `Calendar`, `Menubar`, and a declared `Toast` queue, with the core
-  owning numeric parsing and clamping, the bounded stepper repeat, civil-value segment arithmetic,
-  month and year movement, menubar roving focus, and the exact toast auto-dismiss deadline the
-  binding sleeps on with one `request_repaint_at` instead of a timer of its own;
-- JavaScript bindings for the declared range, ordering, and roving-focus components: QuickGUI UI
-  `Slider` (single-thumb and range), `Splitter`, `Toolbar`, and `ToggleGroup` compound parts
-  declared ahead of time as bounded protocol properties, with the Rust core owning clamping, step
-  snapping, thumb ordering, captured pointer arithmetic, pane-size conservation, wrapping arrow
-  navigation, disabled-item skipping, and the single roving Tab stop, and every result travelling
-  back as one asynchronous `componentchange` payload;
-- JavaScript bindings for the unstyled selection, tab, disclosure, and field descriptors: QuickGUI UI
-  `Checkbox`, `Radio`, `RadioGroup`, `Switch`, `Tabs`, `Collapsible`, `Accordion`, `Field`, and
-  `Fieldset` compound parts declared ahead of time as bounded protocol properties, so the Rust core
-  keeps ownership of part identity, roles, roving/arrow keyboard behavior, label and description
-  relationships, and inactive-panel mount policy; plus controlled QuickGUI UI `Dialog`/`AlertDialog`
-  in-window modal parts whose overlay portal the core mounts only while open and whose
-  Escape/backdrop dismissal policy is declared ahead of time, and a delayed native `tooltip`
-  property with placement, delay, gap, and viewport-margin controls;
+- a Go frontend with `Component` functions, nested children blocks, typed styles, and fine-grained
+  signals. Primitive and compound nodes declare protocol properties consumed by the Rust core;
+  Go does not reimplement native control state, layout, or interaction policy. The SDK includes
+  selection controls, tabs, menus, fields, ranges, overlays, virtual tables and trees, and macOS
+  SwiftUI hosting. [The Go guide](go.md) and runnable examples document the current binding API;
 - element background gradients: bounded eight-stop linear, radial (circle/ellipse, three ending-shape
   extents, any center), and conic gradients in linear-sRGB, sRGB, or Oklab, evaluated analytically in
   the existing instanced shape draw, respecting rounded corners, borders, clipping, subtree opacity,
@@ -212,20 +119,12 @@ Implemented now:
 - raster element backgrounds with `Auto`/`Cover`/`Contain`/`Fixed` sizing, four repeat modes, and
   fractional background positions, painted through the existing bounded image primitive and masked
   by the element's rounded corners;
-- macOS TypeScript/TSX compilation through scriptc and a static Rust C ABI host with a native main-thread application loop,
-  a core-backed singleton application readiness lifecycle, dynamically created `Window` instances,
-  independent transactional bounded retained trees,
-  window-routed bounded click/hover/input/submit/dismiss delivery, and an unstyled QuickGUI UI renderer
-  exposing `View`, `Text`, `Button`, `Input`, `TextArea`, retained core `Markdown`, variable-height
-  `VirtualList`, and controlled core-backed in-window `Popover`, plus a project CLI for
-  safe initialization, stable real-`.app` development hosts, candidate-first source restart, and
-  self-contained signed production packaging; the compiled application pipeline currently targets macOS;
-- declared JavaScript popover and context menus over the Rust `PopoverMenu` model and cursor-point
-  `ContextMenuState`, with one bounded JSON item model, core-owned validation, typeahead, toggle
-  policy, submenu surfaces, and stable-id `onSelect` events; plus JavaScript CSS Grid tracks and
-  placement, complete paint-transition declarations, retained image and application-shader nodes,
-  progress/meter/toggle parts, and declared key, mouse, double-click, wheel, context-menu, gesture,
-  focus, accelerator-keymap, and drag-and-drop listeners with bounded asynchronous payloads;
+- CGO-free Go builds that reuse the Rust shared library through purego in the application process,
+  with a native main-thread application loop, a pinned Go UI goroutine, asynchronous native
+  services, per-window retained trees, and mutation batches. The TypeScript CLI initializes Go
+  projects, restarts development apps after a candidate becomes ready, and bundles the matching
+  native library for production. Published native assets currently target macOS; Windows and
+  Linux require a matching host library and native runtime acceptance;
 - macOS/Windows/Linux backend selection through Winit 0.30 and WGPU 30;
 - inherited right-to-left layout direction with post-layout mirroring of paint, hit testing, and
   accessibility geometry inside each parent content box, logical `ps`/`pe`/`ms`/`me`/`border_s`/

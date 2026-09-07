@@ -2,26 +2,34 @@
 
 ## インポート
 
-`@quickgui/ui` から `Text` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Text } from "@quickgui/ui";
+```go
+import (
+	"fmt"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<Text style={{ fontSize: 18, fontWeight: 600 }}>
-  Native, retained text
-</Text>
+```go
+func TextExample() {
+	count, setCount := ui.CreateSignal(0)
+	ui.View(func() {
+		ui.Text(
+			ui.FontSize(20),
+			func() string { return fmt.Sprintf("Count: %d", count()) },
+		)
+		ui.Button(ui.OnClick(func() { setCount(count() + 1) }), "Increment")
+	})
+}
 ```
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `style` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
+| `WithStyle` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
 | `children` | コンポーネント内にマウントする内容です。 |
-| `role` | 保持ノードが公開するアクセシビリティロールです。 |
-| `ref` | 保持されたネイティブノードを受け取ります。 |
-
+| `Ref` | 保持されたネイティブノードを受け取ります。 |

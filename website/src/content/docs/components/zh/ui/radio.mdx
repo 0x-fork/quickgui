@@ -2,42 +2,47 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `Radio`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { Radio } from "@quickgui/ui/controls";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<Radio.Root
-  value="system"
-  checked={theme() === "system"}
-  onCheckedChange={() => setTheme("system")}
->
-  <Radio.Indicator />
-  <Text>System</Text>
-</Radio.Root>
+```go
+func RadioExample() {
+	value, setValue := ui.CreateSignal("system")
+	ui.RadioGroup.Root(
+		ui.RadioGroupProps{
+			Value:         func() *string { current := value(); return &current },
+			OnValueChange: func(next string, _ *native.Event) { setValue(next) },
+		},
+		func() {
+			for _, option := range []string{"light", "dark", "system"} {
+				ui.Radio.Root(
+					ui.RadioProps{Value: option},
+					func() { ui.Radio.Indicator(ui.PartProps{}); ui.Text(option) },
+				)
+			}
+		},
+	)
+}
 ```
 
 ## 结构
 
-- `Radio.Root`
-- `Radio.Indicator`
-
-```tsx
-<Radio.Root>
-  <Radio.Indicator />
-</Radio.Root>
-```
+- `ui.Radio.Root`
+- `ui.Radio.Indicator`
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `value` | 受控值，具体类型取决于该组件的约定。 |
-| `checked` | 受控的选中状态。 |
-| `onCheckedChange` | 报告核心接受的选中状态。 |
-| `disabled` | 禁止交互，并暴露禁用状态。 |
-
+| `Value` | 受控值，具体类型取决于该组件的约定。 |
+| `Checked` | 受控的选中状态。 |
+| `OnCheckedChange` | 报告核心接受的选中状态。 |
+| `Disabled` | 禁止交互，并暴露禁用状态。 |

@@ -2,38 +2,40 @@
 
 ## インポート
 
-`@quickgui/ui` から `Toggle` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Toggle } from "@quickgui/ui/controls";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<Toggle.Root pressed={bold()} onPressedChange={setBold}>
-  <Text>B</Text>
-  <Toggle.Indicator />
-</Toggle.Root>
+```go
+func ToggleExample() {
+	on, setOn := ui.CreateSignal(false)
+	ui.Toggle.Root(
+		ui.ToggleProps{
+			Pressed:         on,
+			OnPressedChange: func(next bool, _ *native.Event) { setOn(next) },
+		},
+		func() { ui.Toggle.Indicator(ui.PartProps{}); ui.Text("Notifications") },
+	)
+}
 ```
 
 ## 構成
 
-- `Toggle.Root`
-- `Toggle.Indicator`
-
-```tsx
-<Toggle.Root>
-  <Toggle.Indicator />
-</Toggle.Root>
-```
+- `ui.Toggle.Root`
+- `ui.Toggle.Indicator`
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `pressed` | 制御された押下状態です。 |
-| `defaultPressed` | コンポーネント自身が状態を管理するときの初期押下状態です。 |
-| `onPressedChange` | コアが受け入れた押下状態を通知します。 |
-| `disabled` | 操作を無効にし、無効状態を公開します。 |
-
+| `Pressed` | 制御された押下状態です。 |
+| `DefaultPressed` | コンポーネント自身が状態を管理するときの初期押下状態です。 |
+| `OnPressedChange` | コアが受け入れた押下状態を通知します。 |
+| `Disabled` | 操作を無効にし、無効状態を公開します。 |

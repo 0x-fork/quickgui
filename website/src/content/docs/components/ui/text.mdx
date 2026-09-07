@@ -2,26 +2,34 @@ Shapes and paints Unicode text with inherited typography, selection, and accessi
 
 ## Import
 
-Import `Text` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Text } from "@quickgui/ui";
+```go
+import (
+	"fmt"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Text style={{ fontSize: 18, fontWeight: 600 }}>
-  Native, retained text
-</Text>
+```go
+func TextExample() {
+	count, setCount := ui.CreateSignal(0)
+	ui.View(func() {
+		ui.Text(
+			ui.FontSize(20),
+			func() string { return fmt.Sprintf("Count: %d", count()) },
+		)
+		ui.Button(ui.OnClick(func() { setCount(count() + 1) }), "Increment")
+	})
+}
 ```
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `style` | QuickGUI layout, paint, typography, and interaction-state styles. |
+| `WithStyle` | QuickGUI layout, paint, typography, and interaction-state styles. |
 | `children` | Content mounted inside the component. |
-| `role` | Accessibility role exposed by the retained node. |
-| `ref` | Receives the retained native node. |
-
+| `Ref` | Receives the retained native node. |

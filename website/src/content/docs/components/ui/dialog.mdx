@@ -2,62 +2,67 @@ An in-window modal with focus containment, dismissal, and exact transition compl
 
 ## Import
 
-Import `Dialog` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Dialog } from "@quickgui/ui/dialog";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Dialog.Root open={open()} onOpenChange={setOpen}>
-  <Dialog.Trigger><Text>Edit profile</Text></Dialog.Trigger>
-  <Dialog.Portal>
-    <Dialog.Backdrop />
-    <Dialog.Viewport>
-      <Dialog.Popup>
-        <Dialog.Title><Text>Edit profile</Text></Dialog.Title>
-        <Dialog.Description><Text>Changes are saved immediately.</Text></Dialog.Description>
-        <Dialog.Close><Text>Done</Text></Dialog.Close>
-      </Dialog.Popup>
-    </Dialog.Viewport>
-  </Dialog.Portal>
-</Dialog.Root>
+```go
+func DialogExample() {
+	ui.Dialog.Root(
+		ui.DialogRootProps{},
+		func() {
+			ui.Dialog.Trigger(ui.PartProps{}, "Open dialog")
+			ui.Dialog.Portal(
+				ui.PartProps{},
+				func() {
+					ui.Dialog.Backdrop(ui.PartProps{})
+					ui.Dialog.Viewport(
+						ui.PartProps{},
+						func() {
+							ui.Dialog.Popup(
+								ui.DialogPopupProps{},
+								func() {
+									ui.Dialog.Title(ui.PartProps{}, "Confirm action")
+									ui.Dialog.Description(
+										ui.PartProps{},
+										"Review the details before continuing.",
+									)
+									ui.Dialog.Close(ui.PartProps{}, "Cancel")
+								},
+							)
+						},
+					)
+				},
+			)
+		},
+	)
+}
 ```
 
 ## Anatomy
 
-- `Dialog.Root`
-- `Dialog.Trigger`
-- `Dialog.Portal`
-- `Dialog.Backdrop`
-- `Dialog.Viewport`
-- `Dialog.Popup`
-- `Dialog.Title`
-- `Dialog.Description`
-- `Dialog.Close`
-
-```tsx
-<Dialog.Root>
-  <Dialog.Trigger />
-  <Dialog.Portal />
-  <Dialog.Backdrop />
-  <Dialog.Viewport />
-  <Dialog.Popup />
-  <Dialog.Title />
-  <Dialog.Description />
-  <Dialog.Close />
-</Dialog.Root>
-```
+- `ui.Dialog.Root`
+- `ui.Dialog.Trigger`
+- `ui.Dialog.Portal`
+- `ui.Dialog.Backdrop`
+- `ui.Dialog.Viewport`
+- `ui.Dialog.Popup`
+- `ui.Dialog.Title`
+- `ui.Dialog.Description`
+- `ui.Dialog.Close`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `open` | Controlled open state. |
-| `defaultOpen` | Initial state when the component owns whether it is open. |
-| `onOpenChange` | Reports an open or close decision from the core. |
-| `dismissOnEscape` | Allows Escape to dismiss the surface. |
-| `exitDuration` | Keeps closing content mounted for the exact exit transition duration. |
-
+| `Open` | Controlled open state. |
+| `DefaultOpen` | Initial state when the component owns whether it is open. |
+| `OnOpenChange` | Reports an open or close decision from the core. |
+| `DismissOnEscape` | Allows Escape to dismiss the surface. |
+| `ExitDuration` | Keeps closing content mounted for the exact exit transition duration. |

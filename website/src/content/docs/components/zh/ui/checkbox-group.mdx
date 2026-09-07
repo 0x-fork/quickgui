@@ -2,41 +2,45 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `CheckboxGroup`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { CheckboxGroup } from "@quickgui/ui/controls";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<CheckboxGroup.Root
-  allValues={["email", "push"]}
-  value={channels()}
-  onValueChange={setChannels}
->
-  <Checkbox.Root parent><Text>All notifications</Text></Checkbox.Root>
-  <Checkbox.Root value="email"><Text>Email</Text></Checkbox.Root>
-  <Checkbox.Root value="push"><Text>Push</Text></Checkbox.Root>
-</CheckboxGroup.Root>
+```go
+func CheckboxGroupExample() {
+	values, setValues := ui.CreateSignal([]string{"email"})
+	ui.CheckboxGroup.Root(
+		ui.CheckboxGroupProps{
+			AllValues:     []string{"email", "push"},
+			Value:         values,
+			OnValueChange: func(next []string, _ *native.Event) { setValues(next) },
+		},
+		func() {
+			ui.Checkbox.Root(ui.CheckboxProps{Parent: true}, "All notifications")
+			ui.Checkbox.Root(ui.CheckboxProps{Value: "email"}, "Email")
+			ui.Checkbox.Root(ui.CheckboxProps{Value: "push"}, "Push")
+		},
+	)
+}
 ```
 
 ## 结构
 
-- `CheckboxGroup.Root`
-
-```tsx
-<CheckboxGroup.Root>{/* content */}</CheckboxGroup.Root>
-```
+- `ui.CheckboxGroup.Root`
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `allValues` | 用于派生父复选框状态的完整有序值集合。 |
-| `value` | 受控值，具体类型取决于该组件的约定。 |
-| `defaultValue` | 组件自行管理状态时的初始值。 |
-| `onValueChange` | 报告核心接受的值。 |
-| `disabled` | 禁止交互，并暴露禁用状态。 |
-
+| `AllValues` | 用于派生父复选框状态的完整有序值集合。 |
+| `Value` | 受控值，具体类型取决于该组件的约定。 |
+| `DefaultValue` | 组件自行管理状态时的初始值。 |
+| `OnValueChange` | 报告核心接受的值。 |
+| `Disabled` | 禁止交互，并暴露禁用状态。 |

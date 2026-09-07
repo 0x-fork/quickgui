@@ -2,46 +2,46 @@
 
 ## インポート
 
-`@quickgui/ui` から `Progress` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Progress } from "@quickgui/ui/gauges";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<Progress.Root value={completed()} max={total()} format="fraction">
-  <Progress.Label><Text>Exporting</Text></Progress.Label>
-  <Progress.Track><Progress.Indicator /></Progress.Track>
-  <Progress.Value />
-</Progress.Root>
+```go
+func ProgressExample(progress func() *float64) {
+	ui.Progress.Root(
+		ui.ProgressProps{Value: progress, Max: 100},
+		func() {
+			ui.Progress.Label(ui.PartProps{}, "Uploading")
+			ui.Progress.Track(
+				ui.PartProps{},
+				func() { ui.Progress.Indicator(ui.PartProps{}) },
+			)
+			ui.Progress.Value(ui.PartProps{})
+		},
+	)
+}
 ```
 
 ## 構成
 
-- `Progress.Root`
-- `Progress.Track`
-- `Progress.Indicator`
-- `Progress.Label`
-- `Progress.Value`
-
-```tsx
-<Progress.Root>
-  <Progress.Track />
-  <Progress.Indicator />
-  <Progress.Label />
-  <Progress.Value />
-</Progress.Root>
-```
+- `ui.Progress.Root`
+- `ui.Progress.Track`
+- `ui.Progress.Indicator`
+- `ui.Progress.Label`
+- `ui.Progress.Value`
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
-| `max` | 受け入れる最大値です。 |
-| `indeterminate` | 完了量が不明な進捗を表します。 |
-| `valueText` | 支援技術向けの読みやすい値です。 |
-| `onStatusChange` | 導出された状態、整形済みの値、完了率を通知します。 |
-
+| `Value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `Max` | 受け入れる最大値です。 |
+| `Indeterminate` | 完了量が不明な進捗を表します。 |
+| `ValueText` | 支援技術向けの読みやすい値です。 |
+| `OnStatusChange` | 導出された状態、整形済みの値、完了率を通知します。 |

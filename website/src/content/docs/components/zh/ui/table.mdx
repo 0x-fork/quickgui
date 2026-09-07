@@ -2,52 +2,59 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `Table`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { Table } from "@quickgui/ui/collections";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<Table.Root
-  columns={[{ id: "name", label: "Name" }, { id: "status", label: "Status" }]}
-  rowCount={rows.length}
-  onVisibleRangeChange={setVisibleRange}
->
-  <Table.Header column="name"><Text>Name</Text></Table.Header>
-  <For each={visibleRows()}>{(row) =>
-    <Table.Row index={row.index}>
-      <Table.Cell column="name"><Text>{row.name}</Text></Table.Cell>
-      <Table.Cell column="status"><Text>{row.status}</Text></Table.Cell>
-    </Table.Row>
-  }</For>
-</Table.Root>
+```go
+func TableExample(rows []string) {
+	ui.Table.Root(
+		ui.TableRootProps{
+			Columns: func() []ui.TableColumnDeclaration {
+				return []ui.TableColumnDeclaration{{ID: "name", Label: "Name", Track: "1fr", Sortable: true}}
+			},
+			RowCount:     func() float64 { return float64(len(rows)) },
+			RowHeight:    26,
+			HeaderHeight: 28,
+			PartProps:    ui.PartProps{Style: ui.Style{Height: 260, OverflowY: "scroll"}},
+		},
+		func() {
+			ui.Table.Header(ui.TableHeaderProps{Column: "name"}, "Name")
+			for index, name := range rows {
+				ui.Table.Row(
+					ui.TableRowProps{Index: index},
+					func() {
+						ui.Table.Cell(
+							ui.TableCellProps{Column: "name"},
+							name,
+						)
+					},
+				)
+			}
+		},
+	)
+}
 ```
 
 ## 结构
 
-- `Table.Root`
-- `Table.Header`
-- `Table.Row`
-- `Table.Cell`
-
-```tsx
-<Table.Root>
-  <Table.Header />
-  <Table.Row />
-  <Table.Cell />
-</Table.Root>
-```
+- `ui.Table.Root`
+- `ui.Table.Header`
+- `ui.Table.Row`
+- `ui.Table.Cell`
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `columns` | 虚拟表格的列声明。 |
-| `rowCount` | 逻辑总行数。 |
-| `rowHeight` | 每个虚拟化行的逻辑高度。 |
-| `selectionMode` | 允许表格单选或多选。 |
-| `selection` | 表格、原生选择器或颜色控件的受控选中值。 |
-
+| `Columns` | 虚拟表格的列声明。 |
+| `RowCount` | 逻辑总行数。 |
+| `RowHeight` | 每个虚拟化行的逻辑高度。 |
+| `SelectionMode` | 允许表格单选或多选。 |
+| `Selection` | 表格、原生选择器或颜色控件的受控选中值。 |

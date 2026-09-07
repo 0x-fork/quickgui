@@ -12,6 +12,24 @@ const translations: Record<
   string,
   Record<TranslatedLocale, string>
 > = {
+
+  'Unix timestamp in milliseconds; `Min` and `Max` use the same unit.': {
+    zh: '以毫秒表示的 Unix 时间戳；`Min` 和 `Max` 使用相同单位。',
+    ja: 'ミリ秒単位の Unix タイムスタンプです。`Min` と `Max` も同じ単位です。',
+  },
+  '`automatic`, `field`, `stepperField`, or `graphical`.': {
+    zh: '`automatic`、`field`、`stepperField` 或 `graphical`。',
+    ja: '`automatic`、`field`、`stepperField`、`graphical` のいずれかです。',
+  },
+  'Native SwiftUI presentation style for this control.': {
+    zh: '此控件的原生 SwiftUI 展示样式。',
+    ja: 'このコントロールのネイティブ SwiftUI 表示スタイルです。',
+  },
+
+  'Static route declarations built with `ui.Route` and `ui.Layout`.': {
+    zh: '使用 `ui.Route` 和 `ui.Layout` 创建的静态路由声明。',
+    ja: '`ui.Route` と `ui.Layout` で作成する静的ルート宣言です。',
+  },
   'Absolute or parent-relative route pattern.': {
     zh: '绝对路由模式或相对于父路由的模式。',
     ja: '絶対または親からの相対ルートパターンです。',

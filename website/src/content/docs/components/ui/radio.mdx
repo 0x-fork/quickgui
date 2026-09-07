@@ -2,42 +2,47 @@ One selectable item, normally declared inside a RadioGroup.
 
 ## Import
 
-Import `Radio` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Radio } from "@quickgui/ui/controls";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Radio.Root
-  value="system"
-  checked={theme() === "system"}
-  onCheckedChange={() => setTheme("system")}
->
-  <Radio.Indicator />
-  <Text>System</Text>
-</Radio.Root>
+```go
+func RadioExample() {
+	value, setValue := ui.CreateSignal("system")
+	ui.RadioGroup.Root(
+		ui.RadioGroupProps{
+			Value:         func() *string { current := value(); return &current },
+			OnValueChange: func(next string, _ *native.Event) { setValue(next) },
+		},
+		func() {
+			for _, option := range []string{"light", "dark", "system"} {
+				ui.Radio.Root(
+					ui.RadioProps{Value: option},
+					func() { ui.Radio.Indicator(ui.PartProps{}); ui.Text(option) },
+				)
+			}
+		},
+	)
+}
 ```
 
 ## Anatomy
 
-- `Radio.Root`
-- `Radio.Indicator`
-
-```tsx
-<Radio.Root>
-  <Radio.Indicator />
-</Radio.Root>
-```
+- `ui.Radio.Root`
+- `ui.Radio.Indicator`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `value` | Controlled value. The precise value type follows this component’s contract. |
-| `checked` | Controlled checked state. |
-| `onCheckedChange` | Reports the checked state accepted by the core. |
-| `disabled` | Prevents interaction and exposes the disabled state. |
-
+| `Value` | Controlled value. The precise value type follows this component’s contract. |
+| `Checked` | Controlled checked state. |
+| `OnCheckedChange` | Reports the checked state accepted by the core. |
+| `Disabled` | Prevents interaction and exposes the disabled state. |

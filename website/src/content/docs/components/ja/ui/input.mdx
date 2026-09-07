@@ -2,29 +2,35 @@
 
 ## インポート
 
-`@quickgui/ui` から `Input` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Input } from "@quickgui/ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<Input
-  value={name()}
-  placeholder="Your name"
-  onInput={(event) => setName(event.value ?? "")}
-/>
+```go
+func InputExample() {
+	value, setValue := ui.CreateSignal("")
+	ui.Input(
+		ui.Value(value),
+		ui.Placeholder("Write here"),
+		ui.OnInput(func(event *native.Event) { setValue(event.Value) }),
+		ui.Width(320),
+		ui.Height(32),
+	)
+}
 ```
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
-| `placeholder` | 編集値が空のときに表示するテキストです。 |
-| `multiline` | 複数行テキスト編集を有効にします。 |
-| `onInput` | ネイティブ編集の入力を通知します。 |
-| `onChange` | 確定したネイティブ値の変更を通知します。 |
-
+| `Value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `Placeholder` | 編集値が空のときに表示するテキストです。 |
+| `Multiline` | 複数行テキスト編集を有効にします。 |
+| `OnInput` | ネイティブ編集の入力を通知します。 |

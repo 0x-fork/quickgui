@@ -2,40 +2,39 @@
 
 ## インポート
 
-`@quickgui/ui` から `Collapsible` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Collapsible } from "@quickgui/ui/disclosure";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<Collapsible.Root open={open()} onOpenChange={setOpen}>
-  <Collapsible.Trigger><Text>Advanced settings</Text></Collapsible.Trigger>
-  <Collapsible.Panel><AdvancedSettings /></Collapsible.Panel>
-</Collapsible.Root>
+```go
+func CollapsibleExample() {
+	ui.Collapsible.Root(
+		ui.CollapsibleRootProps{},
+		func() {
+			ui.Collapsible.Trigger(ui.PartProps{}, "Show details")
+			ui.Collapsible.Panel(ui.PartProps{}, "Mounted when opened")
+		},
+	)
+}
 ```
 
 ## 構成
 
-- `Collapsible.Root`
-- `Collapsible.Trigger`
-- `Collapsible.Panel`
-
-```tsx
-<Collapsible.Root>
-  <Collapsible.Trigger />
-  <Collapsible.Panel />
-</Collapsible.Root>
-```
+- `ui.Collapsible.Root`
+- `ui.Collapsible.Trigger`
+- `ui.Collapsible.Panel`
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `open` | 制御された開閉状態です。 |
-| `defaultOpen` | コンポーネント自身が開閉状態を管理するときの初期状態です。 |
-| `onOpenChange` | コアが決定した開閉を通知します。 |
-| `keepMounted` | 非アクティブな内容をマウントしたまま、表示を無効にします。 |
-
+| `Open` | 制御された開閉状態です。 |
+| `DefaultOpen` | コンポーネント自身が開閉状態を管理するときの初期状態です。 |
+| `OnOpenChange` | コアが決定した開閉を通知します。 |
+| `KeepMounted` | 非アクティブな内容をマウントしたまま、表示を無効にします。 |

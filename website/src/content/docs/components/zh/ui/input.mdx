@@ -2,29 +2,35 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `Input`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { Input } from "@quickgui/ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<Input
-  value={name()}
-  placeholder="Your name"
-  onInput={(event) => setName(event.value ?? "")}
-/>
+```go
+func InputExample() {
+	value, setValue := ui.CreateSignal("")
+	ui.Input(
+		ui.Value(value),
+		ui.Placeholder("Write here"),
+		ui.OnInput(func(event *native.Event) { setValue(event.Value) }),
+		ui.Width(320),
+		ui.Height(32),
+	)
+}
 ```
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `value` | 受控值，具体类型取决于该组件的约定。 |
-| `placeholder` | 可编辑值为空时显示的文本。 |
-| `multiline` | 启用多行文本编辑。 |
-| `onInput` | 报告原生编辑输入。 |
-| `onChange` | 报告已提交的原生值变化。 |
-
+| `Value` | 受控值，具体类型取决于该组件的约定。 |
+| `Placeholder` | 可编辑值为空时显示的文本。 |
+| `Multiline` | 启用多行文本编辑。 |
+| `OnInput` | 报告原生编辑输入。 |

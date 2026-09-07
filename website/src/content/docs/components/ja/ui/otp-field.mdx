@@ -2,41 +2,49 @@
 
 ## インポート
 
-`@quickgui/ui` から `OtpField` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { OtpField } from "@quickgui/ui/base-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"fmt"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<OtpField.Root value={code()} length={6} onValueChange={setCode} onComplete={verify}>
-  <For each={[0, 1, 2, 3, 4, 5]}>{(index) =>
-    <OtpField.Input index={index} />
-  }</For>
-</OtpField.Root>
+```go
+func OtpFieldExample() {
+	code, setCode := ui.CreateSignal("")
+	ui.OtpField.Root(
+		ui.OtpFieldRootProps{
+			Value:          code,
+			Length:         6,
+			ValidationType: "numeric",
+			OnValueChange:  func(next string, _ *native.Event) { setCode(next) },
+			OnComplete:     func(value string, _ *native.Event) { fmt.Println("Complete:", value) },
+		},
+		func() {
+			for index := range 6 {
+				ui.OtpField.Input(ui.OtpFieldInputProps{Index: index})
+			}
+		},
+	)
+}
 ```
 
 ## 構成
 
-- `OtpField.Root`
-- `OtpField.Input`
-- `OtpField.Separator`
-
-```tsx
-<OtpField.Root>
-  <OtpField.Input />
-  <OtpField.Separator />
-</OtpField.Root>
-```
+- `ui.OtpField.Root`
+- `ui.OtpField.Input`
+- `ui.OtpField.Separator`
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
-| `length` | ワンタイムコード入力スロットの数です。上限は 12 です。 |
-| `onValueChange` | コアが受け入れた値を通知します。 |
-| `disabled` | 操作を無効にし、無効状態を公開します。 |
-
+| `Value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `Length` | ワンタイムコード入力スロットの数です。上限は 12 です。 |
+| `OnValueChange` | コアが受け入れた値を通知します。 |
+| `Disabled` | 操作を無効にし、無効状態を公開します。 |

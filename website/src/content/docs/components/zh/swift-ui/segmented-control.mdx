@@ -2,35 +2,39 @@
 
 ## 导入
 
-从 `@quickgui/ui/swift-ui` 导入 `SegmentedControl`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { Host, SegmentedControl } from "@quickgui/ui/swift-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<Host matchContents>
-  <SegmentedControl
-    role="tabs"
-    selection={layout()}
-    options={[
-      { value: "list", label: "List" },
-      { value: "grid", label: "Grid" },
-    ]}
-    onSelectionChange={setLayout}
-  />
-</Host>
+```go
+func SwiftUiSegmentedControlExample() {
+	value, setValue := ui.CreateSignal("list")
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.SegmentedControl(ui.SwiftUISegmentedControlProps{
+				Selection:         value,
+				Options:           []ui.SwiftUIPickerOption{{Value: "list", Label: "List"}, {Value: "grid", Label: "Grid"}},
+				OnSelectionChange: func(next string, _ *native.Event) { setValue(next) },
+			})
+		},
+	)
+}
 ```
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `selection` | 表格、原生选择器或颜色控件的受控选中值。 |
-| `options` | 有序的原生选择器选项。 |
-| `label` | 原生 SwiftUI 控件的可见标签。 |
-| `role` | 保留节点暴露的无障碍角色。 |
-| `onSelectionChange` | 报告选中的原生选择器选项或颜色。 |
-
+| `Selection` | 表格、原生选择器或颜色控件的受控选中值。 |
+| `Options` | 有序的原生选择器选项。 |
+| `Label` | 原生 SwiftUI 控件的可见标签。 |
+| `Role` | 保留节点暴露的无障碍角色。 |
+| `OnSelectionChange` | 报告选中的原生选择器选项或颜色。 |

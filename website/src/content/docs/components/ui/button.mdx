@@ -2,29 +2,37 @@ An accessible press target that you style and compose with text or other content
 
 ## Import
 
-Import `Button` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Button } from "@quickgui/ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Button
-  onClick={save}
-  style={{ height: 40, paddingLeft: 16, paddingRight: 16 }}
->
-  Save changes
-</Button>
+```go
+func ButtonExample(save func()) {
+	ui.Button(
+		ui.Height(40),
+		ui.PaddingLeft(16),
+		ui.PaddingRight(16),
+		ui.BackgroundColor("#2563eb"),
+		ui.Color("white"),
+		ui.BorderRadius(8),
+		ui.Hover(ui.BackgroundColor("#3b82f6")),
+		ui.OnClick(save),
+		"Save changes",
+	)
+}
 ```
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `style` | QuickGUI layout, paint, typography, and interaction-state styles. |
+| `WithStyle` | QuickGUI layout, paint, typography, and interaction-state styles. |
 | `children` | Content mounted inside the component. |
-| `onClick` | Runs after the core resolves an activation. |
-| `disabled` | Prevents interaction and exposes the disabled state. |
-
+| `OnClick` | Runs after the core resolves an activation. |
+| `Disabled` | Prevents interaction and exposes the disabled state. |

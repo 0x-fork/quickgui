@@ -2,45 +2,47 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `PopoverMenu`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { PopoverMenu } from "@quickgui/ui/menu";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"fmt"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<PopoverMenu.Root
-  items={menuItems}
-  appearance={menuAppearance}
-  onSelect={({ value }) => runCommand(value)}
->
-  <PopoverMenu.Trigger><Text>Actions</Text></PopoverMenu.Trigger>
-  <PopoverMenu.Popup />
-</PopoverMenu.Root>
+```go
+func PopoverMenuExample() {
+	ui.PopoverMenu.Root(
+		ui.PopoverMenuRootProps{
+			Items: func() []ui.MenuItemDeclaration {
+				return []ui.MenuItemDeclaration{{ID: "copy", Label: "Copy"}, {ID: "paste", Label: "Paste"}}
+			},
+			OnSelect: func(item ui.MenuSelectDetails, _ *native.Event) { fmt.Println(item.ID) },
+		},
+		func() {
+			ui.PopoverMenu.Trigger(ui.PartProps{}, "Edit")
+			ui.PopoverMenu.Popup(ui.PopoverMenuPopupProps{})
+		},
+	)
+}
 ```
 
 ## 结构
 
-- `PopoverMenu.Root`
-- `PopoverMenu.Trigger`
-- `PopoverMenu.Popup`
-
-```tsx
-<PopoverMenu.Root>
-  <PopoverMenu.Trigger />
-  <PopoverMenu.Popup />
-</PopoverMenu.Root>
-```
+- `ui.PopoverMenu.Root`
+- `ui.PopoverMenu.Trigger`
+- `ui.PopoverMenu.Popup`
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `items` | 用于选项或键盘导航的有限声明模型。 |
-| `appearance` | 核心绘制的原生菜单或选择器所用的结构颜色和几何属性。 |
-| `open` | 受控的打开状态。 |
-| `onOpenChange` | 报告核心做出的打开或关闭决定。 |
-| `onSelect` | 报告核心选中的菜单项。 |
-
+| `Items` | 用于选项或键盘导航的有限声明模型。 |
+| `Appearance` | 核心绘制的原生菜单或选择器所用的结构颜色和几何属性。 |
+| `Open` | 受控的打开状态。 |
+| `OnOpenChange` | 报告核心做出的打开或关闭决定。 |
+| `OnSelect` | 报告核心选中的菜单项。 |

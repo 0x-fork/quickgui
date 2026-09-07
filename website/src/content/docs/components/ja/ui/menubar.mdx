@@ -2,39 +2,40 @@
 
 ## インポート
 
-`@quickgui/ui` から `Menubar` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Menubar } from "@quickgui/ui/menu";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<Menubar.Root count={2} open={openMenu()} onOpenChange={setOpenMenu}>
-  <Menubar.Item itemIndex={0}><FileMenu /></Menubar.Item>
-  <Menubar.Item itemIndex={1}><EditMenu /></Menubar.Item>
-</Menubar.Root>
+```go
+func MenubarExample() {
+	ui.Menubar.Root(
+		ui.MenubarRootProps{Count: 2},
+		func() {
+			for index, label := range []string{"File", "Edit"} {
+				ui.Menubar.Item(ui.MenubarItemProps{Index: &index}, label)
+			}
+		},
+	)
+}
 ```
 
 ## 構成
 
-- `Menubar.Root`
-- `Menubar.Item`
-
-```tsx
-<Menubar.Root>
-  <Menubar.Item />
-</Menubar.Root>
-```
+- `ui.Menubar.Root`
+- `ui.Menubar.Item`
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `count` | 宣言されたメニューバー項目の数です。 |
-| `open` | 制御された開閉状態です。 |
-| `defaultOpen` | コンポーネント自身が開閉状態を管理するときの初期状態です。 |
-| `onOpenChange` | コアが決定した開閉を通知します。 |
-| `onActiveChange` | ロービングフォーカス状態を現在持つ項目を通知します。 |
-
+| `Count` | 宣言されたメニューバー項目の数です。 |
+| `Open` | 制御された開閉状態です。 |
+| `DefaultOpen` | コンポーネント自身が開閉状態を管理するときの初期状態です。 |
+| `OnOpenChange` | コアが決定した開閉を通知します。 |
+| `OnActiveChange` | ロービングフォーカス状態を現在持つ項目を通知します。 |

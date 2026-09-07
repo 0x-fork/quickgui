@@ -2,64 +2,64 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `Popover`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { Popover } from "@quickgui/ui/popover";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<Popover.Root open={open()} onOpenChange={setOpen}>
-  <Popover.Trigger><Text>Open</Text></Popover.Trigger>
-  <Popover.Portal>
-    <Popover.Positioner side="bottom" sideOffset={8}>
-      <Popover.Popup><Popover.Arrow /><Text>Popover content</Text></Popover.Popup>
-    </Popover.Positioner>
-  </Popover.Portal>
-</Popover.Root>
+```go
+func PopoverExample() {
+	ui.Popover.Root(
+		ui.PopoverRootProps{},
+		func() {
+			ui.Popover.Trigger(ui.PopoverTriggerProps{}, "Account")
+			ui.Popover.Positioner(
+				ui.PopoverPositionerProps{},
+				func() {
+					ui.Popover.Popup(
+						ui.PopoverPopupProps{PartProps: ui.PartProps{Style: ui.Style{
+							Width:   240,
+							Padding: 16,
+						}}},
+						func() {
+							ui.Popover.Title(ui.PartProps{}, "Account")
+							ui.Popover.Close(ui.PartProps{}, "Done")
+						},
+					)
+				},
+			)
+		},
+	)
+}
 ```
 
 ## 结构
 
-- `Popover.Root`
-- `Popover.Trigger`
-- `Popover.Content`
-- `Popover.Portal`
-- `Popover.Backdrop`
-- `Popover.Positioner`
-- `Popover.Popup`
-- `Popover.Arrow`
-- `Popover.Viewport`
-- `Popover.Title`
-- `Popover.Description`
-- `Popover.Close`
-
-```tsx
-<Popover.Root>
-  <Popover.Trigger />
-  <Popover.Content />
-  <Popover.Portal />
-  <Popover.Backdrop />
-  <Popover.Positioner />
-  <Popover.Popup />
-  <Popover.Arrow />
-  <Popover.Viewport />
-  <Popover.Title />
-  <Popover.Description />
-  <Popover.Close />
-</Popover.Root>
-```
+- `ui.Popover.Root`
+- `ui.Popover.Trigger`
+- `ui.Popover.Content`
+- `ui.Popover.Portal`
+- `ui.Popover.Backdrop`
+- `ui.Popover.Positioner`
+- `ui.Popover.Popup`
+- `ui.Popover.Arrow`
+- `ui.Popover.Viewport`
+- `ui.Popover.Title`
+- `ui.Popover.Description`
+- `ui.Popover.Close`
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `open` | 受控的打开状态。 |
-| `defaultOpen` | 组件自行管理打开状态时的初始状态。 |
-| `onOpenChange` | 报告核心做出的打开或关闭决定。 |
-| `side` | 碰撞处理前的首选放置方向。 |
-| `align` | 在放置交叉轴上的首选对齐方式。 |
-| `modal` | 将焦点限制在界面内，并阻止与后方内容交互。 |
-
+| `Open` | 受控的打开状态。 |
+| `DefaultOpen` | 组件自行管理打开状态时的初始状态。 |
+| `OnOpenChange` | 报告核心做出的打开或关闭决定。 |
+| `Side` | 碰撞处理前的首选放置方向。 |
+| `Align` | 在放置交叉轴上的首选对齐方式。 |
+| `Modal` | 将焦点限制在界面内，并阻止与后方内容交互。 |

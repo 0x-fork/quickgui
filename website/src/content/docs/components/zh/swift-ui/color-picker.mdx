@@ -2,31 +2,39 @@
 
 ## 导入
 
-从 `@quickgui/ui/swift-ui` 导入 `ColorPicker`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { Host, ColorPicker } from "@quickgui/ui/swift-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<Host matchContents>
-  <ColorPicker
-    label="Accent"
-    selection={accent()}
-    supportsOpacity
-    onSelectionChange={setAccent}
-  />
-</Host>
+```go
+func SwiftUiColorPickerExample() {
+	value, setValue := ui.CreateSignal("#2563ebff")
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.ColorPicker(ui.SwiftUIColorPickerProps{
+				Selection:         value,
+				Label:             "Accent",
+				SupportsOpacity:   true,
+				OnSelectionChange: func(next string, _ *native.Event) { setValue(next) },
+			})
+		},
+	)
+}
 ```
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `selection` | 表格、原生选择器或颜色控件的受控选中值。 |
-| `label` | 原生 SwiftUI 控件的可见标签。 |
-| `supportsOpacity` | 允许在原生颜色面板中选择 Alpha 值。 |
-| `onSelectionChange` | 报告选中的原生选择器选项或颜色。 |
-
+| `Selection` | 表格、原生选择器或颜色控件的受控选中值。 |
+| `Label` | 原生 SwiftUI 控件的可见标签。 |
+| `SupportsOpacity` | 允许在原生颜色面板中选择 Alpha 值。 |
+| `OnSelectionChange` | 报告选中的原生选择器选项或颜色。 |

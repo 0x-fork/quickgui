@@ -2,30 +2,38 @@
 
 ## 导入
 
-从 `@quickgui/ui/swift-ui` 导入 `Toggle`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { Host, Toggle } from "@quickgui/ui/swift-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<Host matchContents>
-  <Toggle
-    label="Notifications"
-    isOn={notifications()}
-    onIsOnChange={setNotifications}
-  />
-</Host>
+```go
+func SwiftUiToggleExample() {
+	on, setOn := ui.CreateSignal(true)
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.Toggle(ui.SwiftUIToggleProps{
+				IsOn:         on,
+				Label:        "Notifications",
+				OnIsOnChange: func(next bool, _ *native.Event) { setOn(next) },
+			})
+		},
+	)
+}
 ```
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `isOn` | 受控的 SwiftUI 开关值。 |
-| `label` | 原生 SwiftUI 控件的可见标签。 |
-| `onIsOnChange` | 报告原生 SwiftUI 开关接受的值。 |
-| `modifiers` | 应用于托管控件的有序 SwiftUI View 修饰器。 |
-
+| `IsOn` | 受控的 SwiftUI 开关值。 |
+| `Label` | 原生 SwiftUI 控件的可见标签。 |
+| `OnIsOnChange` | 报告原生 SwiftUI 开关接受的值。 |
+| `Modifiers` | 应用于托管控件的有序 SwiftUI View 修饰器。 |

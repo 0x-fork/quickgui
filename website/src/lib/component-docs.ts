@@ -34,10 +34,10 @@ export const ALL_COMPONENT_DOCS = [
     "description": "A general-purpose retained container for layout, paint, pointer input, and accessibility.",
     "parts": [],
     "keyProps": [
-      "style",
+      "WithStyle",
       "children",
-      "onClick",
-      "ref"
+      "OnClick",
+      "Ref"
     ]
   },
   {
@@ -48,10 +48,9 @@ export const ALL_COMPONENT_DOCS = [
     "description": "Shapes and paints Unicode text with inherited typography, selection, and accessibility.",
     "parts": [],
     "keyProps": [
-      "style",
+      "WithStyle",
       "children",
-      "role",
-      "ref"
+      "Ref"
     ]
   },
   {
@@ -62,10 +61,10 @@ export const ALL_COMPONENT_DOCS = [
     "description": "An accessible press target that you style and compose with text or other content.",
     "parts": [],
     "keyProps": [
-      "style",
+      "WithStyle",
       "children",
-      "onClick",
-      "disabled"
+      "OnClick",
+      "Disabled"
     ]
   },
   {
@@ -76,11 +75,10 @@ export const ALL_COMPONENT_DOCS = [
     "description": "A controlled, core-owned text editor with native keyboard and text services.",
     "parts": [],
     "keyProps": [
-      "value",
-      "placeholder",
-      "multiline",
-      "onInput",
-      "onChange"
+      "Value",
+      "Placeholder",
+      "Multiline",
+      "OnInput"
     ]
   },
   {
@@ -91,11 +89,10 @@ export const ALL_COMPONENT_DOCS = [
     "description": "The multiline text-editing primitive, with the same controlled value contract as Input.",
     "parts": [],
     "keyProps": [
-      "value",
-      "placeholder",
-      "onInput",
-      "onChange",
-      "style"
+      "Value",
+      "Placeholder",
+      "OnInput",
+      "WithStyle"
     ]
   },
   {
@@ -106,10 +103,9 @@ export const ALL_COMPONENT_DOCS = [
     "description": "Renders retained Markdown, including an incremental mode for streaming content.",
     "parts": [],
     "keyProps": [
-      "content",
-      "source",
-      "streaming",
-      "style"
+      "Value",
+      "Streaming",
+      "WithStyle"
     ]
   },
   {
@@ -120,22 +116,21 @@ export const ALL_COMPONENT_DOCS = [
     "description": "Displays a filesystem path, file URL, or base64 data URL with retained image resources.",
     "parts": [],
     "keyProps": [
-      "source",
-      "fit",
-      "objectFit",
-      "style"
+      "Value",
+      "ObjectFit",
+      "WithStyle"
     ]
   },
   {
     "kind": "ui",
     "slug": "svg",
-    "name": "Svg",
+    "name": "SVG",
     "section": "Primitives",
     "description": "Renders a complete inline SVG document without loading external SVG resources.",
     "parts": [],
     "keyProps": [
-      "source",
-      "style"
+      "Value",
+      "WithStyle"
     ]
   },
   {
@@ -146,9 +141,9 @@ export const ALL_COMPONENT_DOCS = [
     "description": "Paints validated WGSL with a bounded set of numeric shader parameters.",
     "parts": [],
     "keyProps": [
-      "source",
-      "shaderParameters",
-      "style"
+      "Value",
+      "ShaderParameters",
+      "WithStyle"
     ]
   },
   {
@@ -156,13 +151,13 @@ export const ALL_COMPONENT_DOCS = [
     "slug": "virtual-list",
     "name": "VirtualList",
     "section": "Primitives",
-    "description": "Mounts only the visible slice of a long or variable-height collection.",
+    "description": "Lays out and paints the visible part of a long or variable-height collection.",
     "parts": [],
     "keyProps": [
-      "estimatedItemHeight",
-      "overscan",
-      "listAlignment",
-      "followMode",
+      "EstimatedItemHeight",
+      "Overscan",
+      "ListAlignment",
+      "FollowMode",
       "children"
     ]
   },
@@ -174,11 +169,11 @@ export const ALL_COMPONENT_DOCS = [
     "description": "Embeds the retained Ghostty terminal surface and reports process lifecycle events.",
     "parts": [],
     "keyProps": [
-      "program",
-      "arguments",
-      "workingDirectory",
-      "environment",
-      "onStatus"
+      "Program",
+      "Args",
+      "WorkingDirectory",
+      "Environment",
+      "OnStatus"
     ]
   },
   {
@@ -192,11 +187,11 @@ export const ALL_COMPONENT_DOCS = [
       "Indicator"
     ],
     "keyProps": [
-      "checked",
-      "defaultChecked",
-      "onCheckedChange",
-      "readOnly",
-      "disabled"
+      "Checked",
+      "DefaultChecked",
+      "OnCheckedChange",
+      "ReadOnly",
+      "Disabled"
     ]
   },
   {
@@ -209,11 +204,11 @@ export const ALL_COMPONENT_DOCS = [
       "Root"
     ],
     "keyProps": [
-      "allValues",
-      "value",
-      "defaultValue",
-      "onValueChange",
-      "disabled"
+      "AllValues",
+      "Value",
+      "DefaultValue",
+      "OnValueChange",
+      "Disabled"
     ]
   },
   {
@@ -227,10 +222,10 @@ export const ALL_COMPONENT_DOCS = [
       "Indicator"
     ],
     "keyProps": [
-      "value",
-      "checked",
-      "onCheckedChange",
-      "disabled"
+      "Value",
+      "Checked",
+      "OnCheckedChange",
+      "Disabled"
     ]
   },
   {
@@ -243,11 +238,11 @@ export const ALL_COMPONENT_DOCS = [
       "Root"
     ],
     "keyProps": [
-      "value",
-      "defaultValue",
-      "onValueChange",
-      "readOnly",
-      "required"
+      "Value",
+      "DefaultValue",
+      "OnValueChange",
+      "ReadOnly",
+      "Required"
     ]
   },
   {
@@ -261,10 +256,10 @@ export const ALL_COMPONENT_DOCS = [
       "Thumb"
     ],
     "keyProps": [
-      "checked",
-      "defaultChecked",
-      "onCheckedChange",
-      "disabled"
+      "Checked",
+      "DefaultChecked",
+      "OnCheckedChange",
+      "Disabled"
     ]
   },
   {
@@ -278,10 +273,10 @@ export const ALL_COMPONENT_DOCS = [
       "Indicator"
     ],
     "keyProps": [
-      "pressed",
-      "defaultPressed",
-      "onPressedChange",
-      "disabled"
+      "Pressed",
+      "DefaultPressed",
+      "OnPressedChange",
+      "Disabled"
     ]
   },
   {
@@ -295,11 +290,11 @@ export const ALL_COMPONENT_DOCS = [
       "Item"
     ],
     "keyProps": [
-      "items",
-      "value",
-      "defaultValue",
-      "variant",
-      "onValueChange"
+      "Items",
+      "Value",
+      "DefaultValue",
+      "Multiple",
+      "OnValueChange"
     ]
   },
   {
@@ -319,12 +314,12 @@ export const ALL_COMPONENT_DOCS = [
       "Thumb"
     ],
     "keyProps": [
-      "value",
-      "defaultValue",
-      "min",
-      "max",
-      "step",
-      "onValueChange"
+      "Value",
+      "DefaultValue",
+      "Min",
+      "Max",
+      "Step",
+      "OnValueChange"
     ]
   },
   {
@@ -343,12 +338,12 @@ export const ALL_COMPONENT_DOCS = [
       "ScrubAreaCursor"
     ],
     "keyProps": [
-      "value",
-      "defaultValue",
-      "min",
-      "max",
-      "step",
-      "onValueChange"
+      "Value",
+      "DefaultValue",
+      "Min",
+      "Max",
+      "Step",
+      "OnValueChange"
     ]
   },
   {
@@ -380,11 +375,11 @@ export const ALL_COMPONENT_DOCS = [
       "ScrollDownArrow"
     ],
     "keyProps": [
-      "items",
-      "value",
-      "defaultValue",
-      "multiple",
-      "onValueChange"
+      "Items",
+      "Value",
+      "DefaultValue",
+      "Multiple",
+      "OnValueChange"
     ]
   },
   {
@@ -423,12 +418,12 @@ export const ALL_COMPONENT_DOCS = [
       "Separator"
     ],
     "keyProps": [
-      "items",
-      "value",
-      "inputValue",
-      "multiple",
-      "filterMode",
-      "onValueChange"
+      "Items",
+      "Value",
+      "InputValue",
+      "Multiple",
+      "FilterMode",
+      "OnValueChange"
     ]
   },
   {
@@ -461,11 +456,11 @@ export const ALL_COMPONENT_DOCS = [
       "Separator"
     ],
     "keyProps": [
-      "items",
-      "inputValue",
-      "filterMode",
-      "onInputValueChange",
-      "onCommit"
+      "Items",
+      "InputValue",
+      "FilterMode",
+      "OnInputValueChange",
+      "OnCommit"
     ]
   },
   {
@@ -484,11 +479,11 @@ export const ALL_COMPONENT_DOCS = [
       "Error"
     ],
     "keyProps": [
-      "invalid",
-      "required",
-      "validationMessage",
-      "validationMode",
-      "onValidationChange"
+      "Invalid",
+      "Required",
+      "ValidationMessage",
+      "ValidationMode",
+      "OnValidationChange"
     ]
   },
   {
@@ -504,9 +499,9 @@ export const ALL_COMPONENT_DOCS = [
       "Control"
     ],
     "keyProps": [
-      "disabled",
+      "Disabled",
       "children",
-      "style"
+      "Style"
     ]
   },
   {
@@ -520,11 +515,11 @@ export const ALL_COMPONENT_DOCS = [
       "Segment"
     ],
     "keyProps": [
-      "value",
-      "min",
-      "max",
-      "onValueChange",
-      "disabled"
+      "Value",
+      "Min",
+      "Max",
+      "OnValueChange",
+      "Disabled"
     ]
   },
   {
@@ -538,11 +533,11 @@ export const ALL_COMPONENT_DOCS = [
       "Segment"
     ],
     "keyProps": [
-      "value",
-      "defaultValue",
-      "hour12",
-      "showSeconds",
-      "onValueChange"
+      "Value",
+      "DefaultValue",
+      "Hour12",
+      "ShowSeconds",
+      "OnValueChange"
     ]
   },
   {
@@ -557,12 +552,12 @@ export const ALL_COMPONENT_DOCS = [
       "Day"
     ],
     "keyProps": [
-      "value",
-      "defaultValue",
-      "min",
-      "max",
-      "firstWeekday",
-      "onValueChange"
+      "Value",
+      "DefaultValue",
+      "Min",
+      "Max",
+      "FirstWeekday",
+      "OnValueChange"
     ]
   },
   {
@@ -577,10 +572,10 @@ export const ALL_COMPONENT_DOCS = [
       "Separator"
     ],
     "keyProps": [
-      "value",
-      "length",
-      "onValueChange",
-      "disabled"
+      "Value",
+      "Length",
+      "OnValueChange",
+      "Disabled"
     ]
   },
   {
@@ -597,11 +592,11 @@ export const ALL_COMPONENT_DOCS = [
       "Panel"
     ],
     "keyProps": [
-      "value",
-      "defaultValue",
-      "onValueChange",
-      "orientation",
-      "activation"
+      "Value",
+      "DefaultValue",
+      "OnValueChange",
+      "Orientation",
+      "Activation"
     ]
   },
   {
@@ -618,11 +613,11 @@ export const ALL_COMPONENT_DOCS = [
       "Panel"
     ],
     "keyProps": [
-      "value",
-      "defaultValue",
-      "onValueChange",
-      "multiple",
-      "keepMounted"
+      "Value",
+      "DefaultValue",
+      "OnValueChange",
+      "Multiple",
+      "KeepMounted"
     ]
   },
   {
@@ -637,10 +632,10 @@ export const ALL_COMPONENT_DOCS = [
       "Panel"
     ],
     "keyProps": [
-      "open",
-      "defaultOpen",
-      "onOpenChange",
-      "keepMounted"
+      "Open",
+      "DefaultOpen",
+      "OnOpenChange",
+      "KeepMounted"
     ]
   },
   {
@@ -655,11 +650,11 @@ export const ALL_COMPONENT_DOCS = [
       "Handle"
     ],
     "keyProps": [
-      "value",
-      "defaultValue",
-      "panes",
-      "orientation",
-      "onSizesChange"
+      "Value",
+      "DefaultValue",
+      "Panes",
+      "Orientation",
+      "OnSizesChange"
     ]
   },
   {
@@ -677,10 +672,10 @@ export const ALL_COMPONENT_DOCS = [
       "Corner"
     ],
     "keyProps": [
-      "viewportSize",
-      "contentSize",
-      "overflowEdgeThreshold",
-      "onScrollStateChange"
+      "ViewportSize",
+      "ContentSize",
+      "OverflowEdgeThreshold",
+      "OnScrollStateChange"
     ]
   },
   {
@@ -696,11 +691,11 @@ export const ALL_COMPONENT_DOCS = [
       "Cell"
     ],
     "keyProps": [
-      "columns",
-      "rowCount",
-      "rowHeight",
-      "selectionMode",
-      "selection"
+      "Columns",
+      "RowCount",
+      "RowHeight",
+      "SelectionMode",
+      "Selection"
     ]
   },
   {
@@ -714,11 +709,11 @@ export const ALL_COMPONENT_DOCS = [
       "Row"
     ],
     "keyProps": [
-      "nodes",
-      "expanded",
-      "value",
-      "onExpandedChange",
-      "onValueChange"
+      "Nodes",
+      "Expanded",
+      "Value",
+      "OnExpandedChange",
+      "OnValueChange"
     ]
   },
   {
@@ -731,8 +726,8 @@ export const ALL_COMPONENT_DOCS = [
       "Root"
     ],
     "keyProps": [
-      "orientation",
-      "style"
+      "Orientation",
+      "Style"
     ]
   },
   {
@@ -747,10 +742,10 @@ export const ALL_COMPONENT_DOCS = [
       "Fallback"
     ],
     "keyProps": [
-      "ariaLabel",
-      "src",
-      "delay",
-      "onLoadingStatusChange"
+      "AriaLabel",
+      "Src",
+      "Delay",
+      "OnLoadingStatusChange"
     ]
   },
   {
@@ -767,11 +762,11 @@ export const ALL_COMPONENT_DOCS = [
       "Value"
     ],
     "keyProps": [
-      "value",
-      "max",
-      "indeterminate",
-      "valueText",
-      "onStatusChange"
+      "Value",
+      "Max",
+      "Indeterminate",
+      "ValueText",
+      "OnStatusChange"
     ]
   },
   {
@@ -788,12 +783,12 @@ export const ALL_COMPONENT_DOCS = [
       "Value"
     ],
     "keyProps": [
-      "value",
-      "min",
-      "max",
-      "low",
-      "high",
-      "optimum"
+      "Value",
+      "Min",
+      "Max",
+      "Low",
+      "High",
+      "Optimum"
     ]
   },
   {
@@ -812,11 +807,11 @@ export const ALL_COMPONENT_DOCS = [
       "Separator"
     ],
     "keyProps": [
-      "items",
-      "active",
-      "defaultActive",
-      "orientation",
-      "onActiveChange"
+      "Items",
+      "Active",
+      "DefaultActive",
+      "Orientation",
+      "OnActiveChange"
     ]
   },
   {
@@ -840,12 +835,12 @@ export const ALL_COMPONENT_DOCS = [
       "Close"
     ],
     "keyProps": [
-      "open",
-      "defaultOpen",
-      "onOpenChange",
-      "side",
-      "align",
-      "modal"
+      "Open",
+      "DefaultOpen",
+      "OnOpenChange",
+      "Side",
+      "Align",
+      "Modal"
     ]
   },
   {
@@ -860,12 +855,12 @@ export const ALL_COMPONENT_DOCS = [
       "Content"
     ],
     "keyProps": [
-      "open",
-      "defaultOpen",
-      "onOpenChange",
-      "width",
-      "height",
-      "placement"
+      "Open",
+      "DefaultOpen",
+      "OnOpenChange",
+      "Width",
+      "Height",
+      "Placement"
     ]
   },
   {
@@ -886,11 +881,11 @@ export const ALL_COMPONENT_DOCS = [
       "Close"
     ],
     "keyProps": [
-      "open",
-      "defaultOpen",
-      "onOpenChange",
-      "dismissOnEscape",
-      "exitDuration"
+      "Open",
+      "DefaultOpen",
+      "OnOpenChange",
+      "DismissOnEscape",
+      "ExitDuration"
     ]
   },
   {
@@ -911,11 +906,11 @@ export const ALL_COMPONENT_DOCS = [
       "Close"
     ],
     "keyProps": [
-      "open",
-      "defaultOpen",
-      "onOpenChange",
-      "dismissOnEscape",
-      "exitDuration"
+      "Open",
+      "DefaultOpen",
+      "OnOpenChange",
+      "DismissOnEscape",
+      "ExitDuration"
     ]
   },
   {
@@ -934,12 +929,12 @@ export const ALL_COMPONENT_DOCS = [
       "Arrow"
     ],
     "keyProps": [
-      "open",
-      "defaultOpen",
-      "delay",
-      "closeDelay",
-      "side",
-      "hoverable"
+      "Open",
+      "DefaultOpen",
+      "Delay",
+      "CloseDelay",
+      "Side",
+      "Hoverable"
     ]
   },
   {
@@ -958,11 +953,11 @@ export const ALL_COMPONENT_DOCS = [
       "Arrow"
     ],
     "keyProps": [
-      "open",
-      "defaultOpen",
-      "delay",
-      "closeDelay",
-      "side"
+      "Open",
+      "DefaultOpen",
+      "Delay",
+      "CloseDelay",
+      "Placement"
     ]
   },
   {
@@ -984,11 +979,11 @@ export const ALL_COMPONENT_DOCS = [
       "Close"
     ],
     "keyProps": [
-      "toasts",
-      "toastId",
-      "timeout",
-      "swipeDirection",
-      "onDismiss"
+      "Toasts",
+      "ToastID",
+      "Timeout",
+      "SwipeDirection",
+      "OnDismiss"
     ]
   },
   {
@@ -1019,11 +1014,11 @@ export const ALL_COMPONENT_DOCS = [
       "Separator"
     ],
     "keyProps": [
-      "open",
-      "defaultOpen",
-      "onOpenChange",
-      "orientation",
-      "loopFocus"
+      "Open",
+      "DefaultOpen",
+      "OnOpenChange",
+      "Orientation",
+      "LoopFocus"
     ]
   },
   {
@@ -1038,11 +1033,11 @@ export const ALL_COMPONENT_DOCS = [
       "Popup"
     ],
     "keyProps": [
-      "items",
-      "appearance",
-      "open",
-      "onOpenChange",
-      "onSelect"
+      "Items",
+      "Appearance",
+      "Open",
+      "OnOpenChange",
+      "OnSelect"
     ]
   },
   {
@@ -1056,10 +1051,10 @@ export const ALL_COMPONENT_DOCS = [
       "Trigger"
     ],
     "keyProps": [
-      "items",
-      "appearance",
-      "onSelect",
-      "loop"
+      "Items",
+      "Appearance",
+      "OnSelect",
+      "Loop"
     ]
   },
   {
@@ -1073,11 +1068,11 @@ export const ALL_COMPONENT_DOCS = [
       "Item"
     ],
     "keyProps": [
-      "count",
-      "open",
-      "defaultOpen",
-      "onOpenChange",
-      "onActiveChange"
+      "Count",
+      "Open",
+      "DefaultOpen",
+      "OnOpenChange",
+      "OnActiveChange"
     ]
   },
   {
@@ -1102,11 +1097,11 @@ export const ALL_COMPONENT_DOCS = [
       "Backdrop"
     ],
     "keyProps": [
-      "value",
-      "defaultValue",
-      "onValueChange",
-      "orientation",
-      "delay"
+      "Value",
+      "DefaultValue",
+      "OnValueChange",
+      "Orientation",
+      "Delay"
     ]
   },
   {
@@ -1117,18 +1112,18 @@ export const ALL_COMPONENT_DOCS = [
     "description": "A QuickGUI UI projection of QuickGUI core routing with nested layouts and bounded memory history.",
     "parts": [
       "Router",
-      "route",
-      "layout",
+      "Route",
+      "Layout",
       "Link",
       "Outlet"
     ],
     "keyProps": [
-      "initialPath",
-      "fallback",
-      "routes",
-      "path",
-      "component",
-      "href"
+      "InitialPath",
+      "Fallback",
+      "Routes",
+      "Path",
+      "Component",
+      "Href"
     ]
   },
   {
@@ -1139,8 +1134,8 @@ export const ALL_COMPONENT_DOCS = [
     "description": "The NSHostingView-backed leaf that mounts one SwiftUI component tree inside QuickGUI.",
     "parts": [],
     "keyProps": [
-      "matchContents",
-      "style",
+      "MatchContents",
+      "Style",
       "children"
     ]
   },
@@ -1152,11 +1147,11 @@ export const ALL_COMPONENT_DOCS = [
     "description": "A native SwiftUI button with text, SF Symbol, semantic role, and press handling.",
     "parts": [],
     "keyProps": [
-      "label",
-      "systemImage",
-      "role",
-      "onPress",
-      "modifiers"
+      "Label",
+      "SystemImage",
+      "Role",
+      "OnPress",
+      "Modifiers"
     ]
   },
   {
@@ -1167,12 +1162,12 @@ export const ALL_COMPONENT_DOCS = [
     "description": "A controlled native slider with continuous or stepped values.",
     "parts": [],
     "keyProps": [
-      "value",
-      "min",
-      "max",
-      "step",
-      "label",
-      "onValueChange"
+      "Value",
+      "Min",
+      "Max",
+      "Step",
+      "Label",
+      "OnValueChange"
     ]
   },
   {
@@ -1183,10 +1178,10 @@ export const ALL_COMPONENT_DOCS = [
     "description": "A controlled native SwiftUI on/off switch.",
     "parts": [],
     "keyProps": [
-      "isOn",
-      "label",
-      "onIsOnChange",
-      "modifiers"
+      "IsOn",
+      "Label",
+      "OnIsOnChange",
+      "Modifiers"
     ]
   },
   {
@@ -1197,10 +1192,10 @@ export const ALL_COMPONENT_DOCS = [
     "description": "A determinate or indeterminate native SwiftUI progress indicator.",
     "parts": [],
     "keyProps": [
-      "value",
-      "total",
-      "label",
-      "currentValueLabel"
+      "Value",
+      "Total",
+      "Label",
+      "CurrentValueLabel"
     ]
   },
   {
@@ -1211,12 +1206,12 @@ export const ALL_COMPONENT_DOCS = [
     "description": "A controlled native numeric stepper with bounded values.",
     "parts": [],
     "keyProps": [
-      "value",
-      "min",
-      "max",
-      "step",
-      "label",
-      "onValueChange"
+      "Value",
+      "Min",
+      "Max",
+      "Step",
+      "Label",
+      "OnValueChange"
     ]
   },
   {
@@ -1227,10 +1222,10 @@ export const ALL_COMPONENT_DOCS = [
     "description": "A controlled native SwiftUI text field with edit and submit callbacks.",
     "parts": [],
     "keyProps": [
-      "value",
-      "placeholder",
-      "onValueChange",
-      "onSubmit"
+      "Value",
+      "Placeholder",
+      "OnValueChange",
+      "OnSubmit"
     ]
   },
   {
@@ -1241,10 +1236,10 @@ export const ALL_COMPONENT_DOCS = [
     "description": "The concealed native editor with the same controlled contract as TextField.",
     "parts": [],
     "keyProps": [
-      "value",
-      "placeholder",
-      "onValueChange",
-      "onSubmit"
+      "Value",
+      "Placeholder",
+      "OnValueChange",
+      "OnSubmit"
     ]
   },
   {
@@ -1255,11 +1250,11 @@ export const ALL_COMPONENT_DOCS = [
     "description": "A controlled SwiftUI picker with menu, segmented, radio-group, and inline styles.",
     "parts": [],
     "keyProps": [
-      "selection",
-      "options",
-      "label",
-      "style",
-      "onSelectionChange"
+      "Selection",
+      "Options",
+      "Label",
+      "Style",
+      "OnSelectionChange"
     ]
   },
   {
@@ -1270,11 +1265,11 @@ export const ALL_COMPONENT_DOCS = [
     "description": "A native segmented picker with value-selection and neutral Xcode-style tab roles.",
     "parts": [],
     "keyProps": [
-      "selection",
-      "options",
-      "label",
-      "role",
-      "onSelectionChange"
+      "Selection",
+      "Options",
+      "Label",
+      "Role",
+      "OnSelectionChange"
     ]
   },
   {
@@ -1285,12 +1280,12 @@ export const ALL_COMPONENT_DOCS = [
     "description": "A controlled native date or date-and-time picker.",
     "parts": [],
     "keyProps": [
-      "value",
-      "min",
-      "max",
-      "displayedComponents",
-      "style",
-      "onValueChange"
+      "Value",
+      "Min",
+      "Max",
+      "DisplayedComponents",
+      "Style",
+      "OnValueChange"
     ]
   },
   {
@@ -1301,10 +1296,10 @@ export const ALL_COMPONENT_DOCS = [
     "description": "A native SwiftUI color well that returns CSS-style RGBA color strings.",
     "parts": [],
     "keyProps": [
-      "selection",
-      "label",
-      "supportsOpacity",
-      "onSelectionChange"
+      "Selection",
+      "Label",
+      "SupportsOpacity",
+      "OnSelectionChange"
     ]
   },
   {
@@ -1315,12 +1310,12 @@ export const ALL_COMPONENT_DOCS = [
     "description": "A native SwiftUI gauge with linear and circular accessory styles.",
     "parts": [],
     "keyProps": [
-      "value",
-      "min",
-      "max",
-      "label",
-      "currentValueLabel",
-      "style"
+      "Value",
+      "Min",
+      "Max",
+      "Label",
+      "CurrentValueLabel",
+      "Style"
     ]
   },
   {
@@ -1331,10 +1326,10 @@ export const ALL_COMPONENT_DOCS = [
     "description": "Reverse-hosts one ordinary QuickGUI subtree inside a SwiftUI hierarchy.",
     "parts": [],
     "keyProps": [
-      "width",
-      "height",
-      "matchContents",
-      "background",
+      "Width",
+      "Height",
+      "MatchContents",
+      "Background",
       "children"
     ]
   },
@@ -1349,10 +1344,10 @@ export const ALL_COMPONENT_DOCS = [
       "Content"
     ],
     "keyProps": [
-      "isPresented",
-      "onIsPresentedChange",
-      "attachmentAnchor",
-      "arrowEdge"
+      "IsPresented",
+      "OnIsPresentedChange",
+      "AttachmentAnchor",
+      "ArrowEdge"
     ]
   }
 ] as const satisfies readonly ComponentDoc[]

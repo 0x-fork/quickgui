@@ -17,6 +17,7 @@ import {
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 
+import { sharedLibraryName } from "../native-build.ts";
 import type { ResolvedQuickGuiConfig } from "../config.ts";
 import { CliError } from "../error.ts";
 import { targetInfo, type QuickGuiTarget } from "../targets.ts";
@@ -182,6 +183,7 @@ export async function packageLinux(input: LinuxPackagingInput): Promise<Packagin
     mkdirSync(join(appDir, "usr", "bin"), { recursive: true });
     cpSync(input.executablePath, join(appDir, "usr", "bin", config.executableName));
     chmodSync(join(appDir, "usr", "bin", config.executableName), 0o755);
+    cpSync(join(input.stagingRoot, sharedLibraryName(input.target)), join(appDir, "usr", "bin", sharedLibraryName(input.target)));
     writeFileSync(join(appDir, `${config.executableName}.desktop`), entry);
     writeFileSync(join(appDir, "AppRun"), appRunScript(config.executableName));
     chmodSync(join(appDir, "AppRun"), 0o755);
@@ -217,6 +219,7 @@ export async function packageLinux(input: LinuxPackagingInput): Promise<Packagin
     const executable = new Uint8Array(readFileSync(input.executablePath));
     const data: TarEntry[] = [
       { path: paths.executable, data: executable, mode: 0o755 },
+      { path: join(dirname(paths.executable), sharedLibraryName(input.target)), data: new Uint8Array(readFileSync(join(input.stagingRoot, sharedLibraryName(input.target)))) },
       { path: paths.desktopEntry, data: new TextEncoder().encode(entry) },
       ...(mimeXml
         ? [{ path: paths.mimePackage, data: new TextEncoder().encode(mimeXml) }]
@@ -312,6 +315,7 @@ export async function packageWindows(input: WindowsPackagingInput): Promise<Pack
     version: config.version,
     publisher: config.windows.publisher ?? config.name,
     executablePath: input.executablePath,
+    extraFiles: [[join(input.stagingRoot, "quickgui_host.dll"), "quickgui_host.dll"]],
     outputFile: installerPath,
     protocols: config.protocols,
     documentTypes: config.documentTypes,

@@ -2,54 +2,47 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `Toolbar`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { Toolbar } from "@quickgui/ui/toolbar";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<Toolbar.Root
-  items={[{ value: "back" }, { value: "forward" }, { value: "search" }]}
-  active={active()}
-  onActiveChange={setActive}
->
-  <Toolbar.Button partValue="back"><Text>Back</Text></Toolbar.Button>
-  <Toolbar.Button partValue="forward"><Text>Forward</Text></Toolbar.Button>
-  <Toolbar.Input partValue="search" placeholder="Search" />
-</Toolbar.Root>
+```go
+func ToolbarExample() {
+	ui.Toolbar.Root(
+		ui.ToolbarRootProps{
+			Items:         []ui.ComponentItem{{Value: "select"}, {Value: "draw"}},
+			DefaultActive: "select",
+		},
+		func() {
+			ui.Toolbar.Item(ui.ToolbarItemProps{Value: "select"}, "Select")
+			ui.Toolbar.Item(ui.ToolbarItemProps{Value: "draw"}, "Draw")
+		},
+	)
+}
 ```
 
 ## 结构
 
-- `Toolbar.Root`
-- `Toolbar.Item`
-- `Toolbar.Button`
-- `Toolbar.Link`
-- `Toolbar.Input`
-- `Toolbar.Group`
-- `Toolbar.Separator`
-
-```tsx
-<Toolbar.Root>
-  <Toolbar.Item />
-  <Toolbar.Button />
-  <Toolbar.Link />
-  <Toolbar.Input />
-  <Toolbar.Group />
-  <Toolbar.Separator />
-</Toolbar.Root>
-```
+- `ui.Toolbar.Root`
+- `ui.Toolbar.Item`
+- `ui.Toolbar.Button`
+- `ui.Toolbar.Link`
+- `ui.Toolbar.Input`
+- `ui.Toolbar.Group`
+- `ui.Toolbar.Separator`
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `items` | 用于选项或键盘导航的有限声明模型。 |
-| `active` | 持有当前活动状态或移动焦点状态的受控项目。 |
-| `defaultActive` | 非受控组件的初始活动项目。 |
-| `orientation` | 水平或垂直布局，以及对应的键盘方向。 |
-| `onActiveChange` | 报告当前持有移动焦点状态的项目。 |
-
+| `Items` | 用于选项或键盘导航的有限声明模型。 |
+| `Active` | 持有当前活动状态或移动焦点状态的受控项目。 |
+| `DefaultActive` | 非受控组件的初始活动项目。 |
+| `Orientation` | 水平或垂直布局，以及对应的键盘方向。 |
+| `OnActiveChange` | 报告当前持有移动焦点状态的项目。 |

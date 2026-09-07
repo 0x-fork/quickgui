@@ -2,31 +2,43 @@ SwiftUI 階層の中へ通常の QuickGUI サブツリーをリバースホス�
 
 ## インポート
 
-`@quickgui/ui/swift-ui` から `QuickGUIHostView` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Host, QuickGUIHostView } from "@quickgui/ui/swift-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<Host matchContents>
-  <QuickGUIHostView width={280} height={120}>
-    <View style={{ width: 280, height: 120, padding: 16 }}>
-      <Text>Ordinary QuickGUI content</Text>
-    </View>
-  </QuickGUIHostView>
-</Host>
+```go
+func SwiftUiQuickguiHostViewExample() {
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.QuickGUIHostView(
+				ui.SwiftUIQuickGUIHostViewProps{Width: 320, Height: 180},
+				func() {
+					ui.View(
+						ui.Width("100%"),
+						ui.Height("100%"),
+						ui.Padding(16),
+						"QuickGUI inside SwiftUI",
+					)
+				},
+			)
+		},
+	)
+}
 ```
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `width` | 宣言された論理幅です。 |
-| `height` | 宣言された論理高さです。 |
-| `matchContents` | ホストしたサブツリー固有の幅、高さ、またはその両方を使います。 |
-| `background` | リバースホストした QuickGUI WGPU サーフェスのクリアカラーです。 |
+| `Width` | 宣言された論理幅です。 |
+| `Height` | 宣言された論理高さです。 |
+| `MatchContents` | ホストしたサブツリー固有の幅、高さ、またはその両方を使います。 |
+| `Background` | リバースホストした QuickGUI WGPU サーフェスのクリアカラーです。 |
 | `children` | コンポーネント内にマウントする内容です。 |
-

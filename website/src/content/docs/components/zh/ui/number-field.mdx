@@ -2,54 +2,58 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `NumberField`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { NumberField } from "@quickgui/ui/number-field";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<NumberField.Root value={copies()} min={1} max={20} onValueChange={setCopies}>
-  <NumberField.ScrubArea><Text>Copies</Text></NumberField.ScrubArea>
-  <NumberField.Group>
-    <NumberField.Decrement><Text>−</Text></NumberField.Decrement>
-    <NumberField.Input />
-    <NumberField.Increment><Text>+</Text></NumberField.Increment>
-  </NumberField.Group>
-</NumberField.Root>
+```go
+func NumberFieldExample() {
+	value, setValue := ui.CreateSignal(8.0)
+	ui.NumberField.Root(
+		ui.NumberFieldRootProps{
+			Value: func() *float64 { current := value(); return &current },
+			Min:   0,
+			Max:   100,
+			Step:  1,
+			OnValueChange: func(next *float64, valid bool, _ *native.Event) {
+				if valid && next != nil {
+					setValue(*next)
+				}
+			},
+		},
+		func() {
+			ui.NumberField.Decrement(ui.PartProps{}, "−")
+			ui.NumberField.Input(ui.NumberFieldInputProps{})
+			ui.NumberField.Increment(ui.PartProps{}, "+")
+		},
+	)
+}
 ```
 
 ## 结构
 
-- `NumberField.Root`
-- `NumberField.Group`
-- `NumberField.Input`
-- `NumberField.Increment`
-- `NumberField.Decrement`
-- `NumberField.ScrubArea`
-- `NumberField.ScrubAreaCursor`
-
-```tsx
-<NumberField.Root>
-  <NumberField.Group />
-  <NumberField.Input />
-  <NumberField.Increment />
-  <NumberField.Decrement />
-  <NumberField.ScrubArea />
-  <NumberField.ScrubAreaCursor />
-</NumberField.Root>
-```
+- `ui.NumberField.Root`
+- `ui.NumberField.Group`
+- `ui.NumberField.Input`
+- `ui.NumberField.Increment`
+- `ui.NumberField.Decrement`
+- `ui.NumberField.ScrubArea`
+- `ui.NumberField.ScrubAreaCursor`
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `value` | 受控值，具体类型取决于该组件的约定。 |
-| `defaultValue` | 组件自行管理状态时的初始值。 |
-| `min` | 可接受的最小值。 |
-| `max` | 可接受的最大值。 |
-| `step` | 键盘、指针或原生控件输入使用的步长。 |
-| `onValueChange` | 报告核心接受的值。 |
-
+| `Value` | 受控值，具体类型取决于该组件的约定。 |
+| `DefaultValue` | 组件自行管理状态时的初始值。 |
+| `Min` | 可接受的最小值。 |
+| `Max` | 可接受的最大值。 |
+| `Step` | 键盘、指针或原生控件输入使用的步长。 |
+| `OnValueChange` | 报告核心接受的值。 |

@@ -1,104 +1,96 @@
 import type { en } from './en'
 
 export const ja: typeof en = {
-  meta: {
-    title: 'QuickGUI — ネイティブデスクトップアプリを作る。WebView はいらない',
-    description:
-      'QuickGUI は Rust または TypeScript でネイティブデスクトップアプリを作る GPU アクセラレーション GUI フレームワーク。見慣れた Flexbox / Grid レイアウト、ちゃんと使えるテキスト、標準のアクセシビリティ——アイドル時は CPU ゼロ',
+  "meta": {
+    "title": "QuickGUI — Go でネイティブデスクトップアプリを作る",
+    "description": "Go でネイティブデスクトップアプリを構築。高速ビルド、細粒度のリアクティビティ、GPU 描画、使い慣れたレイアウト、アクセシブルなコンポーネント。CGO は不要です。"
   },
-  common: {
-    skipToContent: 'コンテンツへスキップ',
-    getStarted: 'はじめる',
-    copy: '“{{text}}” をコピー',
-    copied: 'コピーしました',
-    language: '言語',
+  "common": {
+    "skipToContent": "コンテンツへスキップ",
+    "getStarted": "はじめる",
+    "copy": "“{{text}}” をコピー",
+    "copied": "コピーしました",
+    "language": "言語"
   },
-  nav: {
-    features: '機能',
-    code: 'コード',
-    quickstart: 'クイックスタート',
-    docs: 'ドキュメント',
+  "nav": {
+    "features": "機能",
+    "code": "コード",
+    "quickstart": "クイックスタート",
+    "docs": "ドキュメント"
   },
-  hero: {
-    badge: 'v{{version}} crates.io で公開中',
-    titleLine1: 'ネイティブデスクトップアプリを作る',
-    titleLine2: 'WebView はいらない',
-    sub: 'Rust または TypeScript でネイティブアプリを作る GPU アクセラレーション GUI フレームワーク。見慣れたレイアウト、ちゃんと使えるテキスト、標準のアクセシビリティ——アプリがアイドルなら CPU はゼロ',
+  "hero": {
+    "badge": "Go · CGO 不要",
+    "titleLine1": "ネイティブデスクトップアプリを、",
+    "titleLine2": "Go で。",
+    "sub": "普通の Go コードで、高速なビルドと細粒度のリアクティビティを。使い慣れたレイアウトとアクセシブルなコンポーネントで、GPU 描画のネイティブ UI を組み立てます。CGO は不要です。"
   },
-  features: {
-    title: 'デスクトップアプリに必要なもの、ぜんぶ',
-    items: {
-      idle: {
-        title: 'アイドル時は CPU ゼロ',
-        body: '画面に変化がなければ、何も動きません。アイドルウィンドウはフレームを描かず、バッテリーも消費しない',
+  "features": {
+    "title": "デスクトップアプリに必要なもの、ぜんぶ",
+    "items": {
+      "idle": {
+        "title": "変化がなければ休止",
+        "body": "画面に変化がない間、ウィンドウは休止します。シグナルは関連するプロパティだけを更新し、イベント内の変更は一度の再描画にまとめます。"
       },
-      fast: {
-        title: '最初から速い',
-        body: '描画は GPU 上で行われ、ウィンドウの変わった部分だけが再描画されます',
+      "fast": {
+        "title": "高速な Go ビルド",
+        "body": "アプリを編集したら Go コードだけを再ビルド。ネイティブランタイムは同梱され、アプリは CGO を無効にしてビルドできます。"
       },
-      layout: {
-        title: '見慣れたレイアウト',
-        body: 'Flexbox と CSS Grid、Tailwind 風のショートハンド付き。Web ページを組めるなら、ウィンドウも組めます',
+      "layout": {
+        "title": "使い慣れたレイアウト",
+        "body": "Flexbox、CSS Grid、なじみのあるスタイルオプション。Go でレイアウトを組み立て、コンポーネント間でスタイルを再利用できます。"
       },
-      components: {
-        title: 'コンポーネント同梱',
-        body: 'アクセシブルでスタイルなしのコンポーネントを多数同梱——メニュー、ダイアログ、ポップオーバー、select、combobox、タブ、テーブル、ツリー。自由に仕上げられます',
+      "components": {
+        "title": "コンポーネント同梱",
+        "body": "アクセシブルでスタイルなしのコンポーネントを多数同梱——メニュー、ダイアログ、ポップオーバー、select、combobox、タブ、テーブル、ツリー。自由に仕上げられます"
       },
-      text: {
-        title: 'テキストがちゃんと使える',
-        body: '選択、編集、アンドゥ、IME、絵文字、右から左へ書く言語——どのネイティブアプリとも同じ挙動',
+      "text": {
+        "title": "テキストがちゃんと使える",
+        "body": "選択、編集、アンドゥ、IME、絵文字、右から左へ書く言語——どのネイティブアプリとも同じ挙動"
       },
-      a11y: {
-        title: '標準でアクセシブル',
-        body: 'スクリーンリーダーには本物のボタン・リスト・テキストが見えます。追加コードは不要',
+      "a11y": {
+        "title": "標準でアクセシブル",
+        "body": "スクリーンリーダーには本物のボタン・リスト・テキストが見えます。追加コードは不要"
       },
-      lists: {
-        title: 'どんなサイズでも滑らか',
-        body: '100 万行のテーブルやリストも、フレーム落ちなくスクロール',
+      "lists": {
+        "title": "長いリストも可視行だけ",
+        "body": "仮想化テーブルはスクロールに合わせて表示中の行をマウントし、大きな履歴やデータビューを扱いやすくします。"
       },
-      native: {
-        title: '本物のネイティブ',
-        body: '本物のウィンドウ、ネイティブメニュー、ダイアログ、トレイアイコン、通知——ブラウザの着ぐるみではありません',
+      "native": {
+        "title": "ネイティブのデスクトップ機能",
+        "body": "本物のウィンドウ、システムメニュー、ファイルダイアログ、トレイアイコン、通知をアプリで利用できます。"
       },
-      cli: {
-        title: 'CLI ひとつで開発から配布まで',
-        body: 'quickgui dev は編集しながら実行、quickgui build は署名済みでインストール可能なリリースを出力します',
-      },
-    },
+      "cli": {
+        "title": "CLI ひとつで開発から配布まで",
+        "body": "quickgui dev は編集しながら実行、quickgui build は署名済みでインストール可能なリリースを出力します"
+      }
+    }
   },
-  code: {
-    title: 'Rust でも、TypeScript でも',
-    lead: '好きな方でどうぞ——どちらも同じネイティブアプリになります。webview はありません',
+  "code": {
+    "title": "普通の Go。リアクティブな UI。",
+    "lead": "関数ブロックで子要素を宣言。シグナルはそれを読むバインディングを更新し、コンポーネントのほかの部分はマウントされたままです。"
   },
-  swiftUi: {
-    title: 'QuickGUI でネイティブ SwiftUI を使う',
-    lead: 'macOS の QuickGUI UI アプリに、本物の SwiftUI コントロールをそのまま埋め込めます。',
+  "swiftUi": {
+    "title": "QuickGUI でネイティブ SwiftUI を使う",
+    "lead": "macOS の Go アプリに本物の SwiftUI コントロールを埋め込み、QuickGUI コンポーネントと一緒に使えます。"
   },
-  quickstart: {
-    title: '1 分ではじめる',
-    rust: {
-      addCrate: 'クレートを追加',
-      write: 'ビューを書く',
-      writeBody: '上のカウンターがそのまま完全な main.rs です——コピーするだけ',
-      run: '実行',
-    },
-    ui: {
-      create: 'アプリを作成',
-      ship: '出荷する',
-      note: '本物の署名済み・自己完結アプリが手に入ります。インストーラー付き',
-    },
+  "quickstart": {
+    "title": "最初のウィンドウからアプリの配布まで。",
+    "create": "作成して実行",
+    "edit": "整形とビルド",
+    "ship": "署名とパッケージ化",
+    "note": "Go 1.23+ と Bun をインストールしてください。macOS では Xcode Command Line Tools も必要です。署名と公証には自分の Apple 開発者資格情報を使います。"
   },
-  platforms: {
-    available: '利用可能',
-    soon: '開発中',
+  "platforms": {
+    "available": "利用可能",
+    "soon": "開発中"
   },
-  cta: {
-    title: 'ネイティブなものを作ろう',
-    body: 'ビューを書いて、本物のアプリを出荷——アイドルウィンドウは本当にアイドルに',
-    docs: 'ドキュメントを読む',
-    star: 'GitHub でスターする',
+  "cta": {
+    "title": "ネイティブなものを作ろう",
+    "body": "Go コンポーネントを書いて、ランタイムを同梱したネイティブアプリを配布しましょう。",
+    "docs": "ドキュメントを読む",
+    "star": "GitHub でスターする"
   },
-  footer: {
-    license: 'MIT または Apache-2.0',
-  },
+  "footer": {
+    "license": "MIT または Apache-2.0"
+  }
 }

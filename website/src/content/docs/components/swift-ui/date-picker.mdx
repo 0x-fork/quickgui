@@ -2,36 +2,41 @@ A controlled native date or date-and-time picker.
 
 ## Import
 
-Import `DatePicker` from `@quickgui/ui/swift-ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Host, DatePicker } from "@quickgui/ui/swift-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+	"time"
+)
 ```
 
 ## Usage
 
-```tsx
-const [scheduledAt, setScheduledAt] = createSignal(Date.now());
-
-<Host matchContents>
-  <DatePicker
-    label="Schedule"
-    value={scheduledAt()}
-    displayedComponents="dateAndTime"
-    style="field"
-    onValueChange={setScheduledAt}
-  />
-</Host>
+```go
+func SwiftUiDatePickerExample() {
+	value, setValue := ui.CreateSignal(float64(time.Now().UnixMilli()))
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.DatePicker(ui.SwiftUIDatePickerProps{
+				Value:               value,
+				DisplayedComponents: "dateAndTime",
+				OnValueChange:       func(next float64, _ *native.Event) { setValue(next) },
+			})
+		},
+	)
+}
 ```
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `value` | Unix timestamp in milliseconds; `min` and `max` use the same unit. |
-| `min` | Minimum accepted value. |
-| `max` | Maximum accepted value. |
-| `displayedComponents` | Chooses date, time, or combined date-and-time fields. |
-| `style` | `automatic`, `field`, `stepperField`, or `graphical`. |
-| `onValueChange` | Reports the value accepted by the core. |
-
+| `Value` | Unix timestamp in milliseconds; `Min` and `Max` use the same unit. |
+| `Min` | Minimum accepted value. |
+| `Max` | Maximum accepted value. |
+| `DisplayedComponents` | Chooses date, time, or combined date-and-time fields. |
+| `Style` | `automatic`, `field`, `stepperField`, or `graphical`. |
+| `OnValueChange` | Reports the value accepted by the core. |

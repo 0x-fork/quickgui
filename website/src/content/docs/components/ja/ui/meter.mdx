@@ -2,47 +2,54 @@
 
 ## インポート
 
-`@quickgui/ui` から `Meter` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Meter } from "@quickgui/ui/gauges";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<Meter.Root value={storage()} min={0} max={100} high={80} optimum={40} format="percent">
-  <Meter.Label><Text>Storage</Text></Meter.Label>
-  <Meter.Track><Meter.Indicator /></Meter.Track>
-  <Meter.Value />
-</Meter.Root>
+```go
+func MeterExample(value func() *float64) {
+	ui.Meter.Root(
+		ui.MeterProps{
+			Value:   value,
+			Min:     0,
+			Max:     100,
+			Low:     25,
+			High:    80,
+			Optimum: 50,
+		},
+		func() {
+			ui.Meter.Label(ui.PartProps{}, "Disk used")
+			ui.Meter.Track(
+				ui.PartProps{},
+				func() { ui.Meter.Indicator(ui.PartProps{}) },
+			)
+			ui.Meter.Value(ui.PartProps{})
+		},
+	)
+}
 ```
 
 ## 構成
 
-- `Meter.Root`
-- `Meter.Track`
-- `Meter.Indicator`
-- `Meter.Label`
-- `Meter.Value`
-
-```tsx
-<Meter.Root>
-  <Meter.Track />
-  <Meter.Indicator />
-  <Meter.Label />
-  <Meter.Value />
-</Meter.Root>
-```
+- `ui.Meter.Root`
+- `ui.Meter.Track`
+- `ui.Meter.Indicator`
+- `ui.Meter.Label`
+- `ui.Meter.Value`
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
-| `min` | 受け入れる最小値です。 |
-| `max` | 受け入れる最大値です。 |
-| `low` | Meter の低い範囲の上限です。 |
-| `high` | Meter の高い範囲の下限です。 |
-| `optimum` | Meter 値の望ましい点または範囲です。 |
-
+| `Value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `Min` | 受け入れる最小値です。 |
+| `Max` | 受け入れる最大値です。 |
+| `Low` | Meter の低い範囲の上限です。 |
+| `High` | Meter の高い範囲の下限です。 |
+| `Optimum` | Meter 値の望ましい点または範囲です。 |

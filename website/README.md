@@ -28,7 +28,7 @@ plugin (workerd).
 
 - Code snippets are highlighted server-side with shiki (github-light theme)
   from the home route loader; the grammars never ship to the client.
-- GitHub stars and the crates.io version are fetched by the home route loader
+- GitHub stars are fetched by the home route loader
   with a 10-minute in-memory cache.
 - `public/og.png` is a static capture of the `/og` card; regenerate it by
   screenshotting that route at 1200×630 if the branding changes.

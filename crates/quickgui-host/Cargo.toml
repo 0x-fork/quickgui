@@ -3,13 +3,13 @@ name = "quickgui-host"
 version = "0.1.3"
 edition = "2024"
 rust-version = "1.90"
-description = "C ABI application host for natively compiled QuickGUI applications"
+description = "Shared native library for QuickGUI Go applications"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/egoist/quickgui"
 publish = false
 
 [lib]
-crate-type = ["staticlib", "rlib"]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 base64 = "0.22.1"

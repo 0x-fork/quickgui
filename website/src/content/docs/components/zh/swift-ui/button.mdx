@@ -2,31 +2,40 @@
 
 ## 导入
 
-从 `@quickgui/ui/swift-ui` 导入 `Button`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { Host, Button } from "@quickgui/ui/swift-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"fmt"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<Host matchContents>
-  <Button
-    label="Continue"
-    systemImage="arrow.right"
-    onPress={continueFlow}
-  />
-</Host>
+```go
+func SwiftUiButtonExample() {
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.Button(ui.SwiftUIButtonProps{
+				Label:       "Save",
+				SystemImage: "checkmark",
+				OnPress:     func(*native.Event) { fmt.Println("Saved") },
+				Modifiers:   []ui.SwiftUIModifier{ui.SwiftUI.ButtonStyle("borderedProminent")},
+			})
+		},
+	)
+}
 ```
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `label` | 原生 SwiftUI 控件的可见标签。 |
-| `systemImage` | 与 SwiftUI 按钮标签一起显示的 SF Symbols 名称。 |
-| `role` | SwiftUI 语义角色：`default`、`cancel` 或 `destructive`。 |
-| `onPress` | 原生 SwiftUI 按钮激活时运行。 |
-| `modifiers` | 应用于托管控件的有序 SwiftUI View 修饰器。 |
-
+| `Label` | 原生 SwiftUI 控件的可见标签。 |
+| `SystemImage` | 与 SwiftUI 按钮标签一起显示的 SF Symbols 名称。 |
+| `Role` | SwiftUI 语义角色：`default`、`cancel` 或 `destructive`。 |
+| `OnPress` | 原生 SwiftUI 按钮激活时运行。 |
+| `Modifiers` | 应用于托管控件的有序 SwiftUI View 修饰器。 |

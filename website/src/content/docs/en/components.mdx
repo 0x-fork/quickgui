@@ -1,60 +1,87 @@
-QuickGUI ships low-level primitives and accessible compound component families. They are unstyled: the core supplies behavior and semantics while your app supplies every visible surface.
+QuickGUI combines unstyled primitives with accessible compound controls. Compose both through ordinary Go functions.
 
 ## Primitives
 
-Use [View](/docs/components/view), [Text](/docs/components/text), [Button](/docs/components/button), [Input](/docs/components/input), [TextArea](/docs/components/text-area), [Markdown](/docs/components/markdown), [Image](/docs/components/image), [Svg](/docs/components/svg), [Shader](/docs/components/shader), [VirtualList](/docs/components/virtual-list), and [Terminal](/docs/components/terminal) as the retained building blocks.
+Start with `ui.View`, `ui.Text`, `ui.Button`, and `ui.Input`. Options and text can be passed directly. A `func() { ... }` argument groups multiple children under the current parent.
+
+```go
+func ButtonExample(save func()) {
+	ui.Button(
+		ui.Height(40),
+		ui.PaddingLeft(16),
+		ui.PaddingRight(16),
+		ui.BackgroundColor("#2563eb"),
+		ui.Color("white"),
+		ui.BorderRadius(8),
+		ui.Hover(ui.BackgroundColor("#3b82f6")),
+		ui.OnClick(save),
+		"Save changes",
+	)
+}
+```
 
 ## Compound components
 
-A compound family exposes named parts. The root coordinates state and the Rust core owns keyboard behavior, focus, accessibility relationships, mount policy, and exact interaction deadlines.
+Compound families expose parts such as `ui.Tabs.Root`, `ui.Tabs.List`, and `ui.Tabs.Panel`. The core handles roles, keyboard navigation, focus, and control state. Create a part inside its root’s children callback so its context exists.
 
-```tsx
-<Tabs.Root value={tab()} onValueChange={setTab}>
-  <Tabs.List>
-    <Tabs.Tab value="general"><Text>General</Text></Tabs.Tab>
-    <Tabs.Tab value="advanced"><Text>Advanced</Text></Tabs.Tab>
-    <Tabs.Indicator />
-  </Tabs.List>
-  <Tabs.Panel value="general"><GeneralSettings /></Tabs.Panel>
-  <Tabs.Panel value="advanced"><AdvancedSettings /></Tabs.Panel>
-</Tabs.Root>
+```go
+func TabsExample() {
+	ui.Tabs.Root(
+		ui.TabsRootProps{DefaultValue: "overview", Activation: "automatic"},
+		func() {
+			ui.Tabs.List(
+				ui.PartProps{},
+				func() {
+					ui.Tabs.Tab(ui.TabsTabProps{Value: "overview"}, "Overview")
+					ui.Tabs.Tab(ui.TabsTabProps{Value: "settings"}, "Settings")
+				},
+			)
+			ui.Tabs.Panel(ui.TabsPanelProps{Value: "overview"}, "Overview content")
+			ui.Tabs.Panel(ui.TabsPanelProps{Value: "settings"}, "Settings content")
+		},
+	)
+}
 ```
 
 ## Controlled state
 
-Most roots accept a controlled value and matching callback, plus a `default*` value for uncontrolled use.
+A controlled value is an accessor; its callback stores the value accepted by the control. Use a default value to let the component own its state. Optional scalar values use pointers, while multiple selections use slices.
 
-```tsx
-const [open, setOpen] = createSignal(false);
-
-<Dialog.Root open={open()} onOpenChange={setOpen}>
-  {/* parts */}
-</Dialog.Root>
+```go
+func CheckboxExample() {
+	checked, setChecked := ui.CreateSignal(false)
+	ui.Checkbox.Root(
+		ui.CheckboxProps{
+			Checked:         func() ui.CheckedState { return checked() },
+			OnCheckedChange: func(next bool, _ *native.Event) { setChecked(next) },
+		},
+		func() { ui.Checkbox.Indicator(ui.PartProps{}, "✓"); ui.Text("Remember me") },
+	)
+}
 ```
-
-The callback reports the result accepted by the core. Update the signal to keep a controlled declaration in sync.
 
 ## Component families
 
-| Area | Components |
-| --- | --- |
-| Forms | Checkbox, Radio, Switch, Select, Combobox, NumberField, DateField, OtpField |
-| Layout and data | Tabs, Accordion, Splitter, ScrollArea, Table, Tree |
-| Feedback and overlays | Progress, Meter, Toast, Tooltip, Popover, Dialog, Drawer |
-| Menus and navigation | Menu, PopoverMenu, ContextMenu, Menubar, NavigationMenu, Router |
+The reference covers forms, pickers, layout and data, overlays, menus, and routing. `examples/components` contains all 42 original gallery demos, including a 5,000-row table and lazy tree. The separate `examples/swift-ui` gallery demonstrates native SwiftUI hosting.
 
-Every public family has its own page in the sidebar, including its parts, key props, and a working composition.
+```bash
+bun packages/cli/src/cli.ts dev --project examples/components
+```
 
 ## Styling parts
 
-Style each visible part with `style`. Component state is projected onto retained nodes, so hover, focus, selection, and accessibility behavior do not depend on a web runtime.
+Use `PartProps.Style` for each part. It accepts a style record, a slice of records, or an accessor returning either. This lets selection and theme signals update existing parts without rebuilding children.
 
-```tsx
-<Switch.Root
-  checked={enabled()}
-  onCheckedChange={setEnabled}
-  style={{ width: 38, height: 22, borderRadius: 11 }}
->
-  <Switch.Thumb style={{ width: 18, height: 18, borderRadius: 9 }} />
-</Switch.Root>
+```go
+ui.PartProps{
+	Style: ui.Style{
+		Display:         "flex",
+		Height:          32,
+		PaddingLeft:     12,
+		PaddingRight:    12,
+		BackgroundColor: "#2563eb",
+		Color:           "white",
+		BorderRadius:    8,
+	},
+}
 ```

@@ -9,8 +9,6 @@ import { loadConfig } from "./config.ts";
 import { runDev } from "./dev.ts";
 import { CliError, errorMessage } from "./error.ts";
 import { initProject } from "./init.ts";
-import { buildNativeModules } from "./modules.ts";
-import { closeTypeScriptSessions } from "./native-compiler.ts";
 import { findMinisignTool } from "./packaging/pipeline.ts";
 import { minisignKeygenArguments } from "./packaging/updates.ts";
 import { hostTarget } from "./targets.ts";
@@ -38,38 +36,23 @@ export async function runCli(argv: string[]): Promise<number> {
       return await runDev(command);
     case "build":
       return await runBuild(command);
-    case "modules":
-      return await runModules(command);
+    case "fmt": {
+      const child = Bun.spawn([
+        "go", "run", "github.com/egoist/quickgui/go/cmd/quickguifmt",
+        command.check ? "-check" : "-w", ".",
+      ], {
+        cwd: resolve(command.project),
+        env: { ...process.env, CGO_ENABLED: "0" },
+        stdin: "inherit", stdout: "inherit", stderr: "inherit",
+      });
+      return await child.exited;
+    }
     case "keygen":
       return await runKeygen(command);
   }
 }
 
-async function runModules(
-  command: Extract<ParsedCliCommand, { command: "modules" }>,
-): Promise<number> {
-  const projectRoot = resolve(command.project);
-  const config = await loadConfig(projectRoot, command.configFile);
-  const target = command.target ?? config.target ?? hostTarget();
-  const built = await buildNativeModules(config, {
-    target,
-    mode: command.release ? "production" : "development",
-    log: (line) => console.log(`[quickgui] ${line}`),
-  });
-  if (built.length === 0) {
-    console.log(
-      `[quickgui] No native modules: add modules/<name>/main.zig under ${relativeDisplayPath(config.modules.directory)}`,
-    );
-    return 0;
-  }
-  for (const module of built) {
-    const functions = module.manifest.functions.length;
-    console.log(
-      `[quickgui] ${module.rebuilt ? "Built" : "Up to date:"} ${module.name} (${functions} function${functions === 1 ? "" : "s"}) -> ${relativeDisplayPath(module.indexPath)}`,
-    );
-  }
-  return 0;
-}
+
 
 async function runKeygen(
   command: Extract<ParsedCliCommand, { command: "keygen" }>,
@@ -139,20 +122,6 @@ async function runBuild(
 }
 
 function helpText(topic?: HelpTopic): string {
-  if (topic === "modules") {
-    return `Usage: quickgui modules [options]
-
-Compile every native module (modules/<name>/main.zig, written in Zig) into a static native library and
-write its typed modules/<name>/index.ts. \`quickgui dev\` and \`quickgui build\` do this
-automatically; run it directly to refresh bindings or prepare native tests.
-
-Options:
-  --project <directory>      Project directory (default: .)
-  --config <file>            Config file (default: quickgui.config.ts)
-  --target <target>          Target to compile for (default: host)
-  --release                  Use the production optimization mode
-  -h, --help                 Show this help`;
-  }
   if (topic === "keygen") {
     return `Usage: quickgui keygen [options]
 
@@ -208,6 +177,18 @@ Options:
   --update-base-url <url>    Publication URL for the signed update artifact
   -h, --help                 Show this help`;
   }
+  if (topic === "fmt") {
+    return `Usage: quickgui fmt [options]
+
+Format Go source using the project's QuickGUI SDK formatter. Long UI calls,
+multiline declarations, and callback arguments get consistent line breaks;
+gofmt handles indentation and spacing. Requires Go and the SDK in go.mod.
+
+Options:
+  --project <directory>      Go project directory (default: .)
+  --check                    Report unformatted files without writing
+  -h, --help                 Show this help`;
+  }
   return `QuickGUI CLI ${CLI_VERSION}
 
 Usage: quickgui <command> [options]
@@ -216,7 +197,7 @@ Commands:
   init [directory]           Create a new project
   dev                        Run a native app with source reload
   build                      Package a production application
-  modules                    Compile the project's Zig native modules
+  fmt                        Format Go UI declarations
   keygen                     Create a Minisign update signing key pair
 
 Run \`quickgui help <command>\` for command-specific help.`;
@@ -233,8 +214,5 @@ if (import.meta.main) {
   } catch (error) {
     console.error(`quickgui: ${errorMessage(error)}`);
     process.exitCode = error instanceof CliError ? error.exitCode : 1;
-  } finally {
-    // The TypeScript servers behind native builds would otherwise keep the process alive.
-    await closeTypeScriptSessions();
   }
 }

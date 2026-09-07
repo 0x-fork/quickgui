@@ -2,42 +2,45 @@ Groups related fields under one legend and shared semantic state.
 
 ## Import
 
-Import `Fieldset` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Fieldset } from "@quickgui/ui/field";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Fieldset.Root disabled={saving()}>
-  <Fieldset.Legend><Text>Billing address</Text></Fieldset.Legend>
-  <Fieldset.Description><Text>Used for receipts.</Text></Fieldset.Description>
-  <Fieldset.Control element="input" value={address()} />
-</Fieldset.Root>
+```go
+func FieldsetExample(saving func() bool) {
+	ui.Fieldset.Root(
+		ui.PartProps{Disabled: saving},
+		func() {
+			ui.Fieldset.Legend(ui.PartProps{}, "Profile")
+			ui.Field.Root(
+				ui.FieldRootProps{},
+				func() {
+					ui.Field.Label(ui.FieldLabelProps{}, "Name")
+					ui.Field.Control(ui.FieldControlProps{InputPartProps: ui.InputPartProps{Placeholder: "Ada"}})
+				},
+			)
+		},
+	)
+}
 ```
 
 ## Anatomy
 
-- `Fieldset.Root`
-- `Fieldset.Legend`
-- `Fieldset.Description`
-- `Fieldset.Control`
-
-```tsx
-<Fieldset.Root>
-  <Fieldset.Legend />
-  <Fieldset.Description />
-  <Fieldset.Control />
-</Fieldset.Root>
-```
+- `ui.Fieldset.Root`
+- `ui.Fieldset.Legend`
+- `ui.Fieldset.Description`
+- `ui.Fieldset.Control`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `disabled` | Prevents interaction and exposes the disabled state. |
+| `Disabled` | Prevents interaction and exposes the disabled state. |
 | `children` | Content mounted inside the component. |
-| `style` | QuickGUI layout, paint, typography, and interaction-state styles. |
-
+| `Style` | QuickGUI layout, paint, typography, and interaction-state styles. |

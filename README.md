@@ -1,6 +1,6 @@
 # QuickGUI
 
-QuickGUI is a damage-driven, GPU-accelerated GUI framework for Rust desktop applications. It combines a GPUI-style fluent view API, Taffy Flexbox, CSS Grid and parent-size container queries, WGPU rendering, retained Unicode text, native accessibility, and bounded virtual scrolling.
+QuickGUI is a damage-driven, GPU-accelerated GUI framework for Go and Rust desktop applications. It combines a GPUI-style fluent view API, Taffy Flexbox, CSS Grid and parent-size container queries, WGPU rendering, retained Unicode text, native accessibility, and bounded virtual scrolling.
 
 The current focus is production-quality macOS behavior with low idle CPU and bounded memory. Windows and Linux compile through Winit/WGPU but still need native runtime and visual acceptance.
 
@@ -24,6 +24,19 @@ The current focus is production-quality macOS behavior with low idle CPU and bou
 - Native cursor declarations reuse retained hit testing and add no redraw or idle scheduling source.
 - Raw touch contacts are captured per identity with a fixed per-window bound and no recognizer,
   monitor, polling task, or idle scheduling source.
+
+## Go components
+
+The Go frontend loads the Rust shared library through purego in the same process. Builds use `CGO_ENABLED=0`; ordinary app edits only recompile Go. The TypeScript CLI handles development and packaging.
+
+```go
+native.NewWindow(native.WindowOptions{
+	Title: "Counter", Width: 760, Height: 520,
+	Component: Counter,
+})
+```
+
+Components are ordinary `func()` declarations, the same as children blocks. Style and event options, children blocks, and signal accessors bind directly to retained native nodes: `ui.View(ui.Padding(20), func() { ui.Text("Hello") })`. See the [Go guide](docs/go.md) and [counter](examples/counter/main.go) for a complete application.
 
 ## View API
 
@@ -85,9 +98,9 @@ fn main() -> Result<(), quickgui::AppError> {
 Start at the [documentation index](docs/README.md).
 
 - [View API and layout](docs/view-api.md)
-- [QuickGUI UI renderer](docs/ui.md)
+- [Go components and fine-grained reactivity](docs/go.md)
 - [Project CLI and application packaging](docs/cli.md)
-- [Native modules in Zig](docs/native-modules.md)
+- [Go dependencies and native libraries](docs/native-modules.md)
 - [Windows and shared state](docs/windows.md)
 - [Native document windows](docs/document-windows.md)
 - [Displays and window placement](docs/displays.md)
@@ -122,10 +135,11 @@ Start at the [documentation index](docs/README.md).
 
 ## Try it
 
-For a natively compiled TypeScript application (macOS, Node.js 24+, Bun tooling, and Xcode Command Line Tools):
+For a Go application (Go 1.23+, Bun tooling, and Xcode Command Line Tools on macOS):
 
 ```console
 bun install
+bun run build:native # once in a source checkout
 cd examples/counter
 bun run dev
 ```
@@ -159,8 +173,7 @@ cd examples/file-dialog
 bun run dev
 ```
 
-The QuickGUI UI popover example compares the shared compound JSX API of a native `SystemPopover` and a
-retained in-window `Popover`:
+The popover example compares a native `SystemPopover` and a retained in-window `Popover`:
 
 ```console
 cd examples/popover
@@ -176,27 +189,24 @@ cd examples/sidebar-vibrancy
 bun run dev
 ```
 
-The core-first system API example covers app environment, rich clipboard, displays, desktop
-integrations, permissions, preferences, power, native menus, notifications, tray icons, shortcuts,
-window controls, and updater metadata:
+The system API example exercises native clipboard access, display information, notifications,
+and opening external URLs:
 
 ```console
 cd examples/system-api
 bun run dev
 ```
 
-The styling example declares text alignment, the extended text styles, gradients, per-corner radii,
-dashed borders, outlines, filters, transforms with a hover variant, blend modes, a backdrop blur,
-right-to-left layout, sticky headers, and scroll snapping:
+The styling example demonstrates typed Go styles, CSS Grid, gradients, text decoration,
+rounded borders, and hover states:
 
 ```console
 cd examples/styling
 bun run dev
 ```
 
-The components example puts every compound component the QuickGUI UI package binds in one window: select,
-combobox, autocomplete, virtual table and tree, slider, number field, splitter, toolbar, toggle
-group, date and time fields, calendar, menubar, popover and context menus, dialog, tabs, and toasts:
+The components example combines controls, retained Markdown, and a keyed reactive list in one window.
+The Go SDK also provides compound form, menu, overlay, table, and tree components:
 
 ```console
 cd examples/components
@@ -212,8 +222,9 @@ cd examples/quick-git
 bun run dev
 ```
 
-The CLI lowers TSX with TypeScript 7 and compiles the application with scriptc, linking the Rust
-host into a native `.app`. Bun runs the development tools; the application contains no Bun runtime.
+The TypeScript CLI compiles Go with `CGO_ENABLED=0` and bundles the reusable Rust shared library
+beside the executable. The application loads that library through purego in the same process.
+Bun runs the development tools; the application contains no Bun runtime.
 Rust framework examples remain available directly through Cargo:
 
 ```console

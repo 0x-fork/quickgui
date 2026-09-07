@@ -1,40 +1,30 @@
 # Herdr GUI
 
-A real, standalone GUI interpretation of [Herdr](https://herdr.dev/) built with QuickGUI and
-QuickGUI UI. It does not call or embed the Herdr CLI.
+A standalone QuickGUI application inspired by Herdr. The UI and application state are Go; the native core owns the retained PTYs, terminal rendering, input, and process detection. It does not embed or call the Herdr CLI.
+
+- **Spaces, tabs, and panes:** each project directory has its own tabs and remembers the selected tab. Split right or down to tile terminals. Switching tabs, spaces, or appearance preserves each PTY and its scrollback.
+- **Live Agents sidebar:** Codex, Claude Code, OpenCode, and other supported agents appear when the native terminal detects their foreground process. Working, idle, and needs-input indicators come from that process and its terminal output. A shell is not counted as an agent merely because of how its tab was created.
+- **New Agent sheet:** discovers installed Codex, Claude, and OpenCode executables through the interactive login-shell environment and common installation paths. Choose a launcher and an optional initial instruction. Nothing is installed automatically.
+- **Window controls:** drag the sidebar edge and the Spaces/Agents divider. The View menu offers system, light, and dark appearance. Spaces, the active space, both divider positions, and appearance persist in `herdr-gui-state.json` in the application's data directory. The original example's state format is preserved; the reduced Go example's state is imported when no original state exists.
+- **Terminal appearance:** bundled JetBrainsMono Nerd Font Mono regular, bold, italic, and bold italic faces; GitHub Light Default and Dark Default ANSI palettes; a matching cursor and extended edge backgrounds. Fonts are loaded relative to the application's resources, independently of its launch directory.
+
+`Cmd+T` opens a tab, `Cmd+N` opens the agent sheet, `Cmd+O` adds a space, and `Cmd+D` / `Cmd+Shift+D` split right / down. `Cmd+W` closes the focused split, then the tab when other tabs remain, then the window. Native copy, paste, hide, minimize, zoom, and full-screen actions remain available. Closing a pane terminates its PTY; running sessions are not restored after quitting.
 
 From the repository root:
 
-```sh
-bun run build:native
-bun run --filter herdr-gui dev
+```console
+bun install
+bun run build:native # after native core changes
+bun packages/cli/src/cli.ts dev --project examples/herdr-gui
 ```
 
-The app owns real pseudoterminals and child processes. Its model follows Herdr itself: spaces are
-project workspaces, spaces own tabs, and tabs own tiled terminal panes. The sidebar's lower panel is
-derived only from agents that the Rust core discovers in live PTY foreground process groups. A
-plain terminal never becomes a sidebar agent until an actual supported agent process is running.
-Idle, working, and blocked states are derived from the live process and terminal screen.
+Application edits rebuild only Go. The shared library is loaded in process with purego; no CGO or frontend IPC is used.
 
-The New Agent sheet is only a convenient direct launcher. It is not the sidebar's source of truth,
-and the app never installs, calls, embeds, or shells out to the Herdr CLI.
+```console
+CGO_ENABLED=0 go -C examples/herdr-gui test ./...
+bun packages/cli/src/cli.ts fmt --project examples/herdr-gui
+```
 
-The UI follows the system appearance by default, supports explicit light and dark modes, persists
-spaces and appearance, and has captured-pointer resizing for the sidebar and its spaces/agents
-split. Terminal parsing, keyboard encoding, adaptive default colors, resize, scrollback, process
-detection, and cleanup live in QuickGUI's Rust core with `libghostty-vt`. PTYs identify themselves
-with `TERM_PROGRAM=ghostty`.
+[main.go](main.go) handles startup, menus, and window events; [model.go](model.go) manages spaces, tabs, and panes. [workspace.go](workspace.go), [sidebar.go](sidebar.go), and [agent_sheet.go](agent_sheet.go) declare the UI. [model_test.go](model_test.go) covers selection, closing, native-node retention, agent status, launch arguments, discovery, and persistence.
 
-The terminal uses the executable-embedded Regular, Bold, Italic, and Bold Italic faces of
-`JetBrainsMono Nerd Font Mono` from Nerd Fonts 3.5.1 (SIL OFL 1.1; the license is packaged with
-the app). Its light and dark foreground, background, cursor, and 16 ANSI colors are the exact
-GitHub Light Default and GitHub Dark Default terminal values from GitHub's VS Code theme 6.3.5.
-The bundled font files have these SHA-256 checksums:
-
-- Regular: `f2a5ea6cfab397445ffab00c0370927b66d61e560a05db5db271b42006381c1a`
-- Bold: `bfcf9a917276ffc058867d87cbc8a5b2f1ab0f4b710e9170dc02763ccb80bd4b`
-- Italic: `31efd6ead98746f5b0afa1ee6dba60267ad48db36428360bee327bec10621f97`
-- Bold Italic: `9dba502e00e35209f6ed2a151c7376c051657b067cdebbc6e52d06cb9002cf31`
-
-Closing an agent tab terminates that process. Unlike Herdr's background server, this example keeps
-sessions alive only while the GUI process is running.
+The four embedded font faces are distributed under the [SIL Open Font License](assets/JetBrainsMonoNerdFont-OFL.txt). See the [Go guide](../../docs/go.md) for framework usage.

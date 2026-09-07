@@ -3,8 +3,6 @@
     "allowImportingTsExtensions": true,
     "allowJs": true,
     "exactOptionalPropertyTypes": true,
-    "jsx": "preserve",
-    "jsxImportSource": "@quickgui/ui",
     "lib": [
       "ESNext"
     ],
@@ -20,10 +18,9 @@
     ]
   },
   "include": [
-    "packages/**/*.ts",
-    "packages/**/*.tsx",
-    "examples/**/*.ts",
-    "examples/**/*.tsx"
+    "packages/cli/src/**/*.ts",
+    "packages/native/build.ts",
+    "examples/*/quickgui.config.ts"
   ],
   "exclude": [
     "packages/cli/templates",

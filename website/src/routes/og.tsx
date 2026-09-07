@@ -31,17 +31,17 @@ export default function OgCard() {
 
       <div className="relative">
         <h1 className="max-w-4xl text-[64px] leading-[1.08] font-semibold tracking-tight">
-          Build native desktop apps. Skip the webview.
+          Build native desktop apps. With Go.
         </h1>
         <p className="mt-8 font-mono text-xl text-muted-foreground">
-          GPU-accelerated · Rust or TypeScript · zero CPU when idle
+          Go · Fine-grained reactivity · No CGO
         </p>
       </div>
 
       <div className="relative flex items-center justify-between font-mono text-lg text-muted-foreground/80">
         <span>github.com/egoist/quickgui</span>
         <span>
-          <span className="text-peach">$</span> cargo add quickgui
+          <span className="text-peach">$</span> bunx @quickgui/cli init my-app
         </span>
       </div>
     </div>

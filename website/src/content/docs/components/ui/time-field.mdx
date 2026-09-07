@@ -2,42 +2,40 @@ A segmented, keyboard-editable time field with hour, minute, second, and period 
 
 ## Import
 
-Import `TimeField` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { TimeField } from "@quickgui/ui/date-time";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<TimeField.Root value={time()} showSeconds onValueChange={setTime}>
-  <TimeField.Segment segment="hour" />
-  <Text>:</Text>
-  <TimeField.Segment segment="minute" />
-  <Text>:</Text>
-  <TimeField.Segment segment="second" />
-</TimeField.Root>
+```go
+func TimeFieldExample() {
+	ui.TimeField.Root(
+		ui.TimeFieldRootProps{DefaultValue: "09:30", Hour12: true},
+		func() {
+			for _, segment := range []string{"hour", "minute", "period"} {
+				ui.TimeField.Segment(ui.TimeFieldSegmentProps{Segment: segment})
+			}
+		},
+	)
+}
 ```
 
 ## Anatomy
 
-- `TimeField.Root`
-- `TimeField.Segment`
-
-```tsx
-<TimeField.Root>
-  <TimeField.Segment />
-</TimeField.Root>
-```
+- `ui.TimeField.Root`
+- `ui.TimeField.Segment`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `value` | Controlled value. The precise value type follows this component’s contract. |
-| `defaultValue` | Initial value when the component owns its state. |
-| `hour12` | Adds an AM/PM segment and uses a twelve-hour clock. |
-| `showSeconds` | Mounts a seconds segment. |
-| `onValueChange` | Reports the value accepted by the core. |
-
+| `Value` | Controlled value. The precise value type follows this component’s contract. |
+| `DefaultValue` | Initial value when the component owns its state. |
+| `Hour12` | Adds an AM/PM segment and uses a twelve-hour clock. |
+| `ShowSeconds` | Mounts a seconds segment. |
+| `OnValueChange` | Reports the value accepted by the core. |

@@ -2,33 +2,32 @@ A semantic horizontal or vertical divider with no built-in visual style.
 
 ## Import
 
-Import `Separator` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Separator } from "@quickgui/ui/toolbar";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Separator.Root
-  orientation="horizontal"
-  style={{ height: 1, backgroundColor: "#e4e4e7" }}
-/>
+```go
+func SeparatorExample() {
+	ui.Separator.Root(ui.SeparatorProps{
+		Orientation: "horizontal",
+		PartProps:   ui.PartProps{Style: ui.Style{Height: 1, BackgroundColor: "#d1d5db"}},
+	})
+}
 ```
 
 ## Anatomy
 
-- `Separator.Root`
-
-```tsx
-<Separator.Root>{/* content */}</Separator.Root>
-```
+- `ui.Separator.Root`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `orientation` | Horizontal or vertical layout and keyboard direction. |
-| `style` | QuickGUI layout, paint, typography, and interaction-state styles. |
-
+| `Orientation` | Horizontal or vertical layout and keyboard direction. |
+| `Style` | QuickGUI layout, paint, typography, and interaction-state styles. |

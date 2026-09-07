@@ -2,81 +2,62 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `Autocomplete`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { Autocomplete } from "@quickgui/ui/select";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"fmt"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<Autocomplete.Root
-  ariaLabel="Search commands"
-  items={commands}
-  inputValue={query()}
-  filterMode="fuzzy"
-  onInputValueChange={setQuery}
-  onCommit={(details) => run(details.inputValue ?? "")}
-/>
+```go
+func AutocompleteExample() {
+	ui.Autocomplete.Root(ui.AutocompleteRootProps{
+		PickerInputProps: ui.PickerInputProps{
+			PickerSourceProps: ui.PickerSourceProps{Items: func() []ui.OptionDeclaration {
+				return []ui.OptionDeclaration{{Value: "go", Label: "Go"}, {Value: "swift", Label: "Swift"}}
+			}},
+			Placeholder:        "Find a language",
+			OnInputValueChange: func(query string, _ *native.Event) { fmt.Println(query) },
+		},
+	})
+}
 ```
 
 ## 结构
 
-- `Autocomplete.Root`
-- `Autocomplete.Input`
-- `Autocomplete.Option`
-- `Autocomplete.Label`
-- `Autocomplete.Value`
-- `Autocomplete.Icon`
-- `Autocomplete.InputGroup`
-- `Autocomplete.Clear`
-- `Autocomplete.Portal`
-- `Autocomplete.Positioner`
-- `Autocomplete.Popup`
-- `Autocomplete.Arrow`
-- `Autocomplete.Status`
-- `Autocomplete.Empty`
-- `Autocomplete.List`
-- `Autocomplete.Item`
-- `Autocomplete.ItemIndicator`
-- `Autocomplete.Group`
-- `Autocomplete.GroupLabel`
-- `Autocomplete.Collection`
-- `Autocomplete.Separator`
-
-```tsx
-<Autocomplete.Root>
-  <Autocomplete.Input />
-  <Autocomplete.Option />
-  <Autocomplete.Label />
-  <Autocomplete.Value />
-  <Autocomplete.Icon />
-  <Autocomplete.InputGroup />
-  <Autocomplete.Clear />
-  <Autocomplete.Portal />
-  <Autocomplete.Positioner />
-  <Autocomplete.Popup />
-  <Autocomplete.Arrow />
-  <Autocomplete.Status />
-  <Autocomplete.Empty />
-  <Autocomplete.List />
-  <Autocomplete.Item />
-  <Autocomplete.ItemIndicator />
-  <Autocomplete.Group />
-  <Autocomplete.GroupLabel />
-  <Autocomplete.Collection />
-  <Autocomplete.Separator />
-</Autocomplete.Root>
-```
+- `ui.Autocomplete.Root`
+- `ui.Autocomplete.Input`
+- `ui.Autocomplete.Option`
+- `ui.Autocomplete.Label`
+- `ui.Autocomplete.Value`
+- `ui.Autocomplete.Icon`
+- `ui.Autocomplete.InputGroup`
+- `ui.Autocomplete.Clear`
+- `ui.Autocomplete.Portal`
+- `ui.Autocomplete.Positioner`
+- `ui.Autocomplete.Popup`
+- `ui.Autocomplete.Arrow`
+- `ui.Autocomplete.Status`
+- `ui.Autocomplete.Empty`
+- `ui.Autocomplete.List`
+- `ui.Autocomplete.Item`
+- `ui.Autocomplete.ItemIndicator`
+- `ui.Autocomplete.Group`
+- `ui.Autocomplete.GroupLabel`
+- `ui.Autocomplete.Collection`
+- `ui.Autocomplete.Separator`
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `items` | 用于选项或键盘导航的有限声明模型。 |
-| `inputValue` | Combobox 或 Autocomplete 使用的可编辑查询文本。 |
-| `filterMode` | 由核心管理的包含、前缀、模糊或禁用筛选模式。 |
-| `onInputValueChange` | 报告核心保留的可编辑查询文本。 |
-| `onCommit` | 报告一次明确的提交边界及最终值详情。 |
-
+| `Items` | 用于选项或键盘导航的有限声明模型。 |
+| `InputValue` | Combobox 或 Autocomplete 使用的可编辑查询文本。 |
+| `FilterMode` | 由核心管理的包含、前缀、模糊或禁用筛选模式。 |
+| `OnInputValueChange` | 报告核心保留的可编辑查询文本。 |
+| `OnCommit` | 报告一次明确的提交边界及最终值详情。 |

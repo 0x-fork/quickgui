@@ -2,31 +2,36 @@ A determinate or indeterminate native SwiftUI progress indicator.
 
 ## Import
 
-Import `ProgressView` from `@quickgui/ui/swift-ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Host, ProgressView } from "@quickgui/ui/swift-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Host matchContents={{ vertical: true }} style={{ width: 320 }}>
-  <ProgressView
-    value={completed()}
-    total={100}
-    label="Exporting"
-    currentValueLabel={String(completed()) + "%"}
-  />
-</Host>
+```go
+func SwiftUiProgressViewExample() {
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.ProgressView(ui.SwiftUIProgressViewProps{
+				Value: 0.4,
+				Total: 1,
+				Label: "Uploading",
+			})
+		},
+	)
+}
 ```
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `value` | Controlled value. The precise value type follows this component’s contract. |
-| `total` | Denominator for determinate SwiftUI progress. |
-| `label` | Visible native SwiftUI control label. |
-| `currentValueLabel` | Readable label for the current native progress or gauge value. |
-
+| `Value` | Controlled value. The precise value type follows this component’s contract. |
+| `Total` | Denominator for determinate SwiftUI progress. |
+| `Label` | Visible native SwiftUI control label. |
+| `CurrentValueLabel` | Readable label for the current native progress or gauge value. |

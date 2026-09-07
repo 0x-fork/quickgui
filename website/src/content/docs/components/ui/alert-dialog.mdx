@@ -2,62 +2,67 @@ The confirmation-focused dialog variant with stricter backdrop-dismissal default
 
 ## Import
 
-Import `AlertDialog` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { AlertDialog } from "@quickgui/ui/dialog";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<AlertDialog.Root open={open()} onOpenChange={setOpen}>
-  <AlertDialog.Trigger><Text>Delete project</Text></AlertDialog.Trigger>
-  <AlertDialog.Portal>
-    <AlertDialog.Backdrop />
-    <AlertDialog.Viewport>
-      <AlertDialog.Popup>
-        <AlertDialog.Title><Text>Delete this project?</Text></AlertDialog.Title>
-        <AlertDialog.Description><Text>This cannot be undone.</Text></AlertDialog.Description>
-        <AlertDialog.Close><Text>Cancel</Text></AlertDialog.Close>
-      </AlertDialog.Popup>
-    </AlertDialog.Viewport>
-  </AlertDialog.Portal>
-</AlertDialog.Root>
+```go
+func AlertDialogExample() {
+	ui.AlertDialog.Root(
+		ui.DialogRootProps{},
+		func() {
+			ui.AlertDialog.Trigger(ui.PartProps{}, "Open dialog")
+			ui.AlertDialog.Portal(
+				ui.PartProps{},
+				func() {
+					ui.AlertDialog.Backdrop(ui.PartProps{})
+					ui.AlertDialog.Viewport(
+						ui.PartProps{},
+						func() {
+							ui.AlertDialog.Popup(
+								ui.DialogPopupProps{},
+								func() {
+									ui.AlertDialog.Title(ui.PartProps{}, "Confirm action")
+									ui.AlertDialog.Description(
+										ui.PartProps{},
+										"Review the details before continuing.",
+									)
+									ui.AlertDialog.Close(ui.PartProps{}, "Cancel")
+								},
+							)
+						},
+					)
+				},
+			)
+		},
+	)
+}
 ```
 
 ## Anatomy
 
-- `AlertDialog.Root`
-- `AlertDialog.Trigger`
-- `AlertDialog.Portal`
-- `AlertDialog.Backdrop`
-- `AlertDialog.Viewport`
-- `AlertDialog.Popup`
-- `AlertDialog.Title`
-- `AlertDialog.Description`
-- `AlertDialog.Close`
-
-```tsx
-<AlertDialog.Root>
-  <AlertDialog.Trigger />
-  <AlertDialog.Portal />
-  <AlertDialog.Backdrop />
-  <AlertDialog.Viewport />
-  <AlertDialog.Popup />
-  <AlertDialog.Title />
-  <AlertDialog.Description />
-  <AlertDialog.Close />
-</AlertDialog.Root>
-```
+- `ui.AlertDialog.Root`
+- `ui.AlertDialog.Trigger`
+- `ui.AlertDialog.Portal`
+- `ui.AlertDialog.Backdrop`
+- `ui.AlertDialog.Viewport`
+- `ui.AlertDialog.Popup`
+- `ui.AlertDialog.Title`
+- `ui.AlertDialog.Description`
+- `ui.AlertDialog.Close`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `open` | Controlled open state. |
-| `defaultOpen` | Initial state when the component owns whether it is open. |
-| `onOpenChange` | Reports an open or close decision from the core. |
-| `dismissOnEscape` | Allows Escape to dismiss the surface. |
-| `exitDuration` | Keeps closing content mounted for the exact exit transition duration. |
-
+| `Open` | Controlled open state. |
+| `DefaultOpen` | Initial state when the component owns whether it is open. |
+| `OnOpenChange` | Reports an open or close decision from the core. |
+| `DismissOnEscape` | Allows Escape to dismiss the surface. |
+| `ExitDuration` | Keeps closing content mounted for the exact exit transition duration. |

@@ -2,39 +2,40 @@ Coordinates a horizontal in-window menubar and its menu items.
 
 ## Import
 
-Import `Menubar` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Menubar } from "@quickgui/ui/menu";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Menubar.Root count={2} open={openMenu()} onOpenChange={setOpenMenu}>
-  <Menubar.Item itemIndex={0}><FileMenu /></Menubar.Item>
-  <Menubar.Item itemIndex={1}><EditMenu /></Menubar.Item>
-</Menubar.Root>
+```go
+func MenubarExample() {
+	ui.Menubar.Root(
+		ui.MenubarRootProps{Count: 2},
+		func() {
+			for index, label := range []string{"File", "Edit"} {
+				ui.Menubar.Item(ui.MenubarItemProps{Index: &index}, label)
+			}
+		},
+	)
+}
 ```
 
 ## Anatomy
 
-- `Menubar.Root`
-- `Menubar.Item`
-
-```tsx
-<Menubar.Root>
-  <Menubar.Item />
-</Menubar.Root>
-```
+- `ui.Menubar.Root`
+- `ui.Menubar.Item`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `count` | Number of declared menubar items. |
-| `open` | Controlled open state. |
-| `defaultOpen` | Initial state when the component owns whether it is open. |
-| `onOpenChange` | Reports an open or close decision from the core. |
-| `onActiveChange` | Reports the item that now owns the roving focus state. |
-
+| `Count` | Number of declared menubar items. |
+| `Open` | Controlled open state. |
+| `DefaultOpen` | Initial state when the component owns whether it is open. |
+| `OnOpenChange` | Reports an open or close decision from the core. |
+| `OnActiveChange` | Reports the item that now owns the roving focus state. |

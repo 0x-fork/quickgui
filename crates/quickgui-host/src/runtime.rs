@@ -1343,11 +1343,18 @@ pub(crate) fn native_font_data(options: &NativeAppOptions) -> Option<Vec<Arc<[u8
     Some(
         fonts
             .iter()
-            .filter_map(|path| match std::fs::read(path) {
-                Ok(bytes) => Some(Arc::<[u8]>::from(bytes)),
-                Err(error) => {
-                    eprintln!("quickgui: could not read font {path}: {error}");
-                    None
+            .filter_map(|path| {
+                // Packaged applications declare fonts relative to their resources,
+                // independent of the working directory used to launch the app.
+                // Path::join preserves explicitly absolute font paths.
+                let path = std::path::Path::new(options.resource_dir.as_deref().unwrap_or("."))
+                    .join(path);
+                match std::fs::read(&path) {
+                    Ok(bytes) => Some(Arc::<[u8]>::from(bytes)),
+                    Err(error) => {
+                        eprintln!("quickgui: could not read font {}: {error}", path.display());
+                        None
+                    }
                 }
             })
             .collect(),

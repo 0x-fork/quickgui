@@ -2,26 +2,34 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `Text`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { Text } from "@quickgui/ui";
+```go
+import (
+	"fmt"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<Text style={{ fontSize: 18, fontWeight: 600 }}>
-  Native, retained text
-</Text>
+```go
+func TextExample() {
+	count, setCount := ui.CreateSignal(0)
+	ui.View(func() {
+		ui.Text(
+			ui.FontSize(20),
+			func() string { return fmt.Sprintf("Count: %d", count()) },
+		)
+		ui.Button(ui.OnClick(func() { setCount(count() + 1) }), "Increment")
+	})
+}
 ```
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `style` | QuickGUI 的布局、绘制、排版和交互状态样式。 |
+| `WithStyle` | QuickGUI 的布局、绘制、排版和交互状态样式。 |
 | `children` | 挂载在组件内部的内容。 |
-| `role` | 保留节点暴露的无障碍角色。 |
-| `ref` | 接收保留式原生节点。 |
-
+| `Ref` | 接收保留式原生节点。 |

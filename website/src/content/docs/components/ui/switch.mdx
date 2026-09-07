@@ -2,37 +2,40 @@ An on/off control with a root track and independently styled thumb.
 
 ## Import
 
-Import `Switch` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Switch } from "@quickgui/ui/controls";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Switch.Root checked={enabled()} onCheckedChange={setEnabled}>
-  <Switch.Thumb />
-</Switch.Root>
+```go
+func SwitchExample() {
+	on, setOn := ui.CreateSignal(false)
+	ui.Switch.Root(
+		ui.SwitchProps{
+			Checked:         on,
+			OnCheckedChange: func(next bool, _ *native.Event) { setOn(next) },
+		},
+		func() { ui.Switch.Thumb(ui.PartProps{}); ui.Text("Notifications") },
+	)
+}
 ```
 
 ## Anatomy
 
-- `Switch.Root`
-- `Switch.Thumb`
-
-```tsx
-<Switch.Root>
-  <Switch.Thumb />
-</Switch.Root>
-```
+- `ui.Switch.Root`
+- `ui.Switch.Thumb`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `checked` | Controlled checked state. |
-| `defaultChecked` | Initial checked state when the component owns it. |
-| `onCheckedChange` | Reports the checked state accepted by the core. |
-| `disabled` | Prevents interaction and exposes the disabled state. |
-
+| `Checked` | Controlled checked state. |
+| `DefaultChecked` | Initial checked state when the component owns it. |
+| `OnCheckedChange` | Reports the checked state accepted by the core. |
+| `Disabled` | Prevents interaction and exposes the disabled state. |

@@ -2,30 +2,38 @@ A controlled native SwiftUI on/off switch.
 
 ## Import
 
-Import `Toggle` from `@quickgui/ui/swift-ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Host, Toggle } from "@quickgui/ui/swift-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Host matchContents>
-  <Toggle
-    label="Notifications"
-    isOn={notifications()}
-    onIsOnChange={setNotifications}
-  />
-</Host>
+```go
+func SwiftUiToggleExample() {
+	on, setOn := ui.CreateSignal(true)
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.Toggle(ui.SwiftUIToggleProps{
+				IsOn:         on,
+				Label:        "Notifications",
+				OnIsOnChange: func(next bool, _ *native.Event) { setOn(next) },
+			})
+		},
+	)
+}
 ```
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `isOn` | Controlled SwiftUI toggle value. |
-| `label` | Visible native SwiftUI control label. |
-| `onIsOnChange` | Reports the value accepted by the native SwiftUI toggle. |
-| `modifiers` | Ordered SwiftUI view modifiers applied to the hosted control. |
-
+| `IsOn` | Controlled SwiftUI toggle value. |
+| `Label` | Visible native SwiftUI control label. |
+| `OnIsOnChange` | Reports the value accepted by the native SwiftUI toggle. |
+| `Modifiers` | Ordered SwiftUI view modifiers applied to the hosted control. |

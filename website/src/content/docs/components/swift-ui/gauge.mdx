@@ -2,35 +2,40 @@ A native SwiftUI gauge with linear and circular accessory styles.
 
 ## Import
 
-Import `Gauge` from `@quickgui/ui/swift-ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Host, Gauge } from "@quickgui/ui/swift-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Host matchContents>
-  <Gauge
-    value={storageUsed()}
-    min={0}
-    max={100}
-    label="Storage"
-    currentValueLabel={String(storageUsed()) + "%"}
-    style="accessoryCircularCapacity"
-  />
-</Host>
+```go
+func SwiftUiGaugeExample() {
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.Gauge(ui.SwiftUIGaugeProps{
+				Value: 60,
+				Min:   0,
+				Max:   100,
+				Label: "Capacity",
+				Style: "accessoryLinearCapacity",
+			})
+		},
+	)
+}
 ```
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `value` | Controlled value. The precise value type follows this component’s contract. |
-| `min` | Minimum accepted value. |
-| `max` | Maximum accepted value. |
-| `label` | Visible native SwiftUI control label. |
-| `currentValueLabel` | Readable label for the current native progress or gauge value. |
-| `style` | QuickGUI layout, paint, typography, and interaction-state styles. |
-
+| `Value` | Controlled value. The precise value type follows this component’s contract. |
+| `Min` | Minimum accepted value. |
+| `Max` | Maximum accepted value. |
+| `Label` | Visible native SwiftUI control label. |
+| `CurrentValueLabel` | Readable label for the current native progress or gauge value. |
+| `Style` | Native SwiftUI presentation style for this control. |

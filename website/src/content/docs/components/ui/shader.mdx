@@ -2,27 +2,31 @@ Paints validated WGSL with a bounded set of numeric shader parameters.
 
 ## Import
 
-Import `Shader` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Shader } from "@quickgui/ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Shader
-  source={gradientShader}
-  shaderParameters={[time(), intensity()]}
-  style={{ width: 320, height: 180 }}
-/>
+```go
+func ShaderExample(source string, parameters func() []float64) {
+	ui.Shader(
+		ui.Value(source),
+		ui.ShaderParameters(parameters),
+		ui.Width(320),
+		ui.Height(180),
+	)
+}
 ```
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `source` | Filesystem path, data URL, SVG document, or shader source expected by the component. |
-| `shaderParameters` | Up to sixteen numeric values packed into fixed shader parameter vectors. |
-| `style` | QuickGUI layout, paint, typography, and interaction-state styles. |
-
+| `Value` | Filesystem path, data URL, SVG document, or shader source expected by the component. |
+| `ShaderParameters` | Up to sixteen numeric values packed into fixed shader parameter vectors. |
+| `WithStyle` | QuickGUI layout, paint, typography, and interaction-state styles. |

@@ -137,32 +137,12 @@ export interface MacAppStoreConfig {
   entitlements?: string;
 }
 
-/** Zig optimization mode used for native modules. */
-export type ZigOptimizeMode = "Debug" | "ReleaseSafe" | "ReleaseFast" | "ReleaseSmall";
-
-/** Native modules: Zig sources compiled into static native libraries the application imports. */
-export interface NativeModulesConfig {
-  /** Directory whose `<name>/main.zig` subdirectories are modules. Defaults to "modules". */
-  directory?: string;
-  /**
-   * Zig optimization mode. Defaults to `ReleaseSafe` for development builds and `ReleaseFast`
-   * for production builds.
-   */
-  optimize?: ZigOptimizeMode;
-}
-
-/** Native compilation options. */
+/** Go compilation and native shared-library options. */
 export interface NativeConfig {
-  /**
-   * Embed the scriptc dynamic engine for npm dependencies and `any`-typed code. Static builds
-   * are the default: they carry no JavaScript engine at all.
-   */
-  dynamic?: boolean;
-  /**
-   * Report TypeScript errors in the project's own sources before compiling. Off by default: the
-   * native compiler type-checks the program itself, and the editor already shows the errors.
-   */
-  typeCheck?: boolean;
+  /** Use an existing Rust shared library instead of the installed native package. */
+  libraryPath?: string;
+  /** Optional Go build tags. */
+  tags?: string[];
 }
 
 export interface QuickGuiConfig {
@@ -186,8 +166,6 @@ export interface QuickGuiConfig {
   documentTypes?: DocumentTypeConfig[];
   /** Signed updater manifest generation for `quickgui build --update-manifest`. */
   updates?: UpdatesConfig;
-  /** Native modules written in Zig under `modules/<name>/main.zig`. */
-  modules?: NativeModulesConfig;
   macos?: MacOSConfig;
   windows?: WindowsConfig;
   linux?: LinuxConfig;
@@ -202,14 +180,13 @@ export interface ResolvedQuickGuiConfig {
   entry: string;
   outDir: string;
   target?: QuickGuiTarget;
-  native: Required<NativeConfig>;
+  native: { libraryPath?: string; tags: string[] };
   resources: string[];
   fonts: string[];
   protocols: string[];
   icon?: string;
   documentTypes: ResolvedDocumentType[];
   updates?: Required<Pick<UpdatesConfig, "manifest" | "baseUrl">> & UpdatesConfig;
-  modules: Required<Pick<NativeModulesConfig, "directory">> & NativeModulesConfig;
   macos: Required<Pick<MacOSConfig, "minimumSystemVersion" | "category">> & MacOSConfig;
   windows: Required<Pick<WindowsConfig, "hideConsole">> & WindowsConfig;
   linux: Required<Pick<LinuxConfig, "categories" | "section" | "depends" | "appImage" | "deb">> &
@@ -255,7 +232,7 @@ export function resolveConfig(
   }
   const version = optionalString(input.version, "version", 64) ?? "0.1.0";
   const buildVersion = optionalString(input.buildVersion, "buildVersion", 64) ?? version;
-  const entry = resolveRelative(projectRoot, optionalString(input.entry, "entry", 1_024) ?? "src/app.tsx");
+  const entry = resolveRelative(projectRoot, optionalString(input.entry, "entry", 1_024) ?? ".");
   const outDir = resolveRelative(projectRoot, optionalString(input.outDir, "outDir", 1_024) ?? "dist");
   const target = input.target === undefined ? undefined : parseTarget(requiredString(input.target, "target", 64));
   const resources = stringArray(input.resources, "resources").map((path) =>
@@ -271,7 +248,6 @@ export function resolveConfig(
   const sourceIcon = optionalString(input.icon, "icon", 1_024);
   const documentTypes = resolveDocumentTypes(input.documentTypes);
   const updates = resolveUpdates(input.updates, projectRoot);
-  const modules = resolveNativeModules(input.modules, projectRoot);
   const native = objectOrEmpty(input.native, "native");
   const linuxIcon = optionalString(linux.icon, "linux.icon", 1_024);
   const linuxMaintainer = optionalString(linux.maintainer, "linux.maintainer", 255);
@@ -294,8 +270,8 @@ export function resolveConfig(
     outDir,
     ...(target ? { target } : {}),
     native: {
-      dynamic: optionalBoolean(native.dynamic, "native.dynamic") ?? false,
-      typeCheck: optionalBoolean(native.typeCheck, "native.typeCheck") ?? false,
+      ...(optionalString(native.libraryPath, "native.libraryPath", 1024) ? { libraryPath: resolveRelative(projectRoot, String(native.libraryPath)) } : {}),
+      tags: stringArray(native.tags, "native.tags"),
     },
     resources,
     fonts,
@@ -303,7 +279,6 @@ export function resolveConfig(
     ...(sourceIcon ? { icon: resolveRelative(projectRoot, sourceIcon) } : {}),
     documentTypes,
     ...(updates ? { updates } : {}),
-    modules,
     macos: {
       minimumSystemVersion:
         optionalString(macos.minimumSystemVersion, "macos.minimumSystemVersion", 32) ?? "14.0",
@@ -453,24 +428,6 @@ function resolveUpdates(
     baseUrl: baseUrl.replace(/\/+$/, ""),
     ...(secretKey ? { minisignSecretKey: resolveRelative(projectRoot, secretKey) } : {}),
     ...(notesFile ? { notesFile: resolveRelative(projectRoot, notesFile) } : {}),
-  };
-}
-
-const zigOptimizeModes: readonly ZigOptimizeMode[] = ["Debug", "ReleaseSafe", "ReleaseFast", "ReleaseSmall"];
-
-function resolveNativeModules(
-  value: unknown,
-  projectRoot: string,
-): Required<Pick<NativeModulesConfig, "directory">> & NativeModulesConfig {
-  const modules = objectOrEmpty(value, "modules");
-  const directory = optionalString(modules.directory, "modules.directory", 1_024) ?? "modules";
-  const optimize = optionalString(modules.optimize, "modules.optimize", 32);
-  if (optimize !== undefined && !(zigOptimizeModes as readonly string[]).includes(optimize)) {
-    throw new CliError(`\`modules.optimize\` must be one of ${zigOptimizeModes.join(", ")}`);
-  }
-  return {
-    directory: resolveRelative(projectRoot, directory),
-    ...(optimize ? { optimize: optimize as ZigOptimizeMode } : {}),
   };
 }
 

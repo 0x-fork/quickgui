@@ -2,41 +2,45 @@ Coordinates a bounded set of checkbox values and an optional derived parent chec
 
 ## Import
 
-Import `CheckboxGroup` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { CheckboxGroup } from "@quickgui/ui/controls";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<CheckboxGroup.Root
-  allValues={["email", "push"]}
-  value={channels()}
-  onValueChange={setChannels}
->
-  <Checkbox.Root parent><Text>All notifications</Text></Checkbox.Root>
-  <Checkbox.Root value="email"><Text>Email</Text></Checkbox.Root>
-  <Checkbox.Root value="push"><Text>Push</Text></Checkbox.Root>
-</CheckboxGroup.Root>
+```go
+func CheckboxGroupExample() {
+	values, setValues := ui.CreateSignal([]string{"email"})
+	ui.CheckboxGroup.Root(
+		ui.CheckboxGroupProps{
+			AllValues:     []string{"email", "push"},
+			Value:         values,
+			OnValueChange: func(next []string, _ *native.Event) { setValues(next) },
+		},
+		func() {
+			ui.Checkbox.Root(ui.CheckboxProps{Parent: true}, "All notifications")
+			ui.Checkbox.Root(ui.CheckboxProps{Value: "email"}, "Email")
+			ui.Checkbox.Root(ui.CheckboxProps{Value: "push"}, "Push")
+		},
+	)
+}
 ```
 
 ## Anatomy
 
-- `CheckboxGroup.Root`
-
-```tsx
-<CheckboxGroup.Root>{/* content */}</CheckboxGroup.Root>
-```
+- `ui.CheckboxGroup.Root`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `allValues` | Complete ordered value universe used to derive a parent checkbox state. |
-| `value` | Controlled value. The precise value type follows this component’s contract. |
-| `defaultValue` | Initial value when the component owns its state. |
-| `onValueChange` | Reports the value accepted by the core. |
-| `disabled` | Prevents interaction and exposes the disabled state. |
-
+| `AllValues` | Complete ordered value universe used to derive a parent checkbox state. |
+| `Value` | Controlled value. The precise value type follows this component’s contract. |
+| `DefaultValue` | Initial value when the component owns its state. |
+| `OnValueChange` | Reports the value accepted by the core. |
+| `Disabled` | Prevents interaction and exposes the disabled state. |

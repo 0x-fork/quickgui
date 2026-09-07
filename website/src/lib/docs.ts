@@ -65,7 +65,7 @@ export const DOCS_PAGES: readonly DocsPageMeta[] = [
       { id: 'current-window', title: 'Current window' },
       { id: 'routing', title: 'Routing' },
     ],
-    searchTerms: ['signal', 'renderer', 'reactivity', 'lifecycle', 'router'],
+    searchTerms: ['go', 'signal', 'component', 'reactivity', 'lifecycle', 'router'],
   },
   {
     slug: 'styling',

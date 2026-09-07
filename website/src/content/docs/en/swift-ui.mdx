@@ -1,50 +1,55 @@
-The SwiftUI bridge mounts real native SwiftUI controls inside a QuickGUI UI-rendered QuickGUI window on macOS.
+The `ui.SwiftUI` family embeds real macOS controls in a Go application. Ordinary QuickGUI components work without it.
 
 ## Host
 
-`Host` is one retained QuickGUI layout leaf backed by `NSHostingView`. Put SwiftUI bridge components below it.
+Create controls inside `ui.SwiftUI.Host`. The host defines the native view boundary and can size itself from its content.
 
-```tsx
-import { Host, Button, Toggle } from "@quickgui/ui/swift-ui";
-
-<Host matchContents>
-  <Button label="Continue" onPress={continueFlow} />
-</Host>
+```go
+func SwiftUiHostExample() {
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.Button(ui.SwiftUIButtonProps{Label: "Continue"})
+		},
+	)
+}
 ```
 
 ## Native controls
 
-The bridge exports `Button`, `Slider`, `Toggle`, `ProgressView`, `Stepper`, `TextField`, `SecureField`, `Picker`, `SegmentedControl`, `DatePicker`, `ColorPicker`, and `Gauge`. Each one has a dedicated reference page in the sidebar.
+Available controls include Button, Slider, Toggle, ProgressView, Stepper, TextField, SecureField, Picker, SegmentedControl, DatePicker, ColorPicker, and Gauge. Their platform appearance comes from macOS.
 
 ## Controlled values
 
-Values remain controlled by QuickGUI UI. Native changes arrive through the matching callback.
+Bind an accessor and store the value returned by the native callback. A SwiftUI control and a QuickGUI node can share the same signal. DatePicker uses Unix timestamps in milliseconds.
 
-```tsx
-<Host matchContents={{ vertical: true }} style={{ width: 340 }}>
-  <Slider
-    value={volume()}
-    min={0}
-    max={1}
-    step={0.05}
-    label="Volume"
-    onValueChange={setVolume}
-  />
-</Host>
+```go
+func SwiftUiToggleExample() {
+	on, setOn := ui.CreateSignal(true)
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.Toggle(ui.SwiftUIToggleProps{
+				IsOn:         on,
+				Label:        "Notifications",
+				OnIsOnChange: func(next bool, _ *native.Event) { setOn(next) },
+			})
+		},
+	)
+}
 ```
 
 ## Sizing
 
-By default, QuickGUI lays out `Host` like any other retained node. Set `matchContents` to use SwiftUI's intrinsic size on both axes, or choose `{ horizontal: true }` or `{ vertical: true }`.
+`MatchContents: true` sizes both axes intrinsically. Use `ui.SwiftUIMatchContents{Vertical: true}` for an intrinsic height with an application-defined width in `PartProps.Style`.
 
-```tsx
-<Host matchContents={{ vertical: true }} style={{ width: 360 }}>
-  <Picker selection={theme()} options={themes} onSelectionChange={setTheme} />
-</Host>
+```go
+ui.SwiftUIHostProps{
+	MatchContents: ui.SwiftUIMatchContents{Vertical: true},
+	PartProps:     ui.PartProps{Style: ui.Style{Width: 320}},
+}
 ```
 
 ## Platform support
 
-<Note title="MACOS ONLY">
-  SwiftUI hosting is the macOS bridge. Use ordinary `@quickgui/ui` components for cross-platform UI.
-</Note>
+SwiftUI hosting requires macOS. The prebuilt native host includes the bridge; your Go application still builds without CGO. Native styles can vary with the operating-system version.

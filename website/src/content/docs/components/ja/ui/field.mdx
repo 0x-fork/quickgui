@@ -2,51 +2,55 @@
 
 ## インポート
 
-`@quickgui/ui` から `Field` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Field } from "@quickgui/ui/field";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<Field.Root required invalid={name().length === 0} validationMessage="Enter a name">
-  <Field.Label><Text>Name</Text></Field.Label>
-  <Field.Control value={name()} onInput={(event) => setName(event.value ?? "")} />
-  <Field.Description><Text>Shown on your profile.</Text></Field.Description>
-  <Field.Error><Text>Enter a name.</Text></Field.Error>
-</Field.Root>
+```go
+func FieldExample() {
+	email, setEmail := ui.CreateSignal("")
+	ui.Field.Root(
+		ui.FieldRootProps{
+			Required: true,
+			Filled:   func() bool { return email() != "" },
+		},
+		func() {
+			ui.Field.Label(ui.FieldLabelProps{}, "Email")
+			ui.Field.Control(ui.FieldControlProps{InputPartProps: ui.InputPartProps{
+				Value:       email,
+				Placeholder: "you@example.com",
+				OnInput:     func(event *native.Event) { setEmail(event.Value) },
+			}})
+			ui.Field.Description(ui.PartProps{}, "Used for receipts")
+			ui.Field.Error(ui.PartProps{}, "Enter a valid email address")
+		},
+	)
+}
 ```
 
 ## 構成
 
-- `Field.Root`
-- `Field.Item`
-- `Field.Label`
-- `Field.Control`
-- `Field.Validity`
-- `Field.Description`
-- `Field.Error`
-
-```tsx
-<Field.Root>
-  <Field.Item />
-  <Field.Label />
-  <Field.Control />
-  <Field.Validity />
-  <Field.Description />
-  <Field.Error />
-</Field.Root>
-```
+- `ui.Field.Root`
+- `ui.Field.Item`
+- `ui.Field.Label`
+- `ui.Field.Control`
+- `ui.Field.Validity`
+- `ui.Field.Description`
+- `ui.Field.Error`
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `invalid` | Field とそのパーツへ検証エラー状態を反映します。 |
-| `required` | 検証とフォーム送信で必須の値としてマークします。 |
-| `validationMessage` | エラー内容とアクセシビリティに公開する、長さ制限付きメッセージです。 |
-| `validationMode` | 検証を開始するインタラクション境界を選びます。 |
-| `onValidationChange` | コアが選んだ検証のトリガーとタイミングを通知します。 |
-
+| `Invalid` | Field とそのパーツへ検証エラー状態を反映します。 |
+| `Required` | 検証とフォーム送信で必須の値としてマークします。 |
+| `ValidationMessage` | エラー内容とアクセシビリティに公開する、長さ制限付きメッセージです。 |
+| `ValidationMode` | 検証を開始するインタラクション境界を選びます。 |
+| `OnValidationChange` | コアが選んだ検証のトリガーとタイミングを通知します。 |

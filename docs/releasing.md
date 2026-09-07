@@ -86,7 +86,7 @@ that can publish these six crates and store it as the `CARGO_REGISTRY_TOKEN` Git
 - `quickgui-system`
 - `quickgui`
 
-For each npm package (`@quickgui/native`, `@quickgui/ui`, and `@quickgui/cli`), add an
+For each npm package (`@quickgui/native` and `@quickgui/cli`), add an
 [npm Trusted Publisher](https://docs.npmjs.com/trusted-publishers/) with GitHub owner `egoist`,
 repository `quickgui`, workflow filename `release.yml`, and no environment. Allow `npm publish`.
 npm requires Node 22.14 or newer and npm 11.5.1 or newer for OIDC; the workflow uses Node 24 and
@@ -113,7 +113,7 @@ root `package.json` version and uses `v<version>` for the GitHub Release, creati
 selected branch commit if it does not already exist. If the tag already points elsewhere, the
 workflow stops before publishing. Manual dispatch does not change the root version or changelog.
 
-Every QuickGUI Cargo and npm release package uses this one version. CI and the release workflow run
+Every QuickGUI Cargo, Go SDK, and npm release package uses this one version. CI and the release workflow run
 the version synchronizer in their checkout before compiling or packaging; it updates every package
 manifest, internal dependency pin, generated binding check, and lockfile from the root version.
 You never update the Cargo or npm package versions by hand. `bun run version:check` is available to
@@ -128,8 +128,12 @@ The workflow publishes crates.io packages in this dependency order:
 5. `quickgui-system`
 6. `quickgui`
 
-It then publishes npm packages in the order `@quickgui/native`, `@quickgui/ui`, and
-`@quickgui/cli`. Each dependent waits until the previous package is anonymously resolvable from
+The Go SDK is published from the same source commit with a `go/v<version>` tag, as required for
+the nested `github.com/egoist/quickgui/go` module. The workflow refuses to move an existing SDK tag.
+The repository must be readable by Go consumers; a tag alone does not grant access to a private repository.
+
+It then publishes npm packages in the order `@quickgui/native` and `@quickgui/cli`.
+The CLI waits until the native package is anonymously resolvable from
 its public registry. A rerun skips an existing, non-yanked crate version and skips an existing npm
 version only when its registry integrity matches the locally verified tarball. This permits safe
 recovery from a partial registry release without attempting to overwrite immutable versions.

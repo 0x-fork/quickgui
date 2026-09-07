@@ -2,31 +2,36 @@
 
 ## 导入
 
-从 `@quickgui/ui/swift-ui` 导入 `ProgressView`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { Host, ProgressView } from "@quickgui/ui/swift-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<Host matchContents={{ vertical: true }} style={{ width: 320 }}>
-  <ProgressView
-    value={completed()}
-    total={100}
-    label="Exporting"
-    currentValueLabel={String(completed()) + "%"}
-  />
-</Host>
+```go
+func SwiftUiProgressViewExample() {
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.ProgressView(ui.SwiftUIProgressViewProps{
+				Value: 0.4,
+				Total: 1,
+				Label: "Uploading",
+			})
+		},
+	)
+}
 ```
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `value` | 受控值，具体类型取决于该组件的约定。 |
-| `total` | SwiftUI 确定进度的分母。 |
-| `label` | 原生 SwiftUI 控件的可见标签。 |
-| `currentValueLabel` | 当前原生进度或仪表值的易读标签。 |
-
+| `Value` | 受控值，具体类型取决于该组件的约定。 |
+| `Total` | SwiftUI 确定进度的分母。 |
+| `Label` | 原生 SwiftUI 控件的可见标签。 |
+| `CurrentValueLabel` | 当前原生进度或仪表值的易读标签。 |

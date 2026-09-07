@@ -2,29 +2,37 @@
 
 ## インポート
 
-`@quickgui/ui` から `Button` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Button } from "@quickgui/ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<Button
-  onClick={save}
-  style={{ height: 40, paddingLeft: 16, paddingRight: 16 }}
->
-  Save changes
-</Button>
+```go
+func ButtonExample(save func()) {
+	ui.Button(
+		ui.Height(40),
+		ui.PaddingLeft(16),
+		ui.PaddingRight(16),
+		ui.BackgroundColor("#2563eb"),
+		ui.Color("white"),
+		ui.BorderRadius(8),
+		ui.Hover(ui.BackgroundColor("#3b82f6")),
+		ui.OnClick(save),
+		"Save changes",
+	)
+}
 ```
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `style` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
+| `WithStyle` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
 | `children` | コンポーネント内にマウントする内容です。 |
-| `onClick` | コアがアクティブ化を解決した後に実行します。 |
-| `disabled` | 操作を無効にし、無効状態を公開します。 |
-
+| `OnClick` | コアがアクティブ化を解決した後に実行します。 |
+| `Disabled` | 操作を無効にし、無効状態を公開します。 |

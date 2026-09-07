@@ -2,37 +2,40 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `Switch`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { Switch } from "@quickgui/ui/controls";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<Switch.Root checked={enabled()} onCheckedChange={setEnabled}>
-  <Switch.Thumb />
-</Switch.Root>
+```go
+func SwitchExample() {
+	on, setOn := ui.CreateSignal(false)
+	ui.Switch.Root(
+		ui.SwitchProps{
+			Checked:         on,
+			OnCheckedChange: func(next bool, _ *native.Event) { setOn(next) },
+		},
+		func() { ui.Switch.Thumb(ui.PartProps{}); ui.Text("Notifications") },
+	)
+}
 ```
 
 ## 结构
 
-- `Switch.Root`
-- `Switch.Thumb`
-
-```tsx
-<Switch.Root>
-  <Switch.Thumb />
-</Switch.Root>
-```
+- `ui.Switch.Root`
+- `ui.Switch.Thumb`
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `checked` | 受控的选中状态。 |
-| `defaultChecked` | 组件自行管理状态时的初始选中状态。 |
-| `onCheckedChange` | 报告核心接受的选中状态。 |
-| `disabled` | 禁止交互，并暴露禁用状态。 |
-
+| `Checked` | 受控的选中状态。 |
+| `DefaultChecked` | 组件自行管理状态时的初始选中状态。 |
+| `OnCheckedChange` | 报告核心接受的选中状态。 |
+| `Disabled` | 禁止交互，并暴露禁用状态。 |

@@ -2,81 +2,75 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `Menu`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { Menu } from "@quickgui/ui/menu";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"fmt"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<Menu.Root open={open()} onOpenChange={setOpen}>
-  <Menu.Trigger><Text>File</Text></Menu.Trigger>
-  <Menu.Portal>
-    <Menu.Positioner side="bottom">
-      <Menu.Popup>
-        <Menu.Item value="new"><Text>New</Text></Menu.Item>
-        <Menu.Separator />
-        <Menu.CheckboxItem value="sidebar" checked={sidebar()}><Text>Sidebar</Text></Menu.CheckboxItem>
-      </Menu.Popup>
-    </Menu.Positioner>
-  </Menu.Portal>
-</Menu.Root>
+```go
+func MenuExample() {
+	ui.Menu.Root(
+		ui.MenuRootProps{},
+		func() {
+			ui.Menu.Trigger(ui.MenuTriggerProps{}, "Actions")
+			ui.Menu.Positioner(
+				ui.MenuPositionerProps{},
+				func() {
+					ui.Menu.Popup(
+						ui.PartProps{},
+						func() {
+							ui.Menu.Item(
+								ui.MenuItemProps{
+									Value:     "copy",
+									Label:     "Copy",
+									PartProps: ui.PartProps{OnClick: func(*native.Event) { fmt.Println("Copy") }},
+								},
+								"Copy",
+							)
+						},
+					)
+				},
+			)
+		},
+	)
+}
 ```
 
 ## 结构
 
-- `Menu.Root`
-- `Menu.Trigger`
-- `Menu.Portal`
-- `Menu.Backdrop`
-- `Menu.Positioner`
-- `Menu.Popup`
-- `Menu.Arrow`
-- `Menu.Item`
-- `Menu.LinkItem`
-- `Menu.SubmenuRoot`
-- `Menu.SubmenuTrigger`
-- `Menu.Group`
-- `Menu.GroupLabel`
-- `Menu.RadioGroup`
-- `Menu.RadioItem`
-- `Menu.RadioItemIndicator`
-- `Menu.CheckboxItem`
-- `Menu.CheckboxItemIndicator`
-- `Menu.Separator`
-
-```tsx
-<Menu.Root>
-  <Menu.Trigger />
-  <Menu.Portal />
-  <Menu.Backdrop />
-  <Menu.Positioner />
-  <Menu.Popup />
-  <Menu.Arrow />
-  <Menu.Item />
-  <Menu.LinkItem />
-  <Menu.SubmenuRoot />
-  <Menu.SubmenuTrigger />
-  <Menu.Group />
-  <Menu.GroupLabel />
-  <Menu.RadioGroup />
-  <Menu.RadioItem />
-  <Menu.RadioItemIndicator />
-  <Menu.CheckboxItem />
-  <Menu.CheckboxItemIndicator />
-  <Menu.Separator />
-</Menu.Root>
-```
+- `ui.Menu.Root`
+- `ui.Menu.Trigger`
+- `ui.Menu.Portal`
+- `ui.Menu.Backdrop`
+- `ui.Menu.Positioner`
+- `ui.Menu.Popup`
+- `ui.Menu.Arrow`
+- `ui.Menu.Item`
+- `ui.Menu.LinkItem`
+- `ui.Menu.SubmenuRoot`
+- `ui.Menu.SubmenuTrigger`
+- `ui.Menu.Group`
+- `ui.Menu.GroupLabel`
+- `ui.Menu.RadioGroup`
+- `ui.Menu.RadioItem`
+- `ui.Menu.RadioItemIndicator`
+- `ui.Menu.CheckboxItem`
+- `ui.Menu.CheckboxItemIndicator`
+- `ui.Menu.Separator`
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `open` | 受控的打开状态。 |
-| `defaultOpen` | 组件自行管理打开状态时的初始状态。 |
-| `onOpenChange` | 报告核心做出的打开或关闭决定。 |
-| `orientation` | 水平或垂直布局，以及对应的键盘方向。 |
-| `loopFocus` | 到达当前菜单层级末端时循环键盘高亮。 |
-
+| `Open` | 受控的打开状态。 |
+| `DefaultOpen` | 组件自行管理打开状态时的初始状态。 |
+| `OnOpenChange` | 报告核心做出的打开或关闭决定。 |
+| `Orientation` | 水平或垂直布局，以及对应的键盘方向。 |
+| `LoopFocus` | 到达当前菜单层级末端时循环键盘高亮。 |

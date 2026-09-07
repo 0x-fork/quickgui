@@ -2,35 +2,43 @@
 
 ## インポート
 
-`@quickgui/ui/swift-ui` から `Slider` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Host, Slider } from "@quickgui/ui/swift-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<Host matchContents={{ vertical: true }} style={{ width: 360 }}>
-  <Slider
-    value={volume()}
-    min={0}
-    max={1}
-    step={0.05}
-    label="Volume"
-    onValueChange={setVolume}
-  />
-</Host>
+```go
+func SwiftUiSliderExample() {
+	value, setValue := ui.CreateSignal(40.0)
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.Slider(ui.SwiftUISliderProps{
+				Value:         value,
+				Min:           0,
+				Max:           100,
+				Step:          1,
+				Label:         "Value",
+				OnValueChange: func(next float64, _ *native.Event) { setValue(next) },
+			})
+		},
+	)
+}
 ```
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
-| `min` | 受け入れる最小値です。 |
-| `max` | 受け入れる最大値です。 |
-| `step` | キーボード、ポインター、またはネイティブコントロール入力で使う増分です。 |
-| `label` | ネイティブ SwiftUI コントロールに表示するラベルです。 |
-| `onValueChange` | コアが受け入れた値を通知します。 |
-
+| `Value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `Min` | 受け入れる最小値です。 |
+| `Max` | 受け入れる最大値です。 |
+| `Step` | キーボード、ポインター、またはネイティブコントロール入力で使う増分です。 |
+| `Label` | ネイティブ SwiftUI コントロールに表示するラベルです。 |
+| `OnValueChange` | コアが受け入れた値を通知します。 |

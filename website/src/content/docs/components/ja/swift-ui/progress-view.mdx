@@ -2,31 +2,36 @@
 
 ## インポート
 
-`@quickgui/ui/swift-ui` から `ProgressView` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Host, ProgressView } from "@quickgui/ui/swift-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<Host matchContents={{ vertical: true }} style={{ width: 320 }}>
-  <ProgressView
-    value={completed()}
-    total={100}
-    label="Exporting"
-    currentValueLabel={String(completed()) + "%"}
-  />
-</Host>
+```go
+func SwiftUiProgressViewExample() {
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.ProgressView(ui.SwiftUIProgressViewProps{
+				Value: 0.4,
+				Total: 1,
+				Label: "Uploading",
+			})
+		},
+	)
+}
 ```
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
-| `total` | 確定型の SwiftUI 進捗で使う分母です。 |
-| `label` | ネイティブ SwiftUI コントロールに表示するラベルです。 |
-| `currentValueLabel` | 現在のネイティブ進捗または Gauge 値を表す読みやすいラベルです。 |
-
+| `Value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `Total` | 確定型の SwiftUI 進捗で使う分母です。 |
+| `Label` | ネイティブ SwiftUI コントロールに表示するラベルです。 |
+| `CurrentValueLabel` | 現在のネイティブ進捗または Gauge 値を表す読みやすいラベルです。 |

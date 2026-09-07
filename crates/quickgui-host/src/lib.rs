@@ -550,7 +550,7 @@ pub struct NativeAppOptions {
     pub temp_dir: Option<String>,
     /// `default`, `last-window-closed`, or `explicit`.
     pub quit_mode: Option<String>,
-    /// OpenType font files the host reads and registers before the application becomes ready.
+    /// OpenType files registered before readiness. Relative paths use `resource_dir`.
     pub fonts: Option<Vec<String>>,
 }
 
@@ -726,7 +726,7 @@ impl EventSink {
         if event.data.is_some() {
             flags |= 4;
         }
-        // SAFETY: the callback is a scriptc foreign trampoline that copies every span before it
+        // SAFETY: the callback is a purego trampoline that copies every span before it
         // returns; the spans outlive the call because `event` is borrowed for its duration.
         unsafe {
             (self.callback)(
@@ -826,10 +826,6 @@ enum HostCommand {
     },
     DestroyApp {
         app: u32,
-    },
-    /// The application thread's program returned.
-    ScriptExited {
-        code: i32,
     },
 }
 

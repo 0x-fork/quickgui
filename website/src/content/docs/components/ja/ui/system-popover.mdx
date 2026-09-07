@@ -2,44 +2,48 @@ QuickGUI の内容を独立したネイティブ子ウィンドウに表示し�
 
 ## インポート
 
-`@quickgui/ui` から `SystemPopover` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { SystemPopover } from "@quickgui/ui/popover";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<SystemPopover.Root open={open()} onOpenChange={setOpen}>
-  <SystemPopover.Trigger><Text>Open native popover</Text></SystemPopover.Trigger>
-  <SystemPopover.Content width={320} height={180} placement="bottom">
-    <SettingsPanel />
-  </SystemPopover.Content>
-</SystemPopover.Root>
+```go
+func SystemPopoverExample() {
+	ui.SystemPopover.Root(
+		ui.PopoverRootProps{},
+		func() {
+			ui.SystemPopover.Trigger(ui.PopoverTriggerProps{}, "Account")
+			ui.SystemPopover.Content(
+				ui.PopoverContentProps{
+					Width:     240,
+					Height:    120,
+					Placement: "bottom-start",
+				},
+				"Account settings",
+			)
+		},
+	)
+}
 ```
 
 ## 構成
 
-- `SystemPopover.Root`
-- `SystemPopover.Trigger`
-- `SystemPopover.Content`
-
-```tsx
-<SystemPopover.Root>
-  <SystemPopover.Trigger />
-  <SystemPopover.Content />
-</SystemPopover.Root>
-```
+- `ui.SystemPopover.Root`
+- `ui.SystemPopover.Trigger`
+- `ui.SystemPopover.Content`
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `open` | 制御された開閉状態です。 |
-| `defaultOpen` | コンポーネント自身が開閉状態を管理するときの初期状態です。 |
-| `onOpenChange` | コアが決定した開閉を通知します。 |
-| `width` | 宣言された論理幅です。 |
-| `height` | 宣言された論理高さです。 |
-| `placement` | ネイティブ子ウィンドウの配置要求です。 |
-
+| `Open` | 制御された開閉状態です。 |
+| `DefaultOpen` | コンポーネント自身が開閉状態を管理するときの初期状態です。 |
+| `OnOpenChange` | コアが決定した開閉を通知します。 |
+| `Width` | 宣言された論理幅です。 |
+| `Height` | 宣言された論理高さです。 |
+| `Placement` | ネイティブ子ウィンドウの配置要求です。 |

@@ -1,62 +1,78 @@
-SwiftUI 修饰器让 QuickGUI UI 可以声明原生外观；反向托管则让 SwiftUI 内容包含一棵普通的 QuickGUI 子树。
+SwiftUI 修饰器用于设置原生控件样式。反向托管可以把普通 QuickGUI 子树放入 SwiftUI。
 
 ## 修饰器
 
-从 `@quickgui/ui/swift-ui/modifiers` 导入修饰器工厂，并按顺序应用。
+通过 `Modifiers` 按顺序应用 `ui.SwiftUI` 的修饰器工厂，包括 ButtonStyle、ButtonBorderShape、ControlSize、LabelStyle、Tint 和 Disabled。
 
-```tsx
-import { Button, Host } from "@quickgui/ui/swift-ui";
-import { buttonStyle, controlSize, tint } from "@quickgui/ui/swift-ui/modifiers";
-
-<Host matchContents>
-  <Button
-    label="Create project"
-    modifiers={[
-      buttonStyle("borderedProminent"),
-      controlSize("large"),
-      tint("#f97316"),
-    ]}
-  />
-</Host>
+```go
+ui.SwiftUI.Button(ui.SwiftUIButtonProps{
+	Label: "Create project",
+	Modifiers: []ui.SwiftUIModifier{
+		ui.SwiftUI.ButtonStyle("borderedProminent"),
+		ui.SwiftUI.ControlSize("large"),
+		ui.SwiftUI.Tint("#f97316"),
+	},
+})
 ```
-
-可用的工厂包括 `buttonStyle`、`buttonBorderShape`、`controlSize`、`labelStyle`、`tint` 和 `disabled`。
 
 ## Liquid Glass
 
-在提供该能力的系统上，SwiftUI 按钮桥接可以请求原生玻璃按钮样式。最终渲染仍由操作系统负责。
-
-```tsx
-<Button label="Continue" modifiers={[buttonStyle("glass")]} />
-```
+在支持的系统上，使用 `ui.SwiftUI.ButtonStyle("glass")` 请求原生玻璃按钮样式。最终外观由 macOS 决定。
 
 ## 反向托管
 
-`QuickGUIHostView` 会把一棵普通的 QuickGUI 子树反向挂载到 SwiftUI 层级中。
+`ui.SwiftUI.QuickGUIHostView` 在原生层级中拥有一个 QuickGUI 子树。指定尺寸，并在回调中声明子节点，使其挂载到嵌入窗口的生命周期下。
 
-```tsx
-<Host matchContents>
-  <QuickGUIHostView width={320} height={180}>
-    <View style={{ width: 320, height: 180, padding: 16 }}>
-      <Text>QuickGUI content inside SwiftUI</Text>
-    </View>
-  </QuickGUIHostView>
-</Host>
+```go
+func SwiftUiQuickguiHostViewExample() {
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.QuickGUIHostView(
+				ui.SwiftUIQuickGUIHostViewProps{Width: 320, Height: 180},
+				func() {
+					ui.View(
+						ui.Width("100%"),
+						ui.Height("100%"),
+						ui.Padding(16),
+						"QuickGUI inside SwiftUI",
+					)
+				},
+			)
+		},
+	)
+}
 ```
 
 ## SwiftUI Popover
 
-SwiftUI 的 `Popover` 会组合一个原生 SwiftUI 触发器。如果浮窗内容使用普通 QuickGUI 组件构建，可以在其中使用 `QuickGUIHostView`。
+SwiftUI 浮窗通过 `Render` 组合原生触发器。其内容可以反向托管交互式 QuickGUI 组件。
 
-```tsx
-<Host matchContents>
-  <Popover.Root isPresented={open()} onIsPresentedChange={setOpen}>
-    <Popover.Trigger><Button label="Open" /></Popover.Trigger>
-    <Popover.Content>
-      <QuickGUIHostView width={280} height={140}>
-        <SettingsPanel />
-      </QuickGUIHostView>
-    </Popover.Content>
-  </Popover.Root>
-</Host>
+```go
+func SwiftUiPopoverExample() {
+	open, setOpen := ui.CreateSignal(false)
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.Popover.Root(
+				ui.SwiftUIPopoverProps{
+					IsPresented:         open,
+					OnIsPresentedChange: setOpen,
+				},
+				func() {
+					ui.SwiftUI.Popover.Trigger(ui.SwiftUIPopoverTriggerProps{Render: func() { ui.SwiftUI.Button(ui.SwiftUIButtonProps{Label: "Account"}) }})
+					ui.SwiftUI.Popover.Content(
+						ui.SwiftUIPopoverContentProps{},
+						func() {
+							ui.SwiftUI.QuickGUIHostView(
+								ui.SwiftUIQuickGUIHostViewProps{Width: 240, Height: 120},
+								"Account settings",
+							)
+						},
+					)
+				},
+			)
+		},
+	)
+}
 ```

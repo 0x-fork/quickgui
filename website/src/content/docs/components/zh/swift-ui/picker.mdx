@@ -2,37 +2,39 @@
 
 ## 导入
 
-从 `@quickgui/ui/swift-ui` 导入 `Picker`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { Host, Picker } from "@quickgui/ui/swift-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<Host matchContents>
-  <Picker
-    label="Theme"
-    selection={theme()}
-    options={[
-      { value: "system", label: "System" },
-      { value: "light", label: "Light" },
-      { value: "dark", label: "Dark" },
-    ]}
-    style="menu"
-    onSelectionChange={setTheme}
-  />
-</Host>
+```go
+func SwiftUiPickerExample() {
+	value, setValue := ui.CreateSignal("list")
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.Picker(ui.SwiftUIPickerProps{
+				Selection:         value,
+				Options:           []ui.SwiftUIPickerOption{{Value: "list", Label: "List"}, {Value: "grid", Label: "Grid"}},
+				OnSelectionChange: func(next string, _ *native.Event) { setValue(next) },
+			})
+		},
+	)
+}
 ```
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `selection` | 表格、原生选择器或颜色控件的受控选中值。 |
-| `options` | 有序的原生选择器选项。 |
-| `label` | 原生 SwiftUI 控件的可见标签。 |
-| `style` | QuickGUI 的布局、绘制、排版和交互状态样式。 |
-| `onSelectionChange` | 报告选中的原生选择器选项或颜色。 |
-
+| `Selection` | 表格、原生选择器或颜色控件的受控选中值。 |
+| `Options` | 有序的原生选择器选项。 |
+| `Label` | 原生 SwiftUI 控件的可见标签。 |
+| `Style` | 此控件的原生 SwiftUI 展示样式。 |
+| `OnSelectionChange` | 报告选中的原生选择器选项或颜色。 |

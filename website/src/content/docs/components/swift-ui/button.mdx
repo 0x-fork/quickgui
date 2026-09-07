@@ -2,31 +2,40 @@ A native SwiftUI button with text, SF Symbol, semantic role, and press handling.
 
 ## Import
 
-Import `Button` from `@quickgui/ui/swift-ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Host, Button } from "@quickgui/ui/swift-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"fmt"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Host matchContents>
-  <Button
-    label="Continue"
-    systemImage="arrow.right"
-    onPress={continueFlow}
-  />
-</Host>
+```go
+func SwiftUiButtonExample() {
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.Button(ui.SwiftUIButtonProps{
+				Label:       "Save",
+				SystemImage: "checkmark",
+				OnPress:     func(*native.Event) { fmt.Println("Saved") },
+				Modifiers:   []ui.SwiftUIModifier{ui.SwiftUI.ButtonStyle("borderedProminent")},
+			})
+		},
+	)
+}
 ```
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `label` | Visible native SwiftUI control label. |
-| `systemImage` | SF Symbols name displayed with a SwiftUI button label. |
-| `role` | SwiftUI semantic role: `default`, `cancel`, or `destructive`. |
-| `onPress` | Runs when the native SwiftUI button is activated. |
-| `modifiers` | Ordered SwiftUI view modifiers applied to the hosted control. |
-
+| `Label` | Visible native SwiftUI control label. |
+| `SystemImage` | SF Symbols name displayed with a SwiftUI button label. |
+| `Role` | SwiftUI semantic role: `default`, `cancel`, or `destructive`. |
+| `OnPress` | Runs when the native SwiftUI button is activated. |
+| `Modifiers` | Ordered SwiftUI view modifiers applied to the hosted control. |

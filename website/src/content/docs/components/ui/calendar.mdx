@@ -2,45 +2,49 @@ A keyboard-navigable month grid for single-date selection.
 
 ## Import
 
-Import `Calendar` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Calendar } from "@quickgui/ui/date-time";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Calendar.Root value={date()} onValueChange={setDate} onMonthChange={setMonth}>
-  <For each={weeks()}>{(week, weekIndex) =>
-    <Calendar.Week itemIndex={weekIndex()}>
-      <For each={week}>{(day) => <Calendar.Day day={day} />}</For>
-    </Calendar.Week>
-  }</For>
-</Calendar.Root>
+```go
+func CalendarExample(weeks [][]string) {
+	ui.Calendar.Root(
+		ui.CalendarRootProps{DefaultValue: "2026-09-03"},
+		func() {
+			for index, week := range weeks {
+				ui.Calendar.Week(
+					ui.CalendarWeekProps{Index: &index},
+					func() {
+						for _, day := range week {
+							ui.Calendar.Day(ui.CalendarDayProps{Day: day}, day)
+						}
+					},
+				)
+			}
+		},
+	)
+}
 ```
 
 ## Anatomy
 
-- `Calendar.Root`
-- `Calendar.Week`
-- `Calendar.Day`
-
-```tsx
-<Calendar.Root>
-  <Calendar.Week />
-  <Calendar.Day />
-</Calendar.Root>
-```
+- `ui.Calendar.Root`
+- `ui.Calendar.Week`
+- `ui.Calendar.Day`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `value` | Controlled value. The precise value type follows this component’s contract. |
-| `defaultValue` | Initial value when the component owns its state. |
-| `min` | Minimum accepted value. |
-| `max` | Maximum accepted value. |
-| `firstWeekday` | First weekday column, where Monday is 0 and Sunday is 6. |
-| `onValueChange` | Reports the value accepted by the core. |
-
+| `Value` | Controlled value. The precise value type follows this component’s contract. |
+| `DefaultValue` | Initial value when the component owns its state. |
+| `Min` | Minimum accepted value. |
+| `Max` | Maximum accepted value. |
+| `FirstWeekday` | First weekday column, where Monday is 0 and Sunday is 6. |
+| `OnValueChange` | Reports the value accepted by the core. |

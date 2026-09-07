@@ -2,81 +2,62 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `Select`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { Select } from "@quickgui/ui/select";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<Select.Root
-  ariaLabel="Theme"
-  items={[
-    { value: "system", label: "System" },
-    { value: "light", label: "Light" },
-    { value: "dark", label: "Dark" },
-  ]}
-  value={theme()}
-  onValueChange={setTheme}
-/>
+```go
+func SelectExample() {
+	value, setValue := ui.CreateSignal[*string](nil)
+	ui.Select.Root(
+		ui.SelectRootProps{
+			PickerSourceProps: ui.PickerSourceProps{Items: func() []ui.OptionDeclaration {
+				return []ui.OptionDeclaration{{Value: "go", Label: "Go"}, {Value: "swift", Label: "Swift"}}
+			}},
+			Value:         value,
+			OnValueChange: func(next *string, _ *native.Event) { setValue(next) },
+		},
+		func() { ui.Select.Value(ui.PartProps{}); ui.Select.Icon(ui.PartProps{}, "▾") },
+	)
+}
 ```
 
 ## 结构
 
-- `Select.Root`
-- `Select.Trigger`
-- `Select.Option`
-- `Select.Label`
-- `Select.Value`
-- `Select.Icon`
-- `Select.Backdrop`
-- `Select.Portal`
-- `Select.Positioner`
-- `Select.Popup`
-- `Select.Arrow`
-- `Select.List`
-- `Select.Item`
-- `Select.ItemText`
-- `Select.ItemIndicator`
-- `Select.Group`
-- `Select.GroupLabel`
-- `Select.Separator`
-- `Select.ScrollUpArrow`
-- `Select.ScrollDownArrow`
-
-```tsx
-<Select.Root>
-  <Select.Trigger />
-  <Select.Option />
-  <Select.Label />
-  <Select.Value />
-  <Select.Icon />
-  <Select.Backdrop />
-  <Select.Portal />
-  <Select.Positioner />
-  <Select.Popup />
-  <Select.Arrow />
-  <Select.List />
-  <Select.Item />
-  <Select.ItemText />
-  <Select.ItemIndicator />
-  <Select.Group />
-  <Select.GroupLabel />
-  <Select.Separator />
-  <Select.ScrollUpArrow />
-  <Select.ScrollDownArrow />
-</Select.Root>
-```
+- `ui.Select.Root`
+- `ui.Select.Trigger`
+- `ui.Select.Option`
+- `ui.Select.Label`
+- `ui.Select.Value`
+- `ui.Select.Icon`
+- `ui.Select.Backdrop`
+- `ui.Select.Portal`
+- `ui.Select.Positioner`
+- `ui.Select.Popup`
+- `ui.Select.Arrow`
+- `ui.Select.List`
+- `ui.Select.Item`
+- `ui.Select.ItemText`
+- `ui.Select.ItemIndicator`
+- `ui.Select.Group`
+- `ui.Select.GroupLabel`
+- `ui.Select.Separator`
+- `ui.Select.ScrollUpArrow`
+- `ui.Select.ScrollDownArrow`
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `items` | 用于选项或键盘导航的有限声明模型。 |
-| `value` | 受控值，具体类型取决于该组件的约定。 |
-| `defaultValue` | 组件自行管理状态时的初始值。 |
-| `multiple` | 允许选择或打开多个值。 |
-| `onValueChange` | 报告核心接受的值。 |
-
+| `Items` | 用于选项或键盘导航的有限声明模型。 |
+| `Value` | 受控值，具体类型取决于该组件的约定。 |
+| `DefaultValue` | 组件自行管理状态时的初始值。 |
+| `Multiple` | 允许选择或打开多个值。 |
+| `OnValueChange` | 报告核心接受的值。 |

@@ -2,49 +2,55 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `Accordion`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { Accordion } from "@quickgui/ui/disclosure";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<Accordion.Root value={open()} onValueChange={setOpen}>
-  <Accordion.Item value="shipping">
-    <Accordion.Header>
-      <Accordion.Trigger><Text>Shipping</Text></Accordion.Trigger>
-    </Accordion.Header>
-    <Accordion.Panel><Text>Ships in 2–3 days.</Text></Accordion.Panel>
-  </Accordion.Item>
-</Accordion.Root>
+```go
+func AccordionExample() {
+	ui.Accordion.Root(
+		ui.AccordionRootProps{Multiple: true},
+		func() {
+			ui.Accordion.Item(
+				ui.AccordionItemProps{Value: "details"},
+				func() {
+					ui.Accordion.Header(
+						ui.PartProps{},
+						func() {
+							ui.Accordion.Trigger(
+								ui.PartProps{},
+								"Details",
+							)
+						},
+					)
+					ui.Accordion.Panel(ui.PartProps{}, "Mounted when opened")
+				},
+			)
+		},
+	)
+}
 ```
 
 ## 结构
 
-- `Accordion.Root`
-- `Accordion.Item`
-- `Accordion.Header`
-- `Accordion.Trigger`
-- `Accordion.Panel`
-
-```tsx
-<Accordion.Root>
-  <Accordion.Item />
-  <Accordion.Header />
-  <Accordion.Trigger />
-  <Accordion.Panel />
-</Accordion.Root>
-```
+- `ui.Accordion.Root`
+- `ui.Accordion.Item`
+- `ui.Accordion.Header`
+- `ui.Accordion.Trigger`
+- `ui.Accordion.Panel`
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `value` | 受控值，具体类型取决于该组件的约定。 |
-| `defaultValue` | 组件自行管理状态时的初始值。 |
-| `onValueChange` | 报告核心接受的值。 |
-| `multiple` | 允许选择或打开多个值。 |
-| `keepMounted` | 保持非活动内容已挂载，但禁用其显示。 |
-
+| `Value` | 受控值，具体类型取决于该组件的约定。 |
+| `DefaultValue` | 组件自行管理状态时的初始值。 |
+| `OnValueChange` | 报告核心接受的值。 |
+| `Multiple` | 允许选择或打开多个值。 |
+| `KeepMounted` | 保持非活动内容已挂载，但禁用其显示。 |

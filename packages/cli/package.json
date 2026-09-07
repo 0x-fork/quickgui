@@ -26,10 +26,7 @@
     "src/error.ts",
     "src/index.ts",
     "src/init.ts",
-    "src/jsx-lowering.ts",
-    "src/modules.ts",
     "src/native-build.ts",
-    "src/native-compiler.ts",
     "src/targets.ts",
     "templates",
     "src/packaging",
@@ -39,14 +36,10 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@quickgui/native": "workspace:*",
-    "@quickgui/ui": "workspace:*",
-    "scriptc": "0.0.36",
-    "typescript": "7.0.2"
+    "@quickgui/native": "workspace:*"
   },
   "engines": {
-    "bun": ">=1.3.0",
-    "node": ">=24"
+    "bun": ">=1.3.0"
   },
   "os": [
     "darwin"

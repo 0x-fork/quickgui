@@ -2,35 +2,40 @@
 
 ## インポート
 
-`@quickgui/ui/swift-ui` から `Gauge` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Host, Gauge } from "@quickgui/ui/swift-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<Host matchContents>
-  <Gauge
-    value={storageUsed()}
-    min={0}
-    max={100}
-    label="Storage"
-    currentValueLabel={String(storageUsed()) + "%"}
-    style="accessoryCircularCapacity"
-  />
-</Host>
+```go
+func SwiftUiGaugeExample() {
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.Gauge(ui.SwiftUIGaugeProps{
+				Value: 60,
+				Min:   0,
+				Max:   100,
+				Label: "Capacity",
+				Style: "accessoryLinearCapacity",
+			})
+		},
+	)
+}
 ```
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
-| `min` | 受け入れる最小値です。 |
-| `max` | 受け入れる最大値です。 |
-| `label` | ネイティブ SwiftUI コントロールに表示するラベルです。 |
-| `currentValueLabel` | 現在のネイティブ進捗または Gauge 値を表す読みやすいラベルです。 |
-| `style` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
-
+| `Value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `Min` | 受け入れる最小値です。 |
+| `Max` | 受け入れる最大値です。 |
+| `Label` | ネイティブ SwiftUI コントロールに表示するラベルです。 |
+| `CurrentValueLabel` | 現在のネイティブ進捗または Gauge 値を表す読みやすいラベルです。 |
+| `Style` | このコントロールのネイティブ SwiftUI 表示スタイルです。 |

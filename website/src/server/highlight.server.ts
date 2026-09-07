@@ -7,23 +7,21 @@ async function highlightAll(): Promise<HighlightedSnippets> {
     { snippets },
     { createHighlighterCore },
     { createJavaScriptRegexEngine },
-    rust,
-    tsx,
+    go,
     bash,
     githubLight,
   ] = await Promise.all([
     import('../lib/snippets'),
     import('shiki/core'),
     import('shiki/engine/javascript'),
-    import('shiki/langs/rust.mjs'),
-    import('shiki/langs/tsx.mjs'),
+    import('shiki/langs/go.mjs'),
     import('shiki/langs/bash.mjs'),
     import('shiki/themes/github-light.mjs'),
   ])
 
   const highlighter = await createHighlighterCore({
     themes: [githubLight.default],
-    langs: [rust.default, tsx.default, bash.default],
+    langs: [go.default, bash.default],
     engine: createJavaScriptRegexEngine({ forgiving: true }),
   })
 

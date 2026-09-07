@@ -1,19 +1,21 @@
-# QuickGUI SwiftUI
+# swift-ui
 
-This example is a sidebar gallery of the native SwiftUI components exposed through QuickGUI. The
-left rail is a semantic vertical `Tabs` list, and the right pane mounts one live component demo per
-page with the state reported back to QuickGUI.
+The macOS SwiftUI control gallery, modifier declarations, popovers, and embedded QuickGUI views.
 
-The gallery includes real SwiftUI `Button`, `Slider`, `Toggle`, `ProgressView`, `Stepper`,
-`TextField`, `SecureField`, `Picker`, segmented tabs, `DatePicker`, `ColorPicker`, and `Gauge`
-controls. The Popover page presents a native popover that reverse-hosts ordinary QuickGUI `View`,
-`Text`, `Input`, and `Button` components. That embedded subtree keeps its Rust renderer and native
-input/accessibility surface instead of being translated into SwiftUI controls.
+The application is Go. Pass components directly through `native.WindowOptions.Component`; signals update individual retained nodes. The Rust shared library is loaded in process using purego.
+
+From the repository root:
 
 ```console
-cd examples/swift-ui
-bun run dev
+bun install
+bun run build:native # once
+bun packages/cli/src/cli.ts dev --project examples/swift-ui
 ```
 
-The `glass` style uses Liquid Glass on macOS 26 and falls back to a bordered native button on older
-systems. Dismiss the popover by clicking outside it, or use the QuickGUI Save button inside it.
+Check the application without CGO:
+
+```console
+CGO_ENABLED=0 go -C examples/swift-ui test ./...
+```
+
+See [main.go](main.go) and the [Go guide](../../docs/go.md). macOS packaging uses Xcode Command Line Tools; Go 1.23+ and Bun are required.

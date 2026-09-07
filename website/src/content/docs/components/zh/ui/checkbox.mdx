@@ -2,39 +2,41 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `Checkbox`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { Checkbox } from "@quickgui/ui/controls";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<Checkbox.Root checked={checked()} onCheckedChange={setChecked}>
-  <Checkbox.Indicator><Text>✓</Text></Checkbox.Indicator>
-  <Text>Remember this device</Text>
-</Checkbox.Root>
+```go
+func CheckboxExample() {
+	checked, setChecked := ui.CreateSignal(false)
+	ui.Checkbox.Root(
+		ui.CheckboxProps{
+			Checked:         func() ui.CheckedState { return checked() },
+			OnCheckedChange: func(next bool, _ *native.Event) { setChecked(next) },
+		},
+		func() { ui.Checkbox.Indicator(ui.PartProps{}, "✓"); ui.Text("Remember me") },
+	)
+}
 ```
 
 ## 结构
 
-- `Checkbox.Root`
-- `Checkbox.Indicator`
-
-```tsx
-<Checkbox.Root>
-  <Checkbox.Indicator />
-</Checkbox.Root>
-```
+- `ui.Checkbox.Root`
+- `ui.Checkbox.Indicator`
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `checked` | 受控的选中状态。 |
-| `defaultChecked` | 组件自行管理状态时的初始选中状态。 |
-| `onCheckedChange` | 报告核心接受的选中状态。 |
-| `readOnly` | 阻止值变化，但仍允许控件获得焦点。 |
-| `disabled` | 禁止交互，并暴露禁用状态。 |
-
+| `Checked` | 受控的选中状态。 |
+| `DefaultChecked` | 组件自行管理状态时的初始选中状态。 |
+| `OnCheckedChange` | 报告核心接受的选中状态。 |
+| `ReadOnly` | 阻止值变化，但仍允许控件获得焦点。 |
+| `Disabled` | 禁止交互，并暴露禁用状态。 |

@@ -2,46 +2,45 @@
 
 ## インポート
 
-`@quickgui/ui` から `Tree` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Tree } from "@quickgui/ui/collections";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<Tree.Root
-  nodes={nodes}
-  expanded={expanded()}
-  value={selected()}
-  onExpandedChange={setExpanded}
-  onValueChange={setSelected}
->
-  <For each={visibleNodes()}>{(node) =>
-    <Tree.Row nodeId={node.id}><Text>{node.label}</Text></Tree.Row>
-  }</For>
-</Tree.Root>
+```go
+func TreeExample() {
+	nodes := []ui.TreeNodeDeclaration{{ID: "src", Label: "src", Children: []ui.TreeNodeDeclaration{{ID: "src/main.go", Label: "main.go"}}}}
+	ui.Tree.Root(
+		ui.TreeRootProps{
+			Nodes:           func() []ui.TreeNodeDeclaration { return nodes },
+			DefaultExpanded: []string{"src"},
+			RowHeight:       26,
+			PartProps:       ui.PartProps{Style: ui.Style{Height: 200}},
+		},
+		func() {
+			ui.Tree.Row(ui.TreeRowProps{NodeID: "src"}, "src")
+			ui.Tree.Row(ui.TreeRowProps{NodeID: "src/main.go"}, "main.go")
+		},
+	)
+}
 ```
 
 ## 構成
 
-- `Tree.Root`
-- `Tree.Row`
-
-```tsx
-<Tree.Root>
-  <Tree.Row />
-</Tree.Root>
-```
+- `ui.Tree.Root`
+- `ui.Tree.Row`
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `nodes` | Tree の上限付き階層ノード宣言です。 |
-| `expanded` | 制御された展開済み Tree ノード ID です。 |
-| `value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
-| `onExpandedChange` | コアが展開した順序付きノード ID を通知します。 |
-| `onValueChange` | コアが受け入れた値を通知します。 |
-
+| `Nodes` | Tree の上限付き階層ノード宣言です。 |
+| `Expanded` | 制御された展開済み Tree ノード ID です。 |
+| `Value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `OnExpandedChange` | コアが展開した順序付きノード ID を通知します。 |
+| `OnValueChange` | コアが受け入れた値を通知します。 |

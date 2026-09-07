@@ -2,30 +2,35 @@ Input と同じ制御値の規約を持つ、複数行テキスト編集プリ�
 
 ## インポート
 
-`@quickgui/ui` から `TextArea` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { TextArea } from "@quickgui/ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<TextArea
-  value={notes()}
-  placeholder="Release notes"
-  onInput={(event) => setNotes(event.value ?? "")}
-  style={{ width: 360, height: 140 }}
-/>
+```go
+func TextAreaExample() {
+	value, setValue := ui.CreateSignal("")
+	ui.TextArea(
+		ui.Value(value),
+		ui.Placeholder("Write here"),
+		ui.OnInput(func(event *native.Event) { setValue(event.Value) }),
+		ui.Width(320),
+		ui.Height(96),
+	)
+}
 ```
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
-| `placeholder` | 編集値が空のときに表示するテキストです。 |
-| `onInput` | ネイティブ編集の入力を通知します。 |
-| `onChange` | 確定したネイティブ値の変更を通知します。 |
-| `style` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
-
+| `Value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `Placeholder` | 編集値が空のときに表示するテキストです。 |
+| `OnInput` | ネイティブ編集の入力を通知します。 |
+| `WithStyle` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |

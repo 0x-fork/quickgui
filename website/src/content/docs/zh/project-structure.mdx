@@ -1,55 +1,50 @@
-QuickGUI 使用 scriptc 将 TypeScript 和 TSX 编译为原生代码。TypeScript 7 负责转换 JSX，Rust 核心负责布局、渲染、输入和平台主线程。Bun 仅用于开发工具。
+QuickGUI 项目将应用代码放在 Go 模块中，用一个小型 Bun 包提供开发命令。
 
 ## 生成的文件
 
+CLI 会生成以下文件。解析依赖后请提交 `go.sum`。
+
 ```text
 my-app/
-├── src/
-│   └── app.tsx
-├── package.json
+├── main.go
+├── go.mod
+├── go.sum
 ├── quickgui.config.ts
-└── tsconfig.json
+├── package.json
+└── README.md
 ```
-
-将应用界面放在 `src/` 中。通过 `resources` 选项，把其他文件和目录加入生产构建包。
 
 ## 应用入口
 
-入口模块先等待原生应用就绪，然后创建窗口，并将 QuickGUI UI 根节点传给 `createRenderer`。
+`main.go` 启动 `native.Run` 并创建窗口。组件和子节点块统一使用 `func()`，按顺序声明子节点，无需返回节点。较大的应用可拆分为普通 Go 包。
 
-```tsx
-await app.whenReady();
-
-new Window({
-  title: "Notes",
-  renderer: createRenderer(() => <NotesApp />),
-});
+```go
+func ViewExample() {
+	ui.View(
+		ui.Padding(20),
+		ui.Gap(12),
+		func() {
+			ui.Text("Hello from Go")
+			ui.Button(ui.OnClick(func() {}), "Continue")
+		},
+	)
+}
 ```
-
-应用模块可以使用 scriptc 支持的 TypeScript 和 Node 兼容 API 子集，不支持 Bun 应用 API 或依赖 JavaScript 引擎的包。原生窗口操作及其结果始终保持异步。
 
 ## 配置
 
-`quickgui.config.ts` 告诉 CLI 要编译和打包哪些内容。
+`entry` 指定要构建的 Go 包。配置文件由 Bun CLI 执行，不属于运行中的应用。
 
-```tsx
+```ts
 import { defineConfig } from "@quickgui/cli";
 
 export default defineConfig({
-  entry: "src/app.tsx",
-  name: "Notes",
-  identifier: "dev.example.notes",
-  resources: ["assets"],
+  name: "My App",
+  identifier: "com.example.my-app",
+  entry: ".",
 });
 ```
 
-仅发布时使用的选项包括图标、签名、公证、Mac App Store 和更新清单。
-
 ## 软件包
 
-| 软件包 | 用途 |
-| --- | --- |
-| `@quickgui/native` | 应用、窗口、菜单、对话框、通知和原生服务 |
-| `@quickgui/ui` | QuickGUI UI 渲染器、基础组件、复合组件和路由 |
-| `@quickgui/ui/swift-ui` | 在 macOS 上从 QuickGUI UI 托管原生 SwiftUI 控件 |
-| `@quickgui/cli` | 创建项目、开发和生产打包 |
+窗口与平台服务使用 `github.com/egoist/quickgui/go/native`，UI 使用 `github.com/egoist/quickgui/go/ui`，所有权与上下文使用 `github.com/egoist/quickgui/go/reactive`。`@quickgui/cli` 是开发依赖。请固定相互兼容的 Go SDK 和 CLI 版本。

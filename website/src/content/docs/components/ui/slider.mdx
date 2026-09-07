@@ -2,62 +2,64 @@ A single- or multi-thumb range input with core-owned pointer and keyboard intera
 
 ## Import
 
-Import `Slider` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Slider } from "@quickgui/ui/range";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Slider.Root
-  value={[volume()]}
-  min={0}
-  max={100}
-  step={1}
-  onValueChange={(values) => setVolume(values[0] ?? 0)}
->
-  <Slider.Label><Text>Volume</Text></Slider.Label>
-  <Slider.Control>
-    <Slider.Track><Slider.Indicator /></Slider.Track>
-    <Slider.Thumb index={0} />
-  </Slider.Control>
-  <Slider.Value />
-</Slider.Root>
+```go
+func SliderExample() {
+	volume, setVolume := ui.CreateSignal([]float64{40})
+	ui.Slider.Root(
+		ui.SliderRootProps{
+			Value:         volume,
+			Min:           0,
+			Max:           100,
+			Step:          1,
+			OnValueChange: func(next []float64, _ *native.Event) { setVolume(next) },
+		},
+		func() {
+			ui.Slider.Label(ui.PartProps{}, "Volume")
+			ui.Slider.Control(
+				ui.PartProps{Style: ui.Style{Width: 240, Height: 24}},
+				func() {
+					ui.Slider.Track(
+						ui.PartProps{},
+						func() { ui.Slider.Indicator(ui.PartProps{}) },
+					)
+					ui.Slider.Thumb(ui.SliderThumbProps{})
+				},
+			)
+			ui.Slider.Value(ui.PartProps{})
+		},
+	)
+}
 ```
 
 ## Anatomy
 
-- `Slider.Root`
-- `Slider.Label`
-- `Slider.Value`
-- `Slider.Control`
-- `Slider.Track`
-- `Slider.Range`
-- `Slider.Indicator`
-- `Slider.Thumb`
-
-```tsx
-<Slider.Root>
-  <Slider.Label />
-  <Slider.Value />
-  <Slider.Control />
-  <Slider.Track />
-  <Slider.Range />
-  <Slider.Indicator />
-  <Slider.Thumb />
-</Slider.Root>
-```
+- `ui.Slider.Root`
+- `ui.Slider.Label`
+- `ui.Slider.Value`
+- `ui.Slider.Control`
+- `ui.Slider.Track`
+- `ui.Slider.Range`
+- `ui.Slider.Indicator`
+- `ui.Slider.Thumb`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `value` | Controlled value. The precise value type follows this component’s contract. |
-| `defaultValue` | Initial value when the component owns its state. |
-| `min` | Minimum accepted value. |
-| `max` | Maximum accepted value. |
-| `step` | Increment used by keyboard, pointer, or native control input. |
-| `onValueChange` | Reports the value accepted by the core. |
-
+| `Value` | Controlled value. The precise value type follows this component’s contract. |
+| `DefaultValue` | Initial value when the component owns its state. |
+| `Min` | Minimum accepted value. |
+| `Max` | Maximum accepted value. |
+| `Step` | Increment used by keyboard, pointer, or native control input. |
+| `OnValueChange` | Reports the value accepted by the core. |

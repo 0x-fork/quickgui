@@ -2,22 +2,30 @@ Renders a complete inline SVG document without loading external SVG resources.
 
 ## Import
 
-Import `Svg` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Svg } from "@quickgui/ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Svg source={iconSvg} style={{ width: 20, height: 20 }} />
+```go
+func SvgExample() {
+	ui.SVG(
+		ui.Width(20),
+		ui.Height(20),
+		ui.Color("#2563eb"),
+		ui.Value(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M11 4h2v7h7v2h-7v7h-2v-7H4v-2h7z"/></svg>`),
+	)
+}
 ```
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `source` | Filesystem path, data URL, SVG document, or shader source expected by the component. |
-| `style` | QuickGUI layout, paint, typography, and interaction-state styles. |
-
+| `Value` | Filesystem path, data URL, SVG document, or shader source expected by the component. |
+| `WithStyle` | QuickGUI layout, paint, typography, and interaction-state styles. |

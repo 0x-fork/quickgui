@@ -28,13 +28,13 @@ export function SwiftUi({
         <div className="min-w-0 bg-card-2 p-6 sm:p-12">
           <div className="overflow-hidden border border-border bg-background">
             <div className="flex items-center justify-between border-b border-border bg-card-2 px-5 py-2.5">
-              <span className="font-mono text-xs">swift-ui.tsx</span>
+              <span className="font-mono text-xs">swiftui.go</span>
               <span className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
                 <span
-                  className="i-simple-icons size-3.5"
+                  className="i-simple-icons-go size-4"
                   aria-hidden
                 />
-                TypeScript · QuickGUI UI
+                Go · QuickGUI
               </span>
             </div>
             <CodeBlock html={highlighted.swiftUi} />

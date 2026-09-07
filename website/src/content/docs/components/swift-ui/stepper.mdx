@@ -2,34 +2,43 @@ A controlled native numeric stepper with bounded values.
 
 ## Import
 
-Import `Stepper` from `@quickgui/ui/swift-ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Host, Stepper } from "@quickgui/ui/swift-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Host matchContents>
-  <Stepper
-    value={copies()}
-    min={1}
-    max={20}
-    label={"Copies: " + copies()}
-    onValueChange={setCopies}
-  />
-</Host>
+```go
+func SwiftUiStepperExample() {
+	value, setValue := ui.CreateSignal(40.0)
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.Stepper(ui.SwiftUIStepperProps{
+				Value:         value,
+				Min:           0,
+				Max:           100,
+				Step:          1,
+				Label:         "Value",
+				OnValueChange: func(next float64, _ *native.Event) { setValue(next) },
+			})
+		},
+	)
+}
 ```
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `value` | Controlled value. The precise value type follows this component’s contract. |
-| `min` | Minimum accepted value. |
-| `max` | Maximum accepted value. |
-| `step` | Increment used by keyboard, pointer, or native control input. |
-| `label` | Visible native SwiftUI control label. |
-| `onValueChange` | Reports the value accepted by the core. |
-
+| `Value` | Controlled value. The precise value type follows this component’s contract. |
+| `Min` | Minimum accepted value. |
+| `Max` | Maximum accepted value. |
+| `Step` | Increment used by keyboard, pointer, or native control input. |
+| `Label` | Visible native SwiftUI control label. |
+| `OnValueChange` | Reports the value accepted by the core. |

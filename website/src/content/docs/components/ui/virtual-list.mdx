@@ -1,28 +1,39 @@
-Mounts only the visible slice of a long or variable-height collection.
+Lays out and paints the visible part of a long or variable-height collection.
 
 ## Import
 
-Import `VirtualList` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { VirtualList } from "@quickgui/ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<VirtualList estimatedItemHeight={36} overscan={6}>
-  <For each={rows()}>{(row) => <Row row={row} />}</For>
-</VirtualList>
+```go
+func VirtualListExample(rows []string) {
+	ui.VirtualList(
+		ui.Height(320),
+		ui.EstimatedItemHeight(36),
+		ui.Overscan(6),
+		ui.FollowMode("normal"),
+		func() {
+			for _, row := range rows {
+				ui.Text(ui.Height(36), row)
+			}
+		},
+	)
+}
 ```
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `estimatedItemHeight` | Initial logical row-height estimate used by virtualization. |
-| `overscan` | Extra rows mounted before and after the visible range. |
-| `listAlignment` | Pins short list content to the top or bottom. |
-| `followMode` | Chooses ordinary scrolling or tail-following behavior. |
+| `EstimatedItemHeight` | Initial logical row-height estimate used by virtualization. |
+| `Overscan` | Extra rows mounted before and after the visible range. |
+| `ListAlignment` | Pins short list content to the top or bottom. |
+| `FollowMode` | Chooses ordinary scrolling or tail-following behavior. |
 | `children` | Content mounted inside the component. |
-

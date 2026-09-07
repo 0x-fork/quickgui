@@ -2,24 +2,26 @@ Renders retained Markdown, including an incremental mode for streaming content.
 
 ## Import
 
-Import `Markdown` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Markdown } from "@quickgui/ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Markdown content={message()} streaming={isStreaming()} />
+```go
+func MarkdownExample(source func() string, streaming func() bool) {
+	ui.Markdown(ui.Value(source), ui.Streaming(streaming), ui.Width("100%"))
+}
 ```
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `content` | Markdown source to shape and paint. |
-| `source` | Filesystem path, data URL, SVG document, or shader source expected by the component. |
-| `streaming` | Uses incremental Markdown reconciliation for appended content. |
-| `style` | QuickGUI layout, paint, typography, and interaction-state styles. |
-
+| `Value` | Markdown source to shape and paint. |
+| `Streaming` | Uses incremental Markdown reconciliation for appended content. |
+| `WithStyle` | QuickGUI layout, paint, typography, and interaction-state styles. |

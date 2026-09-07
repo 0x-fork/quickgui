@@ -1,62 +1,78 @@
-SwiftUI モディファイアを使うと、QuickGUI UI からネイティブの外観を宣言できます。リバースホスティングを使うと、SwiftUI の内容に通常の QuickGUI サブツリーを含められます。
+SwiftUI モディファイアでネイティブコントロールをスタイルできます。リバースホスティングは通常の QuickGUI サブツリーを SwiftUI 内に配置します。
 
 ## モディファイア
 
-`@quickgui/ui/swift-ui/modifiers` からモディファイアファクトリーを読み込み、順番に適用します。
+`Modifiers` を通して `ui.SwiftUI` のモディファイアを順番に適用します。ButtonStyle、ButtonBorderShape、ControlSize、LabelStyle、Tint、Disabled などが使えます。
 
-```tsx
-import { Button, Host } from "@quickgui/ui/swift-ui";
-import { buttonStyle, controlSize, tint } from "@quickgui/ui/swift-ui/modifiers";
-
-<Host matchContents>
-  <Button
-    label="Create project"
-    modifiers={[
-      buttonStyle("borderedProminent"),
-      controlSize("large"),
-      tint("#f97316"),
-    ]}
-  />
-</Host>
+```go
+ui.SwiftUI.Button(ui.SwiftUIButtonProps{
+	Label: "Create project",
+	Modifiers: []ui.SwiftUIModifier{
+		ui.SwiftUI.ButtonStyle("borderedProminent"),
+		ui.SwiftUI.ControlSize("large"),
+		ui.SwiftUI.Tint("#f97316"),
+	},
+})
 ```
-
-利用できるファクトリーには、`buttonStyle`、`buttonBorderShape`、`controlSize`、`labelStyle`、`tint`、`disabled` があります。
 
 ## Liquid Glass
 
-対応システムでは、SwiftUI Button ブリッジからネイティブのガラスボタンスタイルを要求できます。最終的な描画は引き続き OS が担います。
-
-```tsx
-<Button label="Continue" modifiers={[buttonStyle("glass")]} />
-```
+対応システムでは `ui.SwiftUI.ButtonStyle("glass")` でネイティブのガラスボタンスタイルを指定できます。最終的な外観は macOS が決定します。
 
 ## リバースホスティング
 
-`QuickGUIHostView` は、通常の QuickGUI サブツリーを SwiftUI 階層の中へ戻してマウントします。
+`ui.SwiftUI.QuickGUIHostView` はネイティブ階層内に QuickGUI サブツリーを持ちます。サイズを指定し、コールバック内で子を宣言すると、埋め込みウィンドウのライフサイクルでマウントされます。
 
-```tsx
-<Host matchContents>
-  <QuickGUIHostView width={320} height={180}>
-    <View style={{ width: 320, height: 180, padding: 16 }}>
-      <Text>QuickGUI content inside SwiftUI</Text>
-    </View>
-  </QuickGUIHostView>
-</Host>
+```go
+func SwiftUiQuickguiHostViewExample() {
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.QuickGUIHostView(
+				ui.SwiftUIQuickGUIHostViewProps{Width: 320, Height: 180},
+				func() {
+					ui.View(
+						ui.Width("100%"),
+						ui.Height("100%"),
+						ui.Padding(16),
+						"QuickGUI inside SwiftUI",
+					)
+				},
+			)
+		},
+	)
+}
 ```
 
 ## SwiftUI ポップオーバー
 
-SwiftUI の `Popover` は、ネイティブ SwiftUI トリガーを組み合わせます。ポップオーバーの本体を通常の QuickGUI コンポーネントで作る場合は、その中で `QuickGUIHostView` を使えます。
+SwiftUI ポップオーバーは `Render` でネイティブトリガーを構成します。内容にはインタラクティブな QuickGUI コンポーネントをリバースホストできます。
 
-```tsx
-<Host matchContents>
-  <Popover.Root isPresented={open()} onIsPresentedChange={setOpen}>
-    <Popover.Trigger><Button label="Open" /></Popover.Trigger>
-    <Popover.Content>
-      <QuickGUIHostView width={280} height={140}>
-        <SettingsPanel />
-      </QuickGUIHostView>
-    </Popover.Content>
-  </Popover.Root>
-</Host>
+```go
+func SwiftUiPopoverExample() {
+	open, setOpen := ui.CreateSignal(false)
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.Popover.Root(
+				ui.SwiftUIPopoverProps{
+					IsPresented:         open,
+					OnIsPresentedChange: setOpen,
+				},
+				func() {
+					ui.SwiftUI.Popover.Trigger(ui.SwiftUIPopoverTriggerProps{Render: func() { ui.SwiftUI.Button(ui.SwiftUIButtonProps{Label: "Account"}) }})
+					ui.SwiftUI.Popover.Content(
+						ui.SwiftUIPopoverContentProps{},
+						func() {
+							ui.SwiftUI.QuickGUIHostView(
+								ui.SwiftUIQuickGUIHostViewProps{Width: 240, Height: 120},
+								"Account settings",
+							)
+						},
+					)
+				},
+			)
+		},
+	)
+}
 ```

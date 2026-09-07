@@ -1,16 +1,21 @@
-# QuickGUI sidebar vibrancy
+# sidebar-vibrancy
 
-This example exercises every Electron-compatible macOS vibrancy material plus the `followWindow`,
-`active`, and `inactive` visual-effect states. QuickGUI keeps one core-owned `NSVisualEffectView`
-behind the stable Winit/Metal rendering view and switches its semantic material without recreating
-the retained tree or native window.
+macOS materials and active/inactive visual effect states.
 
-The root view and sidebar remain transparent, while the content pane stays opaque. That leaves the
-native material unobstructed in the sidebar and confines it visually to that region. AppKit
-deprecates the legacy `appearance-based` material in favor of semantic types, but QuickGUI retains
-it for Electron API compatibility.
+The application is Go. Pass components directly through `native.WindowOptions.Component`; signals update individual retained nodes. The Rust shared library is loaded in process using purego.
+
+From the repository root:
 
 ```console
-cd examples/sidebar-vibrancy
-bun run dev
+bun install
+bun run build:native # once
+bun packages/cli/src/cli.ts dev --project examples/sidebar-vibrancy
 ```
+
+Check the application without CGO:
+
+```console
+CGO_ENABLED=0 go -C examples/sidebar-vibrancy test ./...
+```
+
+See [main.go](main.go) and the [Go guide](../../docs/go.md). macOS packaging uses Xcode Command Line Tools; Go 1.23+ and Bun are required.

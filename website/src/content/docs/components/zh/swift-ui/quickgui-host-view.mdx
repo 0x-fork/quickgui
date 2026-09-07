@@ -2,31 +2,43 @@
 
 ## 导入
 
-从 `@quickgui/ui/swift-ui` 导入 `QuickGUIHostView`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { Host, QuickGUIHostView } from "@quickgui/ui/swift-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<Host matchContents>
-  <QuickGUIHostView width={280} height={120}>
-    <View style={{ width: 280, height: 120, padding: 16 }}>
-      <Text>Ordinary QuickGUI content</Text>
-    </View>
-  </QuickGUIHostView>
-</Host>
+```go
+func SwiftUiQuickguiHostViewExample() {
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.QuickGUIHostView(
+				ui.SwiftUIQuickGUIHostViewProps{Width: 320, Height: 180},
+				func() {
+					ui.View(
+						ui.Width("100%"),
+						ui.Height("100%"),
+						ui.Padding(16),
+						"QuickGUI inside SwiftUI",
+					)
+				},
+			)
+		},
+	)
+}
 ```
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `width` | 声明的逻辑宽度。 |
-| `height` | 声明的逻辑高度。 |
-| `matchContents` | 使用托管子树的固有宽度、高度或两者。 |
-| `background` | 反向托管 QuickGUI WGPU 表面的清除颜色。 |
+| `Width` | 声明的逻辑宽度。 |
+| `Height` | 声明的逻辑高度。 |
+| `MatchContents` | 使用托管子树的固有宽度、高度或两者。 |
+| `Background` | 反向托管 QuickGUI WGPU 表面的清除颜色。 |
 | `children` | 挂载在组件内部的内容。 |
-

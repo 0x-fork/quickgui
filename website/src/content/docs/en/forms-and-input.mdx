@@ -1,63 +1,90 @@
-QuickGUI form controls keep text services and interaction in the native core while exposing familiar controlled values to QuickGUI UI.
+Keep field values in signals and write accepted changes back from callbacks.
 
 ## Text input
 
-`Input` is single-line by default. `TextArea` is the multiline convenience component.
+`ui.Input` and `ui.TextArea` host native text editors. Bind `ui.Value` to an accessor and update it from `event.Value` in `OnInput`. `OnSubmit` handles Return in a single-line input.
 
-```tsx
-<Input
-  value={name()}
-  placeholder="Project name"
-  onInput={(event) => setName(event.value ?? "")}
-/>
-
-<TextArea
-  value={notes()}
-  placeholder="Notes"
-  onInput={(event) => setNotes(event.value ?? "")}
-/>
+```go
+func InputExample() {
+	value, setValue := ui.CreateSignal("")
+	ui.Input(
+		ui.Value(value),
+		ui.Placeholder("Write here"),
+		ui.OnInput(func(event *native.Event) { setValue(event.Value) }),
+		ui.Width(320),
+		ui.Height(32),
+	)
+}
 ```
 
 ## Fields
 
-`Field` connects a control to its label, description, validity, and error content.
+`Field.Root` associates a label, control, description, and error. Set `Required`, `Invalid`, and `ValidationMessage` from application state. `ValidationMode` and `ValidationDebounceTime` configure when the core requests validation; your application owns the validation rule.
 
-```tsx
-<Field.Root required invalid={!email()} validationMessage="Enter an email address">
-  <Field.Label><Text>Email</Text></Field.Label>
-  <Field.Control value={email()} onInput={(event) => setEmail(event.value ?? "")} />
-  <Field.Description><Text>Used for account recovery.</Text></Field.Description>
-  <Field.Error><Text>Enter an email address.</Text></Field.Error>
-</Field.Root>
+```go
+func FieldExample() {
+	email, setEmail := ui.CreateSignal("")
+	ui.Field.Root(
+		ui.FieldRootProps{
+			Required: true,
+			Filled:   func() bool { return email() != "" },
+		},
+		func() {
+			ui.Field.Label(ui.FieldLabelProps{}, "Email")
+			ui.Field.Control(ui.FieldControlProps{InputPartProps: ui.InputPartProps{
+				Value:       email,
+				Placeholder: "you@example.com",
+				OnInput:     func(event *native.Event) { setEmail(event.Value) },
+			}})
+			ui.Field.Description(ui.PartProps{}, "Used for receipts")
+			ui.Field.Error(ui.PartProps{}, "Enter a valid email address")
+		},
+	)
+}
 ```
 
 ## Choices
 
-Use `Checkbox` or `Switch` for independent boolean state, `RadioGroup` for one value, and `ToggleGroup` for toolbar-style pressed state.
+Checkboxes accept `bool` or `ui.CheckedIndeterminate` through `ui.CheckedState`. Radio groups keep one value; checkbox and toggle groups can keep several. Read-only controls remain distinct from disabled controls.
 
-```tsx
-<RadioGroup.Root value={theme()} onValueChange={setTheme}>
-  <Radio.Root value="light"><Radio.Indicator /><Text>Light</Text></Radio.Root>
-  <Radio.Root value="dark"><Radio.Indicator /><Text>Dark</Text></Radio.Root>
-</RadioGroup.Root>
+```go
+func CheckboxGroupExample() {
+	values, setValues := ui.CreateSignal([]string{"email"})
+	ui.CheckboxGroup.Root(
+		ui.CheckboxGroupProps{
+			AllValues:     []string{"email", "push"},
+			Value:         values,
+			OnValueChange: func(next []string, _ *native.Event) { setValues(next) },
+		},
+		func() {
+			ui.Checkbox.Root(ui.CheckboxProps{Parent: true}, "All notifications")
+			ui.Checkbox.Root(ui.CheckboxProps{Value: "email"}, "Email")
+			ui.Checkbox.Root(ui.CheckboxProps{Value: "push"}, "Push")
+		},
+	)
+}
 ```
 
 ## Select
 
-`Select`, `Combobox`, and `Autocomplete` declare a bounded item model. QuickGUI filters and paints the native option surface.
+Declare picker options through `PickerSourceProps.Items`. Select uses a chosen value; Combobox combines text filtering and selection; Autocomplete accepts free-form input. Multiple pickers use `Values` and `OnValuesChange`.
 
-```tsx
-<Select.Root
-  ariaLabel="Theme"
-  items={[
-    { value: "system", label: "System" },
-    { value: "dark", label: "Dark" },
-  ]}
-  value={theme()}
-  onValueChange={setTheme}
-/>
+```go
+func SelectExample() {
+	value, setValue := ui.CreateSignal[*string](nil)
+	ui.Select.Root(
+		ui.SelectRootProps{
+			PickerSourceProps: ui.PickerSourceProps{Items: func() []ui.OptionDeclaration {
+				return []ui.OptionDeclaration{{Value: "go", Label: "Go"}, {Value: "swift", Label: "Swift"}}
+			}},
+			Value:         value,
+			OnValueChange: func(next *string, _ *native.Event) { setValue(next) },
+		},
+		func() { ui.Select.Value(ui.PartProps{}); ui.Select.Icon(ui.PartProps{}, "▾") },
+	)
+}
 ```
 
 ## Events
 
-Low-level inputs report a `QuickGuiEvent`; compound value callbacks receive the normalized value first and the event second. Native decisions are delivered asynchronously after the core handles the interaction.
+Plain buttons accept `ui.OnClick(func() { ... })`. Use `ui.OnClickEvent` when you need `*native.Event`. Compound callbacks use typed values and include the native event when relevant. Keep UI state updates on the UI goroutine; use `ui.Async` for background work.

@@ -23,10 +23,10 @@ const templateRoot = fileURLToPath(new URL("../templates/native/", import.meta.u
 const templateFiles = [
   ["package.json", "package.json"],
   ["quickgui.config.ts", "quickgui.config.ts"],
-  ["tsconfig.json", "tsconfig.json"],
+  ["go.mod", "go.mod"],
   ["gitignore", ".gitignore"],
   ["README.md", "README.md"],
-  ["src/app.tsx", "src/app.tsx"],
+  ["main.go", "main.go"],
 ] as const;
 
 export async function initProject(options: InitProjectOptions): Promise<string> {
@@ -47,6 +47,7 @@ export async function initProject(options: InitProjectOptions): Promise<string> 
     "{{APP_NAME}}": JSON.stringify(name),
     "{{IDENTIFIER}}": JSON.stringify(identifier),
     "{{PACKAGE_NAME}}": JSON.stringify(packageName(name)),
+    "{{GO_MODULE}}": `example.com/${packageName(name)}`,
     "{{README_TITLE}}": name.replaceAll("\n", " ").replaceAll("\r", " "),
   };
 
@@ -76,6 +77,8 @@ export async function initProject(options: InitProjectOptions): Promise<string> 
         `Project created at ${destination}, but \`bun install\` failed with status ${status}`,
       );
     }
+    const go = Bun.spawn(["go", "mod", "tidy"], { cwd: destination, stdin: "inherit", stdout: "inherit", stderr: "inherit", env: { ...process.env, CGO_ENABLED: "0" } });
+    if (await go.exited !== 0) throw new CliError(`Project created at ${destination}, but go mod tidy failed`);
   }
 
   return destination;

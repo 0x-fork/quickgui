@@ -2,45 +2,47 @@
 
 ## インポート
 
-`@quickgui/ui` から `PopoverMenu` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { PopoverMenu } from "@quickgui/ui/menu";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"fmt"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<PopoverMenu.Root
-  items={menuItems}
-  appearance={menuAppearance}
-  onSelect={({ value }) => runCommand(value)}
->
-  <PopoverMenu.Trigger><Text>Actions</Text></PopoverMenu.Trigger>
-  <PopoverMenu.Popup />
-</PopoverMenu.Root>
+```go
+func PopoverMenuExample() {
+	ui.PopoverMenu.Root(
+		ui.PopoverMenuRootProps{
+			Items: func() []ui.MenuItemDeclaration {
+				return []ui.MenuItemDeclaration{{ID: "copy", Label: "Copy"}, {ID: "paste", Label: "Paste"}}
+			},
+			OnSelect: func(item ui.MenuSelectDetails, _ *native.Event) { fmt.Println(item.ID) },
+		},
+		func() {
+			ui.PopoverMenu.Trigger(ui.PartProps{}, "Edit")
+			ui.PopoverMenu.Popup(ui.PopoverMenuPopupProps{})
+		},
+	)
+}
 ```
 
 ## 構成
 
-- `PopoverMenu.Root`
-- `PopoverMenu.Trigger`
-- `PopoverMenu.Popup`
-
-```tsx
-<PopoverMenu.Root>
-  <PopoverMenu.Trigger />
-  <PopoverMenu.Popup />
-</PopoverMenu.Root>
-```
+- `ui.PopoverMenu.Root`
+- `ui.PopoverMenu.Trigger`
+- `ui.PopoverMenu.Popup`
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `items` | 選択肢やキーボードナビゲーションに使う、上限付きの宣言モデルです。 |
-| `appearance` | コア描画のネイティブメニューまたはピッカーに使う構造色とジオメトリです。 |
-| `open` | 制御された開閉状態です。 |
-| `onOpenChange` | コアが決定した開閉を通知します。 |
-| `onSelect` | コアが選択したメニュー項目を通知します。 |
-
+| `Items` | 選択肢やキーボードナビゲーションに使う、上限付きの宣言モデルです。 |
+| `Appearance` | コア描画のネイティブメニューまたはピッカーに使う構造色とジオメトリです。 |
+| `Open` | 制御された開閉状態です。 |
+| `OnOpenChange` | コアが決定した開閉を通知します。 |
+| `OnSelect` | コアが選択したメニュー項目を通知します。 |

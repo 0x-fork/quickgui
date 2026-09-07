@@ -1,28 +1,39 @@
-長いリストや高さが可変のコレクションについて、表示範囲だけをマウントします。
+長いリストや高さが可変のコレクションの表示範囲をレイアウトして描画します。
 
 ## インポート
 
-`@quickgui/ui` から `VirtualList` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { VirtualList } from "@quickgui/ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<VirtualList estimatedItemHeight={36} overscan={6}>
-  <For each={rows()}>{(row) => <Row row={row} />}</For>
-</VirtualList>
+```go
+func VirtualListExample(rows []string) {
+	ui.VirtualList(
+		ui.Height(320),
+		ui.EstimatedItemHeight(36),
+		ui.Overscan(6),
+		ui.FollowMode("normal"),
+		func() {
+			for _, row := range rows {
+				ui.Text(ui.Height(36), row)
+			}
+		},
+	)
+}
 ```
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `estimatedItemHeight` | 仮想化で使う初期論理行高の推定値です。 |
-| `overscan` | 表示範囲の前後に追加でマウントする行数です。 |
-| `listAlignment` | 短いリスト内容を上端または下端に固定します。 |
-| `followMode` | 通常のスクロールまたは末尾追従の動作を選びます。 |
+| `EstimatedItemHeight` | 仮想化で使う初期論理行高の推定値です。 |
+| `Overscan` | 表示範囲の前後に追加でマウントする行数です。 |
+| `ListAlignment` | 短いリスト内容を上端または下端に固定します。 |
+| `FollowMode` | 通常のスクロールまたは末尾追従の動作を選びます。 |
 | `children` | コンポーネント内にマウントする内容です。 |
-

@@ -1,50 +1,55 @@
-SwiftUI 桥接层会在 macOS 上由 QuickGUI UI 渲染的 QuickGUI 窗口中挂载真正的原生 SwiftUI 控件。
+`ui.SwiftUI` 组件族在 Go 应用中嵌入真正的 macOS 控件。普通 QuickGUI 组件无需依赖它。
 
 ## Host
 
-`Host` 是由 `NSHostingView` 支持的单个保留式 QuickGUI 布局叶节点。请把 SwiftUI 桥接组件放在它下面。
+在 `ui.SwiftUI.Host` 内创建控件。Host 定义原生视图边界，并可根据内容确定自身尺寸。
 
-```tsx
-import { Host, Button, Toggle } from "@quickgui/ui/swift-ui";
-
-<Host matchContents>
-  <Button label="Continue" onPress={continueFlow} />
-</Host>
+```go
+func SwiftUiHostExample() {
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.Button(ui.SwiftUIButtonProps{Label: "Continue"})
+		},
+	)
+}
 ```
 
 ## 原生控件
 
-桥接层导出 `Button`、`Slider`、`Toggle`、`ProgressView`、`Stepper`、`TextField`、`SecureField`、`Picker`、`SegmentedControl`、`DatePicker`、`ColorPicker` 和 `Gauge`。侧边栏中每个控件都有独立的参考页面。
+可用控件包括 Button、Slider、Toggle、ProgressView、Stepper、TextField、SecureField、Picker、SegmentedControl、DatePicker、ColorPicker 和 Gauge。它们的原生外观由 macOS 提供。
 
 ## 受控值
 
-值仍由 QuickGUI UI 控制。原生更改通过对应的回调传入。
+绑定访问器，并保存原生回调返回的值。SwiftUI 控件与 QuickGUI 节点可以共享同一个信号。DatePicker 使用以毫秒表示的 Unix 时间戳。
 
-```tsx
-<Host matchContents={{ vertical: true }} style={{ width: 340 }}>
-  <Slider
-    value={volume()}
-    min={0}
-    max={1}
-    step={0.05}
-    label="Volume"
-    onValueChange={setVolume}
-  />
-</Host>
+```go
+func SwiftUiToggleExample() {
+	on, setOn := ui.CreateSignal(true)
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.Toggle(ui.SwiftUIToggleProps{
+				IsOn:         on,
+				Label:        "Notifications",
+				OnIsOnChange: func(next bool, _ *native.Event) { setOn(next) },
+			})
+		},
+	)
+}
 ```
 
 ## 尺寸
 
-默认情况下，QuickGUI 会像其他保留式节点一样布局 `Host`。设置 `matchContents` 可以在两个轴上使用 SwiftUI 的固有尺寸，也可以只选择 `{ horizontal: true }` 或 `{ vertical: true }`。
+`MatchContents: true` 让两个方向都使用固有尺寸。要保留固有高度并自定义宽度，可使用 `ui.SwiftUIMatchContents{Vertical: true}`，并在 `PartProps.Style` 设置宽度。
 
-```tsx
-<Host matchContents={{ vertical: true }} style={{ width: 360 }}>
-  <Picker selection={theme()} options={themes} onSelectionChange={setTheme} />
-</Host>
+```go
+ui.SwiftUIHostProps{
+	MatchContents: ui.SwiftUIMatchContents{Vertical: true},
+	PartProps:     ui.PartProps{Style: ui.Style{Width: 320}},
+}
 ```
 
 ## 平台支持
 
-<Note title="仅限 macOS">
-  SwiftUI 托管是 macOS 桥接能力。跨平台界面请使用常规的 `@quickgui/ui` 组件。
-</Note>
+SwiftUI 托管需要 macOS。预编译原生宿主包含桥接层，Go 应用仍然无需 CGO。原生样式可能随操作系统版本变化。

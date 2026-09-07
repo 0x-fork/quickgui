@@ -2,44 +2,48 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `SystemPopover`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { SystemPopover } from "@quickgui/ui/popover";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<SystemPopover.Root open={open()} onOpenChange={setOpen}>
-  <SystemPopover.Trigger><Text>Open native popover</Text></SystemPopover.Trigger>
-  <SystemPopover.Content width={320} height={180} placement="bottom">
-    <SettingsPanel />
-  </SystemPopover.Content>
-</SystemPopover.Root>
+```go
+func SystemPopoverExample() {
+	ui.SystemPopover.Root(
+		ui.PopoverRootProps{},
+		func() {
+			ui.SystemPopover.Trigger(ui.PopoverTriggerProps{}, "Account")
+			ui.SystemPopover.Content(
+				ui.PopoverContentProps{
+					Width:     240,
+					Height:    120,
+					Placement: "bottom-start",
+				},
+				"Account settings",
+			)
+		},
+	)
+}
 ```
 
 ## 结构
 
-- `SystemPopover.Root`
-- `SystemPopover.Trigger`
-- `SystemPopover.Content`
-
-```tsx
-<SystemPopover.Root>
-  <SystemPopover.Trigger />
-  <SystemPopover.Content />
-</SystemPopover.Root>
-```
+- `ui.SystemPopover.Root`
+- `ui.SystemPopover.Trigger`
+- `ui.SystemPopover.Content`
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `open` | 受控的打开状态。 |
-| `defaultOpen` | 组件自行管理打开状态时的初始状态。 |
-| `onOpenChange` | 报告核心做出的打开或关闭决定。 |
-| `width` | 声明的逻辑宽度。 |
-| `height` | 声明的逻辑高度。 |
-| `placement` | 请求的原生子窗口放置位置。 |
-
+| `Open` | 受控的打开状态。 |
+| `DefaultOpen` | 组件自行管理打开状态时的初始状态。 |
+| `OnOpenChange` | 报告核心做出的打开或关闭决定。 |
+| `Width` | 声明的逻辑宽度。 |
+| `Height` | 声明的逻辑高度。 |
+| `Placement` | 请求的原生子窗口放置位置。 |

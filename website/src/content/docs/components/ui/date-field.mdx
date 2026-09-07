@@ -2,42 +2,48 @@ A segmented, keyboard-editable date field with locale-aware date parts.
 
 ## Import
 
-Import `DateField` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { DateField } from "@quickgui/ui/date-time";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<DateField.Root value={date()} format="ymd" onValueChange={setDate}>
-  <DateField.Segment segment="year" />
-  <Text>–</Text>
-  <DateField.Segment segment="month" />
-  <Text>–</Text>
-  <DateField.Segment segment="day" />
-</DateField.Root>
+```go
+func DateFieldExample() {
+	value, setValue := ui.CreateSignal[*string](nil)
+	ui.DateField.Root(
+		ui.DateFieldRootProps{
+			Value:         value,
+			Format:        "ymd",
+			Min:           "2026-01-01",
+			Max:           "2026-12-31",
+			OnValueChange: func(next *string, _ *native.Event) { setValue(next) },
+		},
+		func() {
+			for _, segment := range []string{"year", "month", "day"} {
+				ui.DateField.Segment(ui.DateFieldSegmentProps{Segment: segment})
+			}
+		},
+	)
+}
 ```
 
 ## Anatomy
 
-- `DateField.Root`
-- `DateField.Segment`
-
-```tsx
-<DateField.Root>
-  <DateField.Segment />
-</DateField.Root>
-```
+- `ui.DateField.Root`
+- `ui.DateField.Segment`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `value` | Controlled value. The precise value type follows this component’s contract. |
-| `min` | Minimum accepted value. |
-| `max` | Maximum accepted value. |
-| `onValueChange` | Reports the value accepted by the core. |
-| `disabled` | Prevents interaction and exposes the disabled state. |
-
+| `Value` | Controlled value. The precise value type follows this component’s contract. |
+| `Min` | Minimum accepted value. |
+| `Max` | Maximum accepted value. |
+| `OnValueChange` | Reports the value accepted by the core. |
+| `Disabled` | Prevents interaction and exposes the disabled state. |

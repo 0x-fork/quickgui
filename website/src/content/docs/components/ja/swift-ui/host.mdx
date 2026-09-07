@@ -2,25 +2,31 @@ NSHostingView を基盤とし、QuickGUI 内に 1 つの SwiftUI コンポーネ
 
 ## インポート
 
-`@quickgui/ui/swift-ui` から `Host` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Host } from "@quickgui/ui/swift-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<Host matchContents>
-  <Button label="Continue" />
-</Host>
+```go
+func SwiftUiHostExample() {
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.Button(ui.SwiftUIButtonProps{Label: "Continue"})
+		},
+	)
+}
 ```
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `matchContents` | ホストしたサブツリー固有の幅、高さ、またはその両方を使います。 |
-| `style` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
+| `MatchContents` | ホストしたサブツリー固有の幅、高さ、またはその両方を使います。 |
+| `Style` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
 | `children` | コンポーネント内にマウントする内容です。 |
-

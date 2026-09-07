@@ -2,62 +2,64 @@
 
 ## インポート
 
-`@quickgui/ui` から `Slider` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Slider } from "@quickgui/ui/range";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<Slider.Root
-  value={[volume()]}
-  min={0}
-  max={100}
-  step={1}
-  onValueChange={(values) => setVolume(values[0] ?? 0)}
->
-  <Slider.Label><Text>Volume</Text></Slider.Label>
-  <Slider.Control>
-    <Slider.Track><Slider.Indicator /></Slider.Track>
-    <Slider.Thumb index={0} />
-  </Slider.Control>
-  <Slider.Value />
-</Slider.Root>
+```go
+func SliderExample() {
+	volume, setVolume := ui.CreateSignal([]float64{40})
+	ui.Slider.Root(
+		ui.SliderRootProps{
+			Value:         volume,
+			Min:           0,
+			Max:           100,
+			Step:          1,
+			OnValueChange: func(next []float64, _ *native.Event) { setVolume(next) },
+		},
+		func() {
+			ui.Slider.Label(ui.PartProps{}, "Volume")
+			ui.Slider.Control(
+				ui.PartProps{Style: ui.Style{Width: 240, Height: 24}},
+				func() {
+					ui.Slider.Track(
+						ui.PartProps{},
+						func() { ui.Slider.Indicator(ui.PartProps{}) },
+					)
+					ui.Slider.Thumb(ui.SliderThumbProps{})
+				},
+			)
+			ui.Slider.Value(ui.PartProps{})
+		},
+	)
+}
 ```
 
 ## 構成
 
-- `Slider.Root`
-- `Slider.Label`
-- `Slider.Value`
-- `Slider.Control`
-- `Slider.Track`
-- `Slider.Range`
-- `Slider.Indicator`
-- `Slider.Thumb`
-
-```tsx
-<Slider.Root>
-  <Slider.Label />
-  <Slider.Value />
-  <Slider.Control />
-  <Slider.Track />
-  <Slider.Range />
-  <Slider.Indicator />
-  <Slider.Thumb />
-</Slider.Root>
-```
+- `ui.Slider.Root`
+- `ui.Slider.Label`
+- `ui.Slider.Value`
+- `ui.Slider.Control`
+- `ui.Slider.Track`
+- `ui.Slider.Range`
+- `ui.Slider.Indicator`
+- `ui.Slider.Thumb`
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
-| `defaultValue` | コンポーネント自身が状態を管理するときの初期値です。 |
-| `min` | 受け入れる最小値です。 |
-| `max` | 受け入れる最大値です。 |
-| `step` | キーボード、ポインター、またはネイティブコントロール入力で使う増分です。 |
-| `onValueChange` | コアが受け入れた値を通知します。 |
-
+| `Value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `DefaultValue` | コンポーネント自身が状態を管理するときの初期値です。 |
+| `Min` | 受け入れる最小値です。 |
+| `Max` | 受け入れる最大値です。 |
+| `Step` | キーボード、ポインター、またはネイティブコントロール入力で使う増分です。 |
+| `OnValueChange` | コアが受け入れた値を通知します。 |

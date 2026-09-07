@@ -1,79 +1,98 @@
-QuickGUI styles retained native nodes with a typed `style` object. The names are familiar, but values are resolved by QuickGUI rather than a browser.
+Primitives accept style options and children directly. Compound parts accept a `ui.Style` through `ui.PartProps`.
 
 ## The style prop
 
-```tsx
-<View
-  style={{
-    width: 360,
-    padding: 20,
-    borderRadius: 14,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#e4e4e7",
-  }}
->
-  <Text style={{ color: "#18181b", fontSize: 15 }}>Settings</Text>
-</View>
-```
+Use functional options for short declarations. Reuse a record with `ui.WithStyle(style)`. Numeric lengths are logical pixels; strings also accept percentages. A numeric zero is meaningful; `nil` omits the value. Run `bun run fmt` to wrap long component calls consistently.
 
-Numbers are logical pixels. Percentage strings resolve against the available parent size.
+```go
+func Card() {
+	ui.View(
+		ui.Padding(20),
+		ui.BorderRadius(12),
+		ui.BackgroundColor("#111827"),
+		ui.Text(ui.Color("#e2e8f0"), "Hello"),
+	)
+}
+```
 
 ## Flexbox
 
-Flexbox is the default layout tool for rows, columns, alignment, gaps, wrapping, and flexible sizing.
+Set `Display("flex")`, choose a direction, then declare sizing and alignment. A scrolling flex child usually needs `MinHeight(0)` or `MinWidth(0)` so it can shrink.
 
-```tsx
-<View style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 10 }}>
-  <Avatar.Root>{/* … */}</Avatar.Root>
-  <View style={{ flex: 1 }}><Text>Ada Lovelace</Text></View>
-  <Button><Text>Follow</Text></Button>
-</View>
+```go
+func Row() {
+	ui.View(
+		ui.Display("flex"),
+		ui.Gap(12),
+		ui.AlignItems("center"),
+		func() {
+			ui.Text(ui.Flex(1), ui.MinWidth(0), "Flexible content")
+			ui.Button(ui.FlexShrink(0), "Action")
+		},
+	)
+}
 ```
 
 ## Grid
 
-Use CSS Grid-style tracks for two-dimensional layouts.
+Grid uses familiar track strings. Place children explicitly when auto-placement is not enough.
 
-```tsx
-<View
-  style={{
-    display: "grid",
-    gridTemplateColumns: "220px 1fr",
-    gridTemplateRows: "auto 1fr",
-    gap: 12,
-  }}
->
-  <Sidebar />
-  <Editor />
-</View>
+```go
+func Grid() {
+	ui.View(
+		ui.Display("grid"),
+		ui.GridTemplateColumns("220px 1fr"),
+		ui.Gap(16),
+		func() {
+			ui.Text("Sidebar")
+			ui.Text("Content")
+		},
+	)
+}
 ```
 
 ## Text and color
 
-Text inherits typography and color through the retained tree. Use CSS color strings and system font families.
-
-```tsx
-<Text style={{ color: "#6b7280", fontSize: 13, lineHeight: 18, fontWeight: 500 }}>
-  Last saved just now
-</Text>
-```
+Typography inherits through the node tree. Colors accept hex, `rgb()`/`rgba()`, or packed RGBA values. Pass color and numeric accessors for reactive paint or size changes.
 
 ## Interaction states
 
-Declare hover, active, focus, disabled, and selected paint directly on the node. The core applies the state without a JavaScript round trip.
+`ui.Hover`, `ui.Active`, and `ui.Focus` describe interaction styles. `ui.When` applies options while a reactive condition is true and restores previous values when it turns false. Use `ui.DisabledStyle` and `ui.SelectedStyle` for those interaction states. Children remain mounted.
 
-```tsx
-<Button
-  style={{
-    backgroundColor: "#ffffff",
-    outlineOffset: 2,
-    hover: { backgroundColor: "#f4f4f5" },
-    active: { backgroundColor: "#e4e4e7" },
-    focus: { outline: "2px solid #f97316" },
-    disabled: { opacity: 0.5 },
-  }}
->
-  <Text>Continue</Text>
-</Button>
+```go
+func SelectableButton() {
+	selected, setSelected := ui.CreateSignal(false)
+	ui.Button(
+		ui.BackgroundColor("#e5e7eb"),
+		ui.When(selected, ui.BackgroundColor("#2563eb"), ui.Color("white")),
+		ui.Hover(ui.Opacity(0.85)),
+		ui.OnClick(func() { setSelected(!selected()) }),
+		"Toggle selection",
+	)
+}
 ```
+
+## Groups and named group hover
+
+`ui.Group(true)` marks an unnamed hover group; `ui.Group("card")` names it. A descendant’s `ui.GroupHover(...)` follows its nearest ancestor group, including named groups. `ui.GroupHoverNamed("card", ...)` follows the nearest ancestor with that name, skipping intervening groups with other names.
+
+```go
+func GroupExample() {
+	ui.View(ui.Group("card"), ui.Padding(20), func() {
+		ui.Text(
+			ui.Color("#64748b"),
+			ui.GroupHover(ui.Color("#2563eb")),
+			"Changes when the card is hovered",
+		)
+		ui.View(ui.Group("toolbar"), func() {
+			ui.Text(
+				ui.GroupHoverNamed("card", ui.Color("#2563eb")),
+				ui.GroupHoverNamed("toolbar", ui.Opacity(0.8)),
+				"Follows the card and the nested toolbar",
+			)
+		})
+	})
+}
+```
+
+Hovering any part of the group, including its padding and descendants, activates its rules. A nested group becomes the target for unnamed rules; named rules can still follow an outer group. With no matching ancestor, the rule has no effect. Repeated group rules accumulate in declaration order; a node’s own `ui.Hover(...)` wins for overlapping properties. Use paint properties such as colors, opacity, outlines, and transforms. Hover updates are handled natively without rerunning components or changing layout.

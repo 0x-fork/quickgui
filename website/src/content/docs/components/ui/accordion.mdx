@@ -2,49 +2,55 @@ Coordinates one or more expandable sections and their keyboard focus.
 
 ## Import
 
-Import `Accordion` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Accordion } from "@quickgui/ui/disclosure";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Accordion.Root value={open()} onValueChange={setOpen}>
-  <Accordion.Item value="shipping">
-    <Accordion.Header>
-      <Accordion.Trigger><Text>Shipping</Text></Accordion.Trigger>
-    </Accordion.Header>
-    <Accordion.Panel><Text>Ships in 2–3 days.</Text></Accordion.Panel>
-  </Accordion.Item>
-</Accordion.Root>
+```go
+func AccordionExample() {
+	ui.Accordion.Root(
+		ui.AccordionRootProps{Multiple: true},
+		func() {
+			ui.Accordion.Item(
+				ui.AccordionItemProps{Value: "details"},
+				func() {
+					ui.Accordion.Header(
+						ui.PartProps{},
+						func() {
+							ui.Accordion.Trigger(
+								ui.PartProps{},
+								"Details",
+							)
+						},
+					)
+					ui.Accordion.Panel(ui.PartProps{}, "Mounted when opened")
+				},
+			)
+		},
+	)
+}
 ```
 
 ## Anatomy
 
-- `Accordion.Root`
-- `Accordion.Item`
-- `Accordion.Header`
-- `Accordion.Trigger`
-- `Accordion.Panel`
-
-```tsx
-<Accordion.Root>
-  <Accordion.Item />
-  <Accordion.Header />
-  <Accordion.Trigger />
-  <Accordion.Panel />
-</Accordion.Root>
-```
+- `ui.Accordion.Root`
+- `ui.Accordion.Item`
+- `ui.Accordion.Header`
+- `ui.Accordion.Trigger`
+- `ui.Accordion.Panel`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `value` | Controlled value. The precise value type follows this component’s contract. |
-| `defaultValue` | Initial value when the component owns its state. |
-| `onValueChange` | Reports the value accepted by the core. |
-| `multiple` | Allows more than one value to be selected or opened. |
-| `keepMounted` | Keeps inactive content mounted with display disabled. |
-
+| `Value` | Controlled value. The precise value type follows this component’s contract. |
+| `DefaultValue` | Initial value when the component owns its state. |
+| `OnValueChange` | Reports the value accepted by the core. |
+| `Multiple` | Allows more than one value to be selected or opened. |
+| `KeepMounted` | Keeps inactive content mounted with display disabled. |

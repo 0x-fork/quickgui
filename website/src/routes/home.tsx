@@ -104,7 +104,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         {/* One bordered column runs the whole page; sections stack flush,
             separated by hairlines. */}
         <div className="mx-auto w-full max-w-6xl border-x border-border">
-          <Hero stats={stats} />
+          <Hero />
           <Features />
           <CodeShowcase highlighted={highlighted} />
           <SwiftUi highlighted={highlighted} />

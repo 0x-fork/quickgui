@@ -2,52 +2,59 @@ A virtualized tabular collection with header, row, and cell parts.
 
 ## Import
 
-Import `Table` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Table } from "@quickgui/ui/collections";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Table.Root
-  columns={[{ id: "name", label: "Name" }, { id: "status", label: "Status" }]}
-  rowCount={rows.length}
-  onVisibleRangeChange={setVisibleRange}
->
-  <Table.Header column="name"><Text>Name</Text></Table.Header>
-  <For each={visibleRows()}>{(row) =>
-    <Table.Row index={row.index}>
-      <Table.Cell column="name"><Text>{row.name}</Text></Table.Cell>
-      <Table.Cell column="status"><Text>{row.status}</Text></Table.Cell>
-    </Table.Row>
-  }</For>
-</Table.Root>
+```go
+func TableExample(rows []string) {
+	ui.Table.Root(
+		ui.TableRootProps{
+			Columns: func() []ui.TableColumnDeclaration {
+				return []ui.TableColumnDeclaration{{ID: "name", Label: "Name", Track: "1fr", Sortable: true}}
+			},
+			RowCount:     func() float64 { return float64(len(rows)) },
+			RowHeight:    26,
+			HeaderHeight: 28,
+			PartProps:    ui.PartProps{Style: ui.Style{Height: 260, OverflowY: "scroll"}},
+		},
+		func() {
+			ui.Table.Header(ui.TableHeaderProps{Column: "name"}, "Name")
+			for index, name := range rows {
+				ui.Table.Row(
+					ui.TableRowProps{Index: index},
+					func() {
+						ui.Table.Cell(
+							ui.TableCellProps{Column: "name"},
+							name,
+						)
+					},
+				)
+			}
+		},
+	)
+}
 ```
 
 ## Anatomy
 
-- `Table.Root`
-- `Table.Header`
-- `Table.Row`
-- `Table.Cell`
-
-```tsx
-<Table.Root>
-  <Table.Header />
-  <Table.Row />
-  <Table.Cell />
-</Table.Root>
-```
+- `ui.Table.Root`
+- `ui.Table.Header`
+- `ui.Table.Row`
+- `ui.Table.Cell`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `columns` | Column declarations for the virtual table. |
-| `rowCount` | Total logical row count. |
-| `rowHeight` | Logical height of each virtualized row. |
-| `selectionMode` | Allows single or multiple table selection. |
-| `selection` | Controlled selection for a table, native picker, or color control. |
-
+| `Columns` | Column declarations for the virtual table. |
+| `RowCount` | Total logical row count. |
+| `RowHeight` | Logical height of each virtualized row. |
+| `SelectionMode` | Allows single or multiple table selection. |
+| `Selection` | Controlled selection for a table, native picker, or color control. |

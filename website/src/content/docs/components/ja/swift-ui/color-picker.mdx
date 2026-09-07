@@ -2,31 +2,39 @@ CSS 形式の RGBA 文字列を返す、ネイティブ SwiftUI カラーピッ�
 
 ## インポート
 
-`@quickgui/ui/swift-ui` から `ColorPicker` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Host, ColorPicker } from "@quickgui/ui/swift-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<Host matchContents>
-  <ColorPicker
-    label="Accent"
-    selection={accent()}
-    supportsOpacity
-    onSelectionChange={setAccent}
-  />
-</Host>
+```go
+func SwiftUiColorPickerExample() {
+	value, setValue := ui.CreateSignal("#2563ebff")
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.ColorPicker(ui.SwiftUIColorPickerProps{
+				Selection:         value,
+				Label:             "Accent",
+				SupportsOpacity:   true,
+				OnSelectionChange: func(next string, _ *native.Event) { setValue(next) },
+			})
+		},
+	)
+}
 ```
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `selection` | テーブル、ネイティブピッカー、カラーコントロールの制御選択値です。 |
-| `label` | ネイティブ SwiftUI コントロールに表示するラベルです。 |
-| `supportsOpacity` | ネイティブのカラーパネルでアルファ値を選択できるようにします。 |
-| `onSelectionChange` | 選択したネイティブピッカー項目または色を通知します。 |
-
+| `Selection` | テーブル、ネイティブピッカー、カラーコントロールの制御選択値です。 |
+| `Label` | ネイティブ SwiftUI コントロールに表示するラベルです。 |
+| `SupportsOpacity` | ネイティブのカラーパネルでアルファ値を選択できるようにします。 |
+| `OnSelectionChange` | 選択したネイティブピッカー項目または色を通知します。 |

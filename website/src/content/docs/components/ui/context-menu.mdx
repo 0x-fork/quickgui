@@ -2,37 +2,40 @@ Opens a model-driven native menu from a secondary-button press on its trigger.
 
 ## Import
 
-Import `ContextMenu` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { ContextMenu } from "@quickgui/ui/menu";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"fmt"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<ContextMenu.Root items={menuItems} onSelect={({ value }) => runCommand(value)}>
-  <ContextMenu.Trigger><ProjectRow /></ContextMenu.Trigger>
-</ContextMenu.Root>
+```go
+func ContextMenuExample() {
+	ui.ContextMenu.Root(
+		ui.ContextMenuRootProps{
+			Items:    func() []ui.MenuItemDeclaration { return []ui.MenuItemDeclaration{{ID: "copy", Label: "Copy"}} },
+			OnSelect: func(item ui.MenuSelectDetails, _ *native.Event) { fmt.Println(item.ID) },
+		},
+		func() { ui.ContextMenu.Trigger(ui.ContextMenuTriggerProps{}, "Right-click here") },
+	)
+}
 ```
 
 ## Anatomy
 
-- `ContextMenu.Root`
-- `ContextMenu.Trigger`
-
-```tsx
-<ContextMenu.Root>
-  <ContextMenu.Trigger />
-</ContextMenu.Root>
-```
+- `ui.ContextMenu.Root`
+- `ui.ContextMenu.Trigger`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `items` | Bounded declaration model used for options or keyboard navigation. |
-| `appearance` | Structural colors and geometry for a core-painted native menu or picker. |
-| `onSelect` | Reports the menu entry selected by the core. |
-| `loop` | Wraps highlight navigation at the ends of a menu level. |
-
+| `Items` | Bounded declaration model used for options or keyboard navigation. |
+| `Appearance` | Structural colors and geometry for a core-painted native menu or picker. |
+| `OnSelect` | Reports the menu entry selected by the core. |
+| `Loop` | Wraps highlight navigation at the ends of a menu level. |

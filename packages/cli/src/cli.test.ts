@@ -115,6 +115,15 @@ describe("CLI arguments", () => {
     );
     expect(() => parseTarget("plan9-x64")).toThrow("Unsupported target");
   });
+
+  test("parses formatting and check options", () => {
+    expect(parseCliArgs(["fmt"])).toEqual({ command: "fmt", project: ".", check: false });
+    expect(parseCliArgs(["fmt", "--project", "demo", "--check"])).toEqual({
+      command: "fmt", project: "demo", check: true,
+    });
+    expect(parseCliArgs(["fmt", "--help"])).toEqual({ command: "help", topic: "fmt" });
+    expect(() => parseCliArgs(["fmt", "extra"])).toThrow("positional");
+  });
 });
 
 test("dev process monitoring ignores replaced and cleanup exits", async () => {
@@ -283,23 +292,18 @@ test("project initialization renders a complete native scaffold", async () => {
   expect(JSON.parse(readFileSync(join(project, "package.json"), "utf8"))).toMatchObject({
     name: "sample-app",
     scripts: { dev: "quickgui dev", build: "quickgui build" },
-    dependencies: {
-      "@quickgui/native": "^0.1.3",
-      "@quickgui/ui": "^0.1.3",
-    },
+    devDependencies: { "@quickgui/cli": "^0.1.3" },
   });
-  expect(readFileSync(join(project, "quickgui.config.ts"), "utf8")).toContain(
-    'identifier: "com.example.sample-app"',
-  );
-  const applicationSource = readFileSync(join(project, "src/app.tsx"), "utf8");
-  expect(applicationSource).toContain('from "@quickgui/native"');
-  expect(applicationSource).toContain('from "@quickgui/ui"');
-  expect(applicationSource).toContain("await app.whenReady()");
-  expect(applicationSource).toContain("app.onReopen(");
-  expect(applicationSource).toContain("if (!event.hasVisibleWindows) openMainWindow()");
-  expect(applicationSource).toContain("renderer: createRenderer(");
-  expect(applicationSource).not.toContain("quitMode");
-  expect(applicationSource).not.toContain("app.run()");
+  expect(readFileSync(join(project, "quickgui.config.ts"), "utf8")).toContain('identifier: "com.example.sample-app"');
+  const applicationSource = readFileSync(join(project, "main.go"), "utf8");
+  expect(applicationSource).toContain('"github.com/egoist/quickgui/go/native"');
+  expect(applicationSource).toContain("native.Run(");
+  expect(applicationSource).toContain("native.App.OnReopen(");
+  expect(applicationSource).toContain("ui.CreateSignal(");
+  expect(applicationSource).toContain("Component: Counter");
+  expect(applicationSource).not.toContain("CreateRenderer");
+  expect(applicationSource).not.toContain("{{");
+  expect(readFileSync(join(project, "go.mod"), "utf8")).toContain("module example.com/sample-app");
   expect(readFileSync(join(project, ".gitignore"), "utf8")).toContain(".quickgui");
   expect(readFileSync(join(project, "README.md"), "utf8")).not.toContain("{{");
 });

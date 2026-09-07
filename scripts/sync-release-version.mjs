@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -189,7 +189,6 @@ replaceInlineCargoDependency("tests/downstream_smoke/Cargo.toml", "quickgui");
 
 for (const [relativePath, packageName] of [
   ["packages/native/package.json", "@quickgui/native"],
-  ["packages/ui/package.json", "@quickgui/ui"],
   ["packages/cli/package.json", "@quickgui/cli"],
 ]) {
   replaceJsonPackageVersion(relativePath, packageName);
@@ -204,7 +203,7 @@ edit("packages/cli/src/cli.ts", (contents) =>
   ),
 );
 
-for (const packageName of ["native", "ui", "cli"]) {
+for (const packageName of ["cli"]) {
   edit("packages/cli/templates/native/package.json", (contents) =>
     replaceMatches(
       "packages/cli/templates/native/package.json",
@@ -215,17 +214,19 @@ for (const packageName of ["native", "ui", "cli"]) {
   );
 }
 
-for (const packageName of ["native", "ui"]) {
-  edit("packages/cli/src/cli.test.ts", (contents) =>
-    replaceMatches(
-      "packages/cli/src/cli.test.ts",
-      contents,
-      new RegExp(`("@quickgui/${packageName}": "\\^)[^"]+(")`),
-      (_match, prefix, suffix) => `${prefix}${version}${suffix}`,
-    ),
-  );
-}
+edit("packages/cli/templates/native/go.mod", (contents) =>
+  replaceMatches("packages/cli/templates/native/go.mod", contents,
+    /(github\.com\/egoist\/quickgui\/go v)[^\s]+/,
+    (_match, prefix) => `${prefix}${version}`),
+);
 
+for (const directory of readdirSync(join(repositoryRoot, "examples"))) {
+  const relativePath = `examples/${directory}/go.mod`;
+  if (existsSync(join(repositoryRoot, relativePath))) {
+    edit(relativePath, (contents) => contents.replace(/(github\.com\/egoist\/quickgui\/go v)[^\s]+/,
+      (_match, prefix) => `${prefix}${version}`));
+  }
+}
 
 for (const packageName of [
   "quickgui",
@@ -241,7 +242,6 @@ for (const packageName of [
 
 for (const [workspacePath, packageName] of [
   ["packages/native", "@quickgui/native"],
-  ["packages/ui", "@quickgui/ui"],
   ["packages/cli", "@quickgui/cli"],
 ]) {
   replaceBunWorkspaceVersion("bun.lock", workspacePath, packageName);

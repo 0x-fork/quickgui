@@ -2,68 +2,76 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `NavigationMenu`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { NavigationMenu } from "@quickgui/ui/base-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<NavigationMenu.Root value={section()} onValueChange={setSection}>
-  <NavigationMenu.List>
-    <NavigationMenu.Item value="products">
-      <NavigationMenu.Trigger><Text>Products</Text></NavigationMenu.Trigger>
-      <NavigationMenu.Content><ProductLinks /></NavigationMenu.Content>
-    </NavigationMenu.Item>
-  </NavigationMenu.List>
-  <NavigationMenu.Portal>
-    <NavigationMenu.Positioner><NavigationMenu.Popup><NavigationMenu.Viewport /></NavigationMenu.Popup></NavigationMenu.Positioner>
-  </NavigationMenu.Portal>
-</NavigationMenu.Root>
+```go
+func NavigationMenuExample() {
+	ui.NavigationMenu.Root(
+		ui.NavigationMenuRootProps{
+			Items: []ui.ComponentItem{{Value: "products"}},
+			Delay: 100,
+		},
+		func() {
+			ui.NavigationMenu.List(
+				ui.PartProps{},
+				func() {
+					ui.NavigationMenu.Item(
+						ui.NavigationMenuItemProps{Value: "products"},
+						func() {
+							ui.NavigationMenu.Trigger(ui.NavigationMenuPartProps{}, "Products")
+							ui.NavigationMenu.Positioner(
+								ui.NavigationMenuPartProps{},
+								func() {
+									ui.NavigationMenu.Popup(
+										ui.NavigationMenuPartProps{},
+										func() {
+											ui.NavigationMenu.Link(
+												ui.NavigationMenuLinkProps{Value: "overview"},
+												"Overview",
+											)
+										},
+									)
+								},
+							)
+						},
+					)
+				},
+			)
+		},
+	)
+}
 ```
 
 ## 结构
 
-- `NavigationMenu.Root`
-- `NavigationMenu.List`
-- `NavigationMenu.Item`
-- `NavigationMenu.Trigger`
-- `NavigationMenu.Icon`
-- `NavigationMenu.Content`
-- `NavigationMenu.Link`
-- `NavigationMenu.Portal`
-- `NavigationMenu.Positioner`
-- `NavigationMenu.Popup`
-- `NavigationMenu.Viewport`
-- `NavigationMenu.Arrow`
-- `NavigationMenu.Backdrop`
-
-```tsx
-<NavigationMenu.Root>
-  <NavigationMenu.List />
-  <NavigationMenu.Item />
-  <NavigationMenu.Trigger />
-  <NavigationMenu.Icon />
-  <NavigationMenu.Content />
-  <NavigationMenu.Link />
-  <NavigationMenu.Portal />
-  <NavigationMenu.Positioner />
-  <NavigationMenu.Popup />
-  <NavigationMenu.Viewport />
-  <NavigationMenu.Arrow />
-  <NavigationMenu.Backdrop />
-</NavigationMenu.Root>
-```
+- `ui.NavigationMenu.Root`
+- `ui.NavigationMenu.List`
+- `ui.NavigationMenu.Item`
+- `ui.NavigationMenu.Trigger`
+- `ui.NavigationMenu.Icon`
+- `ui.NavigationMenu.Content`
+- `ui.NavigationMenu.Link`
+- `ui.NavigationMenu.Portal`
+- `ui.NavigationMenu.Positioner`
+- `ui.NavigationMenu.Popup`
+- `ui.NavigationMenu.Viewport`
+- `ui.NavigationMenu.Arrow`
+- `ui.NavigationMenu.Backdrop`
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `value` | 受控值，具体类型取决于该组件的约定。 |
-| `defaultValue` | 组件自行管理状态时的初始值。 |
-| `onValueChange` | 报告核心接受的值。 |
-| `orientation` | 水平或垂直布局，以及对应的键盘方向。 |
-| `delay` | 打开前由核心管理的延迟（毫秒）。 |
-
+| `Value` | 受控值，具体类型取决于该组件的约定。 |
+| `DefaultValue` | 组件自行管理状态时的初始值。 |
+| `OnValueChange` | 报告核心接受的值。 |
+| `Orientation` | 水平或垂直布局，以及对应的键盘方向。 |
+| `Delay` | 打开前由核心管理的延迟（毫秒）。 |

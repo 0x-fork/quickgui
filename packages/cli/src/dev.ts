@@ -131,7 +131,7 @@ export async function runDev(options: DevOptions): Promise<number> {
   try {
     watcher = watch(projectRoot, { recursive: true }, (_event, filename) => {
       const path = filename ? resolve(projectRoot, String(filename)) : undefined;
-      if (path && shouldIgnoreChange(projectRoot, path, config.outDir, config.modules.directory)) {
+      if (path && shouldIgnoreChange(projectRoot, path, config.outDir)) {
         return;
       }
       if (debounce) clearTimeout(debounce);

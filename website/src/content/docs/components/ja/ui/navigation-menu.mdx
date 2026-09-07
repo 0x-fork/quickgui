@@ -2,68 +2,76 @@
 
 ## インポート
 
-`@quickgui/ui` から `NavigationMenu` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { NavigationMenu } from "@quickgui/ui/base-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<NavigationMenu.Root value={section()} onValueChange={setSection}>
-  <NavigationMenu.List>
-    <NavigationMenu.Item value="products">
-      <NavigationMenu.Trigger><Text>Products</Text></NavigationMenu.Trigger>
-      <NavigationMenu.Content><ProductLinks /></NavigationMenu.Content>
-    </NavigationMenu.Item>
-  </NavigationMenu.List>
-  <NavigationMenu.Portal>
-    <NavigationMenu.Positioner><NavigationMenu.Popup><NavigationMenu.Viewport /></NavigationMenu.Popup></NavigationMenu.Positioner>
-  </NavigationMenu.Portal>
-</NavigationMenu.Root>
+```go
+func NavigationMenuExample() {
+	ui.NavigationMenu.Root(
+		ui.NavigationMenuRootProps{
+			Items: []ui.ComponentItem{{Value: "products"}},
+			Delay: 100,
+		},
+		func() {
+			ui.NavigationMenu.List(
+				ui.PartProps{},
+				func() {
+					ui.NavigationMenu.Item(
+						ui.NavigationMenuItemProps{Value: "products"},
+						func() {
+							ui.NavigationMenu.Trigger(ui.NavigationMenuPartProps{}, "Products")
+							ui.NavigationMenu.Positioner(
+								ui.NavigationMenuPartProps{},
+								func() {
+									ui.NavigationMenu.Popup(
+										ui.NavigationMenuPartProps{},
+										func() {
+											ui.NavigationMenu.Link(
+												ui.NavigationMenuLinkProps{Value: "overview"},
+												"Overview",
+											)
+										},
+									)
+								},
+							)
+						},
+					)
+				},
+			)
+		},
+	)
+}
 ```
 
 ## 構成
 
-- `NavigationMenu.Root`
-- `NavigationMenu.List`
-- `NavigationMenu.Item`
-- `NavigationMenu.Trigger`
-- `NavigationMenu.Icon`
-- `NavigationMenu.Content`
-- `NavigationMenu.Link`
-- `NavigationMenu.Portal`
-- `NavigationMenu.Positioner`
-- `NavigationMenu.Popup`
-- `NavigationMenu.Viewport`
-- `NavigationMenu.Arrow`
-- `NavigationMenu.Backdrop`
-
-```tsx
-<NavigationMenu.Root>
-  <NavigationMenu.List />
-  <NavigationMenu.Item />
-  <NavigationMenu.Trigger />
-  <NavigationMenu.Icon />
-  <NavigationMenu.Content />
-  <NavigationMenu.Link />
-  <NavigationMenu.Portal />
-  <NavigationMenu.Positioner />
-  <NavigationMenu.Popup />
-  <NavigationMenu.Viewport />
-  <NavigationMenu.Arrow />
-  <NavigationMenu.Backdrop />
-</NavigationMenu.Root>
-```
+- `ui.NavigationMenu.Root`
+- `ui.NavigationMenu.List`
+- `ui.NavigationMenu.Item`
+- `ui.NavigationMenu.Trigger`
+- `ui.NavigationMenu.Icon`
+- `ui.NavigationMenu.Content`
+- `ui.NavigationMenu.Link`
+- `ui.NavigationMenu.Portal`
+- `ui.NavigationMenu.Positioner`
+- `ui.NavigationMenu.Popup`
+- `ui.NavigationMenu.Viewport`
+- `ui.NavigationMenu.Arrow`
+- `ui.NavigationMenu.Backdrop`
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
-| `defaultValue` | コンポーネント自身が状態を管理するときの初期値です。 |
-| `onValueChange` | コアが受け入れた値を通知します。 |
-| `orientation` | 水平または垂直のレイアウトと、それに対応するキーボード方向です。 |
-| `delay` | 開くまでの、コアが管理する遅延時間（ミリ秒）です。 |
-
+| `Value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `DefaultValue` | コンポーネント自身が状態を管理するときの初期値です。 |
+| `OnValueChange` | コアが受け入れた値を通知します。 |
+| `Orientation` | 水平または垂直のレイアウトと、それに対応するキーボード方向です。 |
+| `Delay` | 開くまでの、コアが管理する遅延時間（ミリ秒）です。 |

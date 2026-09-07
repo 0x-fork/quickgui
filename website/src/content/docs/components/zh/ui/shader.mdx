@@ -2,27 +2,31 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `Shader`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { Shader } from "@quickgui/ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<Shader
-  source={gradientShader}
-  shaderParameters={[time(), intensity()]}
-  style={{ width: 320, height: 180 }}
-/>
+```go
+func ShaderExample(source string, parameters func() []float64) {
+	ui.Shader(
+		ui.Value(source),
+		ui.ShaderParameters(parameters),
+		ui.Width(320),
+		ui.Height(180),
+	)
+}
 ```
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `source` | 组件所需的文件系统路径、数据 URL、SVG 文档或着色器源码。 |
-| `shaderParameters` | 最多 16 个数值，打包到固定的着色器参数向量中。 |
-| `style` | QuickGUI 的布局、绘制、排版和交互状态样式。 |
-
+| `Value` | 组件所需的文件系统路径、数据 URL、SVG 文档或着色器源码。 |
+| `ShaderParameters` | 最多 16 个数值，打包到固定的着色器参数向量中。 |
+| `WithStyle` | QuickGUI 的布局、绘制、排版和交互状态样式。 |

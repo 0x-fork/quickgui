@@ -2,46 +2,45 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `Tree`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { Tree } from "@quickgui/ui/collections";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<Tree.Root
-  nodes={nodes}
-  expanded={expanded()}
-  value={selected()}
-  onExpandedChange={setExpanded}
-  onValueChange={setSelected}
->
-  <For each={visibleNodes()}>{(node) =>
-    <Tree.Row nodeId={node.id}><Text>{node.label}</Text></Tree.Row>
-  }</For>
-</Tree.Root>
+```go
+func TreeExample() {
+	nodes := []ui.TreeNodeDeclaration{{ID: "src", Label: "src", Children: []ui.TreeNodeDeclaration{{ID: "src/main.go", Label: "main.go"}}}}
+	ui.Tree.Root(
+		ui.TreeRootProps{
+			Nodes:           func() []ui.TreeNodeDeclaration { return nodes },
+			DefaultExpanded: []string{"src"},
+			RowHeight:       26,
+			PartProps:       ui.PartProps{Style: ui.Style{Height: 200}},
+		},
+		func() {
+			ui.Tree.Row(ui.TreeRowProps{NodeID: "src"}, "src")
+			ui.Tree.Row(ui.TreeRowProps{NodeID: "src/main.go"}, "main.go")
+		},
+	)
+}
 ```
 
 ## 结构
 
-- `Tree.Root`
-- `Tree.Row`
-
-```tsx
-<Tree.Root>
-  <Tree.Row />
-</Tree.Root>
-```
+- `ui.Tree.Root`
+- `ui.Tree.Row`
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `nodes` | 树使用的有限层级节点声明。 |
-| `expanded` | 受控的已展开树节点标识符。 |
-| `value` | 受控值，具体类型取决于该组件的约定。 |
-| `onExpandedChange` | 报告核心展开的有序节点标识符。 |
-| `onValueChange` | 报告核心接受的值。 |
-
+| `Nodes` | 树使用的有限层级节点声明。 |
+| `Expanded` | 受控的已展开树节点标识符。 |
+| `Value` | 受控值，具体类型取决于该组件的约定。 |
+| `OnExpandedChange` | 报告核心展开的有序节点标识符。 |
+| `OnValueChange` | 报告核心接受的值。 |

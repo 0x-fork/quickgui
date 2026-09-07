@@ -2,62 +2,67 @@
 
 ## インポート
 
-`@quickgui/ui` から `AlertDialog` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { AlertDialog } from "@quickgui/ui/dialog";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<AlertDialog.Root open={open()} onOpenChange={setOpen}>
-  <AlertDialog.Trigger><Text>Delete project</Text></AlertDialog.Trigger>
-  <AlertDialog.Portal>
-    <AlertDialog.Backdrop />
-    <AlertDialog.Viewport>
-      <AlertDialog.Popup>
-        <AlertDialog.Title><Text>Delete this project?</Text></AlertDialog.Title>
-        <AlertDialog.Description><Text>This cannot be undone.</Text></AlertDialog.Description>
-        <AlertDialog.Close><Text>Cancel</Text></AlertDialog.Close>
-      </AlertDialog.Popup>
-    </AlertDialog.Viewport>
-  </AlertDialog.Portal>
-</AlertDialog.Root>
+```go
+func AlertDialogExample() {
+	ui.AlertDialog.Root(
+		ui.DialogRootProps{},
+		func() {
+			ui.AlertDialog.Trigger(ui.PartProps{}, "Open dialog")
+			ui.AlertDialog.Portal(
+				ui.PartProps{},
+				func() {
+					ui.AlertDialog.Backdrop(ui.PartProps{})
+					ui.AlertDialog.Viewport(
+						ui.PartProps{},
+						func() {
+							ui.AlertDialog.Popup(
+								ui.DialogPopupProps{},
+								func() {
+									ui.AlertDialog.Title(ui.PartProps{}, "Confirm action")
+									ui.AlertDialog.Description(
+										ui.PartProps{},
+										"Review the details before continuing.",
+									)
+									ui.AlertDialog.Close(ui.PartProps{}, "Cancel")
+								},
+							)
+						},
+					)
+				},
+			)
+		},
+	)
+}
 ```
 
 ## 構成
 
-- `AlertDialog.Root`
-- `AlertDialog.Trigger`
-- `AlertDialog.Portal`
-- `AlertDialog.Backdrop`
-- `AlertDialog.Viewport`
-- `AlertDialog.Popup`
-- `AlertDialog.Title`
-- `AlertDialog.Description`
-- `AlertDialog.Close`
-
-```tsx
-<AlertDialog.Root>
-  <AlertDialog.Trigger />
-  <AlertDialog.Portal />
-  <AlertDialog.Backdrop />
-  <AlertDialog.Viewport />
-  <AlertDialog.Popup />
-  <AlertDialog.Title />
-  <AlertDialog.Description />
-  <AlertDialog.Close />
-</AlertDialog.Root>
-```
+- `ui.AlertDialog.Root`
+- `ui.AlertDialog.Trigger`
+- `ui.AlertDialog.Portal`
+- `ui.AlertDialog.Backdrop`
+- `ui.AlertDialog.Viewport`
+- `ui.AlertDialog.Popup`
+- `ui.AlertDialog.Title`
+- `ui.AlertDialog.Description`
+- `ui.AlertDialog.Close`
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `open` | 制御された開閉状態です。 |
-| `defaultOpen` | コンポーネント自身が開閉状態を管理するときの初期状態です。 |
-| `onOpenChange` | コアが決定した開閉を通知します。 |
-| `dismissOnEscape` | Escape キーでサーフェスを閉じられるようにします。 |
-| `exitDuration` | 閉じる内容を、正確な終了トランジション時間だけマウントしたままにします。 |
-
+| `Open` | 制御された開閉状態です。 |
+| `DefaultOpen` | コンポーネント自身が開閉状態を管理するときの初期状態です。 |
+| `OnOpenChange` | コアが決定した開閉を通知します。 |
+| `DismissOnEscape` | Escape キーでサーフェスを閉じられるようにします。 |
+| `ExitDuration` | 閉じる内容を、正確な終了トランジション時間だけマウントしたままにします。 |

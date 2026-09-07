@@ -1,75 +1,78 @@
-QuickGUI compiles TypeScript and TSX to native code with scriptc. TypeScript 7 lowers JSX; the Rust core owns layout, rendering, input, and the platform main thread. Bun runs the development tools.
-
-Signals come from `@quickgui/ui`. Setters accept values: `setCount(count() + 1)`. Dynamic custom component props use `Accessor<T>` and are read with `props.value()`. `KeyedFor` keeps rows mounted during immutable updates and gives children an item accessor. There is no resource helper; use asynchronous functions with signals and cleanup.
+Go components create retained native nodes. Signals subscribe individual bindings to the state they read.
 
 ## Rendering model
 
-`createRenderer` mounts one QuickGUI UI root into a `Window`. JSX creates retained QuickGUI nodes rather than DOM elements.
+Every component uses `func()`, including window roots, routes, conditional branches, and children blocks. It declares zero or more children without returning a node. Components run once when mounted. UI calls inside a children block attach to that block’s parent. Use normal Go `if` and `for` for static construction; use `ui.Show` or `ui.For` when a signal must change the child structure.
 
-```tsx
-new Window({
-  title: "Tasks",
-  renderer: createRenderer(() => <Tasks />),
-});
-```
-
-Signals update only the affected retained properties. QuickGUI redraws damaged regions and stays idle when nothing changes.
-
-## Reactive state
-
-Use QuickGUI signals, memos, effects, and control flow.
-
-```tsx
-function Counter() {
-  const [count, setCount] = createSignal(0);
-
-  return (
-    <View style={{ gap: 8 }}>
-      <Text>{count()}</Text>
-      <Button onClick={() => setCount(count() + 1)}>
-        <Text>Increment</Text>
-      </Button>
-    </View>
-  );
+```go
+func ViewExample() {
+	ui.View(
+		ui.Padding(20),
+		ui.Gap(12),
+		func() {
+			ui.Text("Hello from Go")
+			ui.Button(ui.OnClick(func() {}), "Continue")
+		},
+	)
 }
 ```
 
-Native callbacks enter QuickGUI UI asynchronously. A callback receives the result already decided by the core; JavaScript never synchronously asks the native main thread for a value.
+## Reactive state
+
+Pass an accessor for changing text or properties. Calling `count()` while constructing a string captures its current value; placing the call in `func() string` keeps it reactive. Event handlers batch writes automatically. Use `ui.Batch` for a group of writes elsewhere, and `ui.CreateMemo` for derived values.
+
+```go
+func TextExample() {
+	count, setCount := ui.CreateSignal(0)
+	ui.View(func() {
+		ui.Text(
+			ui.FontSize(20),
+			func() string { return fmt.Sprintf("Count: %d", count()) },
+		)
+		ui.Button(ui.OnClick(func() { setCount(count() + 1) }), "Increment")
+	})
+}
+```
 
 ## Window lifecycle
 
-Create windows after `app.whenReady()`. Re-create the main window from the `reopen` event when macOS activates an app with no visible windows.
-
-```tsx
-app.onReopen( ({ hasVisibleWindows }) => {
-  if (!hasVisibleWindows) openMainWindow();
-});
-```
+`WindowOptions.Component` creates one reactive root per window. Closing the window disposes its nodes and effects. Register resource cleanup with `ui.OnCleanup`. For background work, `ui.Async` delivers its result back to the UI goroutine and cancels when its component is disposed.
 
 ## Current window
 
-Use `Window.getCurrentWindow()` from a component mounted by a QuickGUI window renderer when an action belongs to that window.
+Capture `native.CurrentWindow()` while the component is mounting, then use the captured window in callbacks. Do not look it up from an unrelated goroutine. Window events and native requests expose asynchronous callbacks.
 
-```tsx
-function CloseButton() {
-  const window = Window.getCurrentWindow();
-  return <Button onClick={() => window.close()}><Text>Close</Text></Button>;
+```go
+func CloseButton() {
+	window := native.CurrentWindow()
+	ui.Button(ui.OnClick(func() { window.Close() }), "Close window")
 }
 ```
 
 ## Routing
 
-The QuickGUI UI router projects QuickGUI's core-owned route table and bounded memory history.
+Declare routes with `ui.Route` and `ui.Layout`. A layout mounts its matched child with `ui.Outlet`. Read parameters with `ui.UseParams`, or navigate with `ui.UseRouter`.
 
-```tsx
-import { Router, route } from "@quickgui/ui/router";
-
-<Router initialPath="/" routes={[
-  route("/", Shell, [route("", Home), route("projects/:id", Project)]),
-]} />;
+```go
+func RouterExample() {
+	ui.Router(ui.RouterProps{
+		InitialPath: "/",
+		Routes: []*ui.RouteDeclaration{
+			ui.Route(
+				"/",
+				func() {
+					ui.Link(
+						ui.LinkProps{Href: "/settings"},
+						"Settings",
+					)
+				},
+			),
+			ui.Route(
+				"/settings",
+				func() { ui.Text("Settings") },
+			),
+		},
+		Fallback: func() { ui.Text("Page not found") },
+	})
+}
 ```
-
-Use `Link`, `Outlet`, `useLocation`, `useParams`, `useSearchParams`, `useNavigate`, and `useRouter` below `Router`.
-
-
-Route parameters and search parameters are `Map<string, string>` accessors: use `params().get("id")`. Routes are static declarations; layouts render their matched child with `Outlet`.

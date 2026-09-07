@@ -2,40 +2,39 @@ Shows and hides one panel from a trigger while preserving accessible state.
 
 ## Import
 
-Import `Collapsible` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Collapsible } from "@quickgui/ui/disclosure";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Collapsible.Root open={open()} onOpenChange={setOpen}>
-  <Collapsible.Trigger><Text>Advanced settings</Text></Collapsible.Trigger>
-  <Collapsible.Panel><AdvancedSettings /></Collapsible.Panel>
-</Collapsible.Root>
+```go
+func CollapsibleExample() {
+	ui.Collapsible.Root(
+		ui.CollapsibleRootProps{},
+		func() {
+			ui.Collapsible.Trigger(ui.PartProps{}, "Show details")
+			ui.Collapsible.Panel(ui.PartProps{}, "Mounted when opened")
+		},
+	)
+}
 ```
 
 ## Anatomy
 
-- `Collapsible.Root`
-- `Collapsible.Trigger`
-- `Collapsible.Panel`
-
-```tsx
-<Collapsible.Root>
-  <Collapsible.Trigger />
-  <Collapsible.Panel />
-</Collapsible.Root>
-```
+- `ui.Collapsible.Root`
+- `ui.Collapsible.Trigger`
+- `ui.Collapsible.Panel`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `open` | Controlled open state. |
-| `defaultOpen` | Initial state when the component owns whether it is open. |
-| `onOpenChange` | Reports an open or close decision from the core. |
-| `keepMounted` | Keeps inactive content mounted with display disabled. |
-
+| `Open` | Controlled open state. |
+| `DefaultOpen` | Initial state when the component owns whether it is open. |
+| `OnOpenChange` | Reports an open or close decision from the core. |
+| `KeepMounted` | Keeps inactive content mounted with display disabled. |

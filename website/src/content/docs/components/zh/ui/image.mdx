@@ -2,28 +2,26 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `Image`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { Image } from "@quickgui/ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<Image
-  source="assets/hero.png"
-  fit="cover"
-  style={{ width: 240, height: 160, borderRadius: 12 }}
-/>
+```go
+func ImageExample(path string) {
+	ui.Image(ui.Value(path), ui.ObjectFit("cover"), ui.Width(160), ui.Height(120))
+}
 ```
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `source` | 组件所需的文件系统路径、数据 URL、SVG 文档或着色器源码。 |
-| `fit` | 图像内容在声明区域中的适配方式。 |
-| `objectFit` | 图像适配策略的别名。 |
-| `style` | QuickGUI 的布局、绘制、排版和交互状态样式。 |
-
+| `Value` | 组件所需的文件系统路径、数据 URL、SVG 文档或着色器源码。 |
+| `ObjectFit` | 图像内容在声明区域中的适配方式。 |
+| `WithStyle` | QuickGUI 的布局、绘制、排版和交互状态样式。 |

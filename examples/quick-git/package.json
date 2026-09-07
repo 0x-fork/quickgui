@@ -7,10 +7,7 @@
     "build": "quickgui build",
     "test": "bun test"
   },
-  "dependencies": {
-    "@quickgui/native": "workspace:*",
-    "@quickgui/ui": "workspace:*"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@quickgui/cli": "workspace:*"
   }

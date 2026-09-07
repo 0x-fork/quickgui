@@ -2,95 +2,70 @@ Combines editable text, filtering, optional chips, and a native suggestion surfa
 
 ## Import
 
-Import `Combobox` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { Combobox } from "@quickgui/ui/select";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<Combobox.Root
-  ariaLabel="Framework"
-  items={frameworks}
-  value={framework()}
-  inputValue={query()}
-  filterMode="fuzzy"
-  onValueChange={setFramework}
-  onInputValueChange={setQuery}
-/>
+```go
+func ComboboxExample() {
+	value, setValue := ui.CreateSignal[*string](nil)
+	ui.Combobox.Root(ui.ComboboxRootProps{
+		PickerInputProps: ui.PickerInputProps{
+			PickerSourceProps: ui.PickerSourceProps{Items: func() []ui.OptionDeclaration {
+				return []ui.OptionDeclaration{{Value: "go", Label: "Go"}, {Value: "swift", Label: "Swift"}}
+			}},
+			Placeholder: "Choose a language",
+		},
+		Value:         value,
+		OnValueChange: func(next *string, _ *native.Event) { setValue(next) },
+	})
+}
 ```
 
 ## Anatomy
 
-- `Combobox.Root`
-- `Combobox.Input`
-- `Combobox.Option`
-- `Combobox.Label`
-- `Combobox.Value`
-- `Combobox.Icon`
-- `Combobox.InputGroup`
-- `Combobox.Clear`
-- `Combobox.Trigger`
-- `Combobox.Chips`
-- `Combobox.Chip`
-- `Combobox.ChipRemove`
-- `Combobox.Backdrop`
-- `Combobox.Portal`
-- `Combobox.Positioner`
-- `Combobox.Popup`
-- `Combobox.Arrow`
-- `Combobox.Status`
-- `Combobox.Empty`
-- `Combobox.List`
-- `Combobox.Row`
-- `Combobox.Item`
-- `Combobox.ItemIndicator`
-- `Combobox.Group`
-- `Combobox.GroupLabel`
-- `Combobox.Collection`
-- `Combobox.Separator`
-
-```tsx
-<Combobox.Root>
-  <Combobox.Input />
-  <Combobox.Option />
-  <Combobox.Label />
-  <Combobox.Value />
-  <Combobox.Icon />
-  <Combobox.InputGroup />
-  <Combobox.Clear />
-  <Combobox.Trigger />
-  <Combobox.Chips />
-  <Combobox.Chip />
-  <Combobox.ChipRemove />
-  <Combobox.Backdrop />
-  <Combobox.Portal />
-  <Combobox.Positioner />
-  <Combobox.Popup />
-  <Combobox.Arrow />
-  <Combobox.Status />
-  <Combobox.Empty />
-  <Combobox.List />
-  <Combobox.Row />
-  <Combobox.Item />
-  <Combobox.ItemIndicator />
-  <Combobox.Group />
-  <Combobox.GroupLabel />
-  <Combobox.Collection />
-  <Combobox.Separator />
-</Combobox.Root>
-```
+- `ui.Combobox.Root`
+- `ui.Combobox.Input`
+- `ui.Combobox.Option`
+- `ui.Combobox.Label`
+- `ui.Combobox.Value`
+- `ui.Combobox.Icon`
+- `ui.Combobox.InputGroup`
+- `ui.Combobox.Clear`
+- `ui.Combobox.Trigger`
+- `ui.Combobox.Chips`
+- `ui.Combobox.Chip`
+- `ui.Combobox.ChipRemove`
+- `ui.Combobox.Backdrop`
+- `ui.Combobox.Portal`
+- `ui.Combobox.Positioner`
+- `ui.Combobox.Popup`
+- `ui.Combobox.Arrow`
+- `ui.Combobox.Status`
+- `ui.Combobox.Empty`
+- `ui.Combobox.List`
+- `ui.Combobox.Row`
+- `ui.Combobox.Item`
+- `ui.Combobox.ItemIndicator`
+- `ui.Combobox.Group`
+- `ui.Combobox.GroupLabel`
+- `ui.Combobox.Collection`
+- `ui.Combobox.Separator`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `items` | Bounded declaration model used for options or keyboard navigation. |
-| `value` | Controlled value. The precise value type follows this component’s contract. |
-| `inputValue` | Editable query text used by a combobox or autocomplete. |
-| `multiple` | Allows more than one value to be selected or opened. |
-| `filterMode` | Core-owned contains, prefix, fuzzy, or disabled filtering. |
-| `onValueChange` | Reports the value accepted by the core. |
-
+| `Items` | Bounded declaration model used for options or keyboard navigation. |
+| `Value` | Controlled value. The precise value type follows this component’s contract. |
+| `InputValue` | Editable query text used by a combobox or autocomplete. |
+| `Multiple` | Allows more than one value to be selected or opened. |
+| `FilterMode` | Core-owned contains, prefix, fuzzy, or disabled filtering. |
+| `OnValueChange` | Reports the value accepted by the core. |

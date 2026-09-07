@@ -2,48 +2,55 @@
 
 ## 导入
 
-从 `@quickgui/ui/swift-ui` 导入 `Popover`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { Host, Popover } from "@quickgui/ui/swift-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<Popover.Root
-  isPresented={open()}
-  onIsPresentedChange={setOpen}
-  attachmentAnchor="bottom"
-  arrowEdge="top"
->
-  <Popover.Trigger><Button label="Open" /></Popover.Trigger>
-  <Popover.Content>
-    <QuickGUIHostView width={280} height={120}>
-      <SettingsPanel />
-    </QuickGUIHostView>
-  </Popover.Content>
-</Popover.Root>
+```go
+func SwiftUiPopoverExample() {
+	open, setOpen := ui.CreateSignal(false)
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.Popover.Root(
+				ui.SwiftUIPopoverProps{
+					IsPresented:         open,
+					OnIsPresentedChange: setOpen,
+				},
+				func() {
+					ui.SwiftUI.Popover.Trigger(ui.SwiftUIPopoverTriggerProps{Render: func() { ui.SwiftUI.Button(ui.SwiftUIButtonProps{Label: "Account"}) }})
+					ui.SwiftUI.Popover.Content(
+						ui.SwiftUIPopoverContentProps{},
+						func() {
+							ui.SwiftUI.QuickGUIHostView(
+								ui.SwiftUIQuickGUIHostViewProps{Width: 240, Height: 120},
+								"Account settings",
+							)
+						},
+					)
+				},
+			)
+		},
+	)
+}
 ```
 
 ## 结构
 
-- `Popover.Trigger`
-- `Popover.Content`
-
-```tsx
-<Popover.Root isPresented={open()} onIsPresentedChange={setOpen}>
-  <Popover.Trigger><Button label="Open" /></Popover.Trigger>
-  <Popover.Content>{/* SwiftUI-hosted content */}</Popover.Content>
-</Popover.Root>
-```
+- `ui.SwiftUI.Popover.Trigger`
+- `ui.SwiftUI.Popover.Content`
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `isPresented` | 受控的原生 SwiftUI Popover 显示状态。 |
-| `onIsPresentedChange` | 报告原生 SwiftUI Popover 的显示状态变化。 |
-| `attachmentAnchor` | 组合式 SwiftUI 触发器上的锚点。 |
-| `arrowEdge` | 原生 SwiftUI Popover 箭头的首选边缘。 |
-
+| `IsPresented` | 受控的原生 SwiftUI Popover 显示状态。 |
+| `OnIsPresentedChange` | 报告原生 SwiftUI Popover 的显示状态变化。 |
+| `AttachmentAnchor` | 组合式 SwiftUI 触发器上的锚点。 |
+| `ArrowEdge` | 原生 SwiftUI Popover 箭头的首选边缘。 |

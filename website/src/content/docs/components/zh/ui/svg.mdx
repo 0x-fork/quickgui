@@ -2,22 +2,30 @@
 
 ## 导入
 
-从 `@quickgui/ui` 导入 `Svg`。
+从 `github.com/egoist/quickgui/go/ui` 导入 `ui`。
 
-```tsx
-import { Svg } from "@quickgui/ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 用法
 
-```tsx
-<Svg source={iconSvg} style={{ width: 20, height: 20 }} />
+```go
+func SvgExample() {
+	ui.SVG(
+		ui.Width(20),
+		ui.Height(20),
+		ui.Color("#2563eb"),
+		ui.Value(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M11 4h2v7h7v2h-7v7h-2v-7H4v-2h7z"/></svg>`),
+	)
+}
 ```
 
 ## 主要属性
 
 | 属性 | 说明 |
 | --- | --- |
-| `source` | 组件所需的文件系统路径、数据 URL、SVG 文档或着色器源码。 |
-| `style` | QuickGUI 的布局、绘制、排版和交互状态样式。 |
-
+| `Value` | 组件所需的文件系统路径、数据 URL、SVG 文档或着色器源码。 |
+| `WithStyle` | QuickGUI 的布局、绘制、排版和交互状态样式。 |

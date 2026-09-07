@@ -2,44 +2,48 @@ Presents QuickGUI content in a separate native child window that can extend beyo
 
 ## Import
 
-Import `SystemPopover` from `@quickgui/ui`.
+Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
-```tsx
-import { SystemPopover } from "@quickgui/ui/popover";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## Usage
 
-```tsx
-<SystemPopover.Root open={open()} onOpenChange={setOpen}>
-  <SystemPopover.Trigger><Text>Open native popover</Text></SystemPopover.Trigger>
-  <SystemPopover.Content width={320} height={180} placement="bottom">
-    <SettingsPanel />
-  </SystemPopover.Content>
-</SystemPopover.Root>
+```go
+func SystemPopoverExample() {
+	ui.SystemPopover.Root(
+		ui.PopoverRootProps{},
+		func() {
+			ui.SystemPopover.Trigger(ui.PopoverTriggerProps{}, "Account")
+			ui.SystemPopover.Content(
+				ui.PopoverContentProps{
+					Width:     240,
+					Height:    120,
+					Placement: "bottom-start",
+				},
+				"Account settings",
+			)
+		},
+	)
+}
 ```
 
 ## Anatomy
 
-- `SystemPopover.Root`
-- `SystemPopover.Trigger`
-- `SystemPopover.Content`
-
-```tsx
-<SystemPopover.Root>
-  <SystemPopover.Trigger />
-  <SystemPopover.Content />
-</SystemPopover.Root>
-```
+- `ui.SystemPopover.Root`
+- `ui.SystemPopover.Trigger`
+- `ui.SystemPopover.Content`
 
 ## Key props
 
 | Prop | Purpose |
 | --- | --- |
-| `open` | Controlled open state. |
-| `defaultOpen` | Initial state when the component owns whether it is open. |
-| `onOpenChange` | Reports an open or close decision from the core. |
-| `width` | Declared logical width. |
-| `height` | Declared logical height. |
-| `placement` | Requested native child-window placement. |
-
+| `Open` | Controlled open state. |
+| `DefaultOpen` | Initial state when the component owns whether it is open. |
+| `OnOpenChange` | Reports an open or close decision from the core. |
+| `Width` | Declared logical width. |
+| `Height` | Declared logical height. |
+| `Placement` | Requested native child-window placement. |

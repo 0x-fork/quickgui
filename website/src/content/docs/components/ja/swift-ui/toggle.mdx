@@ -2,30 +2,38 @@
 
 ## インポート
 
-`@quickgui/ui/swift-ui` から `Toggle` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Host, Toggle } from "@quickgui/ui/swift-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<Host matchContents>
-  <Toggle
-    label="Notifications"
-    isOn={notifications()}
-    onIsOnChange={setNotifications}
-  />
-</Host>
+```go
+func SwiftUiToggleExample() {
+	on, setOn := ui.CreateSignal(true)
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.Toggle(ui.SwiftUIToggleProps{
+				IsOn:         on,
+				Label:        "Notifications",
+				OnIsOnChange: func(next bool, _ *native.Event) { setOn(next) },
+			})
+		},
+	)
+}
 ```
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `isOn` | 制御された SwiftUI Toggle の値です。 |
-| `label` | ネイティブ SwiftUI コントロールに表示するラベルです。 |
-| `onIsOnChange` | ネイティブ SwiftUI Toggle が受け入れた値を通知します。 |
-| `modifiers` | ホストしたコントロールへ順番に適用する SwiftUI View モディファイアです。 |
-
+| `IsOn` | 制御された SwiftUI Toggle の値です。 |
+| `Label` | ネイティブ SwiftUI コントロールに表示するラベルです。 |
+| `OnIsOnChange` | ネイティブ SwiftUI Toggle が受け入れた値を通知します。 |
+| `Modifiers` | ホストしたコントロールへ順番に適用する SwiftUI View モディファイアです。 |

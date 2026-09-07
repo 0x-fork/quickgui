@@ -2,62 +2,67 @@
 
 ## インポート
 
-`@quickgui/ui` から `Dialog` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Dialog } from "@quickgui/ui/dialog";
+```go
+import (
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<Dialog.Root open={open()} onOpenChange={setOpen}>
-  <Dialog.Trigger><Text>Edit profile</Text></Dialog.Trigger>
-  <Dialog.Portal>
-    <Dialog.Backdrop />
-    <Dialog.Viewport>
-      <Dialog.Popup>
-        <Dialog.Title><Text>Edit profile</Text></Dialog.Title>
-        <Dialog.Description><Text>Changes are saved immediately.</Text></Dialog.Description>
-        <Dialog.Close><Text>Done</Text></Dialog.Close>
-      </Dialog.Popup>
-    </Dialog.Viewport>
-  </Dialog.Portal>
-</Dialog.Root>
+```go
+func DialogExample() {
+	ui.Dialog.Root(
+		ui.DialogRootProps{},
+		func() {
+			ui.Dialog.Trigger(ui.PartProps{}, "Open dialog")
+			ui.Dialog.Portal(
+				ui.PartProps{},
+				func() {
+					ui.Dialog.Backdrop(ui.PartProps{})
+					ui.Dialog.Viewport(
+						ui.PartProps{},
+						func() {
+							ui.Dialog.Popup(
+								ui.DialogPopupProps{},
+								func() {
+									ui.Dialog.Title(ui.PartProps{}, "Confirm action")
+									ui.Dialog.Description(
+										ui.PartProps{},
+										"Review the details before continuing.",
+									)
+									ui.Dialog.Close(ui.PartProps{}, "Cancel")
+								},
+							)
+						},
+					)
+				},
+			)
+		},
+	)
+}
 ```
 
 ## 構成
 
-- `Dialog.Root`
-- `Dialog.Trigger`
-- `Dialog.Portal`
-- `Dialog.Backdrop`
-- `Dialog.Viewport`
-- `Dialog.Popup`
-- `Dialog.Title`
-- `Dialog.Description`
-- `Dialog.Close`
-
-```tsx
-<Dialog.Root>
-  <Dialog.Trigger />
-  <Dialog.Portal />
-  <Dialog.Backdrop />
-  <Dialog.Viewport />
-  <Dialog.Popup />
-  <Dialog.Title />
-  <Dialog.Description />
-  <Dialog.Close />
-</Dialog.Root>
-```
+- `ui.Dialog.Root`
+- `ui.Dialog.Trigger`
+- `ui.Dialog.Portal`
+- `ui.Dialog.Backdrop`
+- `ui.Dialog.Viewport`
+- `ui.Dialog.Popup`
+- `ui.Dialog.Title`
+- `ui.Dialog.Description`
+- `ui.Dialog.Close`
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `open` | 制御された開閉状態です。 |
-| `defaultOpen` | コンポーネント自身が開閉状態を管理するときの初期状態です。 |
-| `onOpenChange` | コアが決定した開閉を通知します。 |
-| `dismissOnEscape` | Escape キーでサーフェスを閉じられるようにします。 |
-| `exitDuration` | 閉じる内容を、正確な終了トランジション時間だけマウントしたままにします。 |
-
+| `Open` | 制御された開閉状態です。 |
+| `DefaultOpen` | コンポーネント自身が開閉状態を管理するときの初期状態です。 |
+| `OnOpenChange` | コアが決定した開閉を通知します。 |
+| `DismissOnEscape` | Escape キーでサーフェスを閉じられるようにします。 |
+| `ExitDuration` | 閉じる内容を、正確な終了トランジション時間だけマウントしたままにします。 |

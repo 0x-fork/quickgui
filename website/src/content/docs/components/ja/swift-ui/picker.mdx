@@ -2,37 +2,39 @@
 
 ## インポート
 
-`@quickgui/ui/swift-ui` から `Picker` をインポートします。
+`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
-```tsx
-import { Host, Picker } from "@quickgui/ui/swift-ui";
+```go
+import (
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/ui"
+)
 ```
 
 ## 使い方
 
-```tsx
-<Host matchContents>
-  <Picker
-    label="Theme"
-    selection={theme()}
-    options={[
-      { value: "system", label: "System" },
-      { value: "light", label: "Light" },
-      { value: "dark", label: "Dark" },
-    ]}
-    style="menu"
-    onSelectionChange={setTheme}
-  />
-</Host>
+```go
+func SwiftUiPickerExample() {
+	value, setValue := ui.CreateSignal("list")
+	ui.SwiftUI.Host(
+		ui.SwiftUIHostProps{MatchContents: true},
+		func() {
+			ui.SwiftUI.Picker(ui.SwiftUIPickerProps{
+				Selection:         value,
+				Options:           []ui.SwiftUIPickerOption{{Value: "list", Label: "List"}, {Value: "grid", Label: "Grid"}},
+				OnSelectionChange: func(next string, _ *native.Event) { setValue(next) },
+			})
+		},
+	)
+}
 ```
 
 ## 主なプロパティ
 
 | プロパティ | 説明 |
 | --- | --- |
-| `selection` | テーブル、ネイティブピッカー、カラーコントロールの制御選択値です。 |
-| `options` | 順序付きのネイティブピッカー選択肢です。 |
-| `label` | ネイティブ SwiftUI コントロールに表示するラベルです。 |
-| `style` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
-| `onSelectionChange` | 選択したネイティブピッカー項目または色を通知します。 |
-
+| `Selection` | テーブル、ネイティブピッカー、カラーコントロールの制御選択値です。 |
+| `Options` | 順序付きのネイティブピッカー選択肢です。 |
+| `Label` | ネイティブ SwiftUI コントロールに表示するラベルです。 |
+| `Style` | このコントロールのネイティブ SwiftUI 表示スタイルです。 |
+| `OnSelectionChange` | 選択したネイティブピッカー項目または色を通知します。 |

@@ -30,9 +30,9 @@ mkdir "$npm_consumer"
   bun init -y >/dev/null
   bun add \
     "@quickgui/native@$release_version" \
-    "@quickgui/ui@$release_version" \
     "@quickgui/cli@$release_version"
   ./node_modules/.bin/quickgui init compiled-consumer --no-install
+  (cd compiled-consumer && bun install && CGO_ENABLED=0 go mod tidy)
   ./node_modules/.bin/quickgui dev --project compiled-consumer --once --no-launch
   ./node_modules/.bin/quickgui --help | grep -F "QuickGUI CLI $release_version"
 )
