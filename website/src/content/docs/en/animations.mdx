@@ -92,8 +92,11 @@ A duration alone, such as `Transition: 180 * time.Millisecond`, transitions back
 | `color` | Inherited `Color` |
 | `opacity` | Subtree `Opacity` |
 | `box-shadow` | `BoxShadow` |
+| `transform` | Subtree `Transform`, including translation, scale, and rotation |
 
-`"all"` means these properties. Transforms, gradient stops, width, height, padding, and other layout values do not interpolate through `Transition`. Unsupported transition property names are rejected.
+`"all"` means these properties. Gradient stops, width, height, padding, and other layout values do not interpolate through `Transition`. Unsupported transition property names are rejected.
+
+For a sliding switch thumb, use `Transform: "translateX(20px)"` and `Transition: "transform 160ms ease-out"`, then change the target to `"translateX(0px)"` when unchecked. This moves the painted subtree and its hit area without moving neighboring layout. Transforms interpolate their affine translation, scale, shear, and shortest rotation; `TransformOrigin` itself changes immediately.
 
 The Go UI API exposes paint transitions and animated images. CSS keyframes, timeline callbacks, and spring declarations are not Go style props.
 

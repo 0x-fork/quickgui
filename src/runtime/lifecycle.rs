@@ -290,6 +290,8 @@ impl Runtime {
         event_loop: &ActiveEventLoop,
         closed: Vec<ClosedWindow>,
     ) {
+        #[cfg(target_os = "macos")]
+        let menus_changed = !closed.is_empty() && !self.exit_requested;
         for closed in closed {
             if let Some(parent) = closed.parent
                 && let Some(window_id) = self.window_handles.get(&parent).copied()
@@ -338,6 +340,10 @@ impl Runtime {
                     return;
                 }
             }
+        }
+        #[cfg(target_os = "macos")]
+        if menus_changed {
+            self.install_active_mac_menu(event_loop);
         }
     }
 

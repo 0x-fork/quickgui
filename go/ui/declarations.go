@@ -358,7 +358,7 @@ func setTransitionProperties(node *native.Node, value any) {
 		switch name {
 		case "background":
 			name = "background-color"
-		case "all", "background-color", "border-color", "border-width", "border-radius", "color", "box-shadow", "opacity":
+		case "all", "background-color", "border-color", "border-width", "border-radius", "color", "box-shadow", "opacity", "transform":
 		default:
 			panic("QuickGUI cannot transition " + name)
 		}

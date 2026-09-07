@@ -269,21 +269,6 @@ impl View for NativeView {
             }));
             root = root.children(std::mem::take(&mut states.portals));
         }
-        let events = Rc::clone(&self.events);
-        let menu_action = cx.action_listener(
-            ElementId::new(ROOT_ELEMENT_ID),
-            move |_view, action: &NativeMenuAction, _cx| {
-                enqueue_event(
-                    &events,
-                    QueuedEvent {
-                        kind: "menu-action",
-                        window,
-                        target: action.0,
-                        value: None,
-                    },
-                );
-            },
-        );
         let select_events = Rc::clone(&self.events);
         // A declared menu command keeps its concrete typed payload through the core's popover
         // chain and arrives here on the owner window's ordinary action path.
@@ -353,9 +338,7 @@ impl View for NativeView {
                 let _ = cx.open_url(Arc::clone(&action.url));
             },
         );
-        root.on_action(menu_action)
-            .on_action(menu_select)
-            .on_action(open_link)
+        root.on_action(menu_select).on_action(open_link)
     }
 }
 
@@ -2506,6 +2489,7 @@ fn native_transition_properties(list: &str) -> TransitionProperties {
             "color" => TransitionProperties::TEXT_COLOR,
             "box-shadow" => TransitionProperties::BOX_SHADOW,
             "opacity" => TransitionProperties::OPACITY,
+            "transform" => TransitionProperties::TRANSFORM,
             _ => TransitionProperties::empty(),
         };
     }

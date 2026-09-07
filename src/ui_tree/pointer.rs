@@ -216,6 +216,7 @@ impl UiTree {
                 root,
                 &self.taffy,
                 &self.natural_bounds,
+                &self.style_transitions,
                 &mut resolved_bounds,
                 &mut self.scroll_offsets,
                 &self.selectable_text_indices,

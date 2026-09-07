@@ -11,6 +11,70 @@ impl View for ChildView {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct ChildCommand(u32);
 
+#[test]
+fn application_actions_can_open_a_window_after_the_last_window_closes() {
+    let opened = Rc::new(Cell::new(None));
+    let calls = Rc::new(Cell::new(0));
+    let application = Application::new()
+        .quit_mode(QuitMode::Explicit)
+        .menu(Menu::new("File").item(crate::MenuItem::action("Open", ChildCommand(7))))
+        .on_action({
+            let opened = Rc::clone(&opened);
+            let calls = Rc::clone(&calls);
+            move |action: &ChildCommand, cx| {
+                assert!(cx.window_handle().is_none());
+                calls.set(calls.get() + 1);
+                opened.set(Some(cx.open_window(
+                    WindowOptions::new("Opened from menu"),
+                    ChildView(action.0),
+                )));
+            }
+        });
+    let (mut cx, original) = application
+        .into_test_context(WindowOptions::default(), ChildView(0))
+        .unwrap();
+    for window in [Some(original.window_handle()), None] {
+        let window = window.unwrap_or_else(|| opened.get().unwrap());
+        assert!(cx.simulate_close_requested(window).unwrap());
+        assert!(cx.windows().is_empty());
+        assert!(!cx.is_exited());
+        assert!(
+            cx.application_callbacks
+                .actions
+                .contains_key(&TypeId::of::<ChildCommand>())
+        );
+        let menu = collect_menu_actions(cx.menus());
+        assert!(
+            cx.invoke_application_action(None, menu[0].action.as_ref().unwrap())
+                .unwrap()
+        );
+        cx.run_until_idle().unwrap();
+        let replacement = opened.get().unwrap();
+        assert!(cx.is_window_open(replacement));
+        assert_eq!(cx.window(replacement).unwrap().parent, None);
+    }
+    assert_eq!(calls.get(), 2);
+}
+
+#[test]
+fn focused_action_handlers_take_precedence_over_application_handlers() {
+    let total = Rc::new(Cell::new(0));
+    let application = Application::new().quit_mode(QuitMode::Explicit).on_action({
+        let total = Rc::clone(&total);
+        move |action: &ChildCommand, _cx| total.set(total.get() + action.0)
+    });
+    let (mut cx, root) = application
+        .into_test_context(WindowOptions::default(), ActionParentView::default())
+        .unwrap();
+    assert!(cx.dispatch_application_action(ChildCommand(3)).unwrap());
+    assert_eq!(cx.read(root, |view| view.command_total).unwrap(), 3);
+    assert_eq!(total.get(), 0);
+    assert!(cx.simulate_close_requested(root.window_handle()).unwrap());
+    assert!(cx.dispatch_application_action(ChildCommand(5)).unwrap());
+    assert_eq!(total.get(), 5);
+    assert!(!cx.dispatch_application_action(123_u64).unwrap());
+}
+
 struct ActionChildView;
 
 impl View for ActionChildView {

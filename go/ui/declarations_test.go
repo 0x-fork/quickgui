@@ -13,7 +13,7 @@ import (
 func TestShadowsAndTransitionsUseTheHostWireFormat(t *testing.T) {
 	node := View(Style{
 		BoxShadow:  "0 2px 8px rgba(0, 0, 0, 0.2), inset 0 0 0 1px currentColor",
-		Transition: "background-color 120ms ease, opacity 0.2s ease-out",
+		Transition: "background-color 120ms ease, opacity 0.2s ease-out, transform 0.2s ease-out",
 	})
 	if bytes.Contains(node.Pending.Body(), []byte("rgba(")) {
 		t.Fatal("CSS shadow was sent as text even though the host requires JSON")
@@ -23,7 +23,7 @@ func TestShadowsAndTransitionsUseTheHostWireFormat(t *testing.T) {
 	}
 	expected := protocol.NewBatch()
 	expected.SetNumber(node.ID, protocol.TransitionDuration, 200)
-	expected.SetString(node.ID, protocol.TransitionProperties, "background-color,opacity")
+	expected.SetString(node.ID, protocol.TransitionProperties, "background-color,opacity,transform")
 	expected.SetString(node.ID, protocol.TransitionEasing, "ease-out")
 	if !bytes.Contains(node.Pending.Body(), expected.Body()) {
 		t.Fatal("transition was not translated into duration, property, and easing fields")

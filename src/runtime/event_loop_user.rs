@@ -14,6 +14,46 @@ impl Runtime {
             self.process_foreground_tasks(event_loop);
             return;
         }
+        // Application menus outlive their windows. Only activate a window when one exists;
+        // otherwise typed application handlers still receive Open, Help, and similar commands.
+        if matches!(
+            &event,
+            RuntimeEvent::MenuWillOpen | RuntimeEvent::MenuAction(_)
+        ) {
+            let target = self.active_window;
+            if let Some(target) = target
+                && !self.activate_window(target)
+            {
+                return;
+            }
+            self.pending_input = None;
+            if let RuntimeEvent::MenuAction(action_id) = event {
+                #[cfg(any(target_os = "macos", target_os = "windows"))]
+                {
+                    self.menu_actions = collect_menu_actions(self.active_menu_declaration());
+                }
+                let item = self
+                    .menu_actions
+                    .get(action_id)
+                    .filter(|item| !item.disabled && !item.hidden)
+                    .map(|item| (item.action.clone(), item.os_action));
+                if let Some((action, os_action)) = item {
+                    let handled = action.as_ref().is_some_and(|action| {
+                        self.invoke_action(event_loop, action).unwrap_or(true)
+                    });
+                    if !handled && let Some(os_action) = os_action {
+                        self.invoke_os_action(event_loop, os_action);
+                    }
+                }
+            }
+            #[cfg(target_os = "macos")]
+            self.sync_native_menu_state();
+            if target.is_some() {
+                self.deactivate_window();
+            }
+            self.process_window_commands(event_loop);
+            return;
+        }
         #[cfg(target_os = "macos")]
         if let RuntimeEvent::DockMenuAction(action_id) = &event {
             self.invoke_dock_menu_action(event_loop, *action_id);
@@ -259,7 +299,9 @@ impl Runtime {
             | RuntimeEvent::SystemNotificationAuthorization { .. } => {
                 unreachable!("handled before window routing")
             }
-            RuntimeEvent::MenuWillOpen | RuntimeEvent::MenuAction(_) => self.active_window,
+            RuntimeEvent::MenuWillOpen | RuntimeEvent::MenuAction(_) => {
+                unreachable!("handled before window routing")
+            }
             #[cfg(target_os = "macos")]
             RuntimeEvent::DockMenuAction(_) => unreachable!("handled before window routing"),
             #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -300,37 +342,8 @@ impl Runtime {
                 self.apply_event_context(event_loop, context, false, true);
             }
             RuntimeEvent::ForegroundTasksReady => unreachable!("handled before window routing"),
-            RuntimeEvent::MenuWillOpen => {
-                self.pending_input = None;
-                #[cfg(target_os = "macos")]
-                self.sync_native_menu_state();
-            }
-            RuntimeEvent::MenuAction(action_id) => {
-                #[cfg(any(target_os = "macos", target_os = "windows"))]
-                {
-                    let menus = self.active_menu_declaration().to_vec();
-                    self.menu_actions = collect_menu_actions(&menus);
-                }
-                let item = self
-                    .menu_actions
-                    .get(action_id)
-                    .filter(|item| !item.disabled)
-                    .map(|item| (item.action.clone(), item.os_action));
-                if let Some((action, os_action)) = item {
-                    let handled = if let Some(action) = action {
-                        let Some(handled) = self.invoke_action(event_loop, &action) else {
-                            return;
-                        };
-                        handled
-                    } else {
-                        false
-                    };
-                    if !handled && let Some(os_action) = os_action {
-                        self.invoke_os_action(event_loop, os_action);
-                    }
-                    #[cfg(target_os = "macos")]
-                    self.sync_native_menu_state();
-                }
+            RuntimeEvent::MenuWillOpen | RuntimeEvent::MenuAction(_) => {
+                unreachable!("handled before window routing")
             }
             #[cfg(target_os = "macos")]
             RuntimeEvent::DockMenuAction(_) => unreachable!("handled before window routing"),

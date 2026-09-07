@@ -41,7 +41,27 @@ impl TestAppContext {
         if let Ok(state) = self.window_mut(window) {
             state.action_dispatch_scratch = dispatch;
         }
-        Ok(false)
+        self.invoke_application_action(Some(window), action)
+    }
+
+    pub(super) fn invoke_application_action(
+        &mut self,
+        window: Option<WindowHandle>,
+        action: &AnyAction,
+    ) -> Result<bool, TestAppError> {
+        if !self
+            .application_callbacks
+            .actions
+            .contains_key(&action.type_id())
+        {
+            return Ok(false);
+        }
+        let mut cx = self.event_context(window);
+        let Some(consumed) = self.application_callbacks.dispatch_action(action, &mut cx) else {
+            return Ok(false);
+        };
+        self.apply_context(window, cx)?;
+        Ok(consumed)
     }
 
     pub(super) fn invoke_key_event(

@@ -41,22 +41,24 @@ func startApp(statePath string) {
 	runner := git.NewRunner(4)
 	appearance, setAppearance := gui.CreateSignal("light")
 	sessions := map[uint32]*session{}
-	var active *native.Window
+	active, setActive := gui.CreateSignal[*native.Window](nil)
 
 	activeStore := func() *model.Store {
-		if active == nil || active.Closed {
+		window := active()
+		if window == nil || window.Closed {
 			return nil
 		}
-		if session, ok := sessions[active.NativeID]; ok {
+		if session, ok := sessions[window.NativeID]; ok {
 			return session.store
 		}
 		return nil
 	}
 	openDialog := func(kind appui.DialogKind) {
-		if active == nil || active.Closed {
+		window := active()
+		if window == nil || window.Closed {
 			return
 		}
-		if session := sessions[active.NativeID]; session != nil && session.store.Repository() != nil {
+		if session := sessions[window.NativeID]; session != nil && session.store.Repository() != nil {
 			session.ui.OpenDialog(appui.DialogRequest{Kind: kind})
 		}
 	}
@@ -125,21 +127,21 @@ func startApp(statePath string) {
 			return
 		}
 		recent := persistence.Current().RecentRepositories
-		hasRepo := activeStore() != nil && activeStore().Repository() != nil
+		store := activeStore()
+		hasWindow := store != nil
+		hasRepo := hasWindow && store.Repository() != nil
 		recentItems := make([]native.MenuItem, 0, len(recent))
 		for _, path := range recent {
 			p := path
 			recentItems = append(recentItems, native.MenuItem{
 				Label: p,
-				Click: func() { openRepositoryPath(p, active) },
+				Click: func() { openRepositoryPath(p, active()) },
 			})
 		}
 		native.SetApplicationMenu([]native.MenuDefinition{
 			{Label: "File", Items: []native.MenuItem{
 				{Label: "Open Repository…", Accelerator: "CmdOrCtrl+O", Click: func() {
-					if w := active; w != nil {
-						openRepositoryDialog(w)
-					}
+					openRepositoryDialog(active())
 				}},
 				{Type: "submenu", Label: "Open Recent", Enabled: boolPtr(len(recent) > 0), Items: recentItems},
 				{Type: "separator"},
@@ -147,12 +149,12 @@ func startApp(statePath string) {
 				{Label: "New Worktree…", Accelerator: "CmdOrCtrl+Alt+N", Enabled: boolPtr(hasRepo), Click: func() { openDialog(appui.DialogNewWorktree) }},
 				{Label: "Stash Changes…", Accelerator: "CmdOrCtrl+Shift+T", Enabled: boolPtr(hasRepo), Click: func() { openDialog(appui.DialogStash) }},
 				{Type: "separator"},
-				{Label: "Close Repository", Accelerator: "CmdOrCtrl+Shift+W", Click: func() {
+				{Label: "Close Repository", Accelerator: "CmdOrCtrl+Shift+W", Enabled: boolPtr(hasRepo), Click: func() {
 					if store := activeStore(); store != nil {
 						store.CloseRepository()
 					}
 				}},
-				{Type: "role", Label: "Close Window", Role: "close-window", Accelerator: "CmdOrCtrl+W"},
+				{Type: "role", Label: "Close Window", Role: "close-window", Accelerator: "CmdOrCtrl+W", Enabled: boolPtr(hasWindow)},
 			}},
 			{Label: "Edit", Items: []native.MenuItem{
 				{Type: "role", Label: "Undo", Role: "undo", Accelerator: "CmdOrCtrl+Z"},
@@ -164,74 +166,74 @@ func startApp(statePath string) {
 				{Type: "role", Label: "Select All", Role: "select-all", Accelerator: "CmdOrCtrl+A"},
 			}},
 			{Label: "View", Items: []native.MenuItem{
-				{Label: "Changes", Accelerator: "CmdOrCtrl+1", Click: func() {
+				{Label: "Changes", Accelerator: "CmdOrCtrl+1", Enabled: boolPtr(hasRepo), Click: func() {
 					if s := activeStore(); s != nil {
 						s.SetView(model.ViewChanges)
 					}
 				}},
-				{Label: "History", Accelerator: "CmdOrCtrl+2", Click: func() {
+				{Label: "History", Accelerator: "CmdOrCtrl+2", Enabled: boolPtr(hasRepo), Click: func() {
 					if s := activeStore(); s != nil {
 						s.SetView(model.ViewHistory)
 					}
 				}},
-				{Label: "Branches", Accelerator: "CmdOrCtrl+3", Click: func() {
+				{Label: "Branches", Accelerator: "CmdOrCtrl+3", Enabled: boolPtr(hasRepo), Click: func() {
 					if s := activeStore(); s != nil {
 						s.SetView(model.ViewBranches)
 					}
 				}},
-				{Label: "Worktrees", Accelerator: "CmdOrCtrl+4", Click: func() {
+				{Label: "Worktrees", Accelerator: "CmdOrCtrl+4", Enabled: boolPtr(hasRepo), Click: func() {
 					if s := activeStore(); s != nil {
 						s.SetView(model.ViewWorktrees)
 					}
 				}},
-				{Label: "Stashes", Accelerator: "CmdOrCtrl+5", Click: func() {
+				{Label: "Stashes", Accelerator: "CmdOrCtrl+5", Enabled: boolPtr(hasRepo), Click: func() {
 					if s := activeStore(); s != nil {
 						s.SetView(model.ViewStashes)
 					}
 				}},
 				{Type: "separator"},
-				{Label: "Refresh", Accelerator: "CmdOrCtrl+R", Click: func() {
+				{Label: "Refresh", Accelerator: "CmdOrCtrl+R", Enabled: boolPtr(hasRepo), Click: func() {
 					if s := activeStore(); s != nil {
 						s.Refresh()
 					}
 				}},
 				{Type: "separator"},
-				{Type: "role", Label: "Toggle Full Screen", Role: "toggle-fullscreen", Accelerator: "Ctrl+Cmd+F"},
+				{Type: "role", Label: "Toggle Full Screen", Role: "toggle-fullscreen", Accelerator: "Ctrl+Cmd+F", Enabled: boolPtr(hasWindow)},
 			}},
 			{Label: "Repository", Items: []native.MenuItem{
-				{Label: "Commit", Accelerator: "CmdOrCtrl+Enter", Click: func() {
+				{Label: "Commit", Accelerator: "CmdOrCtrl+Enter", Enabled: boolPtr(hasRepo), Click: func() {
 					if s := activeStore(); s != nil {
 						s.Commit()
 					}
 				}},
-				{Label: "Generate Commit Message", Accelerator: "CmdOrCtrl+Shift+G", Click: func() {
+				{Label: "Generate Commit Message", Accelerator: "CmdOrCtrl+Shift+G", Enabled: boolPtr(hasRepo), Click: func() {
 					if s := activeStore(); s != nil {
 						s.GenerateMessage("")
 					}
 				}},
 				{Type: "separator"},
-				{Label: "Stage All", Accelerator: "CmdOrCtrl+Shift+A", Click: func() {
+				{Label: "Stage All", Accelerator: "CmdOrCtrl+Shift+A", Enabled: boolPtr(hasRepo), Click: func() {
 					if s := activeStore(); s != nil {
 						s.StageAll()
 					}
 				}},
-				{Label: "Unstage All", Accelerator: "CmdOrCtrl+Shift+U", Click: func() {
+				{Label: "Unstage All", Accelerator: "CmdOrCtrl+Shift+U", Enabled: boolPtr(hasRepo), Click: func() {
 					if s := activeStore(); s != nil {
 						s.UnstageAll()
 					}
 				}},
 				{Type: "separator"},
-				{Label: "Fetch", Accelerator: "CmdOrCtrl+Shift+F", Click: func() {
+				{Label: "Fetch", Accelerator: "CmdOrCtrl+Shift+F", Enabled: boolPtr(hasRepo), Click: func() {
 					if s := activeStore(); s != nil {
 						s.Fetch()
 					}
 				}},
-				{Label: "Pull", Accelerator: "CmdOrCtrl+Shift+L", Click: func() {
+				{Label: "Pull", Accelerator: "CmdOrCtrl+Shift+L", Enabled: boolPtr(hasRepo), Click: func() {
 					if s := activeStore(); s != nil {
 						s.Pull()
 					}
 				}},
-				{Label: "Push", Accelerator: "CmdOrCtrl+Shift+P", Click: func() {
+				{Label: "Push", Accelerator: "CmdOrCtrl+Shift+P", Enabled: boolPtr(hasRepo), Click: func() {
 					if s := activeStore(); s != nil {
 						s.Push()
 					}
@@ -247,10 +249,10 @@ func startApp(statePath string) {
 				}},
 			}},
 			{Label: "Window", Items: []native.MenuItem{
-				{Type: "role", Label: "Minimize", Role: "minimize-window", Accelerator: "CmdOrCtrl+M"},
-				{Type: "role", Label: "Zoom", Role: "zoom-window"},
+				{Type: "role", Label: "Minimize", Role: "minimize-window", Accelerator: "CmdOrCtrl+M", Enabled: boolPtr(hasWindow)},
+				{Type: "role", Label: "Zoom", Role: "zoom-window", Enabled: boolPtr(hasWindow)},
 				{Type: "separator"},
-				{Type: "role", Label: "Bring All to Front", Role: "bring-all-to-front"},
+				{Type: "role", Label: "Bring All to Front", Role: "bring-all-to-front", Enabled: boolPtr(hasWindow)},
 			}},
 			{Label: "Help", Items: []native.MenuItem{
 				{Label: "QuickGUI on GitHub", Click: func() {
@@ -298,7 +300,7 @@ func startApp(statePath string) {
 			}, func(mounted appui.AppContext) { context = mounted }),
 		})
 		sessions[window.NativeID] = &session{window: window, store: store, ui: context}
-		active = window
+		setActive(window)
 		window.On(native.WindowReadyToShow, func(native.WindowEvent) {
 			window.Focus()
 			window.GetState(func(state native.WindowState, err error) {
@@ -317,8 +319,7 @@ func startApp(statePath string) {
 			}
 		})
 		window.On(native.WindowFocus, func(native.WindowEvent) {
-			active = window
-			installMenu()
+			setActive(window)
 			if store.Repository() != nil {
 				store.Refresh()
 			}
@@ -355,18 +356,20 @@ func startApp(statePath string) {
 		window.On(native.WindowClosed, func(native.WindowEvent) {
 			delete(sessions, window.NativeID)
 			store.Dispose()
-			if active == window {
-				active = nil
+			if active() == window {
+				var next *native.Window
 				for _, session := range sessions {
-					active = session.window
+					if !session.window.Closed {
+						next = session.window
+						break
+					}
 				}
+				setActive(next)
 			}
-			installMenu()
 		})
 		if initial != "" {
 			store.OpenRepository(initial)
 		}
-		installMenu()
 		return window
 	}
 

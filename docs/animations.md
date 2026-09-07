@@ -10,8 +10,8 @@ inactive. A clean window still returns to `ControlFlow::Wait`.
 ## Style transitions
 
 Use `transition` to animate interaction-state or application-driven changes to background, border
-color and width, corner radius, inherited text color, subtree opacity, and bounded CSS-like shadow
-lists:
+color and width, corner radius, inherited text color, subtree opacity and transforms, and bounded
+CSS-like shadow lists:
 
 ```rust
 use std::time::Duration;
@@ -46,6 +46,12 @@ Opacity remains a scalar paint value throughout a transition. It multiplies with
 and reaches every specialized pipeline and embedded macOS child view, while Glyphon applies it
 after resolving rich-text run colors. An opacity-only frame therefore reuses text shaping, image
 textures, SVG masks, path tessellation, and custom-shader pipelines.
+
+Select `TransitionProperties::TRANSFORM` to animate subtree translation, rotation, scale, and
+shear. The painted content, clipping, and hit regions follow the same presentation transform;
+neighboring Taffy layout stays fixed. Translation uses the existing direct paint path without an
+extra group texture. Rotation takes the shortest path between the affine matrices; singular
+endpoints fall back to matrix interpolation. Transform origins change immediately.
 
 Transitions are keyed by the element's retained runtime identity. Hover, active, focus, invalid,
 drag-source, and drag-over changes reuse the existing element tree and Taffy layout. Interrupting

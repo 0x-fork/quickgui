@@ -870,6 +870,7 @@ struct TransitionPaintStyle {
     border_widths: Insets,
     radius: f32,
     opacity: f32,
+    transform: Transform2D,
     text_color: Option<Color>,
     text_fallback: Color,
     shadows: TransitionShadowList,
@@ -903,6 +904,11 @@ impl TransitionPaintStyle {
                 f32::interpolate(from.opacity, to.opacity, phase).clamp(0.0, 1.0)
             } else {
                 to.opacity
+            },
+            transform: if selected(TransitionProperties::TRANSFORM) {
+                interpolate_transition_transform(from.transform, to.transform, phase)
+            } else {
+                to.transform
             },
             text_color: if selected(TransitionProperties::TEXT_COLOR) {
                 if phase == 0.0 {
@@ -942,6 +948,8 @@ impl TransitionPaintStyle {
             || (properties.contains(TransitionProperties::BORDER_RADIUS)
                 && self.radius != other.radius)
             || (properties.contains(TransitionProperties::OPACITY) && self.opacity != other.opacity)
+            || (properties.contains(TransitionProperties::TRANSFORM)
+                && self.transform != other.transform)
             || (properties.contains(TransitionProperties::TEXT_COLOR)
                 && (self.text_color.unwrap_or(self.text_fallback)
                     != other.text_color.unwrap_or(other.text_fallback)))

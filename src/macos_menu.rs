@@ -294,8 +294,9 @@ impl MacMenuHost {
         }
         unsafe {
             self.fallback_close_item.setHidden(application_claims_close);
-            self.fallback_close_item
-                .setEnabled(!application_claims_close);
+            self.fallback_close_item.setEnabled(
+                !application_claims_close && app.targetForAction(sel!(performClose:)).is_some(),
+            );
             self.fallback_close_item
                 .setKeyEquivalent(&NSString::from_str(if application_claims_close {
                     ""
@@ -304,8 +305,10 @@ impl MacMenuHost {
                 }));
             self.fallback_minimize_item
                 .setHidden(application_claims_minimize);
-            self.fallback_minimize_item
-                .setEnabled(!application_claims_minimize);
+            self.fallback_minimize_item.setEnabled(
+                !application_claims_minimize
+                    && app.targetForAction(sel!(performMiniaturize:)).is_some(),
+            );
             self.fallback_minimize_item
                 .setKeyEquivalent(&NSString::from_str(if application_claims_minimize {
                     ""
@@ -362,6 +365,11 @@ fn menu_item_claims_window_action(
     native_available: bool,
     fallback_action: OsAction,
 ) -> bool {
+    // A declared role owns its slot even while disabled. Restoring an enabled fallback would
+    // duplicate the item and bypass the application's disabled state after its last window closes.
+    if os_action == Some(fallback_action) {
+        return !state.hidden;
+    }
     !state.hidden
         && !state.disabled
         && (state.action_available || native_available)
@@ -883,7 +891,7 @@ mod tests {
     }
 
     #[test]
-    fn window_fallbacks_yield_to_available_roles_and_exact_shortcuts() {
+    fn window_fallbacks_yield_to_declared_roles_and_available_exact_shortcuts() {
         for (role, key) in [
             (OsAction::CloseWindow, "w"),
             (OsAction::MinimizeWindow, "m"),
@@ -922,7 +930,7 @@ mod tests {
                 role
             ));
             state.disabled = true;
-            assert!(!menu_item_claims_window_action(
+            assert!(menu_item_claims_window_action(
                 &state,
                 Some(role),
                 true,
@@ -938,7 +946,7 @@ mod tests {
             ));
             state.hidden = false;
             state.action_available = false;
-            assert!(!menu_item_claims_window_action(
+            assert!(menu_item_claims_window_action(
                 &state,
                 Some(role),
                 false,

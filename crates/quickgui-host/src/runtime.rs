@@ -697,7 +697,19 @@ impl NativeRuntime {
         let before_quit_events = Rc::clone(&self.events);
         let will_quit_events = Rc::clone(&self.events);
         let closed_windows = Rc::clone(&self.closed_windows);
+        let menu_events = Rc::clone(&self.events);
         let mut application = QuickGuiApplication::new().quit_mode(self.quit_mode);
+        application = application.on_action(move |action: &NativeMenuAction, _cx| {
+            enqueue_event(
+                &menu_events,
+                QueuedEvent {
+                    kind: "menu-action",
+                    window: 0,
+                    target: action.0,
+                    value: None,
+                },
+            );
+        });
         if let Some(info) = self.app_info.clone() {
             application = application.app_info(info);
         }

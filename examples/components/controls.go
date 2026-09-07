@@ -406,6 +406,7 @@ func switchControl(checked func() bool, set func(bool), readOnly bool, caption s
 							Display:         "flex",
 							AlignItems:      "center",
 							BackgroundColor: choose(checked(), p().Accent, p().Track),
+							Transition:      "background-color 160ms ease-out",
 						}
 					},
 				},
@@ -417,7 +418,9 @@ func switchControl(checked func() bool, set func(bool), readOnly bool, caption s
 						Height:          20,
 						BorderRadius:    10,
 						BackgroundColor: "white",
-						MarginLeft:      choose(checked(), 20, 0),
+						FlexShrink:      0,
+						Transform:       choose(checked(), "translateX(20px)", "translateX(0px)"),
+						Transition:      "transform 160ms ease-out",
 					}
 				}})
 			},
@@ -429,7 +432,7 @@ func SwitchDemo() {
 	wifi, setWifi := ui.CreateSignal(true)
 	beta, setBeta := ui.CreateSignal(false)
 	managed, setManaged := ui.CreateSignal(true)
-	panel("Switch", "On/off state with a switch role, including a focusable read-only example.", func() {
+	panel("Switch", "Animated thumb and track color, including a focusable read-only example.", func() {
 		switchControl(wifi, setWifi, false, "Wi-Fi")
 		switchControl(beta, setBeta, false, "Beta updates")
 		switchControl(managed, setManaged, true, "Managed by policy · read-only")

@@ -846,6 +846,20 @@ impl TestAppContext {
         Ok(consumed)
     }
 
+    /// Dispatch through the active window and then application handlers, including without windows.
+    pub fn dispatch_application_action<A: Action>(
+        &mut self,
+        action: A,
+    ) -> Result<bool, TestAppError> {
+        let action = AnyAction::new(action);
+        let consumed = match self.active_window {
+            Some(window) => self.invoke_action(window, &action)?,
+            None => self.invoke_application_action(None, &action)?,
+        };
+        self.run_until_idle()?;
+        Ok(consumed)
+    }
+
     pub fn simulate_input(&mut self, window: WindowHandle, text: &str) -> Result<(), TestAppError> {
         if self.window(window)?.ui.focused_text_input().is_none() {
             return Err(TestAppError::NoFocusedTextInput(window));

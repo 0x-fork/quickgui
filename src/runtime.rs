@@ -359,9 +359,11 @@ type FontPanelChangeCallback = Box<dyn FnMut(Font, &mut EventContext)>;
 type WindowClosedCallback = Box<dyn FnMut(WindowHandle, &mut EventContext)>;
 type QuitCallback = Box<dyn FnMut(QuitRequest, &mut EventContext)>;
 type FinishLaunchingCallback = Box<dyn FnOnce(&mut EventContext)>;
+type ApplicationActionCallback = Box<dyn FnMut(&AnyAction, &mut EventContext)>;
 
 #[derive(Default)]
 struct ApplicationCallbacks {
+    actions: HashMap<TypeId, ApplicationActionCallback>,
     finish_launching: Option<FinishLaunchingCallback>,
     open_urls: Option<OpenUrlsCallback>,
     reopen: Option<ReopenCallback>,
@@ -380,6 +382,14 @@ struct ApplicationCallbacks {
     window_closed: Option<WindowClosedCallback>,
     before_quit: Option<QuitCallback>,
     will_quit: Option<QuitCallback>,
+}
+
+impl ApplicationCallbacks {
+    fn dispatch_action(&mut self, action: &AnyAction, cx: &mut EventContext) -> Option<bool> {
+        let callback = self.actions.get_mut(&action.type_id())?;
+        callback(action, cx);
+        Some(!cx.propagate_action)
+    }
 }
 
 mod application;

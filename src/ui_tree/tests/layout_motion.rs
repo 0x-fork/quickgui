@@ -400,6 +400,7 @@ fn transition_test_style(background: Color, radius: f32) -> TransitionPaintStyle
         border_widths: Insets::default(),
         radius,
         opacity: 1.0,
+        transform: Transform2D::IDENTITY,
         text_color: None,
         text_fallback: Color::WHITE,
         shadows: TransitionShadowList::empty(),
@@ -507,6 +508,145 @@ fn throttled_style_transitions_wake_at_completion_even_below_one_fps() {
     assert_eq!(final_style, to);
     assert!(!playback.active);
     assert_eq!(playback.deadline(), None);
+}
+
+#[test]
+fn transform_transitions_retarget_and_respect_reduced_motion() {
+    let now = Instant::now();
+    let from = transition_test_style(Color::WHITE, 10.0);
+    let mut to = from;
+    to.transform = Transform2D::translate(20.0, 0.0);
+    let config = Transition::new(Duration::from_millis(100))
+        .with_properties(TransitionProperties::TRANSFORM)
+        .with_easing(crate::linear);
+    let mut playback = StyleTransitionPlayback::new(from, &config, now);
+    assert_eq!(
+        playback.sample(to, &config, now, true, false).transform,
+        from.transform
+    );
+    let halfway = now + Duration::from_millis(50);
+    assert_eq!(
+        playback.sample(to, &config, halfway, true, false).transform,
+        Transform2D::translate(10.0, 0.0)
+    );
+    assert_eq!(
+        playback
+            .sample(from, &config, halfway, true, false)
+            .transform,
+        Transform2D::translate(10.0, 0.0)
+    );
+    assert_eq!(
+        playback
+            .sample(from, &config, now + Duration::from_millis(100), true, false)
+            .transform,
+        Transform2D::translate(5.0, 0.0)
+    );
+    assert_eq!(
+        playback.sample(to, &config, now + Duration::from_millis(110), true, true),
+        to
+    );
+    assert!(!playback.requests_frame());
+    assert_eq!(playback.deadline(), None);
+    let colors = Transition::colors(Duration::from_millis(100));
+    let mut playback = StyleTransitionPlayback::new(from, &colors, now);
+    assert_eq!(
+        playback.sample(to, &colors, now, true, false).transform,
+        to.transform
+    );
+    assert!(!playback.requests_frame());
+}
+
+#[test]
+fn transform_transitions_preserve_rotation_and_singular_endpoints() {
+    let from = Transform2D::IDENTITY;
+    let to = Transform2D::rotate_degrees(90.0);
+    let middle = interpolate_transition_transform(from, to, 0.5);
+    let expected = Transform2D::rotate_degrees(45.0);
+    assert!((middle.a - expected.a).abs() < 0.0001);
+    assert!((middle.b - expected.b).abs() < 0.0001);
+    assert!((middle.determinant() - 1.0).abs() < 0.0001);
+    let across_wrap = interpolate_transition_transform(
+        Transform2D::rotate_degrees(170.0),
+        Transform2D::rotate_degrees(-170.0),
+        0.5,
+    );
+    assert!((across_wrap.a + 1.0).abs() < 0.0001);
+    assert!(across_wrap.b.abs() < 0.0001);
+    let collapsed = Transform2D::scale(0.0, 1.0);
+    assert_eq!(
+        interpolate_transition_transform(from, collapsed, 0.5),
+        Transform2D::scale(0.5, 1.0)
+    );
+    assert_eq!(interpolate_transition_transform(from, to, 0.0), from);
+    assert_eq!(interpolate_transition_transform(from, to, 1.0), to);
+}
+
+#[test]
+fn transform_transitions_move_paint_and_hit_regions_without_moving_layout() {
+    for (from, to) in [(0.0, 20.0), (-40.0, 40.0)] {
+        let thumb: ElementId = "animated-thumb".into();
+        let sibling: ElementId = "static-sibling".into();
+        let declaration = |offset| {
+            div().size(100.0, 30.0).flex_row().children([
+                div()
+                    .id(thumb)
+                    .size(20.0, 20.0)
+                    .flex_none()
+                    .clickable()
+                    .bg(Color::WHITE)
+                    .translate(offset, 0.0)
+                    .transition(
+                        Transition::new(Duration::from_millis(100))
+                            .with_properties(TransitionProperties::TRANSFORM)
+                            .with_easing(crate::linear),
+                    ),
+                div().id(sibling).size(20.0, 20.0).flex_none(),
+            ])
+        };
+        let now = Instant::now();
+        let viewport = Size::new(100.0, 30.0);
+        let mut tree = UiTree::new();
+        let mut renderer = TestTextLayout;
+        let mut scene = Scene::new();
+        tree.set_root(declaration(from), viewport, 1.0, &mut renderer)
+            .unwrap();
+        tree.paint_at(&mut scene, &mut renderer, now).unwrap();
+        assert_eq!(tree.element_bounds(thumb).unwrap().x, from);
+        tree.set_root(declaration(to), viewport, 1.0, &mut renderer)
+            .unwrap();
+        scene.clear(Color::TRANSPARENT);
+        tree.paint_at(&mut scene, &mut renderer, now).unwrap();
+        assert_eq!(tree.element_bounds(thumb).unwrap().x, from);
+        scene.clear(Color::TRANSPARENT);
+        tree.paint_at(&mut scene, &mut renderer, now + Duration::from_millis(50))
+            .unwrap();
+        let middle = Rect::new((from + to) / 2.0, 0.0, 20.0, 20.0);
+        assert_eq!(tree.element_bounds(thumb), Some(middle));
+        assert_eq!(tree.element_bounds(sibling).unwrap().x, 20.0);
+        assert!(
+            scene
+                .edge_quads()
+                .iter()
+                .any(|quad| quad.rect == middle && quad.fill == Color::WHITE)
+        );
+        // A pre-paint hover refresh must use the visible position, not jump ahead to the target.
+        tree.refresh_hover_after_layout(Some(Point::new(middle.x + 5.0, 5.0)))
+            .unwrap();
+        assert_eq!(
+            tree.hit_regions
+                .iter()
+                .find(|region| region.id == thumb)
+                .unwrap()
+                .bounds,
+            middle
+        );
+        assert!(tree.style_transition_frame_requested());
+        scene.clear(Color::TRANSPARENT);
+        tree.paint_at(&mut scene, &mut renderer, now + Duration::from_millis(100))
+            .unwrap();
+        assert_eq!(tree.element_bounds(thumb).unwrap().x, to);
+        assert!(!tree.style_transition_frame_requested());
+    }
 }
 
 #[test]

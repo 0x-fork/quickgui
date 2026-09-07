@@ -92,8 +92,11 @@ func CappedTransition() {
 | `color` | 继承的 `Color` |
 | `opacity` | 子树的 `Opacity` |
 | `box-shadow` | `BoxShadow` |
+| `transform` | 子树的 `Transform`，包括平移、缩放和旋转 |
 
-`"all"` 指的是上表中的属性。`Transition` 不会插值变换、渐变色标、宽高、内边距或其他布局值。不支持的过渡属性名会被拒绝。
+`"all"` 指的是上表中的属性。`Transition` 不会插值渐变色标、宽高、内边距或其他布局值。不支持的过渡属性名会被拒绝。
+
+要让开关滑块平滑移动，可设置 `Transform: "translateX(20px)"` 和 `Transition: "transform 160ms ease-out"`，取消选中时将目标改为 `"translateX(0px)"`。绘制子树及其命中区域会一起移动，不影响相邻元素的布局。变换会插值仿射矩阵的平移、缩放、斜切和最短路径旋转；`TransformOrigin` 本身会立即改变。
 
 Go UI API 提供绘制属性过渡和动态图像。CSS 关键帧、时间线回调和弹簧声明不是 Go 样式属性。
 

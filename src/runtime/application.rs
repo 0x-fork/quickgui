@@ -650,6 +650,26 @@ impl Application {
         self
     }
 
+    /// Handle a typed action after the focused window's listeners, or without a window.
+    ///
+    /// Application handlers keep commands such as Open available after the last window closes.
+    /// Registering another handler for the same action type replaces the previous one.
+    pub fn on_action<A: Action>(
+        mut self,
+        mut callback: impl FnMut(&A, &mut EventContext) + 'static,
+    ) -> Self {
+        self.application_callbacks.actions.insert(
+            TypeId::of::<A>(),
+            Box::new(move |action, cx| {
+                callback(
+                    action.downcast_ref::<A>().expect("registered action type"),
+                    cx,
+                );
+            }),
+        );
+        self
+    }
+
     /// Install or replace one main-thread application-global value before launch.
     pub fn global<G: Global>(self, global: G) -> Self {
         self.globals.set(global);

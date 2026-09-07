@@ -514,6 +514,67 @@ impl StyleTransitionPaintContext<'_> {
     }
 }
 
+pub(super) fn interpolate_transition_transform(
+    from: Transform2D,
+    to: Transform2D,
+    phase: f32,
+) -> Transform2D {
+    if phase == 0.0 {
+        return from;
+    }
+    if phase == 1.0 {
+        return to;
+    }
+    let lerp = |from, to| f32::interpolate(from, to, phase);
+    // Translation needs no decomposition and stays on the paint path without a group texture.
+    let matrix_lerp = || {
+        Transform2D::new(
+            lerp(from.a, to.a),
+            lerp(from.b, to.b),
+            lerp(from.c, to.c),
+            lerp(from.d, to.d),
+            lerp(from.tx, to.tx),
+            lerp(from.ty, to.ty),
+        )
+    };
+    if (from.a, from.b, from.c, from.d) == (to.a, to.b, to.c, to.d) {
+        return matrix_lerp();
+    }
+    // Separate rotation from scale/shear so a turning element does not shrink at the midpoint.
+    // Singular endpoints have no unique rotation, so interpolate their matrix components.
+    let decompose = |matrix: Transform2D| {
+        let scale_x = matrix.a.hypot(matrix.b);
+        (scale_x > f32::EPSILON).then(|| {
+            (
+                scale_x,
+                matrix.determinant() / scale_x,
+                (matrix.a * matrix.c + matrix.b * matrix.d) / scale_x,
+                matrix.b.atan2(matrix.a),
+            )
+        })
+    };
+    let (Some((from_x, from_y, from_shear, from_angle)), Some((to_x, to_y, to_shear, to_angle))) =
+        (decompose(from), decompose(to))
+    else {
+        return matrix_lerp();
+    };
+    let angle_delta = (to_angle - from_angle + std::f32::consts::PI)
+        .rem_euclid(std::f32::consts::TAU)
+        - std::f32::consts::PI;
+    let (sin, cos) = (from_angle + phase * angle_delta).sin_cos();
+    let scale_x = lerp(from_x, to_x);
+    let scale_y = lerp(from_y, to_y);
+    let shear = lerp(from_shear, to_shear);
+    Transform2D::new(
+        cos * scale_x,
+        sin * scale_x,
+        cos * shear - sin * scale_y,
+        sin * shear + cos * scale_y,
+        lerp(from.tx, to.tx),
+        lerp(from.ty, to.ty),
+    )
+}
+
 pub(super) fn sane_transition_color(color: Color, fallback: Color) -> Color {
     if [color.r, color.g, color.b, color.a]
         .into_iter()

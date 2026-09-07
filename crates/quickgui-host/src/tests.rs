@@ -2437,7 +2437,7 @@ fn declared_transitions_map_css_names_onto_core_paint_flags_and_easing() {
     node.set_property(
         property::TRANSITION_PROPERTIES,
         Some(PropertyValue::String(Arc::from(
-            "opacity,box-shadow,border-radius",
+            "opacity,box-shadow,border-radius,transform",
         ))),
     );
     node.set_property(
@@ -2459,6 +2459,7 @@ fn declared_transitions_map_css_names_onto_core_paint_flags_and_easing() {
         quickgui::TransitionProperties::OPACITY
             | quickgui::TransitionProperties::BOX_SHADOW
             | quickgui::TransitionProperties::BORDER_RADIUS
+            | quickgui::TransitionProperties::TRANSFORM
     );
     assert_eq!(transition.max_fps, Some(30.0));
     // Easing comes from the core's own curves, so linear is the identity.

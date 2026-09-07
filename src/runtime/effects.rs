@@ -468,7 +468,7 @@ impl Runtime {
         action: &AnyAction,
     ) -> Option<bool> {
         let Some(window) = &mut self.window else {
-            return Some(false);
+            return self.invoke_application_action(event_loop, action);
         };
         let path = window.ui.focus_path();
         let mut dispatch = std::mem::take(&mut window.action_dispatch_scratch);
@@ -510,16 +510,38 @@ impl Runtime {
         if let Some(window) = &mut self.window {
             window.action_dispatch_scratch = dispatch;
         }
-        Some(false)
+        self.invoke_application_action(event_loop, action)
+    }
+
+    fn invoke_application_action(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        action: &AnyAction,
+    ) -> Option<bool> {
+        if !self
+            .application_callbacks
+            .actions
+            .contains_key(&action.type_id())
+        {
+            return Some(false);
+        }
+        let mut cx = self.event_context();
+        let Some(consumed) = self.application_callbacks.dispatch_action(action, &mut cx) else {
+            return Some(false);
+        };
+        self.apply_event_context(event_loop, cx, false, true)
+            .then_some(consumed)
     }
 
     #[cfg_attr(not(any(target_os = "macos", target_os = "windows")), allow(dead_code))]
     pub(super) fn action_available(&self, action: &AnyAction) -> bool {
-        let Some(window) = &self.window else {
-            return false;
-        };
-        let path = window.ui.focus_path();
-        window.ui.action_available(&path, action.type_id())
+        self.application_callbacks
+            .actions
+            .contains_key(&action.type_id())
+            || self.window.as_ref().is_some_and(|window| {
+                let path = window.ui.focus_path();
+                window.ui.action_available(&path, action.type_id())
+            })
     }
 
     #[cfg(target_os = "macos")]
@@ -1242,6 +1264,7 @@ impl Runtime {
             return;
         }
         let Some(window_id) = self.active_window else {
+            self.sync_native_menu_state();
             return;
         };
         if self.activate_window(window_id) {

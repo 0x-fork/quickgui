@@ -204,6 +204,14 @@ scoped to one window. `show_native_popup_menu` projects the same model at a scre
 menus reuse the same typed action registry, while Windows application and popup menus use the native
 menu host. No clean menu installs a polling source or animation frame.
 
+Register commands that outlive windows with `Application::on_action`, for example an Open command
+that calls `EventContext::open_window`. Focused window listeners get the first chance to consume
+the action; the application handler runs afterward, including when no window is open. On macOS,
+closing the last window restores the application menu and disables window-only roles. Go's
+`native.SetApplicationMenu` callbacks use this application scope automatically. Declare `Enabled`
+for commands that depend on an open document or repository, and omit the dialog's `Window` when
+opening one from a windowless application.
+
 ### Accelerators
 
 A menu item's key equivalent normally comes from the keymap binding that dispatches its action.

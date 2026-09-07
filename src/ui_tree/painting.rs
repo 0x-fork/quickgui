@@ -508,6 +508,7 @@ pub(super) fn collect_layout_hit_regions(
     element: &Element,
     taffy: &TaffyTree<MeasureContext>,
     natural_bounds: &HashMap<ElementId, Rect>,
+    style_transitions: &HashMap<ElementId, StyleTransitionPlayback>,
     resolved_bounds: &mut HashMap<ElementId, Rect>,
     scroll_offsets: &mut HashMap<ElementId, Vector>,
     selectable_text_indices: &HashMap<ElementId, usize>,
@@ -570,6 +571,17 @@ pub(super) fn collect_layout_hit_regions(
         focus_within,
         group_style.as_ref(),
     );
+    let declared_transform = if element.transition.as_ref().is_some_and(|transition| {
+        transition
+            .properties
+            .contains(TransitionProperties::TRANSFORM)
+    }) {
+        style_transitions
+            .get(&element.runtime_id)
+            .map_or(declared_transform, |playback| playback.current.transform)
+    } else {
+        declared_transform
+    };
     let window_transform =
         declared_transform.around(transform_origin_point(bounds, transform_origin));
     let translated = window_transform.is_translation();
@@ -681,6 +693,7 @@ pub(super) fn collect_layout_hit_regions(
             child,
             taffy,
             natural_bounds,
+            style_transitions,
             resolved_bounds,
             scroll_offsets,
             selectable_text_indices,
@@ -788,7 +801,7 @@ pub(super) fn paint_element(
     // A subtree transform never moves layout. A pure translation is folded into the painted box
     // here — children, clips, and hit bounds follow it for free — while anything else opens a
     // compositing group below.
-    let (declared_transform, transform_origin) = resolved_transform(
+    let (target_transform, transform_origin) = resolved_transform(
         element,
         hovered,
         pressed,
@@ -798,48 +811,38 @@ pub(super) fn paint_element(
         focus_within,
         group_style.as_ref(),
     );
-    let window_transform =
-        declared_transform.around(transform_origin_point(bounds, transform_origin));
-    let translated = window_transform.is_translation();
-    let bounds = if translated {
-        bounds.translate(Vector::new(window_transform.tx, window_transform.ty))
-    } else {
-        bounds
-    };
-    element_bounds.insert(element.runtime_id, bounds);
-    if let Some(handle) = &element.layout_bounds {
-        handle.report(bounds);
+    // Keep the cheap offscreen path for static geometry. A transform transition must be sampled
+    // first because its current position may still be visible, or move into view on a later frame.
+    if !element.transition.as_ref().is_some_and(|transition| {
+        transition
+            .properties
+            .contains(TransitionProperties::TRANSFORM)
+    }) {
+        let transform = target_transform.around(transform_origin_point(bounds, transform_origin));
+        let bounds = if transform.is_translation() {
+            bounds.translate(Vector::new(transform.tx, transform.ty))
+        } else {
+            bounds
+        };
+        let clip = if element.portal {
+            viewport
+        } else {
+            parent_clip
+        };
+        if element.children.is_empty()
+            && clip.intersection(bounds).is_none()
+            && clip
+                .intersection(expand_hit_bounds(bounds, element.hit_slop))
+                .is_none()
+            && !element_has_outset_shadow(element)
+        {
+            element_bounds.insert(element.runtime_id, bounds);
+            if let Some(handle) = &element.layout_bounds {
+                handle.report(bounds);
+            }
+            return Ok(());
+        }
     }
-    let hit_bounds = expand_hit_bounds(bounds, element.hit_slop);
-
-    // A clipped leaf cannot contribute pixels or interaction regions. Avoid emitting offscreen
-    // text/image primitives for long documents while retaining its measured and accessibility
-    // bounds above. Outset shadows are the one leaf effect allowed to cross its own bounds.
-    let effective_parent_clip = if element.portal {
-        viewport
-    } else {
-        parent_clip
-    };
-    if element.children.is_empty()
-        && effective_parent_clip.intersection(bounds).is_none()
-        && effective_parent_clip.intersection(hit_bounds).is_none()
-        && !element_has_outset_shadow(element)
-    {
-        return Ok(());
-    }
-
-    let layer = element_paint_layer(element, parent_layer);
-    let order = PaintOrder {
-        layer,
-        source: *source_order,
-    };
-    *source_order = (*source_order).saturating_add(1);
-    let parent_clip = if element.portal {
-        viewport
-    } else {
-        parent_clip
-    };
-
     let empty_state = ElementStateStyle::default();
     let interaction_state = if drag_over == Some(element.runtime_id) {
         &element.drag_over
@@ -977,6 +980,7 @@ pub(super) fn paint_element(
                 border_widths: target_border_widths,
                 radius: target_radius.max(0.0),
                 opacity: target_opacity,
+                transform: target_transform,
                 text_color: target_state_text_color
                     .map(|color| sane_transition_color(color, text_fallback)),
                 text_fallback,
@@ -1006,6 +1010,51 @@ pub(super) fn paint_element(
     let state_text_color = sampled_transition
         .as_ref()
         .map_or(target_state_text_color, |style| style.text_color);
+    let declared_transform = sampled_transition
+        .as_ref()
+        .map_or(target_transform, |style| style.transform);
+    let window_transform =
+        declared_transform.around(transform_origin_point(bounds, transform_origin));
+    let translated = window_transform.is_translation();
+    let bounds = if translated {
+        bounds.translate(Vector::new(window_transform.tx, window_transform.ty))
+    } else {
+        bounds
+    };
+    element_bounds.insert(element.runtime_id, bounds);
+    if let Some(handle) = &element.layout_bounds {
+        handle.report(bounds);
+    }
+    let hit_bounds = expand_hit_bounds(bounds, element.hit_slop);
+
+    // A clipped leaf cannot contribute pixels or interaction regions. Avoid emitting offscreen
+    // text/image primitives for long documents while retaining its measured and accessibility
+    // bounds above. Outset shadows are the one leaf effect allowed to cross its own bounds.
+    let effective_parent_clip = if element.portal {
+        viewport
+    } else {
+        parent_clip
+    };
+    if element.children.is_empty()
+        && effective_parent_clip.intersection(bounds).is_none()
+        && effective_parent_clip.intersection(hit_bounds).is_none()
+        && !element_has_outset_shadow(element)
+    {
+        return Ok(());
+    }
+
+    let layer = element_paint_layer(element, parent_layer);
+    let order = PaintOrder {
+        layer,
+        source: *source_order,
+    };
+    *source_order = (*source_order).saturating_add(1);
+    let parent_clip = if element.portal {
+        viewport
+    } else {
+        parent_clip
+    };
+
     let previous_opacity = scene.multiply_opacity(opacity);
     // Explicit per-corner radii replace the single transitionable radius.
     let corners = element

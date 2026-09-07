@@ -18,6 +18,7 @@ bitflags! {
         const TEXT_COLOR = 1 << 4;
         const BOX_SHADOW = 1 << 5;
         const OPACITY = 1 << 6;
+        const TRANSFORM = 1 << 7;
 
         const COLORS = Self::BACKGROUND.bits()
             | Self::BORDER_COLOR.bits()
@@ -26,7 +27,8 @@ bitflags! {
             | Self::BORDER_WIDTH.bits()
             | Self::BORDER_RADIUS.bits()
             | Self::BOX_SHADOW.bits()
-            | Self::OPACITY.bits();
+            | Self::OPACITY.bits()
+            | Self::TRANSFORM.bits();
     }
 }
 
