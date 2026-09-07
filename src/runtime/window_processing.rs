@@ -53,6 +53,15 @@ impl Runtime {
                     if entry.config.title != title {
                         entry.config.title = title;
                         state.window.set_title(&entry.config.title);
+                        // AppKit relays out even a hidden titlebar when its title changes. Restore
+                        // the inset in this same native turn, before a frame can show the default
+                        // controls while waiting for NSWindowDidUpdateNotification.
+                        #[cfg(target_os = "macos")]
+                        if let Some(position) = entry.config.traffic_light_position
+                            && let Err(error) = position_traffic_lights(&state.window, position)
+                        {
+                            tracing::warn!(%error, "could not restore traffic lights after changing the window title");
+                        }
                         force_redraw = true;
                     }
                 }

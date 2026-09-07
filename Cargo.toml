@@ -14,6 +14,7 @@ include = [
   "/build.rs",
   "/src/**",
   "/tests/macos_native_images.rs",
+  "/tests/macos_traffic_lights.rs",
   "/Cargo.lock",
   "/CHANGELOG.md",
   "/LICENSE-APACHE",
@@ -138,6 +139,11 @@ harness = false
 [[test]]
 name = "macos_native_images"
 # AppKit image rasterization must run on the process main thread.
+harness = false
+
+[[test]]
+name = "macos_traffic_lights"
+# Native window layout must run on the process main thread.
 harness = false
 
 [profile.dev]
