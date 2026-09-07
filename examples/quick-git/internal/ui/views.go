@@ -569,7 +569,9 @@ func DiffPane() {
 								},
 							)
 							gui.Show(
-								func() bool { return store.Diff().Loading },
+								func() bool {
+									return store.Diff().Loading && store.Diff().Diff == nil
+								},
 								func() {
 									gui.Text(
 										"Loading…",
@@ -1220,7 +1222,7 @@ func commitFileTable() {
 			},
 			Columns: func() []gui.TableColumnDeclaration {
 				return []gui.TableColumnDeclaration{
-					{ID: "status", Track: "24px", Align: "center"},
+					{ID: "status", Track: "36px", Align: "start"},
 					{ID: "name", Track: "1fr", RowHeader: true},
 				}
 			},
@@ -1262,7 +1264,7 @@ func commitFileTable() {
 							gui.Table.Cell(
 								gui.TableCellProps{
 									Column:    "status",
-									PartProps: gui.PartProps{},
+									PartProps: gui.PartProps{Style: gui.Style{PaddingLeft: 12}},
 								},
 								func() {
 									gui.Text(

@@ -108,12 +108,14 @@ type StoreOptions struct {
 	Runner      *git.Runner
 	Persistence *Persistence
 	Trash       func(absolutePath string) error
+	enqueue     func(func())
 }
 
 type Store struct {
 	runner      *git.Runner
 	persistence *Persistence
 	trash       func(string) error
+	enqueue     func(func())
 	notifier    func(Notice)
 	repo        *git.Repository
 	main        *git.Repository
@@ -218,10 +220,15 @@ func CreateStore(options StoreOptions) *Store {
 
 func buildStore(options StoreOptions) *Store {
 	persisted := options.Persistence.Current()
+	enqueue := options.enqueue
+	if enqueue == nil {
+		enqueue = native.Dispatch
+	}
 	s := &Store{
 		runner:         options.Runner,
 		persistence:    options.Persistence,
 		trash:          options.Trash,
+		enqueue:        enqueue,
 		notifier:       func(notice Notice) { fmt.Printf("[%s] %s\n", notice.Type, notice.Title) },
 		diffCache:      map[string]*git.Diff{},
 		refreshPending: map[ChangeKind]struct{}{},
@@ -361,16 +368,29 @@ func buildStore(options StoreOptions) *Store {
 		return &copy
 	})
 
-	reactive.CreateEffect(func() {
-		sha := ""
+	// History refreshes replace commit records, but a commit's contents are immutable.
+	selectedCommitSHA := reactive.CreateMemo(func() string {
 		if commit := s.SelectedCommit(); commit != nil {
-			sha = commit.Sha
+			return commit.Sha
 		}
-		s.loadCommitDetail(sha)
+		return ""
 	})
 	reactive.CreateEffect(func() {
-		target := s.diffTarget()
-		s.loadDiff(target)
+		s.loadCommitDetail(selectedCommitSHA())
+	})
+	selectedDiffTarget := reactive.CreateMemo(func() DiffTarget {
+		if target := s.diffTarget(); target != nil {
+			return *target
+		}
+		return DiffTarget{}
+	})
+	reactive.CreateEffect(func() {
+		target := selectedDiffTarget()
+		if target.Key == "" {
+			s.loadDiff(nil)
+		} else {
+			s.loadDiff(&target)
+		}
 	})
 
 	go func() {
@@ -676,16 +696,16 @@ func (s *Store) LoadHistory(reset bool) {
 			if !reset {
 				commits = append(append([]git.Commit{}, current.Commits...), page...)
 			}
+			previous := ""
+			if commit := s.SelectedCommit(); commit != nil {
+				previous = commit.Sha
+			}
 			state.Commits = commits
 			state.Graph = git.LayoutGraph(commits)
 			state.Loading = false
 			state.Exhausted = len(page) < HistoryPage
 			s.setHistory(state)
 			if reset {
-				previous := ""
-				if commit := s.SelectedCommit(); commit != nil {
-					previous = commit.Sha
-				}
 				index := -1
 				if previous != "" {
 					for i, commit := range commits {
@@ -1547,7 +1567,7 @@ func truncate(text string, length int) string {
 
 // Dispatch results only while the store still owns a mounted application session.
 func (s *Store) dispatch(fn func()) {
-	native.Dispatch(func() {
+	s.enqueue(func() {
 		if !s.disposed {
 			fn()
 		}
