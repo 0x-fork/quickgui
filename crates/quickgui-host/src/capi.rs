@@ -751,7 +751,6 @@ pub(super) fn run_app_host_loop(
                     }
                     return Ok(0);
                 }
-
             }
         }
 

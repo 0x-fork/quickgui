@@ -1013,6 +1013,10 @@ impl DetachedTree {
             layer,
             source_order,
             None,
+            &mut crate::PipelineMetrics::default(),
+            true,
+            &mut paint_cache::PaintCache::default(),
+            true,
         );
         for playback in self.animations.values_mut() {
             playback.finish_visibility();

@@ -324,6 +324,8 @@ impl AppRunner {
     /// not mounted or are owned by a container-query/animation callback; call
     /// [`Self::invalidate_window`] in that case. A pending view rebuild already reads the latest
     /// source state and accepts the batch without redundant work.
+    /// Structural replacements in a scoped renderer return `false`; use
+    /// [`Self::invalidate_elements`] so its declarations can update callback ownership too.
     pub fn update_elements(
         &mut self,
         handle: WindowHandle,
@@ -335,6 +337,16 @@ impl AppRunner {
         self.runtime
             .update_external_elements(handle, updates)
             .map_err(|error| AppError::View(error.to_string()))
+    }
+
+    /// Re-declare identified component scopes after changing an embedding renderer's source.
+    /// Coalesces sibling mutations into one frame and falls back to the root when any requested
+    /// scope is absent. Scope callbacks run during redraw, never synchronously in this call.
+    pub fn invalidate_elements(&mut self, handle: WindowHandle, ids: &[ElementId]) -> bool {
+        if !matches!(self.status, AppRunStatus::Continue) {
+            return false;
+        }
+        self.runtime.invalidate_external_scopes(handle, ids)
     }
 
     /// Focus one mounted element from an embedding runtime.

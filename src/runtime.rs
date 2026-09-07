@@ -243,6 +243,7 @@ impl From<AccessibilityEvent> for RuntimeEvent {
     }
 }
 
+mod component_scope;
 mod effects;
 mod event_loop_lifecycle;
 mod event_loop_user;
@@ -250,6 +251,7 @@ mod event_loop_wait;
 mod event_loop_window;
 mod keyboard_input;
 mod lifecycle;
+mod listener_scope;
 mod pointer_input;
 mod rendering;
 mod runtime_state;

@@ -61,7 +61,7 @@ impl SubscriptionState {
         self.active.get()
     }
 
-    fn cancel(&self) {
+    pub(crate) fn cancel(&self) {
         self.active.set(false);
     }
 }
@@ -69,7 +69,8 @@ impl SubscriptionState {
 /// An RAII view subscription that cancels entity-event or global-change delivery when dropped.
 ///
 /// Store this handle on the subscribing view for an explicit lifetime, or call [`Self::detach`] to
-/// retain the callback until that view's window is destroyed. The handle is deliberately
+/// retain the callback until its component scope is removed (or the window closes for a root
+/// subscription). The handle is deliberately
 /// main-thread-only, matching [`Entity`].
 #[must_use = "dropping a Subscription immediately cancels it; store it or call detach()"]
 pub struct Subscription {
@@ -89,7 +90,7 @@ impl Subscription {
         )
     }
 
-    /// Keep the subscription active until its owning window is destroyed.
+    /// Keep the subscription active until its owning component scope or window is destroyed.
     pub fn detach(mut self) {
         self.cancel_on_drop = false;
     }

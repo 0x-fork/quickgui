@@ -29,15 +29,19 @@ impl UiTree {
         renderer: &mut impl TextLayoutEngine,
         paint_time: Instant,
     ) -> Result<(), UiError> {
-        self.natural_bounds.clear();
-        self.element_bounds.clear();
-        self.hit_regions.clear();
-        self.scroll_regions.clear();
-        self.dismiss_regions.clear();
+        self.ensure_natural_geometry()?;
+        self.begin_cached_paint(paint_time);
+        let rebuild_geometry = self.needs_paint_geometry();
+        if rebuild_geometry {
+            self.element_bounds.clear();
+            self.hit_regions.clear();
+            self.scroll_regions.clear();
+            self.dismiss_regions.clear();
+            self.selectable_text_regions.clear();
+        }
         #[cfg(target_os = "macos")]
         self.native_views.clear();
         self.text_input_regions.clear();
-        self.selectable_text_regions.clear();
         self.style_transition_frame_requested = false;
         for playback in self.animations.values_mut() {
             playback.seen = false;
@@ -46,17 +50,7 @@ impl UiTree {
             return Ok(());
         };
         let viewport = Rect::from_size(self.viewport);
-        self.scroll_snap_geometry.clear();
-        collect_layout_bounds(
-            root,
-            &self.taffy,
-            &mut self.scroll_offsets,
-            &mut self.scroll_end_states,
-            &mut self.natural_bounds,
-            &mut self.scroll_snap_geometry,
-            None,
-            LayoutFrame::root(Point::ZERO, viewport),
-        )?;
+        let paint_started = Instant::now();
         let mut source_order = 0;
         let styled_focus = self.styled_focus();
         let pressed_path = self.ancestor_path(self.pressed);
@@ -106,6 +100,10 @@ impl UiTree {
             PaintLayerKey::default(),
             &mut source_order,
             None,
+            &mut self.work,
+            rebuild_geometry,
+            &mut self.paint_cache,
+            false,
         );
         for playback in self.animations.values_mut() {
             playback.finish_visibility();
@@ -158,8 +156,11 @@ impl UiTree {
                 &mut source_order,
             )?;
         }
-        self.hit_regions.sort_by_key(|region| region.order);
-        self.scroll_regions.sort_by_key(|region| region.order);
+        if rebuild_geometry {
+            self.hit_regions.sort_by_key(|region| region.order);
+            self.scroll_regions.sort_by_key(|region| region.order);
+            self.dismiss_regions.sort_by_key(|region| region.order);
+        }
         if let Some(drag) = self.scrollbar_drag
             && !self
                 .scroll_regions
@@ -176,11 +177,13 @@ impl UiTree {
                 self.hovered_scrollbar = None;
             }
         }
-        self.dismiss_regions.sort_by_key(|region| region.order);
         #[cfg(target_os = "macos")]
         self.native_views
             .sort_by_key(|region| (region.z_index, region.source_order));
         scene.finish();
+        self.finish_paint_geometry();
+        self.finish_cached_paint();
+        self.work.paint_time += paint_started.elapsed();
         Ok(())
     }
 
@@ -192,21 +195,11 @@ impl UiTree {
         &mut self,
         point: Option<Point>,
     ) -> Result<bool, UiError> {
-        self.natural_bounds.clear();
+        self.ensure_natural_geometry()?;
+        self.geometry_cache.invalidate_paint();
         self.hit_regions.clear();
         if let Some(root) = &self.root {
             let viewport = Rect::from_size(self.viewport);
-            self.scroll_snap_geometry.clear();
-            collect_layout_bounds(
-                root,
-                &self.taffy,
-                &mut self.scroll_offsets,
-                &mut self.scroll_end_states,
-                &mut self.natural_bounds,
-                &mut self.scroll_snap_geometry,
-                None,
-                LayoutFrame::root(Point::ZERO, viewport),
-            )?;
             let mut source_order = 0;
             let styled_focus = self.styled_focus();
             let pressed_path = self.ancestor_path(self.pressed);

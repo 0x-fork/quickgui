@@ -32,10 +32,13 @@ source declaration first, so later rebuilds preserve the new values.
 | Change | Declaration | Layout | Paint |
 | --- | --- | --- | --- |
 | Equivalent native mutation batch | Skipped; revision unchanged | Skipped | No redraw requested |
-| Ordinary mounted text mutation | Skipped | Changed leaf and affected ancestors; clean branches cached | Rebuilt |
-| Ordinary mounted color or opacity mutation | Skipped | Skipped | Rebuilt |
-| Structural, layout, listener, or component-owned mutation | Rebuilt | Reconciled; clean branches cached | Rebuilt |
-| Hover, selection, retained scrolling, style transition | Usually skipped; virtualization or application callbacks can request a declaration | Retained boxes | Rebuilt |
+| Ordinary mounted text mutation | Skipped | Changed leaf and affected ancestors; clean branches cached | Geometry refreshed; commands recorded |
+| Ordinary mounted color or opacity mutation | Skipped | Skipped | Dirty branches recorded; clean subtree commands shared |
+| Ordinary structural, layout, or listener mutation | Affected scopes only | Only replaced declarations reconciled; clean measurements cached | Geometry and mount indexes refreshed |
+| Compound part, callback-owned subtree, or unsupported target | Full declaration fallback | Reconciled; clean measurements cached | Rebuilt |
+| Rust component entity/global dependency | Affected component scopes only | Reconciled if the component returns a new subtree | Updated subtree and affected geometry |
+| Rust value binding | Binding callback only | Text: intrinsic layout; colors/opacity/transform: skipped | Affected drawing and, for transforms, placement |
+| Hover, selection, retained scrolling, style transition | Usually skipped; virtualization or application callbacks can request a declaration | Retained boxes | Clean static subtrees reused when their paint and geometry inputs match |
 | Viewport resize | Skipped unless the view observes viewport geometry | Recomputed for changed constraints | Rebuilt |
 
 Removed nodes and their measurement contexts are released after container-query expansion
@@ -45,11 +48,53 @@ they cannot silently freeze derived state. Forwarded events wake the host queue 
 a speculative declaration before Go handles them. Native redraw requests remain coalesced once
 per mutation batch, while core-owned interaction paint still runs when needed.
 
-This is layout subtree reuse and targeted declaration skipping, not complete SwiftUI/Compose
-parity. General Rust `View` dependencies are still tracked at window scope, and a normal view
-invalidation executes its root render method. Painting still traverses the mounted tree to rebuild
-the scene and hit regions; there is no retained display-list subtree cache or GPU damage-region
-renderer. The compositor's texture reuse is allocation caching, not cached subtree pixels.
+Natural bounds and scroll-snap geometry now have a lifetime separate from painting. Color-only
+changes reuse them and the retained hit, dismiss, and selection regions. The hover refresh after
+layout shares its natural-bounds pass with painting. Editable controls and state transforms refresh
+interaction geometry when their state can move a caret viewport or change hit coordinates.
+
+Substantial static subtrees retain immutable drawing-command chunks. A changed element invalidates
+its ancestor path, while inherited style or group changes also invalidate affected descendants.
+An unchanged panel shares its command chunks with the next scene instead of copying its primitives.
+Callbacks, native views, animation owners, and compositing groups stay dynamic; surrounding static
+branches can still be cached. A conservative 32 MiB command budget and 256 subtree entries bound
+retention. Removing a subtree releases its cached references. Chunk ordering preserves stacking
+order, though separate chunks can require more draw batches than a newly combined display list.
+
+Rust views can opt into `ViewContext::component(id, callback)`. Entity and global reads inside a
+component subscribe that scope, with reverse dependency indexes routing changes directly to its
+observers. Nested scopes record their own reads. A dirty parent subsumes dirty descendants in the
+same batch; removed scopes release callbacks, detached subscriptions, and dependency edges. Mouse,
+key, and action listener keys remain stable across unrelated updates and retired keys never alias
+new callbacks. Root-level observations, explicit view invalidation, and environment/focus changes
+retain the full-declaration behavior.
+
+`ViewContext::bind(element, callback)` attaches a direct property binding to an explicitly identified
+element. Its callback returns `ElementUpdate::Text`, `BackgroundColor`, `TextColor`, `Opacity`, or
+`Transform`. Only the binding reruns when its dependencies change. Text updates invalidate intrinsic
+measurement and accessible text; colors and opacity require paint; transforms refresh hit geometry,
+placement, and accessibility geometry without layout. A binding cannot declare listeners or child
+components. `component` callbacks return an unkeyed root, or a root with the component's own ID;
+nested components belong in its children.
+
+Embedding renderers use `with_scope`, `View::render_scope`, and `AppRunner::invalidate_elements`.
+The Go native host keeps direct text/color/opacity updates and uses scoped declaration for ordinary
+layout, property removal, listener, insertion, removal, and keyed-move batches. Both parents of a
+move are invalidated, and all old scope listeners are retired before any new scope is declared.
+Root child-list changes, compound parts with derived identities or hoisted portals, and callback-
+owned declarations use the established full-declaration path. Asynchronous image replacement also
+uses a complete image-resource frame so removed loaders do not remain active indefinitely.
+
+`ElementUpdate::Replace` reconciles only the replacement subtree with the retained layout arena.
+Sibling declarations and measurement caches survive. Structural batches still validate window-wide
+identity/limit constraints and refresh mount indexes (focus, dispatch, input, selection, scroll,
+animations, and accessibility) against the final tree. Those scans are not proportional only to the
+changed nodes. Batches with overlapping replacement roots are rejected for the source renderer to
+coalesce or rebuild; disjoint replacements may move a keyed child between parents.
+
+See the [optimization coverage](rendering-optimization-plan.md) for validation and remaining
+performance boundaries. There is no GPU damage-region renderer or assumption that swapchain pixels
+survive presentation.
 
 Regression tests compare retained layout with a fresh layout after updates, reordering,
 reparenting, resizing, query expansion, and unmounting. Work counters assert that updating one
@@ -57,6 +102,46 @@ label measures none of the 100 text leaves in an unchanged sibling panel, and th
 paint-only declarations perform no additional layout pass. Core and native-host tests also assert
 that targeted updates preserve click delivery and accessible names without incrementing the view
 render count.
+
+`FrameMetrics.pipeline` exposes elapsed phase timings and work counters, including mutation work
+received before redraw. `RenderStats` records tracked primitive buffer uploads and shadow storage,
+and group passes skipped by pixel reuse. A test-only allocation probe verified that hovering a
+toolbar button visits two paint nodes, resolves no natural geometry, and allocates 3,040 bytes in
+nine allocations with either 100 or 10,000 unrelated mounted nodes. This is a UI-tree measurement;
+renderer preparation and GPU submission have their own costs.
+
+## Rust dependency bindings
+
+A text binding can update a counter without calling the containing view's `render` method:
+
+```rust
+use quickgui::{button, div, text, ElementUpdate, Entity, IntoElement, View, ViewContext};
+
+struct Counter {
+    count: Entity<usize>,
+}
+
+impl View for Counter {
+    fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+        let count = self.count.clone();
+        let label = cx.bind(text("").id("count"), move |cx| ElementUpdate::Text {
+            id: "count".into(),
+            content: cx.observe(&count, |value| value.to_string().into()),
+        });
+        let increment = cx.listener("increment", |view, cx| {
+            view.count.update(cx, |value, _| *value += 1);
+        });
+        div().flex_col().child(label).child(
+            button().on_click(increment).child("Increment"),
+        )
+    }
+}
+```
+
+Use `cx.component("details", move |cx| { ... })` when the dependency changes the child structure.
+Capture an `Entity` handle in the callback and read its current value with `cx.observe`; capturing
+only a copied value would keep the callback tied to that old snapshot. The existing Go signal API
+already emits native property/structural mutations and needs no application syntax changes.
 
 ## Layout
 
@@ -155,10 +240,15 @@ subtree directly into its parent without the effect and reports it in
 and `layer_texture_bytes`.
 
 A scene with no groups records exactly the passes and draws it always did: `render_scene` takes a
-zero-group fast path that compiles no pipeline, allocates no texture, and adds no pass. Group
-textures are retained across frames and reused whenever a group keeps its identity and the window
-keeps its size; their contents are re-recorded each frame, because no content signature is
-computed.
+zero-group fast path that compiles no pipeline, allocates no texture, and adds no pass.
+
+Group textures also retain their pixels. Immutable command snapshots distinguish raw content from
+the group's own transform, opacity, and filter parameters. Rotating or fading stable content reuses
+the raw texture; an unchanged blur reuses its blurred texture too. Content, nested effects, scale,
+texture repurposing, and effect fallback invalidate the relevant result. Snapshots have a separate
+32 MiB command-storage bound and hold only weak texture references, leaving GPU ownership and
+eviction with the existing pool. This skips group draw/blur passes; primitive preparation can still
+visit the scene. Headless tests compare these paths pixel-for-pixel with fresh rendering.
 
 Backdrop filters and destination-reading blend modes need the target back. The window surface is
 configured with `COPY_SRC` when the adapter advertises it; the whole target is then copied into a

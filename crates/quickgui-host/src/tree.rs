@@ -532,6 +532,112 @@ pub(super) fn retained_element_updates(
     Some(updates)
 }
 
+/// An ordinary node keeps its native identity. Compound parts and collection-owned descendants
+/// have derived IDs and coordinated callbacks, so their enclosing declaration remains the owner.
+pub(super) fn native_scope_identity(tree: &NativeTree, id: u32) -> bool {
+    let mut current = id;
+    for _ in 0..MAX_TREE_DEPTH {
+        if current == ROOT_NODE {
+            return id != ROOT_NODE;
+        }
+        let Some(node) = tree.nodes.get(&current) else {
+            return false;
+        };
+        if node.string(property::PART).is_some() {
+            return false;
+        }
+        if current != id && !matches!(node.tag, NodeTag::View | NodeTag::Button) {
+            return false;
+        }
+        if !matches!(
+            node.tag,
+            NodeTag::View
+                | NodeTag::Button
+                | NodeTag::Text
+                | NodeTag::Sentinel
+                | NodeTag::Input
+                | NodeTag::Markdown
+                | NodeTag::VirtualList
+                | NodeTag::Terminal
+                | NodeTag::Svg
+                | NodeTag::Image
+                | NodeTag::Shader
+        ) {
+            return false;
+        }
+        let Some(parent) = node.parent else {
+            return false;
+        };
+        current = parent;
+    }
+    false
+}
+
+pub(super) fn native_scope_supported(tree: &NativeTree, id: u32) -> bool {
+    if !native_scope_identity(tree, id) {
+        return false;
+    }
+    let mut pending = vec![id];
+    while let Some(id) = pending.pop() {
+        let Some(node) = tree.nodes.get(&id) else {
+            return false;
+        };
+        // Parts may hoist portals and coordinate siblings outside this subtree. Keep their
+        // established full-declaration path until they expose an explicit component boundary.
+        if node.string(property::PART).is_some() {
+            return false;
+        }
+        pending.extend(&node.children);
+    }
+    true
+}
+
+/// Collect old mounted owners before committing the transaction. Newly constructed nodes are
+/// covered by the insertion's existing parent. A keyed move invalidates both old and new parents.
+pub(super) fn retained_scope_updates(
+    tree: &NativeTree,
+    mutations: &[Mutation],
+) -> Option<Vec<ElementId>> {
+    let mut targets = HashSet::new();
+    let mut add = |id: u32| -> Option<()> {
+        let Some(_) = tree.nodes.get(&id) else {
+            return Some(());
+        };
+        let mut current = id;
+        loop {
+            if current == ROOT_NODE {
+                return None;
+            }
+            let node = tree.nodes.get(&current)?;
+            if native_scope_identity(tree, current) {
+                if !native_scope_supported(tree, current) {
+                    return None;
+                }
+                targets.insert(ElementId::new(u64::from(current)));
+                return Some(());
+            }
+            let Some(parent) = node.parent else {
+                return Some(());
+            };
+            current = parent;
+        }
+    };
+    for mutation in mutations {
+        match mutation {
+            Mutation::Create { .. } => {}
+            Mutation::SetProperty { id, .. } | Mutation::ReplaceText { id, .. } => add(*id)?,
+            Mutation::Insert { parent, child, .. } => {
+                add(*parent)?;
+                if let Some(parent) = tree.nodes.get(child).and_then(|node| node.parent) {
+                    add(parent)?;
+                }
+            }
+            Mutation::Remove { parent, .. } | Mutation::Cleanup { parent, .. } => add(*parent)?,
+        }
+    }
+    Some(targets.into_iter().collect())
+}
+
 #[derive(Debug)]
 pub(super) struct ProtocolError(String);
 

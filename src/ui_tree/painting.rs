@@ -287,6 +287,7 @@ pub(super) fn paint_selectable_text(
     regions: &mut Vec<SelectableTextRegion>,
     scene: &mut Scene,
     renderer: &mut impl TextLayoutEngine,
+    rebuild_geometry: bool,
 ) {
     let Some(document_index) = document_index else {
         return;
@@ -294,14 +295,16 @@ pub(super) fn paint_selectable_text(
     let Some(clip) = parent_clip.intersection(bounds) else {
         return;
     };
-    regions.push(SelectableTextRegion {
-        document_index,
-        bounds,
-        clip,
-        style: style.clone(),
-        highlights: highlights.cloned(),
-        order,
-    });
+    if rebuild_geometry {
+        regions.push(SelectableTextRegion {
+            document_index,
+            bounds,
+            clip,
+            style: style.clone(),
+            highlights: highlights.cloned(),
+            order,
+        });
+    }
     let Some(range) =
         static_selection_range_for_entry(selection, indices, document_index, content.len())
     else {
@@ -759,7 +762,133 @@ pub(super) fn paint_element(
     parent_layer: PaintLayerKey,
     source_order: &mut usize,
     inherited_state_text_color: Option<Color>,
+    work: &mut crate::PipelineMetrics,
+    rebuild_geometry: bool,
+    cache: &mut super::paint_cache::PaintCache,
+    dirty_parent: bool,
 ) -> Result<(), UiError> {
+    let dirty_subtree = dirty_parent || cache.dirty_subtree(element.runtime_id);
+    let eligible = cache.eligible(element.runtime_id, parent_layer);
+    let key = super::paint_cache::PaintCacheKey {
+        frame: parent_origin,
+        clip: parent_clip,
+        layer: parent_layer,
+        opacity: scene.current_opacity(),
+        text_color: inherited_state_text_color,
+    };
+    if eligible
+        && !rebuild_geometry
+        && !dirty_subtree
+        && let Some(count) = cache.replay(element.runtime_id, key, scene)
+    {
+        *source_order = source_order.saturating_add(count);
+        work.reused_subtrees += 1;
+        return Ok(());
+    }
+    let capture = eligible.then(|| scene.begin_fragment());
+    let groups_before = scene.groups().len();
+    let source_before = *source_order;
+    let result = paint_element_contents(
+        element,
+        taffy,
+        natural_bounds,
+        element_bounds,
+        scroll_offsets,
+        hovered,
+        pressed,
+        dragging,
+        drag_over,
+        styled_focus,
+        pressed_path,
+        focused_path,
+        groups,
+        scale_factor,
+        scene,
+        renderer,
+        text_inputs,
+        animations,
+        animations_enabled,
+        paint_time,
+        transition_context,
+        hit_regions,
+        scroll_regions,
+        scrollbar_states,
+        dismiss_regions,
+        #[cfg(target_os = "macos")]
+        native_views,
+        text_input_regions,
+        selectable_text_indices,
+        selectable_text_regions,
+        static_text_selection,
+        parent_origin,
+        parent_clip,
+        viewport,
+        parent_layer,
+        source_order,
+        inherited_state_text_color,
+        work,
+        rebuild_geometry,
+        cache,
+        dirty_subtree,
+    );
+    if let Some(start) = capture {
+        let commands = scene.finish_fragment(start);
+        if result.is_ok() && scene.groups().len() == groups_before {
+            cache.record(
+                element.runtime_id,
+                key,
+                commands,
+                *source_order - source_before,
+            );
+        }
+    }
+    result
+}
+
+#[allow(clippy::too_many_arguments)]
+fn paint_element_contents(
+    element: &Element,
+    taffy: &TaffyTree<MeasureContext>,
+    natural_bounds: &HashMap<ElementId, Rect>,
+    element_bounds: &mut HashMap<ElementId, Rect>,
+    scroll_offsets: &mut HashMap<ElementId, Vector>,
+    hovered: &HashSet<ElementId>,
+    pressed: Option<ElementId>,
+    dragging: Option<ElementId>,
+    drag_over: Option<ElementId>,
+    styled_focus: Option<ElementId>,
+    pressed_path: &[ElementId],
+    focused_path: &[ElementId],
+    groups: Option<&GroupScope<'_>>,
+    scale_factor: f32,
+    scene: &mut Scene,
+    renderer: &mut impl TextLayoutEngine,
+    text_inputs: &mut HashMap<ElementId, TextInputState>,
+    animations: &mut HashMap<ElementId, AnimationPlayback>,
+    animations_enabled: bool,
+    paint_time: Instant,
+    transition_context: &mut StyleTransitionPaintContext<'_>,
+    hit_regions: &mut Vec<HitRegion>,
+    scroll_regions: &mut Vec<ScrollRegion>,
+    scrollbar_states: &mut HashMap<ElementId, ScrollbarState>,
+    dismiss_regions: &mut Vec<DismissRegion>,
+    #[cfg(target_os = "macos")] native_views: &mut Vec<NativeViewPlacement>,
+    text_input_regions: &mut Vec<TextInputRegion>,
+    selectable_text_indices: &HashMap<ElementId, usize>,
+    selectable_text_regions: &mut Vec<SelectableTextRegion>,
+    static_text_selection: Option<StaticTextSelection>,
+    parent_origin: LayoutFrame,
+    parent_clip: Rect,
+    viewport: Rect,
+    parent_layer: PaintLayerKey,
+    source_order: &mut usize,
+    inherited_state_text_color: Option<Color>,
+    work: &mut crate::PipelineMetrics,
+    rebuild_geometry: bool,
+    cache: &mut super::paint_cache::PaintCache,
+    dirty_parent: bool,
+) -> Result<(), UiError> {
+    work.painted_nodes += 1;
     if element.is_display_none() || element.is_visibility_hidden() {
         return Ok(());
     }
@@ -836,7 +965,9 @@ pub(super) fn paint_element(
                 .is_none()
             && !element_has_outset_shadow(element)
         {
-            element_bounds.insert(element.runtime_id, bounds);
+            if rebuild_geometry {
+                element_bounds.insert(element.runtime_id, bounds);
+            }
             if let Some(handle) = &element.layout_bounds {
                 handle.report(bounds);
             }
@@ -1021,7 +1152,9 @@ pub(super) fn paint_element(
     } else {
         bounds
     };
-    element_bounds.insert(element.runtime_id, bounds);
+    if rebuild_geometry {
+        element_bounds.insert(element.runtime_id, bounds);
+    }
     if let Some(handle) = &element.layout_bounds {
         handle.report(bounds);
     }
@@ -1141,17 +1274,19 @@ pub(super) fn paint_element(
     }
 
     let selectable_document_index = selectable_text_indices.get(&element.runtime_id).copied();
-    if let Some(region) = element_hit_region(
-        element,
-        bounds,
-        parent_clip,
-        order,
-        selectable_document_index.is_some(),
-        hit_transform,
-    ) {
+    if rebuild_geometry
+        && let Some(region) = element_hit_region(
+            element,
+            bounds,
+            parent_clip,
+            order,
+            selectable_document_index.is_some(),
+            hit_transform,
+        )
+    {
         hit_regions.push(region);
     }
-    if !element.dismiss_policy.is_empty() {
+    if rebuild_geometry && !element.dismiss_policy.is_empty() {
         dismiss_regions.push(DismissRegion {
             id: element.runtime_id,
             bounds,
@@ -1206,6 +1341,7 @@ pub(super) fn paint_element(
                 selectable_text_regions,
                 scene,
                 renderer,
+                rebuild_geometry,
             );
             scene.push_text_in(
                 layer,
@@ -1283,6 +1419,7 @@ pub(super) fn paint_element(
                     selectable_text_regions,
                     scene,
                     renderer,
+                    rebuild_geometry,
                 );
                 scene.push_text_in(
                     layer,
@@ -1791,6 +1928,10 @@ pub(super) fn paint_element(
             layer,
             source_order,
             state_text_color,
+            work,
+            rebuild_geometry,
+            cache,
+            dirty_parent,
         )?;
     }
 
@@ -1813,7 +1954,9 @@ pub(super) fn paint_element(
             order,
             scrollbar_order,
         };
-        scroll_regions.push(region);
+        if rebuild_geometry {
+            scroll_regions.push(region);
+        }
         paint_vertical_scrollbar(
             scene,
             layer,
@@ -1865,7 +2008,9 @@ pub(super) fn paint_element(
             order,
             scrollbar_order,
         };
-        scroll_regions.push(region);
+        if rebuild_geometry {
+            scroll_regions.push(region);
+        }
         paint_vertical_scrollbar(
             scene,
             layer,

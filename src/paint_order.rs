@@ -18,7 +18,7 @@ impl LeafEntry {
     };
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 enum NodeKind {
     Leaf {
         entries: [LeafEntry; MAX_NODE_ENTRIES],
@@ -30,7 +30,7 @@ enum NodeKind {
     },
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct Node {
     parent: Option<usize>,
     bounds: Rect,
@@ -70,7 +70,7 @@ impl Node {
 /// inserted rectangle receives one more than the greatest order of any earlier rectangle it
 /// intersects. Rectangles at the same order are therefore guaranteed not to overlap and may be
 /// reordered by primitive kind or texture for batching.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct BoundsOrderTree {
     root: Option<usize>,
     nodes: Vec<Node>,
@@ -78,6 +78,10 @@ pub(crate) struct BoundsOrderTree {
 }
 
 impl BoundsOrderTree {
+    pub(crate) fn allocated_bytes(&self) -> usize {
+        self.nodes.capacity() * size_of::<Node>() + self.query_stack.capacity() * size_of::<usize>()
+    }
+
     pub(crate) fn with_capacity(primitives: usize) -> Self {
         let leaf_nodes = primitives.div_ceil(MAX_NODE_ENTRIES);
         Self {

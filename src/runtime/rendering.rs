@@ -84,13 +84,75 @@ impl Runtime {
         let Some(state) = &mut self.window else {
             return;
         };
+        let started = FrameTimer::start();
+        let mut declaration_time = Duration::ZERO;
+        let mut scope_animation_frame = false;
+        if !state.view_dirty && state.listeners.scopes.pending() {
+            let previous_focus = state.ui.focused();
+            let declaration_started = Instant::now();
+            let mut cx = ViewContext::<()> {
+                size: state.logical_size,
+                scale_factor: state.scale_factor,
+                metrics: state.metrics.current(),
+                focused: state.ui.focused(),
+                focused_path: state.ui.focus_path(),
+                request_animation_frame: false,
+                repaint_deadline: None,
+                listeners: &mut state.listeners,
+                window: window_handle,
+                window_state,
+                displays: &displays,
+                keyboard_layout: &keyboard_layout,
+                assets: &assets,
+                app_info: app_info.as_ref(),
+                app_paths: app_paths.as_ref(),
+                system_info: &system_info,
+                system_preferences: &system_preferences,
+                background_tasks: Some(&background_tasks),
+                foreground_tasks: &foreground_tasks,
+                globals: &globals,
+                event_proxy: Some(&event_proxy),
+                marker: PhantomData,
+            };
+            let updates = state.view.render_scopes(&mut cx);
+            scope_animation_frame = cx.request_animation_frame;
+            state.view_deadline = state
+                .view_deadline
+                .into_iter()
+                .chain(cx.repaint_deadline)
+                .min();
+            declaration_time += declaration_started.elapsed();
+            if let Some(mut updates) = updates {
+                for update in &mut updates {
+                    if let crate::ElementUpdate::Replace { element, .. } = update {
+                        state.image_assets.resolve_subtree(element);
+                    }
+                }
+                match state.ui.update_elements(&updates) {
+                    Ok(Some(kind)) => {
+                        state.layout_dirty |= kind == crate::ui_tree::ElementUpdateKind::Layout;
+                        if state.layout_dirty {
+                            mounted_focus_previous = Some(previous_focus);
+                        }
+                    }
+                    Ok(None) => state.view_dirty = true,
+                    Err(error) => {
+                        self.fail(event_loop, AppError::View(error.to_string()));
+                        return;
+                    }
+                }
+            } else {
+                state.view_dirty = true;
+            }
+        }
         let retained_scroll_only = scroll_result.changed
             && !scroll_result.view_dirty
             && !state.view_dirty
             && !state.layout_dirty;
         let retained_layout_only = state.layout_dirty && !state.view_dirty;
+        let placement_changed = state.ui.take_retained_placement_dirty();
         let retained_geometry_changed =
-            state.view_dirty || state.layout_dirty || scroll_result.changed;
+            state.view_dirty || state.layout_dirty || scroll_result.changed || placement_changed;
         let retained_semantics_changed = state.ui.take_retained_semantics_dirty();
         if retained_semantics_changed {
             state.accessibility_updates.semantic_change();
@@ -100,18 +162,18 @@ impl Runtime {
             // even though its frame takes the retained-layout path. Do not debounce semantics
             // as if this were only a live resize.
             None
-        } else if retained_layout_only {
+        } else if retained_layout_only || placement_changed {
             Some(AccessibilityUpdateKind::LayoutGeometry)
         } else if retained_scroll_only {
             Some(AccessibilityUpdateKind::ScrollGeometry)
         } else {
             None
         };
-        let started = FrameTimer::start();
         #[cfg(feature = "inspector")]
         let view_rebuilt = state.view_dirty || state.layout_dirty;
-        let mut request_animation_frame = false;
+        let mut request_animation_frame = scope_animation_frame;
         if state.view_dirty {
+            let declaration_started = Instant::now();
             let previous_mounted_focus = state.ui.focused();
             let focused_path = state.ui.focus_path();
             let (mut root, requested, repaint_deadline) = state.view.render(
@@ -135,6 +197,7 @@ impl Runtime {
                 &globals,
                 Some(&event_proxy),
             );
+            declaration_time += declaration_started.elapsed();
             request_animation_frame = requested;
             state.view_deadline = repaint_deadline;
             state.image_assets.begin_resolve_tree(&mut root);
@@ -365,6 +428,7 @@ impl Runtime {
                 LogicalSize::new(caret.width.max(1.0) as f64, caret.height.max(1.0) as f64),
             );
         }
+        let accessibility_started = Instant::now();
         if let Some(update_kind) = state
             .accessibility_updates
             .should_update(accessibility_geometry, Instant::now())
@@ -380,7 +444,8 @@ impl Runtime {
                 }
             });
         }
-
+        let accessibility_time = accessibility_started.elapsed();
+        let render_started = Instant::now();
         match state.renderer.render(&state.scene, state.scale_factor) {
             Ok(RenderOutcome::Presented(mut stats)) => {
                 #[cfg(target_os = "macos")]
@@ -396,7 +461,11 @@ impl Runtime {
                 stats.image_resources_loading = image_assets.loading;
                 stats.image_resources_failed = image_assets.failed;
                 (stats.animated_images, stats.active_animations) = state.ui.animation_counts();
-                state.metrics.record(started.elapsed(), stats);
+                let mut pipeline = state.ui.take_work();
+                pipeline.declaration_time = declaration_time;
+                pipeline.accessibility_time = accessibility_time;
+                pipeline.render_time = render_started.elapsed();
+                state.metrics.record(started.elapsed(), stats, pipeline);
                 #[cfg(target_os = "macos")]
                 if let Some(guard) = state.first_frame_guard.take() {
                     guard.reveal();

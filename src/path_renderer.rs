@@ -91,6 +91,7 @@ pub(crate) struct PathRenderer {
     paint_capacities: Vec<usize>,
     paint_bind_groups: Vec<BindGroup>,
     active_buffer: usize,
+    pub(crate) uploads: crate::renderer::upload::BufferUploads,
     vertices: Vec<GpuPathVertex>,
     paints: Vec<GpuPathPaint>,
     pending: Vec<PendingPath>,
@@ -226,6 +227,7 @@ impl PathRenderer {
             paint_capacities: vec![INITIAL_PAINT_CAPACITY; BUFFERED_FRAMES],
             paint_bind_groups,
             active_buffer: 0,
+            uploads: crate::renderer::upload::BufferUploads::default(),
             vertices: Vec::with_capacity(INITIAL_VERTEX_CAPACITY),
             paints: Vec::with_capacity(INITIAL_PAINT_CAPACITY),
             pending: Vec::with_capacity(INITIAL_PAINT_CAPACITY),
@@ -245,6 +247,7 @@ impl PathRenderer {
         physical_height: u32,
         scale: f32,
     ) -> PathPrepareStats {
+        self.uploads.begin_frame();
         self.vertices.clear();
         self.paints.clear();
         self.pending.clear();
@@ -309,9 +312,10 @@ impl PathRenderer {
             self.layer_batches.push(batch_start..self.batches.len());
         }
 
-        queue.write_buffer(
-            &self.uniform_buffer,
+        self.uploads.write(
             0,
+            queue,
+            &self.uniform_buffer,
             bytemuck::bytes_of(&ViewUniform {
                 viewport: [physical_width as f32, physical_height as f32],
                 scale,
@@ -321,14 +325,16 @@ impl PathRenderer {
         self.active_buffer = (self.active_buffer + 1) % BUFFERED_FRAMES;
         self.ensure_active_capacity(device);
         if !self.vertices.is_empty() {
-            queue.write_buffer(
+            self.uploads.write(
+                1 + self.active_buffer,
+                queue,
                 &self.vertex_buffers[self.active_buffer],
-                0,
                 bytemuck::cast_slice(&self.vertices),
             );
-            queue.write_buffer(
+            self.uploads.write(
+                1 + BUFFERED_FRAMES + self.active_buffer,
+                queue,
                 &self.paint_buffers[self.active_buffer],
-                0,
                 bytemuck::cast_slice(&self.paints),
             );
         }
@@ -372,6 +378,7 @@ impl PathRenderer {
                 .min(MAX_GPU_PATH_VERTICES);
             self.vertex_buffers[self.active_buffer] = create_vertex_buffer(device, capacity);
             self.vertex_capacities[self.active_buffer] = capacity;
+            self.uploads.reset(1 + self.active_buffer);
         }
 
         let paint_required = self.paints.len().max(1);
@@ -386,6 +393,7 @@ impl PathRenderer {
                 &self.paint_buffers[self.active_buffer],
             );
             self.paint_capacities[self.active_buffer] = capacity;
+            self.uploads.reset(1 + BUFFERED_FRAMES + self.active_buffer);
         }
     }
 }

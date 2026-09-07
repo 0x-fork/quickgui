@@ -167,6 +167,14 @@ impl View for NativeView {
         );
     }
 
+    fn render_scope(&mut self, id: ElementId, cx: &mut ViewContext<'_, Self>) -> Option<Element> {
+        let id = u32::try_from(id.as_u64()).ok()?;
+        if self.context_menu_owner.is_some() || !native_scope_supported(&self.tree.borrow(), id) {
+            return None;
+        }
+        self.build_tree(cx, Some(id))
+    }
+
     fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
         let window = self.handles.as_ref().map_or(self.window, |handles| {
             handles
@@ -175,100 +183,7 @@ impl View for NativeView {
                 .copied()
                 .expect("a native binding view must retain its core window handle")
         });
-        let tree = self.tree.borrow();
-        self.components.sync(&tree, window, &self.events);
-        let components = &mut self.components;
-        let mut markdown = self.markdown.borrow_mut();
-        markdown.retain(|id, _| {
-            tree.nodes
-                .get(id)
-                .is_some_and(|node| node.tag == NodeTag::Markdown)
-        });
-        let mut svgs = self.svgs.borrow_mut();
-        svgs.retain(|id, _| {
-            tree.nodes
-                .get(id)
-                .is_some_and(|node| node.tag == NodeTag::Svg)
-        });
-        let mut lists = self.lists.borrow_mut();
-        lists.retain(|id, _| {
-            tree.nodes
-                .get(id)
-                .is_some_and(|node| node.tag == NodeTag::VirtualList)
-        });
-        let mut terminals = self.terminals.borrow_mut();
-        terminals.retain(|id, _| {
-            tree.nodes
-                .get(id)
-                .is_some_and(|node| node.tag == NodeTag::Terminal)
-        });
-        let mut images = self.images.borrow_mut();
-        images.retain(|id, _| {
-            tree.nodes
-                .get(id)
-                .is_some_and(|node| node.tag == NodeTag::Image)
-        });
-        let mut background_images = self.background_images.borrow_mut();
-        background_images.retain(|id, _| {
-            tree.nodes
-                .get(id)
-                .is_some_and(|node| node.string(property::BACKGROUND_IMAGE).is_some())
-        });
-        let mut shaders = self.shaders.borrow_mut();
-        shaders.retain(|id, _| {
-            tree.nodes
-                .get(id)
-                .is_some_and(|node| node.tag == NodeTag::Shader)
-        });
-        self.menus.borrow_mut().retain(|id, _| {
-            tree.nodes
-                .get(id)
-                .is_some_and(|node| node.string(property::PART) == Some(POPOVER_MENU_POPUP_PART))
-        });
-        let context_menu = self.context_menu;
-        let context_menu_owner = self.context_menu_owner;
-        #[cfg(target_os = "macos")]
-        let mut swift_ui_hosts = self.swift_ui_hosts.borrow_mut();
-        #[cfg(target_os = "macos")]
-        let embedded_views = self.embedded_views.borrow();
-        #[cfg(target_os = "macos")]
-        swift_ui_hosts.retain(|id, _| {
-            tree.nodes
-                .get(id)
-                .is_some_and(|node| node.tag == NodeTag::SwiftUiHost)
-        });
-        let mut root = div()
-            .id(ElementId::new(ROOT_ELEMENT_ID))
-            .size_full()
-            .min_w(0.0)
-            .min_h(0.0);
-        if let Some(node) = tree.nodes.get(&ROOT_NODE) {
-            let mut part_ids = HashSet::new();
-            let mut states = NativeElementStates {
-                markdown: &mut markdown,
-                svgs: &mut svgs,
-                lists: &mut lists,
-                terminals: &mut terminals,
-                part_ids: &mut part_ids,
-                portals: Vec::new(),
-                images: &mut images,
-                background_images: &mut background_images,
-                shaders: &mut shaders,
-                components,
-                menus: Rc::clone(&self.menus),
-                context_menu,
-                context_menu_owner,
-                #[cfg(target_os = "macos")]
-                swift_ui_hosts: &mut swift_ui_hosts,
-                #[cfg(target_os = "macos")]
-                embedded_views: &embedded_views,
-            };
-            root = root.children(node.children.iter().filter_map(|id| {
-                build_element(*id, window, &tree, &self.events, &mut states, cx, 0)
-                    .and_then(|element| hoist_portal(element, &mut states))
-            }));
-            root = root.children(std::mem::take(&mut states.portals));
-        }
+        let root = self.build_tree(cx, None).expect("native window root");
         let select_events = Rc::clone(&self.events);
         // A declared menu command keeps its concrete typed payload through the core's popover
         // chain and arrives here on the owner window's ordinary action path.
@@ -1133,6 +1048,136 @@ fn swift_ui_text_content(node: &NativeNode, tree: &NativeTree) -> String {
     text
 }
 
+impl NativeView {
+    fn build_tree(
+        &mut self,
+        cx: &mut ViewContext<'_, Self>,
+        scope: Option<u32>,
+    ) -> Option<Element> {
+        let window = self.handles.as_ref().map_or(self.window, |handles| {
+            handles
+                .borrow()
+                .get(&cx.window_handle())
+                .copied()
+                .expect("a native binding view must retain its core window handle")
+        });
+        let tree = self.tree.borrow();
+        if scope.is_none() {
+            self.components.sync(&tree, window, &self.events);
+        }
+        let components = &mut self.components;
+        let mut markdown = self.markdown.borrow_mut();
+        markdown.retain(|id, _| {
+            tree.nodes
+                .get(id)
+                .is_some_and(|node| node.tag == NodeTag::Markdown)
+        });
+        let mut svgs = self.svgs.borrow_mut();
+        svgs.retain(|id, _| {
+            tree.nodes
+                .get(id)
+                .is_some_and(|node| node.tag == NodeTag::Svg)
+        });
+        let mut lists = self.lists.borrow_mut();
+        lists.retain(|id, _| {
+            tree.nodes
+                .get(id)
+                .is_some_and(|node| node.tag == NodeTag::VirtualList)
+        });
+        let mut terminals = self.terminals.borrow_mut();
+        terminals.retain(|id, _| {
+            tree.nodes
+                .get(id)
+                .is_some_and(|node| node.tag == NodeTag::Terminal)
+        });
+        let mut images = self.images.borrow_mut();
+        images.retain(|id, _| {
+            tree.nodes
+                .get(id)
+                .is_some_and(|node| node.tag == NodeTag::Image)
+        });
+        let mut background_images = self.background_images.borrow_mut();
+        background_images.retain(|id, _| {
+            tree.nodes
+                .get(id)
+                .is_some_and(|node| node.string(property::BACKGROUND_IMAGE).is_some())
+        });
+        let mut shaders = self.shaders.borrow_mut();
+        shaders.retain(|id, _| {
+            tree.nodes
+                .get(id)
+                .is_some_and(|node| node.tag == NodeTag::Shader)
+        });
+        self.menus.borrow_mut().retain(|id, _| {
+            tree.nodes
+                .get(id)
+                .is_some_and(|node| node.string(property::PART) == Some(POPOVER_MENU_POPUP_PART))
+        });
+        let context_menu = self.context_menu;
+        let context_menu_owner = self.context_menu_owner;
+        #[cfg(target_os = "macos")]
+        let mut swift_ui_hosts = self.swift_ui_hosts.borrow_mut();
+        #[cfg(target_os = "macos")]
+        let embedded_views = self.embedded_views.borrow();
+        #[cfg(target_os = "macos")]
+        swift_ui_hosts.retain(|id, _| {
+            tree.nodes
+                .get(id)
+                .is_some_and(|node| node.tag == NodeTag::SwiftUiHost)
+        });
+        let mut root = div()
+            .id(ElementId::new(ROOT_ELEMENT_ID))
+            .size_full()
+            .min_w(0.0)
+            .min_h(0.0);
+        if let Some(node) = tree.nodes.get(&ROOT_NODE) {
+            let mut part_ids = HashSet::new();
+            let mut states = NativeElementStates {
+                markdown: &mut markdown,
+                svgs: &mut svgs,
+                lists: &mut lists,
+                terminals: &mut terminals,
+                part_ids: &mut part_ids,
+                portals: Vec::new(),
+                images: &mut images,
+                background_images: &mut background_images,
+                shaders: &mut shaders,
+                components,
+                menus: Rc::clone(&self.menus),
+                context_menu,
+                context_menu_owner,
+                #[cfg(target_os = "macos")]
+                swift_ui_hosts: &mut swift_ui_hosts,
+                #[cfg(target_os = "macos")]
+                embedded_views: &embedded_views,
+            };
+            if let Some(id) = scope {
+                let mut current = id;
+                let mut depth = 0;
+                while let Some(parent) = tree.nodes.get(&current).and_then(|node| node.parent) {
+                    if parent == ROOT_NODE {
+                        break;
+                    }
+                    depth += 1;
+                    current = parent;
+                }
+                let element =
+                    build_element(id, window, &tree, &self.events, &mut states, cx, depth)?;
+                if !states.portals.is_empty() || element.is_viewport_portal() {
+                    return None;
+                }
+                return Some(element);
+            }
+            root = root.children(node.children.iter().filter_map(|id| {
+                build_element(*id, window, &tree, &self.events, &mut states, cx, 0)
+                    .and_then(|element| hoist_portal(element, &mut states))
+            }));
+            root = root.children(std::mem::take(&mut states.portals));
+        }
+        Some(root)
+    }
+}
+
 pub(super) fn build_element(
     id: u32,
     window: u32,
@@ -1142,7 +1187,17 @@ pub(super) fn build_element(
     cx: &mut ViewContext<'_, NativeView>,
     depth: usize,
 ) -> Option<Element> {
-    build_element_inner(id, window, tree, events, states, cx, depth, true)
+    if native_scope_identity(tree, id) {
+        let mut present = false;
+        let element = cx.with_scope(ElementId::new(u64::from(id)), |cx| {
+            let element = build_element_inner(id, window, tree, events, states, cx, depth, true);
+            present = element.is_some();
+            element.unwrap_or_else(|| div().hidden())
+        });
+        present.then_some(element)
+    } else {
+        build_element_inner(id, window, tree, events, states, cx, depth, true)
+    }
 }
 
 /// Build one declared node's own element — its styles, states, and semantics — without its

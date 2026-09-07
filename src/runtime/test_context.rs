@@ -801,6 +801,9 @@ impl TestAppContext {
         if state.dirty {
             return Ok(true);
         }
+        if state.listeners.needs_scoped_replacement(updates) {
+            return Ok(false);
+        }
         let Some(kind) = state
             .ui
             .update_elements(updates)
@@ -813,6 +816,17 @@ impl TestAppContext {
         }
         self.prepare_retained_geometry(window)?;
         Ok(true)
+    }
+
+    /// Headless counterpart to `AppRunner::invalidate_elements`.
+    pub fn invalidate_elements(
+        &mut self,
+        window: WindowHandle,
+        ids: &[ElementId],
+    ) -> Result<(), TestAppError> {
+        let state = self.window_mut(window)?;
+        state.dirty |= !state.listeners.scopes.invalidate(ids);
+        self.run_until_idle()
     }
 
     pub fn window_state(&self, window: WindowHandle) -> Result<WindowState, TestAppError> {

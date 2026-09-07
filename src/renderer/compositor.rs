@@ -20,7 +20,10 @@
 //! per-frame preparation — text included, so text rotates with its parent — at the cost of memory,
 //! which [`MAX_LAYER_TEXTURE_BYTES`] bounds with honest degradation once the bound is reached.
 
-use std::sync::Arc;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Weak},
+};
 
 use wgpu::{
     BindGroup, BlendComponent, BlendFactor, BlendOperation, BlendState, ColorTargetState,
@@ -37,7 +40,7 @@ use crate::{
     custom_shader_renderer::CustomShaderRenderer,
     image_renderer::ImageRenderer,
     path_renderer::PathRenderer,
-    scene::{BLUR_MARGIN_SIGMAS, PaintGroup, PrimitiveRef},
+    scene::{BLUR_MARGIN_SIGMAS, PaintGroup, PaintLayer, PrimitiveRef},
     svg_renderer::SvgRenderer,
 };
 
@@ -57,6 +60,7 @@ const MAX_BLUR_DRAWS: usize = 4 * crate::MAX_LAYERS_PER_FRAME;
 
 const COMPOSITE_UNIFORM_STRIDE: u64 = 256;
 const BLUR_UNIFORM_STRIDE: u64 = 256;
+const MAX_CACHED_LAYER_COMMAND_BYTES: usize = 32 * 1024 * 1024;
 
 /// Per-frame compositing telemetry surfaced through [`RenderStats`](crate::RenderStats).
 #[derive(Clone, Copy, Debug, Default)]
@@ -65,6 +69,8 @@ pub(crate) struct CompositeStats {
     pub layers: usize,
     /// Offscreen group passes recorded this frame.
     pub layer_passes: usize,
+    /// Group textures whose unchanged content was reused without recording a group pass.
+    pub reused_layers: usize,
     /// Separable blur passes recorded this frame.
     pub blur_passes: usize,
     /// Bytes of offscreen texture retained by this window after eviction.
@@ -151,6 +157,7 @@ struct LayerTexture {
     texture: Arc<Texture>,
     view: Arc<TextureView>,
     last_used: u64,
+    generation: u64,
 }
 
 impl LayerTexture {
@@ -160,14 +167,33 @@ impl LayerTexture {
 }
 
 /// A bounded, least-recently-used pool of window-sized offscreen textures.
-#[derive(Default)]
 struct LayerTextureCache {
     textures: Vec<LayerTexture>,
     frame: u64,
     bytes: u64,
+    generation: u64,
+    byte_limit: u64,
+}
+
+impl Default for LayerTextureCache {
+    fn default() -> Self {
+        Self {
+            textures: Vec::new(),
+            frame: 0,
+            bytes: 0,
+            generation: 0,
+            byte_limit: MAX_LAYER_TEXTURE_BYTES,
+        }
+    }
 }
 
 impl LayerTextureCache {
+    fn generation(&self, key: LayerTextureKey) -> u64 {
+        self.textures
+            .iter()
+            .find(|texture| texture.key == key)
+            .map_or(0, |texture| texture.generation)
+    }
     fn begin_frame(&mut self) {
         self.frame = self.frame.wrapping_add(1);
     }
@@ -198,16 +224,18 @@ impl LayerTextureCache {
                 && texture.height == height
                 && texture.format == format
         }) {
+            self.generation = self.generation.wrapping_add(1);
+            reusable.generation = self.generation;
             reusable.key = key;
             reusable.last_used = frame;
             return Some((reusable.texture.clone(), reusable.view.clone()));
         }
 
         let bytes = u64::from(width) * u64::from(height) * 4;
-        if bytes > MAX_LAYER_TEXTURE_BYTES {
+        if bytes > self.byte_limit {
             return None;
         }
-        while self.bytes + bytes > MAX_LAYER_TEXTURE_BYTES {
+        while self.bytes + bytes > self.byte_limit {
             let victim = self
                 .textures
                 .iter()
@@ -238,6 +266,7 @@ impl LayerTextureCache {
         }));
         let view = Arc::new(texture.create_view(&TextureViewDescriptor::default()));
         self.bytes += bytes;
+        self.generation = self.generation.wrapping_add(1);
         self.textures.push(LayerTexture {
             key,
             width,
@@ -246,6 +275,7 @@ impl LayerTextureCache {
             texture: texture.clone(),
             view: view.clone(),
             last_used: frame,
+            generation: self.generation,
         });
         Some((texture, view))
     }
@@ -362,6 +392,88 @@ struct GroupPlan {
     inlined: bool,
 }
 
+#[derive(Clone)]
+struct GroupContent {
+    layers: Vec<Arc<PaintLayer>>,
+    children: Vec<(PaintGroup, GroupContent)>,
+}
+
+impl GroupContent {
+    fn allocated_bytes(&self) -> usize {
+        self.layers.capacity() * size_of::<Arc<PaintLayer>>()
+            + self
+                .layers
+                .iter()
+                .map(|layer| layer.allocated_bytes())
+                .sum::<usize>()
+            + self.children.capacity() * size_of::<(PaintGroup, GroupContent)>()
+            + self
+                .children
+                .iter()
+                .map(|(group, content)| {
+                    group.layers.capacity() * size_of::<usize>() + content.allocated_bytes()
+                })
+                .sum::<usize>()
+    }
+
+    fn of(scene: &Scene, group: &PaintGroup) -> Self {
+        Self {
+            layers: group
+                .layers
+                .iter()
+                .map(|index| scene.paint_layers()[*index].clone())
+                .collect(),
+            children: scene
+                .groups()
+                .iter()
+                .filter(|child| child.parent == group.id)
+                .map(|child| (child.clone(), Self::of(scene, child)))
+                .collect(),
+        }
+    }
+
+    fn matches(&self, other: &Self) -> bool {
+        self.layers.len() == other.layers.len()
+            && self.children.len() == other.children.len()
+            && self
+                .layers
+                .iter()
+                .zip(&other.layers)
+                .all(|(a, b)| a.same_commands(b))
+            && self
+                .children
+                .iter()
+                .zip(&other.children)
+                .all(|((a, ac), (b, bc))| {
+                    a.id == b.id
+                        && a.bounds == b.bounds
+                        && a.clip == b.clip
+                        && a.effects == b.effects
+                        && a.opacity == b.opacity
+                        && ac.matches(bc)
+                })
+    }
+}
+
+struct CachedGroup {
+    content: GroupContent,
+    texture: Weak<Texture>,
+    blurred: Option<Weak<TextureView>>,
+    scale: f32,
+    sigma: f32,
+    descendant_effects: Vec<(u16, bool)>,
+    content_generation: u64,
+    blur_generation: u64,
+}
+
+struct GroupReuse {
+    content: GroupContent,
+    pixels: bool,
+    blur: bool,
+    sigma: f32,
+    descendant_effects: Vec<(u16, bool)>,
+}
+
 /// Immutable device objects, created lazily on the first frame that declares a layer effect.
 struct CompositePipelines {
     format: TextureFormat,
@@ -379,6 +491,7 @@ struct CompositePipelines {
 pub(crate) struct Compositor {
     pipelines: Option<CompositePipelines>,
     cache: LayerTextureCache,
+    content_cache: HashMap<u16, CachedGroup>,
 }
 
 impl Compositor {
@@ -446,6 +559,8 @@ impl Compositor {
         };
 
         if groups.is_empty() {
+            self.content_cache
+                .retain(|id, _| scene.groups().iter().any(|group| group.id == *id));
             let mut pass = begin_pass(encoder, target_view, clear, "quickgui scene pass");
             for layer in root_layers {
                 for order in 0..=scene.paint_layers()[layer].max_order() {
@@ -483,6 +598,54 @@ impl Compositor {
         };
         stats.layer_texture_bytes = self.cache.bytes;
 
+        self.content_cache
+            .retain(|id, _| scene.groups().iter().any(|group| group.id == *id));
+        let mut reuse: Vec<_> = groups
+            .iter()
+            .rev()
+            .zip(&textures)
+            .map(|(group, claimed)| {
+                let content = GroupContent::of(scene, group);
+                let previous = self.content_cache.get(&group.id);
+                let pixels = previous.is_some_and(|previous| {
+                    previous.scale == frame.scale
+                        && previous.content_generation
+                            == self.cache.generation(LayerTextureKey::Content(group.id))
+                        && previous
+                            .texture
+                            .upgrade()
+                            .zip(claimed.content_texture.as_ref())
+                            .is_some_and(|(old, current)| Arc::ptr_eq(&old, current))
+                        && previous.content.matches(&content)
+                });
+                let sigma = group.effects.blur.max(
+                    group
+                        .effects
+                        .drop_shadow
+                        .map_or(0.0, |shadow| shadow.sigma()),
+                );
+                let blur = pixels
+                    && previous.is_some_and(|previous| {
+                        previous.sigma == sigma
+                            && previous.blur_generation
+                                == self.cache.generation(LayerTextureKey::Blurred(group.id))
+                            && previous
+                                .blurred
+                                .as_ref()
+                                .and_then(Weak::upgrade)
+                                .zip(claimed.blurred.as_ref())
+                                .is_some_and(|(old, current)| Arc::ptr_eq(&old, current))
+                    });
+                GroupReuse {
+                    content,
+                    pixels,
+                    blur,
+                    sigma,
+                    descendant_effects: Vec::new(),
+                }
+            })
+            .collect();
+
         // Phase 2: build every draw and the ordered step lists.
         self.ensure_pipelines(device, frame.format);
         let pipelines = self
@@ -495,7 +658,7 @@ impl Compositor {
         let mut blur_uniforms: Vec<BlurUniform> = Vec::new();
         let mut plans: Vec<GroupPlan> = Vec::new();
 
-        for (group, claimed) in groups.iter().rev().zip(textures.iter()) {
+        for ((group, claimed), reuse) in groups.iter().rev().zip(textures.iter()).zip(&mut reuse) {
             let plan = plan_group(
                 device,
                 pipelines,
@@ -512,49 +675,81 @@ impl Compositor {
                 &mut composite_uniforms,
                 &mut blur_uniforms,
             );
+            // Texture pressure or per-frame draw limits can inline a child that previously had
+            // an effect (and vice versa), even when its declaration is unchanged.
+            reuse.descendant_effects = plans.iter().map(|plan| (plan.id, plan.inlined)).collect();
+            reuse.pixels &= self
+                .content_cache
+                .get(&group.id)
+                .is_some_and(|previous| previous.descendant_effects == reuse.descendant_effects);
+            reuse.blur &= reuse.pixels;
             if plan.inlined {
                 stats.skipped_layer_effects += 1;
             } else {
                 stats.layers += 1;
-                stats.layer_passes += 1;
+                if reuse.pixels {
+                    stats.reused_layers += 1;
+                } else {
+                    stats.layer_passes += 1;
+                }
             }
             plans.push(plan);
         }
         plans.reverse();
         let root_steps = build_steps(scene, &root_layers, &plans);
-        stats.blur_passes = blur_draws.len();
+        stats.blur_passes = blur_draws.len()
+            - plans
+                .iter()
+                .rev()
+                .zip(&reuse)
+                .filter(|(_, reuse)| reuse.blur)
+                .map(|(plan, _)| plan.blurs.len())
+                .sum::<usize>();
 
+        // Base and overlay planes can be encoded before one queue submission. Queue writes are
+        // executed before that submission, so each plane needs distinct uniform addresses.
+        let overlay = u64::from(frame.plane == Some(ScenePlane::Overlay));
+        let composite_offset = overlay * COMPOSITE_UNIFORM_STRIDE * MAX_COMPOSITE_DRAWS as u64;
+        let blur_offset = overlay * BLUR_UNIFORM_STRIDE * MAX_BLUR_DRAWS as u64;
+        for draw in &mut composite_draws {
+            draw.offset += composite_offset as u32;
+        }
+        for draw in &mut blur_draws {
+            draw.offset += blur_offset as u32;
+        }
         queue.write_buffer(
             &pipelines.composite_uniforms,
-            0,
+            composite_offset,
             &pack_uniforms(&composite_uniforms, COMPOSITE_UNIFORM_STRIDE),
         );
         queue.write_buffer(
             &pipelines.blur_uniforms,
-            0,
+            blur_offset,
             &pack_uniforms(&blur_uniforms, BLUR_UNIFORM_STRIDE),
         );
 
         // Phase 3: record group passes deepest first, then the target's own pass.
-        for plan in plans.iter().rev() {
+        for (plan, reuse) in plans.iter().rev().zip(&reuse) {
             let Some(content) = plan.content.clone() else {
                 continue;
             };
-            record_target(
-                encoder,
-                renderers,
-                &plan.steps,
-                &composite_draws,
-                &blur_draws,
-                pipelines,
-                &content,
-                plan.content_texture.as_deref(),
-                capture.as_ref().map(|(texture, _)| texture.as_ref()),
-                Some(UiColor::TRANSPARENT),
-                frame,
-                "quickgui layer pass",
-            )?;
-            for blur in &plan.blurs {
+            if !reuse.pixels {
+                record_target(
+                    encoder,
+                    renderers,
+                    &plan.steps,
+                    &composite_draws,
+                    &blur_draws,
+                    pipelines,
+                    &content,
+                    plan.content_texture.as_deref(),
+                    capture.as_ref().map(|(texture, _)| texture.as_ref()),
+                    Some(UiColor::TRANSPARENT),
+                    frame,
+                    "quickgui layer pass",
+                )?;
+            }
+            for blur in plan.blurs.iter().filter(|_| !reuse.blur) {
                 let draw = &blur_draws[*blur];
                 let mut pass = begin_pass(encoder, &draw.target, None, "quickgui layer blur");
                 pass.set_pipeline(&pipelines.blur);
@@ -577,6 +772,44 @@ impl Compositor {
             frame,
             "quickgui scene pass",
         )?;
+
+        for (((group, claimed), reuse), plan) in groups
+            .iter()
+            .rev()
+            .zip(&textures)
+            .zip(reuse)
+            .zip(plans.iter().rev())
+        {
+            self.content_cache.remove(&group.id);
+            let retained_bytes: usize = self
+                .content_cache
+                .values()
+                .map(|entry| entry.content.allocated_bytes())
+                .sum();
+            if !plan.inlined
+                && retained_bytes + reuse.content.allocated_bytes()
+                    <= MAX_CACHED_LAYER_COMMAND_BYTES
+                && let Some(texture) = &claimed.content_texture
+            {
+                self.content_cache.insert(
+                    group.id,
+                    CachedGroup {
+                        content: reuse.content,
+                        texture: Arc::downgrade(texture),
+                        blurred: claimed.blurred.as_ref().map(Arc::downgrade),
+                        scale: frame.scale,
+                        sigma: reuse.sigma,
+                        descendant_effects: reuse.descendant_effects,
+                        content_generation: self
+                            .cache
+                            .generation(LayerTextureKey::Content(group.id)),
+                        blur_generation: self.cache.generation(LayerTextureKey::Blurred(group.id)),
+                    },
+                );
+            } else {
+                self.content_cache.remove(&group.id);
+            }
+        }
 
         Ok(stats)
     }
@@ -1372,13 +1605,13 @@ impl CompositePipelines {
         });
         let composite_uniforms = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("quickgui composite uniforms"),
-            size: COMPOSITE_UNIFORM_STRIDE * MAX_COMPOSITE_DRAWS as u64,
+            size: 2 * COMPOSITE_UNIFORM_STRIDE * MAX_COMPOSITE_DRAWS as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         let blur_uniforms = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("quickgui blur uniforms"),
-            size: BLUR_UNIFORM_STRIDE * MAX_BLUR_DRAWS as u64,
+            size: 2 * BLUR_UNIFORM_STRIDE * MAX_BLUR_DRAWS as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -1464,5 +1697,64 @@ impl PaintGroup {
             self.bounds.width + margin * 2.0,
             self.bounds.height + margin * 2.0,
         )
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod cache_tests {
+    use super::*;
+    use crate::renderer::OffscreenRenderer;
+    use crate::{Assets, PerformanceProfile};
+
+    #[test]
+    fn texture_budget_and_generations_survive_repurposing() {
+        let fonts = crate::renderer::create_shared_font_system(&Assets::default(), &[]).unwrap();
+        let renderer =
+            pollster::block_on(OffscreenRenderer::new(PerformanceProfile::Balanced, fonts))
+                .unwrap();
+        let (device, _) = renderer.gpu();
+        let mut cache = LayerTextureCache {
+            byte_limit: 16 * 16 * 4,
+            ..Default::default()
+        };
+        let format = TextureFormat::Rgba8UnormSrgb;
+        cache.begin_frame();
+        let (original, _) = cache
+            .acquire(device, LayerTextureKey::Content(1), 16, 16, format)
+            .unwrap();
+        let generation = cache.generation(LayerTextureKey::Content(1));
+        assert!(
+            cache
+                .acquire(device, LayerTextureKey::Content(2), 16, 16, format)
+                .is_none()
+        );
+        assert!(cache.bytes <= cache.byte_limit);
+        cache.begin_frame();
+        let (scratch, _) = cache
+            .acquire(device, LayerTextureKey::Scratch(0), 16, 16, format)
+            .unwrap();
+        assert!(Arc::ptr_eq(&original, &scratch));
+        assert_ne!(generation, cache.generation(LayerTextureKey::Scratch(0)));
+        cache.begin_frame();
+        let (reclaimed, _) = cache
+            .acquire(device, LayerTextureKey::Content(1), 16, 16, format)
+            .unwrap();
+        assert!(Arc::ptr_eq(&original, &reclaimed));
+        assert_ne!(
+            generation,
+            cache.generation(LayerTextureKey::Content(1)),
+            "pointer identity cannot validate reused pixels"
+        );
+        cache.begin_frame();
+        let (resized, _) = cache
+            .acquire(device, LayerTextureKey::Content(1), 8, 8, format)
+            .unwrap();
+        assert!(!Arc::ptr_eq(&original, &resized));
+        assert_eq!(cache.bytes, 8 * 8 * 4);
+        assert!(
+            cache
+                .acquire(device, LayerTextureKey::Content(3), 32, 32, format)
+                .is_none()
+        );
     }
 }

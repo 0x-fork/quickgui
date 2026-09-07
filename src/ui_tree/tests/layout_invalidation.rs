@@ -3,6 +3,293 @@ use crate::ElementUpdate;
 
 const VIEWPORT: Size = Size::new(640.0, 480.0);
 
+#[test]
+fn subtree_replacement_reconciles_only_changed_nodes_and_reuses_keyed_state() {
+    let mut tree = UiTree::new();
+    set_root(&mut tree, panels("Before", Color::BLACK));
+    let value = ElementId::from("value");
+    let value_node = tree.layout_nodes.nodes[&value];
+    let measurements = Measurements::start();
+    tree.take_work();
+    let replacement = div()
+        .id("changing-panel")
+        .size(240.0, 480.0)
+        .text_size(20.0)
+        .children([text("After").id("value"), text("Inserted").id("new")]);
+    assert_eq!(
+        tree.update_elements(&[
+            ElementUpdate::Replace {
+                id: "changing-panel".into(),
+                element: Box::new(replacement.clone())
+            },
+            ElementUpdate::BackgroundColor {
+                id: "stable-panel".into(),
+                color: Color::WHITE
+            },
+        ])
+        .unwrap(),
+        Some(ElementUpdateKind::Layout)
+    );
+    tree.layout(VIEWPORT, 1.0, &mut TestTextLayout).unwrap();
+    assert_eq!(tree.take_work().reconciled_nodes, 3);
+    assert_eq!(tree.layout_nodes.nodes[&value], value_node);
+    assert!(
+        measurements
+            .take()
+            .iter()
+            .all(|id| *id == TextId::new(value.value())
+                || *id == TextId::new(ElementId::from("new").value()))
+    );
+    let mut expected = panels("Before", Color::BLACK);
+    expected.children[0] = replacement;
+    expected.children[1].visual.background = Some(Color::WHITE);
+    assert_matches_fresh_layout(&tree, expected, VIEWPORT, 1.0);
+}
+
+#[test]
+fn disjoint_replacements_can_move_a_key_between_parents_in_either_order() {
+    let initial = || {
+        div().id("root").flex_row().children([
+            div().id("left").size(200.0, 100.0),
+            div()
+                .id("right")
+                .size(200.0, 100.0)
+                .child(text("Moved").id("key")),
+        ])
+    };
+    for reverse in [false, true] {
+        let mut tree = UiTree::new();
+        set_root(&mut tree, initial());
+        let key = tree.layout_nodes.nodes[&"key".into()];
+        let left = div()
+            .id("left")
+            .size(200.0, 100.0)
+            .child(text("Moved").id("key"));
+        let right = div().id("right").size(200.0, 100.0);
+        let mut updates = vec![
+            ElementUpdate::Replace {
+                id: "left".into(),
+                element: Box::new(left.clone()),
+            },
+            ElementUpdate::Replace {
+                id: "right".into(),
+                element: Box::new(right.clone()),
+            },
+        ];
+        if reverse {
+            updates.reverse();
+        }
+        tree.update_elements(&updates).unwrap().unwrap();
+        tree.layout(VIEWPORT, 1.0, &mut TestTextLayout).unwrap();
+        assert_eq!(tree.layout_nodes.nodes[&"key".into()], key);
+        assert_matches_fresh_layout(
+            &tree,
+            div().id("root").flex_row().children([left, right]),
+            VIEWPORT,
+            1.0,
+        );
+    }
+}
+
+#[test]
+fn invalid_replacements_and_overlapping_batches_leave_the_tree_unchanged() {
+    let mut tree = UiTree::new();
+    set_root(&mut tree, panels("Original", Color::BLACK));
+    let before = tree.layout_nodes.nodes.clone();
+    let replace = |element| ElementUpdate::Replace {
+        id: "changing-panel".into(),
+        element: Box::new(element),
+    };
+    assert!(
+        tree.update_elements(&[replace(
+            div()
+                .id("changing-panel")
+                .child(text("Duplicate").id("stable-panel"))
+        )])
+        .is_err()
+    );
+    assert_eq!(tree.layout_nodes.nodes, before);
+    assert_matches_fresh_layout(&tree, panels("Original", Color::BLACK), VIEWPORT, 1.0);
+    assert_eq!(
+        tree.update_elements(&[
+            replace(div().id("changing-panel")),
+            ElementUpdate::Text {
+                id: "value".into(),
+                content: Arc::from("Overlapping")
+            },
+        ])
+        .unwrap(),
+        None
+    );
+    assert_matches_fresh_layout(&tree, panels("Original", Color::BLACK), VIEWPORT, 1.0);
+}
+
+#[test]
+fn paint_only_mutation_reuses_geometry_and_hit_allocations() {
+    let mut tree = UiTree::new();
+    set_root(
+        &mut tree,
+        div().size_full().child(
+            div()
+                .id("button")
+                .size(100.0, 40.0)
+                .clickable()
+                .bg(Color::BLACK),
+        ),
+    );
+    let mut scene = Scene::new();
+    tree.paint(&mut scene, &mut TestTextLayout).unwrap();
+    let before_hits = tree.hit_regions.as_ptr();
+    let before_bounds = tree.element_bounds.clone();
+    let initial = tree.take_work();
+    assert!(initial.geometry_nodes > 0);
+    tree.update_elements(&[ElementUpdate::BackgroundColor {
+        id: ElementId::from("button"),
+        color: Color::WHITE,
+    }])
+    .unwrap();
+    scene.clear(Color::BLACK);
+    tree.paint(&mut scene, &mut TestTextLayout).unwrap();
+    let work = tree.take_work();
+    assert_eq!(work.geometry_nodes, 0);
+    assert_eq!(work.layout_passes, 0);
+    assert_eq!(tree.hit_regions.as_ptr(), before_hits);
+    assert_eq!(tree.element_bounds, before_bounds);
+    assert!(
+        tree.hit_regions
+            .iter()
+            .any(|hit| hit.id == ElementId::from("button"))
+    );
+}
+
+#[test]
+fn layout_hover_refresh_and_paint_share_natural_geometry() {
+    let mut tree = UiTree::new();
+    set_root(&mut tree, panels("one", Color::BLACK));
+    tree.take_work();
+    tree.refresh_hover_after_layout(Some(Point::new(20.0, 20.0)))
+        .unwrap();
+    let work = tree.take_work();
+    assert!(work.geometry_nodes > 0);
+    tree.paint(&mut Scene::new(), &mut TestTextLayout).unwrap();
+    assert_eq!(tree.take_work().geometry_nodes, 0);
+}
+
+#[test]
+fn toolbar_hover_work_is_independent_of_unrelated_panel_size() {
+    let mut counts = Vec::new();
+    let mut allocation_counts = Vec::new();
+    for count in [100, 10_000] {
+        let mut tree = UiTree::new();
+        let root = div().size_full().flex_row().children([
+            button()
+                .id("toolbar")
+                .size(40.0, 40.0)
+                .flex_none()
+                .bg(Color::BLACK)
+                .hover(|style| style.bg(Color::WHITE)),
+            div()
+                .id("document")
+                .flex_col()
+                .size(500.0, 480.0)
+                .overflow_hidden()
+                .children((0..count).map(|i| text("Stable").id(ElementId::new(1000 + i)))),
+        ]);
+        set_root(&mut tree, root);
+        let mut scene = Scene::new();
+        tree.paint(&mut scene, &mut TestTextLayout).unwrap();
+        let chunks: Vec<_> = scene
+            .paint_layers()
+            .iter()
+            .filter(|layer| !layer.text_runs().is_empty())
+            .cloned()
+            .collect();
+        tree.take_work();
+        let (_, allocations) = crate::allocation_tests::measure(|| {
+            assert!(tree.pointer_moved(Point::new(10.0, 10.0), &mut TestTextLayout));
+            scene.clear(Color::BLACK);
+            tree.paint(&mut scene, &mut TestTextLayout).unwrap();
+        });
+        allocation_counts.push(allocations);
+        let work = tree.take_work();
+        assert_eq!(work.geometry_nodes, 0);
+        assert_eq!(work.layout_passes, 0);
+        assert!(work.reused_subtrees > 0);
+        assert!(work.cached_paint_bytes > 0);
+        counts.push(work.painted_nodes);
+        eprintln!(
+            "mounted siblings={count}, painted={}, geometry={}, allocations={}, allocated bytes={}",
+            work.painted_nodes, work.geometry_nodes, allocations.calls, allocations.bytes
+        );
+        for chunk in chunks {
+            assert!(
+                scene
+                    .paint_layers()
+                    .iter()
+                    .any(|current| Arc::ptr_eq(current, &chunk)),
+                "replay must share commands without copying every primitive"
+            );
+        }
+    }
+    assert_eq!(counts, vec![2, 2]);
+    assert_eq!(allocation_counts[0].calls, allocation_counts[1].calls);
+    assert_eq!(allocation_counts[0].bytes, allocation_counts[1].bytes);
+}
+
+#[test]
+fn inherited_color_invalidates_cached_descendants() {
+    let mut tree = UiTree::new();
+    set_root(
+        &mut tree,
+        div().id("root").size_full().text_color(Color::BLACK).child(
+            div()
+                .flex_col()
+                .children((0..64).map(|i| text("Inherited").id(ElementId::new(1000 + i)))),
+        ),
+    );
+    let mut scene = Scene::new();
+    tree.paint(&mut scene, &mut TestTextLayout).unwrap();
+    for color in [Color::WHITE, Color::rgb8(120, 10, 30)] {
+        tree.update_elements(&[ElementUpdate::TextColor {
+            id: ElementId::from("root"),
+            color,
+        }])
+        .unwrap();
+        scene.clear(Color::BLACK);
+        tree.paint(&mut scene, &mut TestTextLayout).unwrap();
+        assert!(!scene.text_runs().is_empty());
+        assert!(scene.text_runs().iter().all(|run| run.style.color == color));
+    }
+}
+
+#[test]
+fn named_group_hover_reaches_cached_member_subtrees() {
+    let mut tree = UiTree::new();
+    set_root(
+        &mut tree,
+        div().id("group").group_named("outer").size_full().child(
+            div().group().size_full().children((0..64).map(|i| {
+                text("Member")
+                    .id(ElementId::new(1000 + i))
+                    .text_color(Color::BLACK)
+                    .group_hover_named("outer", |style| style.text_color(Color::WHITE))
+            })),
+        ),
+    );
+    let mut scene = Scene::new();
+    tree.paint(&mut scene, &mut TestTextLayout).unwrap();
+    tree.hovered.insert(ElementId::from("group"));
+    scene.clear(Color::BLACK);
+    tree.paint(&mut scene, &mut TestTextLayout).unwrap();
+    assert!(!scene.text_runs().is_empty());
+    assert!(
+        scene
+            .text_runs()
+            .iter()
+            .all(|run| run.style.color == Color::WHITE)
+    );
+}
+
 struct Measurements;
 
 impl Measurements {

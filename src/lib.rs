@@ -303,7 +303,10 @@ pub use menubar::{
     MAX_MENUBAR_MENUS, Menubar, MenubarClose, MenubarFirst, MenubarItem, MenubarLast, MenubarNext,
     MenubarOpen, MenubarPrevious, MenubarState, menubar, menubar_key_bindings,
 };
-pub use metrics::{FrameMetrics, RenderStats};
+pub use metrics::{FrameMetrics, PipelineMetrics, RenderStats};
+
+#[cfg(test)]
+mod allocation_tests;
 #[cfg(target_os = "macos")]
 pub use native_view::{MAX_NATIVE_VIEW_OUTSET, MacNativeView};
 pub use navigation_menu::{

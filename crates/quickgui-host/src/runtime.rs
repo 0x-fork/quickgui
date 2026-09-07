@@ -1107,6 +1107,10 @@ impl NativeRuntime {
         let mut tree = native_window.tree.borrow_mut();
         let previous_revision = tree.revision;
         let retained_updates = retained_element_updates(&tree, &mutations);
+        let retained_scopes = retained_updates
+            .is_none()
+            .then(|| retained_scope_updates(&tree, &mutations))
+            .flatten();
         let revision = apply_mutations(&mut tree, mutations).map_err(|error| error.to_string())?;
         drop(tree);
         if revision != previous_revision
@@ -1119,7 +1123,11 @@ impl NativeRuntime {
                 None => false,
             };
             if !updated {
-                runner.invalidate_window(handle);
+                if let Some(scopes) = retained_scopes {
+                    runner.invalidate_elements(handle, &scopes);
+                } else {
+                    runner.invalidate_window(handle);
+                }
             }
         }
         Ok(revision)

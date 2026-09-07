@@ -1,6 +1,25 @@
 use super::*;
 
 impl TextSystem {
+    pub(super) fn upload_stats(&self) -> super::upload::UploadStats {
+        let mut stats =
+            self.batches
+                .iter()
+                .fold(super::upload::UploadStats::default(), |mut stats, batch| {
+                    let renderer = &self.renderers[batch.renderer];
+                    stats.bytes += renderer.last_upload_bytes() as u64;
+                    stats.writes += renderer.last_upload_writes();
+                    stats.reused += usize::from(renderer.last_upload_writes() == 0);
+                    stats
+                });
+        stats.shadow_bytes = self
+            .renderers
+            .iter()
+            .map(|renderer| renderer.retained_upload_bytes())
+            .sum();
+        stats
+    }
+
     pub(super) fn new(
         device: &Device,
         queue: &Queue,

@@ -1,8 +1,37 @@
 use std::time::{Duration, Instant};
 
+/// Work performed between presented frames. Durations are elapsed time for each phase, while
+/// [`FrameMetrics::cpu_time`] measures application-thread CPU time across the frame as a whole.
+/// Mutation time includes retained updates received before the redraw callback starts.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct PipelineMetrics {
+    pub mutation_time: Duration,
+    pub declaration_time: Duration,
+    pub reconciliation_time: Duration,
+    pub layout_time: Duration,
+    pub geometry_time: Duration,
+    pub paint_time: Duration,
+    pub accessibility_time: Duration,
+    /// Renderer preparation, upload, submission, and any presentation wait.
+    pub render_time: Duration,
+    pub reconciled_nodes: usize,
+    pub layout_passes: usize,
+    pub measured_nodes: usize,
+    pub geometry_nodes: usize,
+    pub painted_nodes: usize,
+    pub reused_subtrees: usize,
+    pub cached_paint_bytes: usize,
+}
+
 /// Renderer work submitted for the most recently completed frame.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct RenderStats {
+    /// Bytes written to retained primitive GPU buffers this frame, excluding texture uploads.
+    pub uploaded_buffer_bytes: u64,
+    pub buffer_write_calls: usize,
+    pub reused_buffers: usize,
+    /// Bounded CPU shadows used to compare rotating physical GPU buffers.
+    pub upload_shadow_bytes: usize,
     pub quads: usize,
     /// Analytic drop and inset shadows submitted with the instanced shape draw.
     pub shadows: usize,
@@ -51,6 +80,8 @@ pub struct RenderStats {
     pub compositing_layers: usize,
     /// Offscreen group passes recorded this frame.
     pub layer_passes: usize,
+    /// Stable group textures composited without redrawing their content.
+    pub reused_compositing_layers: usize,
     /// Separable Gaussian passes recorded for subtree, drop-shadow, and backdrop blurs.
     pub blur_passes: usize,
     /// Offscreen compositing bytes retained by this window, bounded by
@@ -73,6 +104,7 @@ pub struct FrameMetrics {
     pub frame_time: Duration,
     pub smoothed_frame_time: Duration,
     pub render: RenderStats,
+    pub pipeline: PipelineMetrics,
 }
 
 impl FrameMetrics {
@@ -103,7 +135,12 @@ impl MetricsTracker {
         self.metrics
     }
 
-    pub fn record(&mut self, elapsed: FrameElapsed, render: RenderStats) {
+    pub fn record(
+        &mut self,
+        elapsed: FrameElapsed,
+        render: RenderStats,
+        pipeline: PipelineMetrics,
+    ) {
         let (smoothed_cpu_time, smoothed_frame_time) = if self.metrics.frame_number == 0 {
             (elapsed.cpu_time, elapsed.frame_time)
         } else {
@@ -120,6 +157,7 @@ impl MetricsTracker {
             frame_time: elapsed.frame_time,
             smoothed_frame_time,
             render,
+            pipeline,
         };
     }
 }

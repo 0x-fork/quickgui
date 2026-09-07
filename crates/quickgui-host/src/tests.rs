@@ -3,6 +3,8 @@ use quickgui::{
     ElementStateStyle, MAX_GROUP_STYLES_PER_ELEMENT, MAX_HOVER_GROUP_NAME_BYTES, Transform2D,
 };
 
+mod incremental;
+
 #[test]
 fn go_mutation_fixture_uses_native_text_and_color_encoding() {
     let bytes = include_bytes!("../../../go/testdata/text.qgmb");

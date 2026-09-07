@@ -1,18 +1,26 @@
 use super::*;
 
 impl UiTree {
+    pub(crate) fn take_work(&mut self) -> crate::PipelineMetrics {
+        std::mem::take(&mut self.work)
+    }
+
     pub fn new() -> Self {
         Self::new_at(Instant::now())
     }
 
     pub(crate) fn new_at(animation_epoch: Instant) -> Self {
         Self {
+            work: crate::PipelineMetrics::default(),
+            geometry_cache: retained::GeometryCache::default(),
+            paint_cache: paint_cache::PaintCache::default(),
             root: None,
             taffy: TaffyTree::with_capacity(256),
             layout_nodes: LayoutNodeCache::default(),
             root_node: None,
             mounted_state_dirty: false,
             retained_semantics_dirty: false,
+            retained_placement_dirty: false,
             seen_ids: HashSet::with_capacity(256),
             displayed_ids: HashSet::with_capacity(256),
             visible_ids: HashSet::with_capacity(256),
@@ -237,6 +245,8 @@ impl UiTree {
         viewport: Size,
         scale_factor: f32,
     ) -> Result<(), UiError> {
+        let started = Instant::now();
+        let reconciled_before = self.layout_nodes.reconciled_nodes;
         self.seen_ids.clear();
         self.seen_ids
             .insert(ElementId::new(ACCESSIBILITY_ROOT_ID.0));
@@ -262,7 +272,12 @@ impl UiTree {
         self.layout_nodes.commit_children(&mut self.taffy)?;
         self.root = Some(root);
         self.root_node = Some(root_node);
+        self.geometry_cache.invalidate();
+        self.geometry_cache.state_transforms =
+            retained::has_state_transform(self.root.as_ref().unwrap());
         self.mounted_state_dirty = true;
+        self.work.reconciliation_time += started.elapsed();
+        self.work.reconciled_nodes += self.layout_nodes.reconciled_nodes - reconciled_before;
         Ok(())
     }
 
@@ -270,6 +285,12 @@ impl UiTree {
     /// declaration. Intermediate container-query shells deliberately skip this phase so they
     /// cannot transiently unmount stable text input, scroll, transition, or image state.
     pub(super) fn sync_mounted_root(&mut self, now: Instant) -> Result<(), UiError> {
+        self.geometry_cache.invalidate();
+        self.geometry_cache.state_transforms = self
+            .root
+            .as_ref()
+            .is_some_and(retained::has_state_transform);
+        self.paint_cache.mount(self.root.as_ref());
         // Query callbacks may temporarily replace their descendants with an empty shell. Keep
         // their layout nodes until the complete declaration has converged, just like mount state.
         self.layout_nodes.retain(&mut self.taffy, &self.seen_ids)?;
@@ -907,6 +928,9 @@ impl UiTree {
         now: Instant,
         prepare: &mut impl FnMut(&mut Element),
     ) -> Result<(), UiError> {
+        let started = Instant::now();
+        let passes_before = self.layout_nodes.layout_passes;
+        let measured_before = self.layout_nodes.measured_nodes;
         self.update_layout_scale_factor(scale_factor)?;
         self.viewport = viewport;
         let mut converged = self.root_node.is_none();
@@ -974,6 +998,12 @@ impl UiTree {
         }
         if let Some(tooltip) = &mut self.tooltip_overlay {
             tooltip.tree.layout(viewport, scale_factor, renderer)?;
+        }
+        self.work.layout_time += started.elapsed();
+        self.work.layout_passes += self.layout_nodes.layout_passes - passes_before;
+        self.work.measured_nodes += self.layout_nodes.measured_nodes - measured_before;
+        if self.layout_nodes.layout_passes != passes_before {
+            self.geometry_cache.invalidate();
         }
         Ok(())
     }

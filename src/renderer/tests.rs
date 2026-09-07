@@ -33,6 +33,236 @@ fn application_font_system_handle_is_shared_without_a_lock() {
     assert!(Rc::ptr_eq(&fonts, &fonts.clone()));
 }
 
+#[cfg(target_os = "macos")]
+#[test]
+fn retained_uploads_update_the_correct_physical_buffer() {
+    let fonts = create_shared_font_system(&Assets::default(), &[]).unwrap();
+    let renderer =
+        pollster::block_on(OffscreenRenderer::new(PerformanceProfile::Balanced, fonts)).unwrap();
+    let (device, queue) = renderer.gpu();
+    let make_buffer = || {
+        device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("retained upload test"),
+            size: 4096,
+            usage: wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        })
+    };
+    let buffers = [make_buffer(), make_buffer()];
+    let mut uploads = super::upload::BufferUploads::default();
+    let mut data = vec![1u8; 4096];
+    for (slot, buffer) in buffers.iter().enumerate() {
+        uploads.write(slot, queue, buffer, &data);
+    }
+    uploads.begin_frame();
+    uploads.write(0, queue, &buffers[0], &data);
+    assert_eq!(uploads.stats().bytes, 0);
+    data[512] = 2;
+    uploads.write(1, queue, &buffers[1], &data);
+    assert_eq!(uploads.stats().bytes, 256);
+    let readback = device.create_buffer(&wgpu::BufferDescriptor {
+        label: None,
+        size: 4096,
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+    let read = |buffer: &wgpu::Buffer| {
+        let mut encoder = device.create_command_encoder(&Default::default());
+        encoder.copy_buffer_to_buffer(buffer, 0, &readback, 0, 4096);
+        queue.submit(Some(encoder.finish()));
+        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+        readback
+            .slice(..)
+            .map_async(wgpu::MapMode::Read, move |result| {
+                sender.send(result).unwrap();
+            });
+        device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+        receiver.recv().unwrap().unwrap();
+        let bytes = readback.slice(..).get_mapped_range().unwrap().to_vec();
+        readback.unmap();
+        bytes
+    };
+    assert_eq!(read(&buffers[0]), vec![1; 4096]);
+    assert_eq!(read(&buffers[1]), data);
+    let replacement = make_buffer();
+    uploads.reset(1);
+    uploads.begin_frame();
+    uploads.write(1, queue, &replacement, &data);
+    assert_eq!(uploads.stats().bytes, 4096);
+    assert_eq!(read(&replacement), data);
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn compositing_planes_keep_distinct_uniforms_in_one_submission() {
+    use crate::scene::PaintLayerKey;
+    let fonts = create_shared_font_system(&Assets::default(), &[]).unwrap();
+    let renderer = pollster::block_on(OffscreenRenderer::new(
+        PerformanceProfile::Balanced,
+        fonts.clone(),
+    ))
+    .unwrap();
+    let (device, queue) = renderer.gpu();
+    let format = TextureFormat::Rgba8UnormSrgb;
+    let size = Size::new(64.0, 64.0);
+    let mut scene = Scene::new();
+    for (plane, angle, color, blur) in [
+        (ScenePlane::Base, 15.0, Color::WHITE, 1.0),
+        (ScenePlane::Overlay, -35.0, Color::rgb8(255, 0, 0), 3.0),
+    ] {
+        let key = PaintLayerKey {
+            plane,
+            ..Default::default()
+        };
+        let bounds = Rect::new(15.0, 20.0, 25.0, 12.0);
+        let group = scene
+            .begin_group(
+                key,
+                bounds,
+                Rect::from_size(size),
+                crate::LayerEffects {
+                    transform: crate::Transform2D::rotate_degrees(angle)
+                        .around(Point::new(30.0, 30.0)),
+                    blur,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        scene.push_quad_in(group.content_key(), Quad::new(bounds, color));
+        scene.end_group(group);
+    }
+    scene.finish();
+    let mut shapes = ShapeRenderer::new(device, format, None);
+    shapes.prepare(device, queue, &scene, Rect::from_size(size), 64, 64, 1.0);
+    let text = TextSystem::new(device, queue, format, fonts, None);
+    let renderers = SceneRenderers {
+        shapes: &shapes,
+        text: &text,
+        path: None,
+        image: None,
+        svg: None,
+        custom_shader: None,
+    };
+    let targets: Vec<_> = (0..4)
+        .map(|_| {
+            let texture = device.create_texture(&wgpu::TextureDescriptor {
+                label: None,
+                size: wgpu::Extent3d {
+                    width: 64,
+                    height: 64,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            });
+            let view = texture.create_view(&Default::default());
+            (texture, view)
+        })
+        .collect();
+    let mut shared = Compositor::default();
+    let mut independent = [Compositor::default(), Compositor::default()];
+    let mut encoder = device.create_command_encoder(&Default::default());
+    for (index, plane) in [ScenePlane::Base, ScenePlane::Overlay]
+        .into_iter()
+        .enumerate()
+    {
+        let frame = CompositeFrame {
+            width: 64,
+            height: 64,
+            scale: 1.0,
+            format,
+            target_copyable: true,
+            plane: Some(plane),
+        };
+        shared
+            .render_scene(
+                device,
+                queue,
+                &mut encoder,
+                &scene,
+                &renderers,
+                &targets[index].1,
+                Some(&targets[index].0),
+                Some(Color::BLACK),
+                frame,
+            )
+            .unwrap();
+        independent[index]
+            .render_scene(
+                device,
+                queue,
+                &mut encoder,
+                &scene,
+                &renderers,
+                &targets[index + 2].1,
+                Some(&targets[index + 2].0),
+                Some(Color::BLACK),
+                frame,
+            )
+            .unwrap();
+    }
+    let readbacks: Vec<_> = targets
+        .iter()
+        .map(|(texture, _)| {
+            let readback = device.create_buffer(&wgpu::BufferDescriptor {
+                label: None,
+                size: 64 * 256,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            });
+            encoder.copy_texture_to_buffer(
+                wgpu::TexelCopyTextureInfo {
+                    texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                wgpu::TexelCopyBufferInfo {
+                    buffer: &readback,
+                    layout: wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(256),
+                        rows_per_image: Some(64),
+                    },
+                },
+                wgpu::Extent3d {
+                    width: 64,
+                    height: 64,
+                    depth_or_array_layers: 1,
+                },
+            );
+            readback
+        })
+        .collect();
+    queue.submit(Some(encoder.finish()));
+    let pixels: Vec<_> = readbacks
+        .iter()
+        .map(|buffer| {
+            let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+            buffer
+                .slice(..)
+                .map_async(wgpu::MapMode::Read, move |result| {
+                    sender.send(result).unwrap();
+                });
+            device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+            receiver.recv().unwrap().unwrap();
+            let pixels = buffer.slice(..).get_mapped_range().unwrap().to_vec();
+            buffer.unmap();
+            pixels
+        })
+        .collect();
+    assert_eq!(
+        pixels[0], pixels[2],
+        "overlay uniforms overwrote the base plane"
+    );
+    assert_eq!(pixels[1], pixels[3]);
+    assert_ne!(pixels[0], pixels[1]);
+}
+
 #[test]
 fn advanced_shaping_uses_ordered_custom_fallbacks_before_platform_fonts() {
     fn shaped_families(buffer: &Buffer, font_system: &FontSystem) -> Vec<(usize, String)> {
@@ -2143,6 +2373,173 @@ fn a_blurred_group_records_two_separable_passes_and_stays_inside_its_budget() {
         far_outside < just_outside && just_outside < inside,
         "the blur must fall off outwards: {inside} {just_outside} {far_outside}"
     );
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn retained_layer_pixels_survive_transform_opacity_and_blur_changes() {
+    use crate::scene::PaintLayerKey;
+    let fonts = create_shared_font_system(&Assets::default(), &[]).unwrap();
+    let mut renderer = pollster::block_on(OffscreenRenderer::new(
+        PerformanceProfile::Balanced,
+        fonts.clone(),
+    ))
+    .unwrap();
+    let viewport = Size::new(80.0, 80.0);
+    for (index, (angle, opacity, blur, color, expected_passes, scale)) in [
+        (10.0, 1.0, 2.0, Color::WHITE, 1, 1.0),
+        (25.0, 0.5, 2.0, Color::WHITE, 0, 1.0),
+        (25.0, 0.5, 4.0, Color::WHITE, 0, 1.0),
+        (25.0, 0.5, 4.0, Color::rgb8(220, 30, 20), 1, 1.0),
+        (25.0, 0.5, 4.0, Color::rgb8(220, 30, 20), 1, 2.0),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut scene = Scene::new();
+        scene.clear(Color::BLACK);
+        scene.multiply_opacity(opacity);
+        let group = scene
+            .begin_group(
+                PaintLayerKey::default(),
+                Rect::new(20.0, 20.0, 20.0, 20.0),
+                Rect::from_size(viewport),
+                crate::LayerEffects {
+                    transform: crate::Transform2D::rotate_degrees(angle)
+                        .around(Point::new(30.0, 30.0)),
+                    blur,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        scene.push_quad_in(
+            group.content_key(),
+            Quad::new(Rect::new(20.0, 20.0, 20.0, 20.0), color),
+        );
+        scene.end_group(group);
+        scene.finish();
+        let actual = renderer
+            .render_to_snapshot(&scene, viewport, scale)
+            .unwrap();
+        let stats = renderer.last_composite();
+        assert_eq!(stats.layer_passes, expected_passes, "case {index}");
+        if index == 1 {
+            assert_eq!(stats.reused_layers, 1);
+            assert_eq!(stats.blur_passes, 0);
+        }
+        if index == 2 {
+            assert_eq!(stats.blur_passes, 2);
+        }
+        let mut fresh = pollster::block_on(OffscreenRenderer::new(
+            PerformanceProfile::Balanced,
+            fonts.clone(),
+        ))
+        .unwrap();
+        let expected = fresh.render_to_snapshot(&scene, viewport, scale).unwrap();
+        assert_eq!(
+            actual.rgba(),
+            expected.rgba(),
+            "cached compositing changed pixels in case {index}"
+        );
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn nested_layer_transform_invalidates_parent_pixels_only() {
+    use crate::scene::PaintLayerKey;
+    let fonts = create_shared_font_system(&Assets::default(), &[]).unwrap();
+    let mut renderer = pollster::block_on(OffscreenRenderer::new(
+        PerformanceProfile::Balanced,
+        fonts.clone(),
+    ))
+    .unwrap();
+    for angle in [10.0, 25.0] {
+        let mut scene = Scene::new();
+        let bounds = Rect::new(10.0, 10.0, 40.0, 40.0);
+        let viewport = Size::new(64.0, 64.0);
+        let outer = scene
+            .begin_group(
+                PaintLayerKey::default(),
+                bounds,
+                Rect::from_size(viewport),
+                crate::LayerEffects {
+                    blur: 1.0,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        let inner = scene
+            .begin_group(
+                outer.content_key(),
+                bounds,
+                Rect::from_size(viewport),
+                crate::LayerEffects {
+                    transform: crate::Transform2D::rotate_degrees(angle)
+                        .around(Point::new(30.0, 30.0)),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        scene.push_quad_in(inner.content_key(), Quad::new(bounds, Color::WHITE));
+        scene.end_group(inner);
+        scene.end_group(outer);
+        scene.finish();
+        let actual = renderer.render_to_snapshot(&scene, viewport, 1.0).unwrap();
+        if angle == 25.0 {
+            assert_eq!(renderer.last_composite().layer_passes, 1);
+            assert_eq!(renderer.last_composite().reused_layers, 1);
+        }
+        let mut fresh = pollster::block_on(OffscreenRenderer::new(
+            PerformanceProfile::Balanced,
+            fonts.clone(),
+        ))
+        .unwrap();
+        let expected = fresh.render_to_snapshot(&scene, viewport, 1.0).unwrap();
+        assert_eq!(actual.rgba(), expected.rgba());
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn retained_glyph_uploads_match_fresh_text_through_edits_and_buffer_growth() {
+    let fonts = create_shared_font_system(&Assets::default(), &[]).unwrap();
+    let mut renderer = pollster::block_on(OffscreenRenderer::new(
+        PerformanceProfile::Balanced,
+        fonts.clone(),
+    ))
+    .unwrap();
+    let viewport = Size::new(200.0, 80.0);
+    for content in [
+        "Count 100",
+        "Count 101",
+        "Count 101",
+        "",
+        "Count 2",
+        "A longer label with several more glyphs",
+    ] {
+        let mut scene = Scene::new();
+        scene.clear(Color::BLACK);
+        scene.push_text(TextRun::new(
+            TextId::new(90),
+            content.into(),
+            Rect::new(5.0, 5.0, 190.0, 70.0),
+            TextStyle::new(16.0, Color::WHITE),
+        ));
+        scene.finish();
+        let actual = renderer.render_to_snapshot(&scene, viewport, 1.0).unwrap();
+        let mut fresh = pollster::block_on(OffscreenRenderer::new(
+            PerformanceProfile::Balanced,
+            fonts.clone(),
+        ))
+        .unwrap();
+        let expected = fresh.render_to_snapshot(&scene, viewport, 1.0).unwrap();
+        assert_eq!(
+            actual.rgba(),
+            expected.rgba(),
+            "glyph uploads differ for {content:?}"
+        );
+    }
 }
 
 #[test]

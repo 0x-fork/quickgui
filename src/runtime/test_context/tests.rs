@@ -19,5 +19,6 @@ mod application;
 mod core;
 mod input;
 mod platform_services;
+mod scopes;
 mod visual;
 mod window_shell;

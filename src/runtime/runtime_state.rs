@@ -256,6 +256,32 @@ impl Runtime {
         true
     }
 
+    pub(super) fn invalidate_external_scopes(
+        &mut self,
+        handle: WindowHandle,
+        ids: &[ElementId],
+    ) -> bool {
+        let window = if self.current_handle() == Some(handle) {
+            self.window.as_mut()
+        } else {
+            self.window_handles
+                .get(&handle)
+                .and_then(|id| self.windows.get_mut(id))
+                .map(|entry| &mut entry.state)
+        };
+        let Some(window) = window else {
+            return false;
+        };
+        if ids.is_empty() {
+            return true;
+        }
+        window.view_dirty |= !window.listeners.scopes.invalidate(ids);
+        if window.visible && window.scheduler.invalidate() {
+            window.window.request_redraw();
+        }
+        true
+    }
+
     pub(super) fn update_external_elements(
         &mut self,
         handle: WindowHandle,
@@ -274,6 +300,9 @@ impl Runtime {
         };
         if window.view_dirty {
             return Ok(true);
+        }
+        if window.listeners.needs_scoped_replacement(updates) {
+            return Ok(false);
         }
         let Some(kind) = window.ui.update_elements(updates)? else {
             return Ok(false);

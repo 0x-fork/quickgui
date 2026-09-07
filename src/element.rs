@@ -122,7 +122,7 @@ pub const MAX_MOUSE_LISTENERS_PER_ELEMENT: usize = 16;
 pub const MAX_KEY_LISTENERS_PER_ELEMENT: usize = 16;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct MouseListenerKey(pub(crate) u32);
+pub(crate) struct MouseListenerKey(pub(crate) u64);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum MouseListenerKind {
@@ -143,7 +143,7 @@ pub(crate) struct MouseListenerBinding {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct KeyListenerKey(pub(crate) u32);
+pub(crate) struct KeyListenerKey(pub(crate) u64);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum KeyListenerKind {
@@ -2136,7 +2136,7 @@ pub struct Element {
     pub(crate) snap_stop_always: bool,
 }
 
-/// A change to a mounted element that does not replace its identity, children, or listeners.
+/// A change to a mounted element, addressed by stable identity.
 ///
 /// Embedding runtimes can submit a batch with [`crate::AppRunner::update_elements`] after
 /// updating their source declaration. Text changes invalidate intrinsic layout along the
@@ -2144,19 +2144,71 @@ pub struct Element {
 /// targets reject the entire batch, allowing the caller to request an ordinary view rebuild.
 #[derive(Clone, Debug)]
 pub enum ElementUpdate {
-    Text { id: ElementId, content: Arc<str> },
-    BackgroundColor { id: ElementId, color: Color },
-    TextColor { id: ElementId, color: Color },
-    Opacity { id: ElementId, opacity: f32 },
+    Text {
+        id: ElementId,
+        content: Arc<str>,
+    },
+    BackgroundColor {
+        id: ElementId,
+        color: Color,
+    },
+    TextColor {
+        id: ElementId,
+        color: Color,
+    },
+    Opacity {
+        id: ElementId,
+        opacity: f32,
+    },
+    /// Change placement without measuring or laying out the subtree again.
+    Transform {
+        id: ElementId,
+        transform: Transform2D,
+    },
+    /// Replace a declaration at an existing identity, retaining keyed layout and input state.
+    /// The replacement root must have the same explicit ID. Register replacement listeners
+    /// through a component scope; this operation itself does not register callbacks.
+    Replace {
+        id: ElementId,
+        element: Box<Element>,
+    },
 }
 
 impl ElementUpdate {
+    pub(crate) fn apply_to_declaration(&self, element: &mut Element) -> bool {
+        if element.explicit_id != Some(self.id()) {
+            return false;
+        }
+        match self {
+            Self::Text { content, .. } => {
+                let ElementKind::Text(value) = &mut element.kind else {
+                    return false;
+                };
+                *value = content.clone();
+            }
+            Self::BackgroundColor { color, .. } => element.visual.background = Some(*color),
+            Self::TextColor { color, .. } => element.typography.color = Some(*color),
+            Self::Opacity { opacity, .. } => {
+                element.visual.opacity = if opacity.is_finite() {
+                    opacity.clamp(0.0, 1.0)
+                } else {
+                    1.0
+                }
+            }
+            Self::Transform { transform, .. } => element.visual.transform = *transform,
+            Self::Replace { .. } => return false,
+        }
+        true
+    }
+
     pub fn id(&self) -> ElementId {
         match self {
             Self::Text { id, .. }
             | Self::BackgroundColor { id, .. }
             | Self::TextColor { id, .. }
-            | Self::Opacity { id, .. } => *id,
+            | Self::Opacity { id, .. }
+            | Self::Transform { id, .. }
+            | Self::Replace { id, .. } => *id,
         }
     }
 }

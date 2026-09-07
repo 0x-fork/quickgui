@@ -497,6 +497,11 @@ impl TestAppContext {
 
         let entities = cx.entity_notifications;
         for state in self.windows.values_mut() {
+            state.listeners.scopes.invalidate_entities(&entities);
+            state
+                .listeners
+                .scopes
+                .invalidate_globals(&cx.global_notifications);
             if state
                 .listeners
                 .observes_entity_change(&entities, cx.notify_all_entities)

@@ -707,7 +707,7 @@ impl GpuRenderer {
                 .as_ref()
                 .map_or_else(|| surface.clone(), |(_, view)| view.clone())
         });
-        let composite_stats = {
+        let mut composite_stats = {
             let renderers = SceneRenderers {
                 shapes: &self.shapes,
                 path: self.path.as_ref(),
@@ -753,7 +753,7 @@ impl GpuRenderer {
                 svg: self.svg.as_ref(),
                 text: &self.text,
             };
-            self.compositor.render_scene(
+            let overlay_stats = self.compositor.render_scene(
                 &self.device,
                 &self.queue,
                 &mut encoder,
@@ -774,6 +774,11 @@ impl GpuRenderer {
                     plane: Some(ScenePlane::Overlay),
                 },
             )?;
+            composite_stats.layers += overlay_stats.layers;
+            composite_stats.layer_passes += overlay_stats.layer_passes;
+            composite_stats.reused_layers += overlay_stats.reused_layers;
+            composite_stats.blur_passes += overlay_stats.blur_passes;
+            composite_stats.layer_texture_bytes = overlay_stats.layer_texture_bytes;
             if overlay_intermediate.is_some()
                 && let (Some(present), Some(surface)) =
                     (&self.present, overlay_surface_view.as_ref())
@@ -792,7 +797,28 @@ impl GpuRenderer {
         let (retained_text_areas, retained_text_layouts, retained_text_renderers) =
             self.text.retained_counts();
 
+        let uploads = std::iter::once(self.shapes.uploads.stats())
+            .chain(self.path.as_ref().map(|renderer| renderer.uploads.stats()))
+            .chain(
+                self.custom_shader
+                    .as_ref()
+                    .map(|renderer| renderer.uploads.stats()),
+            )
+            .chain(self.image.as_ref().map(|renderer| renderer.uploads.stats()))
+            .chain(self.svg.as_ref().map(|renderer| renderer.uploads.stats()))
+            .chain(std::iter::once(self.text.upload_stats()))
+            .fold(super::upload::UploadStats::default(), |mut total, stats| {
+                total.bytes += stats.bytes;
+                total.writes += stats.writes;
+                total.reused += stats.reused;
+                total.shadow_bytes += stats.shadow_bytes;
+                total
+            });
         Ok(RenderOutcome::Presented(RenderStats {
+            uploaded_buffer_bytes: uploads.bytes,
+            buffer_write_calls: uploads.writes,
+            reused_buffers: uploads.reused,
+            upload_shadow_bytes: uploads.shadow_bytes,
             quads: quad_count,
             shadows: shadow_count,
             images: image_stats.images,
@@ -830,6 +856,7 @@ impl GpuRenderer {
             cached_text_areas: text_count.saturating_sub(reshaped),
             compositing_layers: composite_stats.layers,
             layer_passes: composite_stats.layer_passes,
+            reused_compositing_layers: composite_stats.reused_layers,
             blur_passes: composite_stats.blur_passes,
             layer_texture_bytes: composite_stats.layer_texture_bytes,
             skipped_layer_effects: composite_stats.skipped_layer_effects,

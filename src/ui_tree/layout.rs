@@ -9,8 +9,9 @@ pub(super) struct LayoutNodeCache {
     pub(super) positions: HashMap<ElementId, (ElementId, usize)>,
     child_updates: Vec<(NodeId, Vec<NodeId>)>,
     root_constraints: HashMap<NodeId, (Size, f32)>,
-    #[cfg(test)]
     pub(super) layout_passes: usize,
+    pub(super) measured_nodes: usize,
+    pub(super) reconciled_nodes: usize,
 }
 
 impl LayoutNodeCache {
@@ -22,6 +23,7 @@ impl LayoutNodeCache {
         context: Option<MeasureContext>,
         children: Vec<NodeId>,
     ) -> Result<NodeId, UiError> {
+        self.reconciled_nodes += 1;
         let node = if let Some(&node) = self.nodes.get(&id) {
             if taffy.style(node)? != style {
                 taffy.set_style(node, style.clone())?;
@@ -122,12 +124,18 @@ impl LayoutNodeCache {
             // declarations. Its internal cache still skips clean branches of a dirty root.
             return Ok(());
         }
-        compute_detached_layout(taffy, root, viewport, scale_factor, renderer)?;
+        self.measured_nodes += compute_layout_measured(
+            taffy,
+            root,
+            TaffySize {
+                width: AvailableSpace::Definite(viewport.width),
+                height: AvailableSpace::Definite(viewport.height),
+            },
+            scale_factor,
+            renderer,
+        )?;
         self.root_constraints.insert(root, (viewport, scale_factor));
-        #[cfg(test)]
-        {
-            self.layout_passes += 1;
-        }
+        self.layout_passes += 1;
         Ok(())
     }
 }
@@ -246,6 +254,17 @@ pub(super) fn compute_detached_layout_available(
     scale_factor: f32,
     renderer: &mut impl TextLayoutEngine,
 ) -> Result<(), UiError> {
+    compute_layout_measured(taffy, root, available, scale_factor, renderer).map(|_| ())
+}
+
+fn compute_layout_measured(
+    taffy: &mut TaffyTree<MeasureContext>,
+    root: NodeId,
+    available: TaffySize<AvailableSpace>,
+    scale_factor: f32,
+    renderer: &mut impl TextLayoutEngine,
+) -> Result<usize, UiError> {
+    let mut measured = 0;
     taffy.compute_layout_with_measure(
         root,
         available,
@@ -256,6 +275,7 @@ pub(super) fn compute_detached_layout_available(
             if let (Some(width), Some(height)) = (known.width, known.height) {
                 return TaffySize { width, height };
             }
+            measured += 1;
             match context {
                 MeasureContext::Text {
                     id,
@@ -300,7 +320,7 @@ pub(super) fn compute_detached_layout_available(
             }
         },
     )?;
-    Ok(())
+    Ok(measured)
 }
 
 /// Lay out every callback subtree as an independent root within its query's assigned box.
@@ -1381,7 +1401,7 @@ pub(super) fn apply_logical_insets(element: &mut Element) {
 /// collection, and paint) need to turn a Taffy-relative child location into painted geometry:
 /// the translated origin, whether horizontal positions mirror, the containing block a sticky
 /// child may not leave, and the viewport of the nearest ancestor scroll container.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) struct LayoutFrame {
     /// Horizontal origin term. See [`frame_rect`] for how `mirror` changes its meaning.
     pub origin_x: f32,

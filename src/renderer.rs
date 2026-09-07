@@ -296,6 +296,7 @@ mod offscreen;
 mod present;
 mod text_layout;
 mod text_system;
+pub(crate) mod upload;
 
 #[cfg(test)]
 pub(crate) use compositor::CompositeStats;
@@ -571,6 +572,7 @@ pub(crate) struct ShapeRenderer {
     gradient_capacities: Vec<usize>,
     gradient_bind_groups: Vec<BindGroup>,
     active_buffer: usize,
+    pub(crate) uploads: crate::renderer::upload::BufferUploads,
     batches: Vec<ShapeBatch>,
     layer_batches: Vec<Range<usize>>,
     pending: Vec<OrderedShape>,
@@ -749,6 +751,7 @@ impl ShapeRenderer {
             gradient_capacities: vec![INITIAL_GRADIENT_CAPACITY; BUFFERED_FRAMES],
             gradient_bind_groups,
             active_buffer: 0,
+            uploads: crate::renderer::upload::BufferUploads::default(),
             batches: Vec::with_capacity(16),
             layer_batches: Vec::with_capacity(4),
             pending: Vec::with_capacity(INITIAL_SHAPE_CAPACITY),
@@ -768,6 +771,7 @@ impl ShapeRenderer {
         physical_height: u32,
         scale: f32,
     ) -> (usize, usize, usize) {
+        self.uploads.begin_frame();
         self.instances.clear();
         self.batches.clear();
         self.layer_batches.clear();
@@ -872,9 +876,10 @@ impl ShapeRenderer {
             self.layer_batches.push(batch_start..self.batches.len());
         }
 
-        queue.write_buffer(
-            &self.uniform_buffer,
+        self.uploads.write(
             0,
+            queue,
+            &self.uniform_buffer,
             bytemuck::bytes_of(&ViewUniform {
                 viewport: [physical_width as f32, physical_height as f32],
                 scale,
@@ -888,11 +893,13 @@ impl ShapeRenderer {
             self.instance_buffers[self.active_buffer] =
                 create_shape_instance_buffer(device, capacity);
             self.instance_capacities[self.active_buffer] = capacity;
+            self.uploads.reset(1 + self.active_buffer);
         }
         if !self.instances.is_empty() {
-            queue.write_buffer(
+            self.uploads.write(
+                1 + self.active_buffer,
+                queue,
                 &self.instance_buffers[self.active_buffer],
-                0,
                 bytemuck::cast_slice(&self.instances),
             );
         }
@@ -906,11 +913,13 @@ impl ShapeRenderer {
                 &self.gradient_buffers[self.active_buffer],
             );
             self.gradient_capacities[self.active_buffer] = capacity;
+            self.uploads.reset(1 + BUFFERED_FRAMES + self.active_buffer);
         }
         if !self.gradients.is_empty() {
-            queue.write_buffer(
+            self.uploads.write(
+                1 + BUFFERED_FRAMES + self.active_buffer,
+                queue,
                 &self.gradient_buffers[self.active_buffer],
-                0,
                 bytemuck::cast_slice(&self.gradients),
             );
         }

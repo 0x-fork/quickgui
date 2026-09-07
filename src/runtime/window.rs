@@ -1517,10 +1517,16 @@ pub(crate) fn validate_taskbar_overlay_description(
 pub trait View: Sized + 'static {
     fn event(&mut self, _event: &Event, _cx: &mut EventContext) {}
     fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement;
+    /// Embedding renderers can rebuild a subtree declared with `ViewContext::with_scope`.
+    /// Return `None` when a mutation needs an ordinary full declaration instead.
+    fn render_scope(&mut self, _id: ElementId, _cx: &mut ViewContext<'_, Self>) -> Option<Element> {
+        None
+    }
 }
 
 pub(super) trait AnyView {
     fn event(&mut self, event: &Event, cx: &mut EventContext);
+    fn render_scopes(&mut self, cx: &mut ViewContext<'_, ()>) -> Option<Vec<crate::ElementUpdate>>;
 
     #[allow(clippy::too_many_arguments)]
     fn render(
@@ -1557,6 +1563,18 @@ pub(super) struct ViewAdapter<V>(V);
 impl<V: View> AnyView for ViewAdapter<V> {
     fn event(&mut self, event: &Event, cx: &mut EventContext) {
         self.0.event(event, cx);
+    }
+
+    fn render_scopes(&mut self, cx: &mut ViewContext<'_, ()>) -> Option<Vec<crate::ElementUpdate>> {
+        cx.with_type::<V, _>(|cx| {
+            let roots = cx.listeners.prepare_component_updates();
+            let mut updates = Vec::with_capacity(roots.len());
+            for scope in roots {
+                let id = scope.id;
+                updates.push(cx.refresh_component(scope, |cx| self.0.render_scope(id, cx))?);
+            }
+            Some(updates)
+        })
     }
 
     fn render(
@@ -1607,6 +1625,7 @@ impl<V: View> AnyView for ViewAdapter<V> {
         };
         cx.listeners.clear();
         let root = self.0.render(&mut cx).into_element();
+        cx.listeners.retain_components(&root, None);
         (root, cx.request_animation_frame, cx.repaint_deadline)
     }
 

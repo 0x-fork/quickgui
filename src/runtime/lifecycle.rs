@@ -664,23 +664,18 @@ impl Runtime {
         if entities.is_empty() && !all {
             return;
         }
-
-        if let Some(state) = &mut self.window
-            && state.listeners.observes_entity_change(entities, all)
+        for state in self
+            .window
+            .iter_mut()
+            .chain(self.windows.values_mut().map(|entry| &mut entry.state))
         {
-            state.view_dirty = true;
-            if state.scheduler.invalidate() {
-                state.window.request_redraw();
-            }
-        }
-
-        for entry in self.windows.values_mut() {
-            if !entry.state.listeners.observes_entity_change(entities, all) {
-                continue;
-            }
-            entry.state.view_dirty = true;
-            if entry.state.scheduler.invalidate() {
-                entry.state.window.request_redraw();
+            let root = state.listeners.observes_entity_change(entities, all);
+            let scoped = state.listeners.scopes.invalidate_entities(entities);
+            if root || scoped {
+                state.view_dirty |= root;
+                if state.scheduler.invalidate() {
+                    state.window.request_redraw();
+                }
             }
         }
     }
@@ -689,27 +684,18 @@ impl Runtime {
         if global_types.is_empty() && !all {
             return;
         }
-
-        if let Some(state) = &mut self.window
-            && state.listeners.observes_global_change(global_types, all)
+        for state in self
+            .window
+            .iter_mut()
+            .chain(self.windows.values_mut().map(|entry| &mut entry.state))
         {
-            state.view_dirty = true;
-            if state.scheduler.invalidate() {
-                state.window.request_redraw();
-            }
-        }
-
-        for entry in self.windows.values_mut() {
-            if !entry
-                .state
-                .listeners
-                .observes_global_change(global_types, all)
-            {
-                continue;
-            }
-            entry.state.view_dirty = true;
-            if entry.state.scheduler.invalidate() {
-                entry.state.window.request_redraw();
+            let root = state.listeners.observes_global_change(global_types, all);
+            let scoped = state.listeners.scopes.invalidate_globals(global_types);
+            if root || scoped {
+                state.view_dirty |= root;
+                if state.scheduler.invalidate() {
+                    state.window.request_redraw();
+                }
             }
         }
     }

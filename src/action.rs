@@ -11,7 +11,7 @@ use crate::{DispatchPhase, ElementId};
 pub const MAX_ACTION_LISTENERS_PER_ELEMENT: usize = 32;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct ActionListenerKey(pub(crate) u32);
+pub(crate) struct ActionListenerKey(pub(crate) u64);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct ActionListenerBinding {

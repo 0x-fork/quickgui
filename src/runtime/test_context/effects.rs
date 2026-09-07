@@ -520,7 +520,9 @@ impl TestAppContext {
         let windows = self
             .windows()
             .into_iter()
-            .filter(|window| self.windows[window].dirty)
+            .filter(|window| {
+                self.windows[window].dirty || self.windows[window].listeners.scopes.pending()
+            })
             .collect::<Vec<_>>();
         if windows.is_empty() {
             return Ok(false);
@@ -537,6 +539,55 @@ impl TestAppContext {
             let system_info = self.system_info.clone();
             let system_preferences = self.system_preferences;
             let state_snapshot = self.window(window)?.state;
+            if !self.window(window)?.dirty {
+                let previous_focus = self.window(window)?.ui.focused();
+                let state = self.window_mut(window)?;
+                let mut cx = ViewContext::<()> {
+                    size: state.state.viewport_size,
+                    scale_factor: state.state.scale_factor,
+                    metrics: FrameMetrics::default(),
+                    focused: state.ui.focused(),
+                    focused_path: state.ui.focus_path(),
+                    request_animation_frame: false,
+                    repaint_deadline: None,
+                    listeners: &mut state.listeners,
+                    window,
+                    window_state: state_snapshot,
+                    displays: &displays,
+                    keyboard_layout: &keyboard_layout,
+                    assets: &assets,
+                    app_info: app_info.as_ref(),
+                    app_paths: app_paths.as_ref(),
+                    system_info: &system_info,
+                    system_preferences: &system_preferences,
+                    background_tasks: None,
+                    foreground_tasks: &foreground_tasks,
+                    globals: &globals,
+                    event_proxy: None,
+                    marker: PhantomData,
+                };
+                let updates = state.view.render_scopes(&mut cx);
+                state.requested_animation_frame |= cx.request_animation_frame;
+                state.repaint_deadline = state
+                    .repaint_deadline
+                    .into_iter()
+                    .chain(cx.repaint_deadline)
+                    .min();
+                let applied = match updates {
+                    Some(updates) => state
+                        .ui
+                        .update_elements(&updates)
+                        .map_err(|error| TestAppError::View(error.to_string()))?
+                        .is_some(),
+                    None => false,
+                };
+                if applied {
+                    state.retained_geometry_ready = false;
+                    self.prepare_retained_geometry(window)?;
+                    self.focus_changed(window, previous_focus)?;
+                    continue;
+                }
+            }
             let (root, requested, repaint_deadline) = {
                 let state = self.window_mut(window)?;
                 state.view.render(

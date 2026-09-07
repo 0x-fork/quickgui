@@ -1,3 +1,4 @@
+use super::listener_scope::{ListenerSlots, OwnedListener};
 use super::*;
 
 /// Context provided while a view declares its element tree.
@@ -240,7 +241,8 @@ impl<V: 'static> ViewContext<'_, V> {
 
     /// Read shared state and retain a window-level observation for later updates.
     ///
-    /// Calling [`Entity::update`] from any window then invalidates this view exactly once. The
+    /// Calling [`Entity::update`] from any window invalidates the current component scope, or the
+    /// root view when called outside a scope. The
     /// observation is refreshed on each declarative rebuild, so conditional reads automatically
     /// unsubscribe when that branch is no longer rendered.
     pub fn observe<T, R>(&mut self, entity: &Entity<T>, read: impl FnOnce(&T) -> R) -> R {
@@ -252,7 +254,8 @@ impl<V: 'static> ViewContext<'_, V> {
     ///
     /// Delivery passes a temporary strong handle to the source entity and runs only after the
     /// emitting callback releases its borrows. Store the returned [`Subscription`] on the view to
-    /// control its lifetime, or call [`Subscription::detach`] to retain it until the window closes.
+    /// control its lifetime, or call [`Subscription::detach`] to retain it until the declaring
+    /// component scope is removed (or the window closes for a root subscription).
     pub fn subscribe<T, E>(
         &mut self,
         entity: &Entity<T>,
@@ -377,6 +380,8 @@ impl<V: 'static> ViewContext<'_, V> {
             );
         });
         let previous = self.listeners.child_window_closed.insert(child, callback);
+        self.listeners
+            .own_listener(OwnedListener::ChildClosed(child));
         assert!(
             previous.is_none(),
             "child window {child:?} was observed more than once by the same view"
@@ -397,16 +402,19 @@ impl<V: 'static> ViewContext<'_, V> {
                 < MAX_CHILD_WINDOW_CLOSE_LISTENERS_PER_WINDOW,
             "a window cannot declare more than {MAX_CHILD_WINDOW_CLOSE_LISTENERS_PER_WINDOW} child-window close listeners"
         );
+        let callback: ChildWindowClosedCallback = Arc::new(move |view, child, context| {
+            callback(
+                view.downcast_mut::<V>()
+                    .expect("child-window close listener received the wrong view type"),
+                child,
+                context,
+            );
+        });
         self.listeners
             .any_child_window_closed
-            .push(Arc::new(move |view, child, context| {
-                callback(
-                    view.downcast_mut::<V>()
-                        .expect("child-window close listener received the wrong view type"),
-                    child,
-                    context,
-                );
-            }));
+            .push(callback.clone());
+        self.listeners
+            .own_listener(OwnedListener::AnyChildClosed(callback));
     }
 
     /// Register a stable, view-local click callback for use with [`crate::Element::on_click`].
@@ -424,6 +432,7 @@ impl<V: 'static> ViewContext<'_, V> {
             );
         });
         let previous = self.listeners.clicks.insert(id, callback);
+        self.listeners.own_listener(OwnedListener::Click(id));
         assert!(
             previous.is_none(),
             "listener id {id:?} was registered more than once"
@@ -456,6 +465,7 @@ impl<V: 'static> ViewContext<'_, V> {
             },
         );
         let previous = self.listeners.context_menus.insert(id, callback);
+        self.listeners.own_listener(OwnedListener::ContextMenu(id));
         assert!(
             previous.is_none(),
             "context-menu listener id {id:?} was registered more than once"
@@ -487,6 +497,7 @@ impl<V: 'static> ViewContext<'_, V> {
             },
         );
         let previous = self.listeners.pointers.insert(id, callback);
+        self.listeners.own_listener(OwnedListener::Pointer(id));
         assert!(
             previous.is_none(),
             "pointer listener id {id:?} was registered more than once"
@@ -696,6 +707,7 @@ impl<V: 'static> ViewContext<'_, V> {
             );
         });
         let previous = self.listeners.scroll_wheels.insert(id, callback);
+        self.listeners.own_listener(OwnedListener::ScrollWheel(id));
         assert!(
             previous.is_none(),
             "scroll-wheel listener id {id:?} was registered more than once"
@@ -725,6 +737,7 @@ impl<V: 'static> ViewContext<'_, V> {
             );
         });
         let previous = self.listeners.touches.insert(id, callback);
+        self.listeners.own_listener(OwnedListener::Touch(id));
         assert!(
             previous.is_none(),
             "touch listener id {id:?} was registered more than once"
@@ -751,6 +764,7 @@ impl<V: 'static> ViewContext<'_, V> {
             );
         });
         let previous = self.listeners.mouse_pressures.insert(id, callback);
+        self.listeners.own_listener(OwnedListener::Pressure(id));
         assert!(
             previous.is_none(),
             "mouse-pressure listener id {id:?} was registered more than once"
@@ -777,6 +791,7 @@ impl<V: 'static> ViewContext<'_, V> {
             );
         });
         let previous = self.listeners.pinches.insert(id, callback);
+        self.listeners.own_listener(OwnedListener::Pinch(id));
         assert!(
             previous.is_none(),
             "pinch listener id {id:?} was registered more than once"
@@ -803,6 +818,7 @@ impl<V: 'static> ViewContext<'_, V> {
             );
         });
         let previous = self.listeners.rotations.insert(id, callback);
+        self.listeners.own_listener(OwnedListener::Rotation(id));
         assert!(
             previous.is_none(),
             "rotation listener id {id:?} was registered more than once"
@@ -829,6 +845,7 @@ impl<V: 'static> ViewContext<'_, V> {
             );
         });
         let previous = self.listeners.smart_magnifies.insert(id, callback);
+        self.listeners.own_listener(OwnedListener::SmartMagnify(id));
         assert!(
             previous.is_none(),
             "smart-magnify listener id {id:?} was registered more than once"
@@ -864,6 +881,7 @@ impl<V: 'static> ViewContext<'_, V> {
             .listeners
             .drag_sources
             .insert(id, (TypeId::of::<T>(), callback));
+        self.listeners.own_listener(OwnedListener::Drag(id));
         assert!(
             previous.is_none(),
             "drag listener id {id:?} was registered more than once"
@@ -899,6 +917,8 @@ impl<V: 'static> ViewContext<'_, V> {
             .listeners
             .drops
             .insert((id, TypeId::of::<T>()), callback);
+        self.listeners
+            .own_listener(OwnedListener::Drop(id, TypeId::of::<T>()));
         assert!(
             previous.is_none(),
             "drop listener id {id:?} for this payload type was registered more than once"
@@ -928,6 +948,7 @@ impl<V: 'static> ViewContext<'_, V> {
             },
         );
         let previous = self.listeners.inputs.insert(id, callback);
+        self.listeners.own_listener(OwnedListener::Input(id));
         assert!(
             previous.is_none(),
             "input listener id {id:?} was registered more than once"
@@ -960,6 +981,7 @@ impl<V: 'static> ViewContext<'_, V> {
             },
         );
         let previous = self.listeners.submits.insert(id, callback);
+        self.listeners.own_listener(OwnedListener::Submit(id));
         assert!(
             previous.is_none(),
             "submit listener id {id:?} was registered more than once"
@@ -990,6 +1012,7 @@ impl<V: 'static> ViewContext<'_, V> {
             );
         });
         let previous = self.listeners.form_submits.insert(id, callback);
+        self.listeners.own_listener(OwnedListener::FormSubmit(id));
         assert!(
             previous.is_none(),
             "form submit listener id {id:?} was registered more than once"
@@ -1020,6 +1043,7 @@ impl<V: 'static> ViewContext<'_, V> {
             );
         });
         let previous = self.listeners.form_invalids.insert(id, callback);
+        self.listeners.own_listener(OwnedListener::FormInvalid(id));
         assert!(
             previous.is_none(),
             "form invalid listener id {id:?} was registered more than once"
@@ -1045,6 +1069,7 @@ impl<V: 'static> ViewContext<'_, V> {
             );
         });
         let previous = self.listeners.dismisses.insert(id, callback);
+        self.listeners.own_listener(OwnedListener::Dismiss(id));
         assert!(
             previous.is_none(),
             "dismiss listener id {id:?} was registered more than once"
@@ -1165,10 +1190,13 @@ impl GlobalObserverSubscription {
 
 #[derive(Default)]
 pub(super) struct ListenerRegistry {
+    pub(super) current_scope: Option<ElementId>,
+    pub(super) scope_listeners: HashMap<ElementId, Vec<OwnedListener>>,
+    pub(super) scopes: component_scope::ComponentScopes,
     pub(super) clicks: HashMap<ElementId, ClickCallback>,
     pub(super) pointers: HashMap<ElementId, PointerCallback>,
-    pub(super) mouse_listeners: Vec<MouseListenerCallback>,
-    pub(super) key_listeners: Vec<KeyListenerCallback>,
+    pub(super) mouse_listeners: ListenerSlots<MouseListenerCallback>,
+    pub(super) key_listeners: ListenerSlots<KeyListenerCallback>,
     pub(super) scroll_wheels: HashMap<ElementId, ScrollWheelCallback>,
     pub(super) touches: HashMap<ElementId, TouchCallback>,
     pub(super) context_menus: HashMap<ElementId, ContextMenuCallback>,
@@ -1184,7 +1212,7 @@ pub(super) struct ListenerRegistry {
     pub(super) form_submits: HashMap<ElementId, FormSubmitCallback>,
     pub(super) form_invalids: HashMap<ElementId, FormInvalidCallback>,
     pub(super) dismisses: HashMap<ElementId, ClickCallback>,
-    pub(super) actions: Vec<ActionCallback>,
+    pub(super) actions: ListenerSlots<ActionCallback>,
     pub(super) observed_entities: HashSet<EntityId>,
     pub(super) observed_globals: HashSet<TypeId>,
     pub(super) observes_window_state: bool,
@@ -1212,13 +1240,13 @@ impl ListenerRegistry {
             self.mouse_listeners.len() < MAX_MOUSE_LISTENERS_PER_WINDOW,
             "a window cannot declare more than {MAX_MOUSE_LISTENERS_PER_WINDOW} targeted desktop mouse listeners"
         );
-        let key = MouseListenerKey(self.mouse_listeners.len() as u32);
-        self.mouse_listeners.push(callback);
+        let key = MouseListenerKey(self.mouse_listeners.push(callback));
+        self.own_listener(OwnedListener::Mouse(key.0));
         key
     }
 
     pub(super) fn mouse_listener(&self, key: MouseListenerKey) -> Option<MouseListenerCallback> {
-        self.mouse_listeners.get(key.0 as usize).cloned()
+        self.mouse_listeners.get(key.0).cloned()
     }
 
     pub(super) fn push_key_listener(&mut self, callback: KeyListenerCallback) -> KeyListenerKey {
@@ -1226,13 +1254,13 @@ impl ListenerRegistry {
             self.key_listeners.len() < MAX_KEY_LISTENERS_PER_WINDOW,
             "a window cannot declare more than {MAX_KEY_LISTENERS_PER_WINDOW} focused key listeners"
         );
-        let key = KeyListenerKey(self.key_listeners.len() as u32);
-        self.key_listeners.push(callback);
+        let key = KeyListenerKey(self.key_listeners.push(callback));
+        self.own_listener(OwnedListener::Key(key.0));
         key
     }
 
     pub(super) fn key_listener(&self, key: KeyListenerKey) -> Option<KeyListenerCallback> {
-        self.key_listeners.get(key.0 as usize).cloned()
+        self.key_listeners.get(key.0).cloned()
     }
 
     pub(super) fn push_action_listener(&mut self, callback: ActionCallback) -> ActionListenerKey {
@@ -1240,16 +1268,20 @@ impl ListenerRegistry {
             self.actions.len() < MAX_ACTION_LISTENERS_PER_WINDOW,
             "a window cannot declare more than {MAX_ACTION_LISTENERS_PER_WINDOW} typed action listeners"
         );
-        let key = ActionListenerKey(self.actions.len() as u32);
-        self.actions.push(callback);
+        let key = ActionListenerKey(self.actions.push(callback));
+        self.own_listener(OwnedListener::Action(key.0));
         key
     }
 
     pub(super) fn action_listener(&self, key: ActionListenerKey) -> Option<ActionCallback> {
-        self.actions.get(key.0 as usize).cloned()
+        self.actions.get(key.0).cloned()
     }
 
     pub(super) fn observe_global(&mut self, global_type: TypeId) {
+        if let Some(id) = self.current_scope {
+            self.scopes.observe_global(id, global_type);
+            return;
+        }
         if self.observed_globals.contains(&global_type) {
             return;
         }
@@ -1279,6 +1311,7 @@ impl ListenerRegistry {
             "a window cannot retain more than {MAX_GLOBAL_SUBSCRIPTIONS_PER_WINDOW} global subscriptions"
         );
         let (subscription, state) = Subscription::new();
+        self.own_listener(OwnedListener::Subscription(state.clone()));
         self.global_observers.push(GlobalObserverSubscription {
             global_type,
             state,
@@ -1314,6 +1347,10 @@ impl ListenerRegistry {
     }
 
     pub(super) fn observe_entity(&mut self, entity: EntityId) {
+        if let Some(id) = self.current_scope {
+            self.scopes.observe_entity(id, entity);
+            return;
+        }
         if self.observed_entities.contains(&entity) {
             return;
         }
@@ -1344,6 +1381,7 @@ impl ListenerRegistry {
             "a window cannot retain more than {MAX_ENTITY_SUBSCRIPTIONS_PER_WINDOW} entity-event subscriptions"
         );
         let (subscription, state) = Subscription::new();
+        self.own_listener(OwnedListener::Subscription(state.clone()));
         self.entity_events
             .entry((entity, event_type))
             .or_default()
@@ -1387,6 +1425,15 @@ impl ListenerRegistry {
     }
 
     pub(super) fn clear(&mut self) {
+        for (_, listeners) in self.scope_listeners.drain() {
+            for listener in listeners {
+                if let OwnedListener::Subscription(state) = listener {
+                    state.cancel();
+                }
+            }
+        }
+        self.current_scope = None;
+        self.scopes = component_scope::ComponentScopes::default();
         self.clicks.clear();
         self.pointers.clear();
         self.mouse_listeners.clear();

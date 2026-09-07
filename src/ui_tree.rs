@@ -435,7 +435,7 @@ struct ScrollbarDrag {
     scroll_origin_y: f32,
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 struct ScrollbarState {
     hovered: bool,
     dragging: bool,
@@ -639,12 +639,16 @@ struct ScrollEndState {
 }
 
 pub(crate) struct UiTree {
+    work: crate::PipelineMetrics,
+    geometry_cache: retained::GeometryCache,
+    paint_cache: paint_cache::PaintCache,
     root: Option<Element>,
     taffy: TaffyTree<MeasureContext>,
     layout_nodes: LayoutNodeCache,
     root_node: Option<NodeId>,
     mounted_state_dirty: bool,
     retained_semantics_dirty: bool,
+    retained_placement_dirty: bool,
     seen_ids: HashSet<ElementId>,
     /// IDs whose complete ancestor chain participates in layout (`display != none`).
     displayed_ids: HashSet<ElementId>,
@@ -1053,8 +1057,10 @@ mod input_state;
 mod layout;
 mod lifecycle;
 mod motion;
+mod paint_cache;
 mod painting;
 mod pointer;
+mod retained;
 mod updates;
 
 use accessibility::*;

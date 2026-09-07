@@ -95,6 +95,7 @@ pub(crate) struct ImageRenderer {
     instance_buffers: Vec<wgpu::Buffer>,
     instance_capacities: Vec<usize>,
     active_buffer: usize,
+    pub(crate) uploads: crate::renderer::upload::BufferUploads,
     instances: Vec<ImageInstance>,
     pending: Vec<OrderedImage>,
     batches: Vec<ImageBatch>,
@@ -268,6 +269,7 @@ impl ImageRenderer {
                 .collect(),
             instance_capacities: vec![INITIAL_IMAGE_CAPACITY; BUFFERED_FRAMES],
             active_buffer: 0,
+            uploads: crate::renderer::upload::BufferUploads::default(),
             instances: Vec::with_capacity(INITIAL_IMAGE_CAPACITY),
             pending: Vec::with_capacity(INITIAL_IMAGE_CAPACITY),
             batches: Vec::with_capacity(16),
@@ -291,6 +293,7 @@ impl ImageRenderer {
         physical_height: u32,
         scale: f32,
     ) -> ImagePrepareStats {
+        self.uploads.begin_frame();
         self.frame = self.frame.wrapping_add(1);
         self.instances.clear();
         self.pending.clear();
@@ -418,9 +421,10 @@ impl ImageRenderer {
             self.layer_batches.push(batch_start..self.batches.len());
         }
 
-        queue.write_buffer(
-            &self.uniform_buffer,
+        self.uploads.write(
             0,
+            queue,
+            &self.uniform_buffer,
             bytemuck::bytes_of(&ViewUniform {
                 viewport: [physical_width as f32, physical_height as f32],
                 scale,
@@ -433,11 +437,13 @@ impl ImageRenderer {
             let capacity = required.next_power_of_two();
             self.instance_buffers[self.active_buffer] = create_instance_buffer(device, capacity);
             self.instance_capacities[self.active_buffer] = capacity;
+            self.uploads.reset(1 + self.active_buffer);
         }
         if !self.instances.is_empty() {
-            queue.write_buffer(
+            self.uploads.write(
+                1 + self.active_buffer,
+                queue,
                 &self.instance_buffers[self.active_buffer],
-                0,
                 bytemuck::cast_slice(&self.instances),
             );
         }

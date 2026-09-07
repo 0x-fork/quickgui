@@ -1,4 +1,7 @@
-use std::sync::{Arc, LazyLock};
+use std::sync::{
+    Arc, LazyLock, OnceLock,
+    atomic::{AtomicU64, Ordering},
+};
 
 use glyphon::{Style as GlyphStyle, Weight};
 
@@ -2114,8 +2117,9 @@ pub(crate) struct PaintLayerKey {
     pub group: u16,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct PaintLayer {
+    revision: u64,
     key: PaintLayerKey,
     quads: Vec<Quad>,
     edge_quads: Vec<EdgeQuad>,
@@ -2164,6 +2168,7 @@ pub(crate) struct PaintItem {
 impl PaintLayer {
     fn new(key: PaintLayerKey) -> Self {
         Self {
+            revision: next_layer_revision(),
             key,
             quads: Vec::new(),
             edge_quads: Vec::new(),
@@ -2185,6 +2190,42 @@ impl PaintLayer {
 
     pub(crate) fn key(&self) -> PaintLayerKey {
         self.key
+    }
+
+    pub(crate) fn allocated_bytes(&self) -> usize {
+        size_of::<PaintLayer>()
+            + self.quads.capacity() * size_of::<Quad>()
+            + self.edge_quads.capacity() * size_of::<EdgeQuad>()
+            + self.wavy_underlines.capacity() * size_of::<WavyUnderline>()
+            + self.shadows.capacity() * size_of::<Shadow>()
+            + self.shapes.capacity() * size_of::<ShapeRef>()
+            + self.images.capacity() * size_of::<ImagePrimitive>()
+            + self.svgs.capacity() * size_of::<SvgPrimitive>()
+            + self.paths.capacity() * size_of::<PathPrimitive>()
+            + self.custom_shaders.capacity() * size_of::<CustomShaderPrimitive>()
+            + self.text.capacity() * size_of::<TextRun>()
+            + self.paint.capacity() * size_of::<PaintItem>()
+            + self.order_tree.allocated_bytes()
+    }
+
+    pub(crate) fn revision(&self) -> u64 {
+        self.revision
+    }
+
+    pub(crate) fn same_commands(&self, other: &Self) -> bool {
+        self.revision() == other.revision()
+            || (self.key == other.key
+                && self.paint == other.paint
+                && self.quads == other.quads
+                && self.edge_quads == other.edge_quads
+                && self.wavy_underlines == other.wavy_underlines
+                && self.shadows == other.shadows
+                && self.images == other.images
+                && self.svgs == other.svgs
+                && self.paths == other.paths
+                && self.custom_shaders == other.custom_shaders
+                && self.text == other.text
+                && self.groups == other.groups)
     }
 
     pub(crate) fn quads(&self) -> &[Quad] {
@@ -2256,6 +2297,7 @@ impl PaintLayer {
     }
 
     fn clear(&mut self) {
+        self.revision = next_layer_revision();
         self.quads.clear();
         self.edge_quads.clear();
         self.wavy_underlines.clear();
@@ -2278,8 +2320,10 @@ impl PaintLayer {
 #[derive(Debug)]
 pub struct Scene {
     background: Color,
-    layers: Vec<PaintLayer>,
+    layers: Vec<Arc<PaintLayer>>,
     used_layers: usize,
+    recording_start: usize,
+    inspection_base: OnceLock<PaintLayer>,
     opacity: f32,
     groups: Vec<PaintGroup>,
     /// Groups the scene refused to open because a bound was already reached.
@@ -2290,7 +2334,8 @@ impl Scene {
     pub fn new() -> Self {
         Self {
             background: Color::BLACK,
-            layers: vec![PaintLayer {
+            layers: vec![Arc::new(PaintLayer {
+                revision: next_layer_revision(),
                 key: PaintLayerKey::default(),
                 quads: Vec::with_capacity(256),
                 edge_quads: Vec::with_capacity(64),
@@ -2307,8 +2352,10 @@ impl Scene {
                 order_tree: BoundsOrderTree::with_capacity(512),
                 max_order: 0,
                 content_bounds: None,
-            }],
+            })],
             used_layers: 1,
+            recording_start: 0,
+            inspection_base: OnceLock::new(),
             opacity: 1.0,
             groups: Vec::new(),
             skipped_groups: 0,
@@ -2316,18 +2363,26 @@ impl Scene {
     }
 
     pub fn clear(&mut self, background: Color) {
+        self.inspection_base.take();
         self.background = background;
         if self.layers.len() > MAX_RETAINED_PAINT_LAYERS {
             self.layers.truncate(MAX_RETAINED_PAINT_LAYERS);
         }
         for layer in &mut self.layers {
-            layer.clear();
+            if let Some(layer) = Arc::get_mut(layer) {
+                layer.clear();
+            }
         }
         if self.layers.is_empty() {
-            self.layers.push(PaintLayer::new(PaintLayerKey::default()));
+            self.layers
+                .push(Arc::new(PaintLayer::new(PaintLayerKey::default())));
         }
-        self.layers[0].key = PaintLayerKey::default();
+        if Arc::get_mut(&mut self.layers[0]).is_none() {
+            self.layers[0] = Arc::new(PaintLayer::new(PaintLayerKey::default()));
+        }
+        Arc::get_mut(&mut self.layers[0]).unwrap().key = PaintLayerKey::default();
         self.used_layers = 1;
+        self.recording_start = 0;
         self.opacity = 1.0;
         self.groups.clear();
         self.skipped_groups = 0;
@@ -2591,74 +2646,103 @@ impl Scene {
     }
 
     pub fn quads(&self) -> &[Quad] {
-        self.layers
+        self.base_layer().map(PaintLayer::quads).unwrap_or_default()
+    }
+
+    // Preserve the public slice inspection API. The renderer consumes shared chunks directly;
+    // only an explicit caller asking for a contiguous base-layer slice materializes this copy.
+    fn base_layer(&self) -> Option<&PaintLayer> {
+        let mut layers = self
+            .paint_layers()
             .iter()
-            .take(self.used_layers)
-            .find(|layer| layer.key == PaintLayerKey::default())
-            .map(PaintLayer::quads)
-            .unwrap_or_default()
+            .filter(|layer| layer.key == PaintLayerKey::default());
+        let first = layers.next()?;
+        if layers.next().is_none() {
+            return Some(first);
+        }
+        Some(self.inspection_base.get_or_init(|| {
+            let mut merged = PaintLayer::new(PaintLayerKey::default());
+            for layer in self
+                .paint_layers()
+                .iter()
+                .filter(|layer| layer.key == PaintLayerKey::default())
+            {
+                merged.quads.extend_from_slice(&layer.quads);
+                merged.edge_quads.extend_from_slice(&layer.edge_quads);
+                merged.text.extend_from_slice(&layer.text);
+                merged.shadows.extend_from_slice(&layer.shadows);
+                merged.images.extend_from_slice(&layer.images);
+                merged.svgs.extend_from_slice(&layer.svgs);
+                merged.paths.extend_from_slice(&layer.paths);
+                merged
+                    .custom_shaders
+                    .extend_from_slice(&layer.custom_shaders);
+            }
+            merged
+        }))
+    }
+
+    /// Close the preceding segment before recording one independently retained subtree.
+    pub(crate) fn begin_fragment(&mut self) -> usize {
+        self.recording_start = self.used_layers;
+        self.used_layers
+    }
+
+    pub(crate) fn finish_fragment(&mut self, start: usize) -> SceneFragment {
+        self.recording_start = self.used_layers;
+        SceneFragment {
+            layers: self.layers[start..self.used_layers].to_vec(),
+        }
+    }
+
+    pub(crate) fn replay_fragment(&mut self, fragment: &SceneFragment) {
+        self.inspection_base.take();
+        for layer in &fragment.layers {
+            if self.used_layers == self.layers.len() {
+                self.layers.push(layer.clone());
+            } else {
+                self.layers[self.used_layers] = layer.clone();
+            }
+            self.used_layers += 1;
+        }
+        self.recording_start = self.used_layers;
     }
 
     #[cfg(test)]
     pub(crate) fn edge_quads(&self) -> &[EdgeQuad] {
-        self.layers
-            .iter()
-            .take(self.used_layers)
-            .find(|layer| layer.key == PaintLayerKey::default())
+        self.base_layer()
             .map(PaintLayer::edge_quads)
             .unwrap_or_default()
     }
 
     pub fn text_runs(&self) -> &[TextRun] {
-        self.layers
-            .iter()
-            .take(self.used_layers)
-            .find(|layer| layer.key == PaintLayerKey::default())
+        self.base_layer()
             .map(PaintLayer::text_runs)
             .unwrap_or_default()
     }
 
     pub fn shadows(&self) -> &[Shadow] {
-        self.layers
-            .iter()
-            .take(self.used_layers)
-            .find(|layer| layer.key == PaintLayerKey::default())
+        self.base_layer()
             .map(PaintLayer::shadows)
             .unwrap_or_default()
     }
 
     pub fn images(&self) -> &[ImagePrimitive] {
-        self.layers
-            .iter()
-            .take(self.used_layers)
-            .find(|layer| layer.key == PaintLayerKey::default())
+        self.base_layer()
             .map(PaintLayer::images)
             .unwrap_or_default()
     }
 
     pub fn svgs(&self) -> &[SvgPrimitive] {
-        self.layers
-            .iter()
-            .take(self.used_layers)
-            .find(|layer| layer.key == PaintLayerKey::default())
-            .map(PaintLayer::svgs)
-            .unwrap_or_default()
+        self.base_layer().map(PaintLayer::svgs).unwrap_or_default()
     }
 
     pub fn paths(&self) -> &[PathPrimitive] {
-        self.layers
-            .iter()
-            .take(self.used_layers)
-            .find(|layer| layer.key == PaintLayerKey::default())
-            .map(PaintLayer::paths)
-            .unwrap_or_default()
+        self.base_layer().map(PaintLayer::paths).unwrap_or_default()
     }
 
     pub fn custom_shaders(&self) -> &[CustomShaderPrimitive] {
-        self.layers
-            .iter()
-            .take(self.used_layers)
-            .find(|layer| layer.key == PaintLayerKey::default())
+        self.base_layer()
             .map(PaintLayer::custom_shaders)
             .unwrap_or_default()
     }
@@ -2749,7 +2833,18 @@ impl Scene {
     }
 
     pub(crate) fn finish(&mut self) {
-        self.layers[..self.used_layers].sort_by_key(PaintLayer::key);
+        // A pooled slot outside this frame must not keep an unmounted subtree alive merely
+        // because the previous frame's compositor still holds a snapshot during scene assembly.
+        for layer in &mut self.layers[self.used_layers..] {
+            if let Some(layer) = Arc::get_mut(layer) {
+                layer.clear();
+            } else {
+                *layer = Arc::new(PaintLayer::new(layer.key()));
+            }
+        }
+        self.layers[..self.used_layers].sort_by_key(|layer| layer.key());
+        // Finished chunks are immutable. Any subsequent overlay starts its own command chunk.
+        self.recording_start = self.used_layers;
         if self.groups.is_empty() {
             return;
         }
@@ -2796,7 +2891,7 @@ impl Scene {
         }
     }
 
-    pub(crate) fn paint_layers(&self) -> &[PaintLayer] {
+    pub(crate) fn paint_layers(&self) -> &[Arc<PaintLayer>] {
         &self.layers[..self.used_layers]
     }
 
@@ -2808,22 +2903,54 @@ impl Scene {
     }
 
     fn layer_mut(&mut self, key: PaintLayerKey) -> &mut PaintLayer {
-        if let Some(index) = self.layers[..self.used_layers]
+        self.inspection_base.take();
+        if let Some(index) = self.layers[self.recording_start..self.used_layers]
             .iter()
             .position(|layer| layer.key == key)
         {
-            return &mut self.layers[index];
+            let layer = &mut self.layers[self.recording_start + index];
+            if Arc::get_mut(layer).is_none() {
+                Arc::make_mut(layer).revision = next_layer_revision();
+            }
+            return Arc::get_mut(layer).unwrap();
         }
 
         let index = self.used_layers;
         self.used_layers += 1;
         if index == self.layers.len() {
-            self.layers.push(PaintLayer::new(key));
+            self.layers.push(Arc::new(PaintLayer::new(key)));
         } else {
-            self.layers[index].key = key;
-            self.layers[index].clear();
+            if let Some(layer) = Arc::get_mut(&mut self.layers[index]) {
+                layer.key = key;
+                layer.clear();
+            } else {
+                self.layers[index] = Arc::new(PaintLayer::new(key));
+            }
         }
-        &mut self.layers[index]
+        Arc::get_mut(&mut self.layers[index]).unwrap()
+    }
+}
+
+fn next_layer_revision() -> u64 {
+    static NEXT: AtomicU64 = AtomicU64::new(1);
+    NEXT.fetch_add(1, Ordering::Relaxed)
+}
+
+/// Immutable commands shared with a retained subtree. A fragment contains no compositing groups;
+/// group IDs and destination-reading effects belong to the enclosing frame's compositor plan.
+#[derive(Clone)]
+pub(crate) struct SceneFragment {
+    layers: Vec<Arc<PaintLayer>>,
+}
+
+impl SceneFragment {
+    pub(crate) fn bytes(&self) -> usize {
+        self.layers.capacity() * size_of::<Arc<PaintLayer>>()
+            + self
+                .layers
+                .iter()
+                .map(|layer| layer.allocated_bytes())
+                .sum::<usize>()
     }
 }
 
@@ -2912,6 +3039,24 @@ impl Default for Scene {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unused_scene_slots_release_retained_command_chunks() {
+        let mut scene = Scene::new();
+        let start = scene.begin_fragment();
+        scene.push_quad(Quad::new(Rect::new(0.0, 0.0, 20.0, 20.0), Color::WHITE));
+        let fragment = scene.finish_fragment(start);
+        let old = Arc::downgrade(&fragment.layers[0]);
+        scene.finish();
+        scene.clear(Color::BLACK);
+        scene.push_quad(Quad::new(Rect::new(0.0, 0.0, 10.0, 10.0), Color::BLACK));
+        scene.finish();
+        drop(fragment);
+        assert!(
+            old.upgrade().is_none(),
+            "unused pooled slots retained unmounted commands"
+        );
+    }
     use crate::Point;
 
     #[test]

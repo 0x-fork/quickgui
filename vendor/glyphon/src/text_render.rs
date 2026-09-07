@@ -18,6 +18,9 @@ pub struct TextRenderer {
     vertex_buffer_size: u64,
     pipeline: RenderPipeline,
     glyph_vertices: Vec<GlyphToRender>,
+    uploaded_vertices: Vec<u8>,
+    last_upload_bytes: usize,
+    last_upload_writes: usize,
 }
 
 impl TextRenderer {
@@ -43,7 +46,25 @@ impl TextRenderer {
             vertex_buffer_size,
             pipeline,
             glyph_vertices: Vec::new(),
+            uploaded_vertices: Vec::new(),
+            last_upload_bytes: 0,
+            last_upload_writes: 0,
         }
+    }
+
+    /// Bytes written to the glyph vertex buffer during the last preparation.
+    pub fn last_upload_bytes(&self) -> usize {
+        self.last_upload_bytes
+    }
+
+    /// Vertex-buffer writes performed during the last preparation.
+    pub fn last_upload_writes(&self) -> usize {
+        self.last_upload_writes
+    }
+
+    /// CPU bytes retained for exact vertex-upload comparisons (at most 128 KiB).
+    pub fn retained_upload_bytes(&self) -> usize {
+        self.uploaded_vertices.capacity()
     }
 
     /// Prepares all of the provided text areas for rendering.
@@ -136,6 +157,8 @@ impl TextRenderer {
         ) -> Option<RasterizedCustomGlyph>,
     ) -> Result<(), PrepareError> {
         self.glyph_vertices.clear();
+        self.last_upload_bytes = 0;
+        self.last_upload_writes = 0;
 
         let state = State { device, queue };
         let mut system = GlyphSystem {
@@ -328,7 +351,16 @@ impl TextRenderer {
         };
 
         if self.vertex_buffer_size >= vertices_raw.len() as u64 {
-            queue.write_buffer(&self.vertex_buffer, 0, vertices_raw);
+            let range = changed_vertex_bytes(&self.uploaded_vertices, vertices_raw);
+            if !range.is_empty() {
+                queue.write_buffer(
+                    &self.vertex_buffer,
+                    range.start as u64,
+                    &vertices_raw[range.clone()],
+                );
+                self.last_upload_bytes = range.len();
+                self.last_upload_writes = 1;
+            }
         } else {
             self.vertex_buffer.destroy();
 
@@ -341,6 +373,21 @@ impl TextRenderer {
 
             self.vertex_buffer = buffer;
             self.vertex_buffer_size = buffer_size;
+            self.last_upload_bytes = vertices_raw.len();
+            self.last_upload_writes = 1;
+        }
+
+        // Painter-order batching can retain several text renderers. Bound each shadow so a long
+        // document cannot double the entire glyph working set indefinitely.
+        if vertices_raw.len() <= 128 * 1024 {
+            if vertices_raw.len() > self.uploaded_vertices.capacity() {
+                self.uploaded_vertices
+                    .reserve_exact(vertices_raw.len() - self.uploaded_vertices.len());
+            }
+            self.uploaded_vertices.resize(vertices_raw.len(), 0);
+            self.uploaded_vertices.copy_from_slice(vertices_raw);
+        } else {
+            self.uploaded_vertices = Vec::new();
         }
 
         Ok(())
@@ -365,6 +412,31 @@ impl TextRenderer {
 
         Ok(())
     }
+}
+
+fn changed_vertex_bytes(previous: &[u8], current: &[u8]) -> std::ops::Range<usize> {
+    let alignment = COPY_BUFFER_ALIGNMENT as usize;
+    let prefix = previous
+        .iter()
+        .zip(current)
+        .take_while(|(a, b)| a == b)
+        .count();
+    if prefix == current.len() {
+        return 0..0;
+    }
+    let start = prefix / alignment * alignment;
+    let suffix = if previous.len() == current.len() {
+        previous[prefix..]
+            .iter()
+            .rev()
+            .zip(current[prefix..].iter().rev())
+            .take_while(|(a, b)| a == b)
+            .count()
+    } else {
+        0
+    };
+    let end = (current.len() - suffix).div_ceil(alignment) * alignment;
+    start..end.min(current.len())
 }
 
 #[repr(u16)]
