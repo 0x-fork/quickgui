@@ -20,9 +20,7 @@ func TextAreaExample() {
 		ui.Value(value),
 		ui.Placeholder("Write here"),
 		ui.OnInput(func(event *native.Event) { setValue(event.Value) }),
-		ui.Width(320),
-		ui.Height(96),
-	)
+	).Width(320).Height(96)
 }
 ```
 
@@ -33,4 +31,4 @@ func TextAreaExample() {
 | `Value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
 | `Placeholder` | 編集値が空のときに表示するテキストです。 |
 | `OnInput` | ネイティブ編集の入力を通知します。 |
-| `ui.BackgroundColor(...)`, `ui.Padding(...)`, `ui.Hover(...)` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
+| `ui.Style().BackgroundColor(...)`, `ui.Style().Padding(...)`, `ui.Style().Hover(...)` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |

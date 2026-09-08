@@ -13,35 +13,33 @@ const (
 	blueSurface = "#1d3b68"
 )
 
-var linkStyle = ui.Styles(
-	ui.Display("flex"),
-	ui.Height(34),
-	ui.AlignItems("center"),
-	ui.PaddingLeft(12),
-	ui.PaddingRight(12),
-	ui.BorderRadius(8),
-	ui.TextColor(muted),
-	ui.Cursor("default"),
-	ui.UserSelect("none"),
-	ui.Hover(ui.BackgroundColor(panelRaised)),
-)
-var activeLinkStyle = ui.Styles(ui.BackgroundColor(blueSurface), ui.TextColor("#dceaff"))
-var buttonStyle = ui.Styles(
-	ui.Display("flex"),
-	ui.Height(34),
-	ui.AlignItems("center"),
-	ui.JustifyContent("center"),
-	ui.PaddingLeft(12),
-	ui.PaddingRight(12),
-	ui.BackgroundColor(panelRaised),
-	ui.TextColor(textColor),
-	ui.BorderRadius(8),
-	ui.Cursor("default"),
-	ui.UserSelect("none"),
-	ui.AppRegion("no-drag"),
-	ui.Hover(ui.BackgroundColor(blueSurface)),
-	ui.DisabledStyle(ui.Opacity(0.35)),
-)
+var linkStyle = ui.Style().
+	Display("flex").
+	Height(34).
+	AlignItems("center").
+	PaddingLeft(12).
+	PaddingRight(12).
+	BorderRadius(8).
+	TextColor(muted).
+	Cursor("default").
+	UserSelect("none").
+	Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor(panelRaised) })
+var activeLinkStyle = ui.Style().BackgroundColor(blueSurface).TextColor("#dceaff")
+var buttonStyle = ui.Style().
+	Display("flex").
+	Height(34).
+	AlignItems("center").
+	JustifyContent("center").
+	PaddingLeft(12).
+	PaddingRight(12).
+	BackgroundColor(panelRaised).
+	TextColor(textColor).
+	BorderRadius(8).
+	Cursor("default").
+	UserSelect("none").
+	AppRegion("no-drag").
+	Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor(blueSurface) }).
+	DisabledStyle(func(s ui.StyleBuilder) ui.StyleBuilder { return s.Opacity(0.35) })
 
 func link(label, href string, end bool) {
 	ui.Link(
@@ -64,17 +62,15 @@ func historyButton(label, path string, click func(), disabled func() bool) {
 	ui.Button(
 		func() {
 			ui.SVG(
-				ui.Value(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#e8edf7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="`+path+`"/></svg>`),
-				ui.Width(17),
-				ui.Height(17),
-			)
+				ui.Value(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#e8edf7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="` + path + `"/></svg>`),
+			).Width(17).Height(17)
 		},
 		buttonStyle,
-		ui.Width(34),
-		ui.Height(30),
-		ui.PaddingLeft(0),
-		ui.PaddingRight(0),
-		ui.BorderRadius(7),
+		ui.Style().Width(34),
+		ui.Style().Height(30),
+		ui.Style().PaddingLeft(0),
+		ui.Style().PaddingRight(0),
+		ui.Style().BorderRadius(7),
 		ui.AriaLabel(label),
 		ui.Disabled(disabled),
 		ui.OnClick(click),
@@ -84,45 +80,43 @@ func historyButton(label, path string, click func(), disabled func() bool) {
 func page(title, description any, children ...any) {
 	ui.View(
 		func() {
-			ui.Text(title, ui.FontSize(28), ui.LineHeight(36), ui.FontWeight(750))
-			ui.Text(description, ui.MaxWidth(620), ui.TextColor(muted), ui.LineHeight(21))
+			ui.Text(
+				title,
+			).FontSize(28).LineHeight(36).FontWeight(750)
+			ui.Text(
+				description,
+			).MaxWidth(620).TextColor(muted).LineHeight(21)
 			ui.Child(children)
 		},
-		ui.Display("flex"),
-		ui.FlexDirection("column"),
-		ui.Width("100%"),
-		ui.Height("100%"),
-		ui.Padding(28),
-		ui.Gap(16),
-		ui.OverflowY("auto"),
-	)
+	).Display("flex").FlexDirection("column").Width("100%").Height("100%").Padding(28).Gap(16).OverflowY("auto")
 }
 
 func card(title, detail, href string) {
-	active := ui.Styles(ui.BorderColor(blue))
+	active := ui.Style().BorderColor(blue)
 	ui.Link(
 		ui.LinkProps{
 			Href:        href,
 			ActiveStyle: &active,
-			PartProps: ui.PartProps{Style: ui.Styles(
-				ui.Display("flex"),
-				ui.FlexDirection("column"),
-				ui.Width(260),
-				ui.MinHeight(112),
-				ui.Padding(18),
-				ui.Gap(8),
-				ui.BackgroundColor(panel),
-				ui.BorderWidth(1),
-				ui.BorderColor(border),
-				ui.BorderRadius(12),
-				ui.TextColor(textColor),
-				ui.Cursor("default"),
-				ui.Hover(ui.BackgroundColor(panelRaised)),
-			)},
+			PartProps: ui.PartProps{Style: ui.Style().
+				Display("flex").
+				FlexDirection("column").
+				Width(260).
+				MinHeight(112).
+				Padding(18).
+				Gap(8).
+				BackgroundColor(panel).
+				BorderWidth(1).
+				BorderColor(border).
+				BorderRadius(12).
+				TextColor(textColor).
+				Cursor("default").
+				Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
+					return s.BackgroundColor(panelRaised)
+				})},
 		},
 		func() {
-			ui.Text(title, ui.FontWeight(700))
-			ui.Text(detail, ui.TextColor(muted), ui.LineHeight(19))
+			ui.Text(title).FontWeight(700)
+			ui.Text(detail).TextColor(muted).LineHeight(19)
 		},
 	)
 }

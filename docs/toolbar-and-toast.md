@@ -322,9 +322,8 @@ func Notices() {
 							ui.Toast.Positioner(
 								ui.ToastPartProps{
 									ToastID: id,
-									PartProps: ui.PartProps{Style: ui.Styles(
-										ui.Top(func() float64 { return entry().Offset }),
-									)},
+									PartProps: ui.PartProps{Style: ui.Style().
+										Top(func() float64 { return entry().Offset })},
 								},
 								func() {
 									ui.Toast.Root(

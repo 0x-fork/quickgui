@@ -1,6 +1,78 @@
 Capture the current window while constructing a component. Its methods present OS dialogs and popup menus, with results delivered asynchronously.
 
-## Choose a directory
+## Popover
+
+Create a trigger, positioner, and popup from `@ui.popover([])`. The native core handles placement, collisions, focus, and dismissal.
+
+```moonbit
+fn component_example() -> @ui.Element {
+  let popover = @ui.popover([]).side("bottom").side_offset(6)
+  popover.children([
+    popover.slot(@ui.Trigger).label("Details"),
+    popover
+    .slot(@ui.Positioner)
+    .children([
+      popover
+      .slot(@ui.Popup)
+      .children([@ui.text("Popover content")])
+      .padding(16),
+    ]),
+  ])
+}
+```
+
+## Dialog
+
+Create modal content from `@ui.dialog([])` and its Portal, Backdrop, Popup, Title, Description, and Close slots. The core keeps focus inside the modal and owns dismissal.
+
+```moonbit
+fn component_example() -> @ui.Element {
+  let dialog = @ui.dialog([])
+  dialog.children([
+    dialog.slot(@ui.Trigger).label("Open dialog"),
+    dialog
+    .slot(@ui.Portal)
+    .children([
+      dialog.slot(@ui.Backdrop),
+      dialog
+      .slot(@ui.Popup)
+      .padding(24)
+      .flex_col()
+      .gap(12)
+      .children([
+        dialog.slot(@ui.Title).label("Confirm action"),
+        dialog.slot(@ui.Description).label("Review before continuing."),
+        dialog.slot(@ui.Close).label("Close"),
+      ]),
+    ]),
+  ])
+}
+```
+
+## System popover
+
+`@ui.system_popover([]).system_content(...)` creates content in a separate native child window. Provide its size and placement, and create its QuickGUI nodes inside the content callback.
+
+```moonbit
+fn component_example() -> @ui.Element {
+  @ui.system_popover([])
+  .label("Open details")
+  .system_content(
+    () => @ui.div([@ui.text("Native child window")]).padding(16),
+    options={
+      "width": 260,
+      "height": 120,
+      "popoverPlacement": "bottom-start",
+      "popoverDismissOnEscape": true,
+      "popoverDismissOnPointerOutside": true,
+    },
+  )
+}
+```
+
+## Native dialogs
+
+### Choose a directory
 
 ```moonbit
 fn folder_picker() -> @ui.Element {
@@ -29,7 +101,7 @@ fn folder_picker() -> @ui.Element {
 
 Dialog kind `0` is an alert, `1` opens paths, and `2` saves a path. Open/save results contain a paths array; an empty selection is cancellation. Alerts return the chosen button identifier. Handle the `Result` instead of blocking the UI thread.
 
-## Popup and context menus
+### Popup and context menus
 
 ```moonbit
 fn menu_button() -> @ui.Element {
@@ -53,7 +125,7 @@ fn menu_button() -> @ui.Element {
 
 `popup_menu` keeps action callbacks alive until the menu dismisses. Use `submenu` for nested items and `menu_role` for standard platform commands. Event handlers and menu items retain the registering owner.
 
-## Application menus and overlays
+### Application menus and overlays
 
 Call `@native.set_application_menu(items)` inside the application startup callback to install app-level menus. Use platform roles for commands such as closing, hiding, or minimizing a window.
 

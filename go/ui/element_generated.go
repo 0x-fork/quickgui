@@ -6,742 +6,742 @@ import "github.com/egoist/quickgui/go/native"
 
 // ObjectFit sets the corresponding style property.
 func (element *Element) ObjectFit(value string) *Element {
-	return element.configureStyle("ObjectFit", ObjectFit(value))
+	return element.configureStyle("ObjectFit", styleObjectFit(value))
 }
 
 // WordWrap sets the corresponding style property.
 func (element *Element) WordWrap(value string) *Element {
-	return element.configureStyle("OverflowWrap", WordWrap(value))
+	return element.configureStyle("OverflowWrap", styleWordWrap(value))
 }
 
 // TransitionTimingFunction sets the corresponding style property.
 func (element *Element) TransitionTimingFunction(value any) *Element {
-	return element.configureStyle("TransitionEasing", TransitionTimingFunction(value))
+	return element.configureStyle("TransitionEasing", styleTransitionTimingFunction(value))
 }
 
 // PaddingInlineStart sets the corresponding style property.
 func (element *Element) PaddingInlineStart(value any) *Element {
-	return element.configureStyle("PaddingStart", PaddingInlineStart(value))
+	return element.configureStyle("PaddingStart", stylePaddingInlineStart(value))
 }
 
 // PaddingInlineEnd sets the corresponding style property.
 func (element *Element) PaddingInlineEnd(value any) *Element {
-	return element.configureStyle("PaddingEnd", PaddingInlineEnd(value))
+	return element.configureStyle("PaddingEnd", stylePaddingInlineEnd(value))
 }
 
 // MarginInlineStart sets the corresponding style property.
 func (element *Element) MarginInlineStart(value any) *Element {
-	return element.configureStyle("MarginStart", MarginInlineStart(value))
+	return element.configureStyle("MarginStart", styleMarginInlineStart(value))
 }
 
 // MarginInlineEnd sets the corresponding style property.
 func (element *Element) MarginInlineEnd(value any) *Element {
-	return element.configureStyle("MarginEnd", MarginInlineEnd(value))
+	return element.configureStyle("MarginEnd", styleMarginInlineEnd(value))
 }
 
 // BorderInlineStartWidth sets the corresponding style property.
 func (element *Element) BorderInlineStartWidth(value any) *Element {
-	return element.configureStyle("BorderStartWidth", BorderInlineStartWidth(value))
+	return element.configureStyle("BorderStartWidth", styleBorderInlineStartWidth(value))
 }
 
 // BorderInlineEndWidth sets the corresponding style property.
 func (element *Element) BorderInlineEndWidth(value any) *Element {
-	return element.configureStyle("BorderEndWidth", BorderInlineEndWidth(value))
+	return element.configureStyle("BorderEndWidth", styleBorderInlineEndWidth(value))
 }
 
 // AspectRatio sets the corresponding style property.
 func (element *Element) AspectRatio(value any) *Element {
-	return element.configureStyle("AspectRatio", AspectRatio(value))
+	return element.configureStyle("AspectRatio", styleAspectRatio(value))
 }
 
 // GridColumn sets the corresponding style property.
 func (element *Element) GridColumn(value any) *Element {
-	return element.configureStyle("GridColumn", GridColumn(value))
+	return element.configureStyle("GridColumn", styleGridColumn(value))
 }
 
 // GridRow sets the corresponding style property.
 func (element *Element) GridRow(value any) *Element {
-	return element.configureStyle("GridRow", GridRow(value))
+	return element.configureStyle("GridRow", styleGridRow(value))
 }
 
 // BorderStartWidth sets the corresponding style property.
 func (element *Element) BorderStartWidth(value any) *Element {
-	return element.configureStyle("BorderStartWidth", BorderStartWidth(value))
+	return element.configureStyle("BorderStartWidth", styleBorderStartWidth(value))
 }
 
 // BorderEndWidth sets the corresponding style property.
 func (element *Element) BorderEndWidth(value any) *Element {
-	return element.configureStyle("BorderEndWidth", BorderEndWidth(value))
+	return element.configureStyle("BorderEndWidth", styleBorderEndWidth(value))
 }
 
 // Background sets the corresponding style property.
 func (element *Element) Background(value any) *Element {
-	return element.configureStyle("Background", Background(value))
+	return element.configureStyle("Background", styleBackground(value))
 }
 
 // BackgroundGradient sets the corresponding style property.
 func (element *Element) BackgroundGradient(value any) *Element {
-	return element.configureStyle("BackgroundGradient", BackgroundGradient(value))
+	return element.configureStyle("BackgroundGradient", styleBackgroundGradient(value))
 }
 
 // TransitionProperty sets the corresponding style property.
 func (element *Element) TransitionProperty(value any) *Element {
-	return element.configureStyle("TransitionProperty", TransitionProperty(value))
+	return element.configureStyle("TransitionProperty", styleTransitionProperty(value))
 }
 
 // TransitionDuration sets the corresponding style property.
 func (element *Element) TransitionDuration(value any) *Element {
-	return element.configureStyle("TransitionDuration", TransitionDuration(value))
+	return element.configureStyle("TransitionDuration", styleTransitionDuration(value))
 }
 
 // TransitionEasing sets the corresponding style property.
 func (element *Element) TransitionEasing(value any) *Element {
-	return element.configureStyle("TransitionEasing", TransitionEasing(value))
+	return element.configureStyle("TransitionEasing", styleTransitionEasing(value))
 }
 
 // TransitionMaxFps sets the corresponding style property.
 func (element *Element) TransitionMaxFps(value any) *Element {
-	return element.configureStyle("TransitionMaxFps", TransitionMaxFps(value))
+	return element.configureStyle("TransitionMaxFps", styleTransitionMaxFps(value))
 }
 
 // MarkdownCodeBackground sets the corresponding style property.
 func (element *Element) MarkdownCodeBackground(value any) *Element {
-	return element.configureStyle("MarkdownCodeBackground", MarkdownCodeBackground(value))
+	return element.configureStyle("MarkdownCodeBackground", styleMarkdownCodeBackground(value))
 }
 
 // MarkdownBorderColor sets the corresponding style property.
 func (element *Element) MarkdownBorderColor(value any) *Element {
-	return element.configureStyle("MarkdownBorderColor", MarkdownBorderColor(value))
+	return element.configureStyle("MarkdownBorderColor", styleMarkdownBorderColor(value))
 }
 
 // MarkdownMutedColor sets the corresponding style property.
 func (element *Element) MarkdownMutedColor(value any) *Element {
-	return element.configureStyle("MarkdownMutedColor", MarkdownMutedColor(value))
+	return element.configureStyle("MarkdownMutedColor", styleMarkdownMutedColor(value))
 }
 
 // MarkdownLinkColor sets the corresponding style property.
 func (element *Element) MarkdownLinkColor(value any) *Element {
-	return element.configureStyle("MarkdownLinkColor", MarkdownLinkColor(value))
+	return element.configureStyle("MarkdownLinkColor", styleMarkdownLinkColor(value))
 }
 
 // MarkdownCodeTextColor sets the corresponding style property.
 func (element *Element) MarkdownCodeTextColor(value any) *Element {
-	return element.configureStyle("MarkdownCodeTextColor", MarkdownCodeTextColor(value))
+	return element.configureStyle("MarkdownCodeTextColor", styleMarkdownCodeTextColor(value))
 }
 
 // MarkdownBlockGap sets the corresponding style property.
 func (element *Element) MarkdownBlockGap(value any) *Element {
-	return element.configureStyle("MarkdownBlockGap", MarkdownBlockGap(value))
+	return element.configureStyle("MarkdownBlockGap", styleMarkdownBlockGap(value))
 }
 
 // MarkdownCodeFontSize sets the corresponding style property.
 func (element *Element) MarkdownCodeFontSize(value any) *Element {
-	return element.configureStyle("MarkdownCodeFontSize", MarkdownCodeFontSize(value))
+	return element.configureStyle("MarkdownCodeFontSize", styleMarkdownCodeFontSize(value))
 }
 
 // ScrollToEndRevision sets the corresponding style property.
 func (element *Element) ScrollToEndRevision(value any) *Element {
-	return element.configureStyle("ScrollToEndRevision", ScrollToEndRevision(value))
+	return element.configureStyle("ScrollToEndRevision", styleScrollToEndRevision(value))
 }
 
 // TextDecoration sets the corresponding style property.
 func (element *Element) TextDecoration(value string) *Element {
-	return element.configureStyle("TextDecoration", TextDecoration(value))
+	return element.configureStyle("TextDecoration", styleTextDecoration(value))
 }
 
 // InvalidStyle merges the Invalid interaction style.
-func (element *Element) InvalidStyle(options ...StyleDeclaration) *Element {
-	return element.configureStyle("Invalid", InvalidStyle(options...))
+func (element *Element) InvalidStyle(build func(StyleBuilder) StyleBuilder) *Element {
+	return element.configureStyle("Invalid", styleInvalidStyle(build(Style())))
 }
 
 // Dragging merges the Dragging interaction style.
-func (element *Element) Dragging(options ...StyleDeclaration) *Element {
-	return element.configureStyle("Dragging", Dragging(options...))
+func (element *Element) Dragging(build func(StyleBuilder) StyleBuilder) *Element {
+	return element.configureStyle("Dragging", styleDragging(build(Style())))
 }
 
 // DragOver merges the DragOver interaction style.
-func (element *Element) DragOver(options ...StyleDeclaration) *Element {
-	return element.configureStyle("DragOver", DragOver(options...))
+func (element *Element) DragOver(build func(StyleBuilder) StyleBuilder) *Element {
+	return element.configureStyle("DragOver", styleDragOver(build(Style())))
 }
 
 // FocusWithin merges the FocusWithin interaction style.
-func (element *Element) FocusWithin(options ...StyleDeclaration) *Element {
-	return element.configureStyle("FocusWithin", FocusWithin(options...))
+func (element *Element) FocusWithin(build func(StyleBuilder) StyleBuilder) *Element {
+	return element.configureStyle("FocusWithin", styleFocusWithin(build(Style())))
 }
 
 // GridTemplateColumns sets the corresponding style property.
 func (element *Element) GridTemplateColumns(value any) *Element {
-	return element.configureStyle("GridTemplateColumns", GridTemplateColumns(value))
+	return element.configureStyle("GridTemplateColumns", styleGridTemplateColumns(value))
 }
 
 // GridTemplateRows sets the corresponding style property.
 func (element *Element) GridTemplateRows(value any) *Element {
-	return element.configureStyle("GridTemplateRows", GridTemplateRows(value))
+	return element.configureStyle("GridTemplateRows", styleGridTemplateRows(value))
 }
 
 // GridAutoFlow sets the corresponding style property.
 func (element *Element) GridAutoFlow(value string) *Element {
-	return element.configureStyle("GridAutoFlow", GridAutoFlow(value))
+	return element.configureStyle("GridAutoFlow", styleGridAutoFlow(value))
 }
 
 // GridColumnStart sets the corresponding style property.
 func (element *Element) GridColumnStart(value any) *Element {
-	return element.configureStyle("GridColumnStart", GridColumnStart(value))
+	return element.configureStyle("GridColumnStart", styleGridColumnStart(value))
 }
 
 // GridColumnEnd sets the corresponding style property.
 func (element *Element) GridColumnEnd(value any) *Element {
-	return element.configureStyle("GridColumnEnd", GridColumnEnd(value))
+	return element.configureStyle("GridColumnEnd", styleGridColumnEnd(value))
 }
 
 // GridColumnSpan sets the corresponding style property.
 func (element *Element) GridColumnSpan(value any) *Element {
-	return element.configureStyle("GridColumnSpan", GridColumnSpan(value))
+	return element.configureStyle("GridColumnSpan", styleGridColumnSpan(value))
 }
 
 // GridRowStart sets the corresponding style property.
 func (element *Element) GridRowStart(value any) *Element {
-	return element.configureStyle("GridRowStart", GridRowStart(value))
+	return element.configureStyle("GridRowStart", styleGridRowStart(value))
 }
 
 // GridRowEnd sets the corresponding style property.
 func (element *Element) GridRowEnd(value any) *Element {
-	return element.configureStyle("GridRowEnd", GridRowEnd(value))
+	return element.configureStyle("GridRowEnd", styleGridRowEnd(value))
 }
 
 // GridRowSpan sets the corresponding style property.
 func (element *Element) GridRowSpan(value any) *Element {
-	return element.configureStyle("GridRowSpan", GridRowSpan(value))
+	return element.configureStyle("GridRowSpan", styleGridRowSpan(value))
 }
 
 // PaddingStart sets the corresponding style property.
 func (element *Element) PaddingStart(value any) *Element {
-	return element.configureStyle("PaddingStart", PaddingStart(value))
+	return element.configureStyle("PaddingStart", stylePaddingStart(value))
 }
 
 // PaddingEnd sets the corresponding style property.
 func (element *Element) PaddingEnd(value any) *Element {
-	return element.configureStyle("PaddingEnd", PaddingEnd(value))
+	return element.configureStyle("PaddingEnd", stylePaddingEnd(value))
 }
 
 // MarginStart sets the corresponding style property.
 func (element *Element) MarginStart(value any) *Element {
-	return element.configureStyle("MarginStart", MarginStart(value))
+	return element.configureStyle("MarginStart", styleMarginStart(value))
 }
 
 // MarginEnd sets the corresponding style property.
 func (element *Element) MarginEnd(value any) *Element {
-	return element.configureStyle("MarginEnd", MarginEnd(value))
+	return element.configureStyle("MarginEnd", styleMarginEnd(value))
 }
 
 // BorderTopWidth sets the corresponding style property.
 func (element *Element) BorderTopWidth(value any) *Element {
-	return element.configureStyle("BorderTopWidth", BorderTopWidth(value))
+	return element.configureStyle("BorderTopWidth", styleBorderTopWidth(value))
 }
 
 // BorderRightWidth sets the corresponding style property.
 func (element *Element) BorderRightWidth(value any) *Element {
-	return element.configureStyle("BorderRightWidth", BorderRightWidth(value))
+	return element.configureStyle("BorderRightWidth", styleBorderRightWidth(value))
 }
 
 // BorderBottomWidth sets the corresponding style property.
 func (element *Element) BorderBottomWidth(value any) *Element {
-	return element.configureStyle("BorderBottomWidth", BorderBottomWidth(value))
+	return element.configureStyle("BorderBottomWidth", styleBorderBottomWidth(value))
 }
 
 // BorderLeftWidth sets the corresponding style property.
 func (element *Element) BorderLeftWidth(value any) *Element {
-	return element.configureStyle("BorderLeftWidth", BorderLeftWidth(value))
+	return element.configureStyle("BorderLeftWidth", styleBorderLeftWidth(value))
 }
 
 // BorderTopLeftRadius sets the corresponding style property.
 func (element *Element) BorderTopLeftRadius(value any) *Element {
-	return element.configureStyle("BorderTopLeftRadius", BorderTopLeftRadius(value))
+	return element.configureStyle("BorderTopLeftRadius", styleBorderTopLeftRadius(value))
 }
 
 // BorderTopRightRadius sets the corresponding style property.
 func (element *Element) BorderTopRightRadius(value any) *Element {
-	return element.configureStyle("BorderTopRightRadius", BorderTopRightRadius(value))
+	return element.configureStyle("BorderTopRightRadius", styleBorderTopRightRadius(value))
 }
 
 // BorderBottomLeftRadius sets the corresponding style property.
 func (element *Element) BorderBottomLeftRadius(value any) *Element {
-	return element.configureStyle("BorderBottomLeftRadius", BorderBottomLeftRadius(value))
+	return element.configureStyle("BorderBottomLeftRadius", styleBorderBottomLeftRadius(value))
 }
 
 // BorderBottomRightRadius sets the corresponding style property.
 func (element *Element) BorderBottomRightRadius(value any) *Element {
-	return element.configureStyle("BorderBottomRightRadius", BorderBottomRightRadius(value))
+	return element.configureStyle("BorderBottomRightRadius", styleBorderBottomRightRadius(value))
 }
 
 // BorderStyle sets the corresponding style property.
 func (element *Element) BorderStyle(value string) *Element {
-	return element.configureStyle("BorderStyle", BorderStyle(value))
+	return element.configureStyle("BorderStyle", styleBorderStyle(value))
 }
 
 // BoxShadow sets the corresponding style property.
 func (element *Element) BoxShadow(value any) *Element {
-	return element.configureStyle("BoxShadow", BoxShadow(value))
+	return element.configureStyle("BoxShadow", styleBoxShadow(value))
 }
 
 // TextShadow sets the corresponding style property.
 func (element *Element) TextShadow(value any) *Element {
-	return element.configureStyle("TextShadow", TextShadow(value))
+	return element.configureStyle("TextShadow", styleTextShadow(value))
 }
 
 // TextDecorationLine sets the corresponding style property.
 func (element *Element) TextDecorationLine(value string) *Element {
-	return element.configureStyle("TextDecorationLine", TextDecorationLine(value))
+	return element.configureStyle("TextDecorationLine", styleTextDecorationLine(value))
 }
 
 // TextDecorationColor sets the corresponding style property.
 func (element *Element) TextDecorationColor(value any) *Element {
-	return element.configureStyle("TextDecorationColor", TextDecorationColor(value))
+	return element.configureStyle("TextDecorationColor", styleTextDecorationColor(value))
 }
 
 // TextDecorationStyle sets the corresponding style property.
 func (element *Element) TextDecorationStyle(value string) *Element {
-	return element.configureStyle("TextDecorationStyle", TextDecorationStyle(value))
+	return element.configureStyle("TextDecorationStyle", styleTextDecorationStyle(value))
 }
 
 // TextDecorationThickness sets the corresponding style property.
 func (element *Element) TextDecorationThickness(value any) *Element {
-	return element.configureStyle("TextDecorationThickness", TextDecorationThickness(value))
+	return element.configureStyle("TextDecorationThickness", styleTextDecorationThickness(value))
 }
 
 // WordSpacing sets the corresponding style property.
 func (element *Element) WordSpacing(value any) *Element {
-	return element.configureStyle("WordSpacing", WordSpacing(value))
+	return element.configureStyle("WordSpacing", styleWordSpacing(value))
 }
 
 // WordBreak sets the corresponding style property.
 func (element *Element) WordBreak(value string) *Element {
-	return element.configureStyle("WordBreak", WordBreak(value))
+	return element.configureStyle("WordBreak", styleWordBreak(value))
 }
 
 // OverflowWrap sets the corresponding style property.
 func (element *Element) OverflowWrap(value string) *Element {
-	return element.configureStyle("OverflowWrap", OverflowWrap(value))
+	return element.configureStyle("OverflowWrap", styleOverflowWrap(value))
 }
 
 // Hyphens sets the corresponding style property.
 func (element *Element) Hyphens(value string) *Element {
-	return element.configureStyle("Hyphens", Hyphens(value))
+	return element.configureStyle("Hyphens", styleHyphens(value))
 }
 
 // TextDirection sets the corresponding style property.
 func (element *Element) TextDirection(value string) *Element {
-	return element.configureStyle("TextDirection", TextDirection(value))
+	return element.configureStyle("TextDirection", styleTextDirection(value))
 }
 
 // Direction sets the corresponding style property.
 func (element *Element) Direction(value string) *Element {
-	return element.configureStyle("Direction", Direction(value))
+	return element.configureStyle("Direction", styleDirection(value))
 }
 
 // BackgroundImage sets the corresponding style property.
 func (element *Element) BackgroundImage(value string) *Element {
-	return element.configureStyle("BackgroundImage", BackgroundImage(value))
+	return element.configureStyle("BackgroundImage", styleBackgroundImage(value))
 }
 
 // BackgroundSize sets the corresponding style property.
 func (element *Element) BackgroundSize(value string) *Element {
-	return element.configureStyle("BackgroundSize", BackgroundSize(value))
+	return element.configureStyle("BackgroundSize", styleBackgroundSize(value))
 }
 
 // BackgroundRepeat sets the corresponding style property.
 func (element *Element) BackgroundRepeat(value string) *Element {
-	return element.configureStyle("BackgroundRepeat", BackgroundRepeat(value))
+	return element.configureStyle("BackgroundRepeat", styleBackgroundRepeat(value))
 }
 
 // BackgroundPosition sets the corresponding style property.
 func (element *Element) BackgroundPosition(value string) *Element {
-	return element.configureStyle("BackgroundPosition", BackgroundPosition(value))
+	return element.configureStyle("BackgroundPosition", styleBackgroundPosition(value))
 }
 
 // Filter sets the corresponding style property.
 func (element *Element) Filter(value any) *Element {
-	return element.configureStyle("Filter", Filter(value))
+	return element.configureStyle("Filter", styleFilter(value))
 }
 
 // BackdropFilter sets the corresponding style property.
 func (element *Element) BackdropFilter(value any) *Element {
-	return element.configureStyle("BackdropFilter", BackdropFilter(value))
+	return element.configureStyle("BackdropFilter", styleBackdropFilter(value))
 }
 
 // MixBlendMode sets the corresponding style property.
 func (element *Element) MixBlendMode(value string) *Element {
-	return element.configureStyle("MixBlendMode", MixBlendMode(value))
+	return element.configureStyle("MixBlendMode", styleMixBlendMode(value))
 }
 
 // Transition sets the corresponding style property.
 func (element *Element) Transition(value any) *Element {
-	return element.configureStyle("Transition", Transition(value))
+	return element.configureStyle("Transition", styleTransition(value))
 }
 
 // ScrollSnapType sets the corresponding style property.
 func (element *Element) ScrollSnapType(value string) *Element {
-	return element.configureStyle("ScrollSnapType", ScrollSnapType(value))
+	return element.configureStyle("ScrollSnapType", styleScrollSnapType(value))
 }
 
 // ScrollSnapX sets the corresponding style property.
 func (element *Element) ScrollSnapX(value string) *Element {
-	return element.configureStyle("ScrollSnapX", ScrollSnapX(value))
+	return element.configureStyle("ScrollSnapX", styleScrollSnapX(value))
 }
 
 // ScrollSnapY sets the corresponding style property.
 func (element *Element) ScrollSnapY(value string) *Element {
-	return element.configureStyle("ScrollSnapY", ScrollSnapY(value))
+	return element.configureStyle("ScrollSnapY", styleScrollSnapY(value))
 }
 
 // ScrollSnapAlign sets the corresponding style property.
 func (element *Element) ScrollSnapAlign(value string) *Element {
-	return element.configureStyle("ScrollSnapAlign", ScrollSnapAlign(value))
+	return element.configureStyle("ScrollSnapAlign", styleScrollSnapAlign(value))
 }
 
 // ScrollSnapStop sets the corresponding style property.
 func (element *Element) ScrollSnapStop(value string) *Element {
-	return element.configureStyle("ScrollSnapStop", ScrollSnapStop(value))
+	return element.configureStyle("ScrollSnapStop", styleScrollSnapStop(value))
 }
 
 // Display sets the corresponding style property.
 func (element *Element) Display(value string) *Element {
-	return element.configureStyle("Display", Display(value))
+	return element.configureStyle("Display", styleDisplay(value))
 }
 
 // FlexDirection sets the corresponding style property.
 func (element *Element) FlexDirection(value string) *Element {
-	return element.configureStyle("FlexDirection", FlexDirection(value))
+	return element.configureStyle("FlexDirection", styleFlexDirection(value))
 }
 
 // FlexGrow sets the corresponding style property.
 func (element *Element) FlexGrow(value any) *Element {
-	return element.configureStyle("FlexGrow", FlexGrow(value))
+	return element.configureStyle("FlexGrow", styleFlexGrow(value))
 }
 
 // FlexShrink sets the corresponding style property.
 func (element *Element) FlexShrink(value any) *Element {
-	return element.configureStyle("FlexShrink", FlexShrink(value))
+	return element.configureStyle("FlexShrink", styleFlexShrink(value))
 }
 
 // FlexBasis sets the corresponding style property.
 func (element *Element) FlexBasis(value any) *Element {
-	return element.configureStyle("FlexBasis", FlexBasis(value))
+	return element.configureStyle("FlexBasis", styleFlexBasis(value))
 }
 
 // AlignItems sets the corresponding style property.
 func (element *Element) AlignItems(value string) *Element {
-	return element.configureStyle("AlignItems", AlignItems(value))
+	return element.configureStyle("AlignItems", styleAlignItems(value))
 }
 
 // AlignSelf sets the corresponding style property.
 func (element *Element) AlignSelf(value string) *Element {
-	return element.configureStyle("AlignSelf", AlignSelf(value))
+	return element.configureStyle("AlignSelf", styleAlignSelf(value))
 }
 
 // JustifyContent sets the corresponding style property.
 func (element *Element) JustifyContent(value string) *Element {
-	return element.configureStyle("JustifyContent", JustifyContent(value))
+	return element.configureStyle("JustifyContent", styleJustifyContent(value))
 }
 
 // AlignContent sets the corresponding style property.
 func (element *Element) AlignContent(value string) *Element {
-	return element.configureStyle("AlignContent", AlignContent(value))
+	return element.configureStyle("AlignContent", styleAlignContent(value))
 }
 
 // Gap sets the corresponding style property.
 func (element *Element) Gap(value any) *Element {
-	return element.configureStyle("Gap", Gap(value))
+	return element.configureStyle("Gap", styleGap(value))
 }
 
 // ColumnGap sets the corresponding style property.
 func (element *Element) ColumnGap(value any) *Element {
-	return element.configureStyle("ColumnGap", ColumnGap(value))
+	return element.configureStyle("ColumnGap", styleColumnGap(value))
 }
 
 // RowGap sets the corresponding style property.
 func (element *Element) RowGap(value any) *Element {
-	return element.configureStyle("RowGap", RowGap(value))
+	return element.configureStyle("RowGap", styleRowGap(value))
 }
 
 // Width sets the corresponding style property.
 func (element *Element) Width(value any) *Element {
-	return element.configureStyle("Width", Width(value))
+	return element.configureStyle("Width", styleWidth(value))
 }
 
 // Height sets the corresponding style property.
 func (element *Element) Height(value any) *Element {
-	return element.configureStyle("Height", Height(value))
+	return element.configureStyle("Height", styleHeight(value))
 }
 
 // MinWidth sets the corresponding style property.
 func (element *Element) MinWidth(value any) *Element {
-	return element.configureStyle("MinWidth", MinWidth(value))
+	return element.configureStyle("MinWidth", styleMinWidth(value))
 }
 
 // MinHeight sets the corresponding style property.
 func (element *Element) MinHeight(value any) *Element {
-	return element.configureStyle("MinHeight", MinHeight(value))
+	return element.configureStyle("MinHeight", styleMinHeight(value))
 }
 
 // MaxWidth sets the corresponding style property.
 func (element *Element) MaxWidth(value any) *Element {
-	return element.configureStyle("MaxWidth", MaxWidth(value))
+	return element.configureStyle("MaxWidth", styleMaxWidth(value))
 }
 
 // MaxHeight sets the corresponding style property.
 func (element *Element) MaxHeight(value any) *Element {
-	return element.configureStyle("MaxHeight", MaxHeight(value))
+	return element.configureStyle("MaxHeight", styleMaxHeight(value))
 }
 
 // Padding sets the corresponding style property.
 func (element *Element) Padding(value any) *Element {
-	return element.configureStyle("Padding", Padding(value))
+	return element.configureStyle("Padding", stylePadding(value))
 }
 
 // PaddingTop sets the corresponding style property.
 func (element *Element) PaddingTop(value any) *Element {
-	return element.configureStyle("PaddingTop", PaddingTop(value))
+	return element.configureStyle("PaddingTop", stylePaddingTop(value))
 }
 
 // PaddingRight sets the corresponding style property.
 func (element *Element) PaddingRight(value any) *Element {
-	return element.configureStyle("PaddingRight", PaddingRight(value))
+	return element.configureStyle("PaddingRight", stylePaddingRight(value))
 }
 
 // PaddingBottom sets the corresponding style property.
 func (element *Element) PaddingBottom(value any) *Element {
-	return element.configureStyle("PaddingBottom", PaddingBottom(value))
+	return element.configureStyle("PaddingBottom", stylePaddingBottom(value))
 }
 
 // PaddingLeft sets the corresponding style property.
 func (element *Element) PaddingLeft(value any) *Element {
-	return element.configureStyle("PaddingLeft", PaddingLeft(value))
+	return element.configureStyle("PaddingLeft", stylePaddingLeft(value))
 }
 
 // Margin sets the corresponding style property.
 func (element *Element) Margin(value any) *Element {
-	return element.configureStyle("Margin", Margin(value))
+	return element.configureStyle("Margin", styleMargin(value))
 }
 
 // MarginTop sets the corresponding style property.
 func (element *Element) MarginTop(value any) *Element {
-	return element.configureStyle("MarginTop", MarginTop(value))
+	return element.configureStyle("MarginTop", styleMarginTop(value))
 }
 
 // MarginRight sets the corresponding style property.
 func (element *Element) MarginRight(value any) *Element {
-	return element.configureStyle("MarginRight", MarginRight(value))
+	return element.configureStyle("MarginRight", styleMarginRight(value))
 }
 
 // MarginBottom sets the corresponding style property.
 func (element *Element) MarginBottom(value any) *Element {
-	return element.configureStyle("MarginBottom", MarginBottom(value))
+	return element.configureStyle("MarginBottom", styleMarginBottom(value))
 }
 
 // MarginLeft sets the corresponding style property.
 func (element *Element) MarginLeft(value any) *Element {
-	return element.configureStyle("MarginLeft", MarginLeft(value))
+	return element.configureStyle("MarginLeft", styleMarginLeft(value))
 }
 
 // BackgroundColor sets the corresponding style property.
 func (element *Element) BackgroundColor(value any) *Element {
-	return element.configureStyle("BackgroundColor", BackgroundColor(value))
+	return element.configureStyle("BackgroundColor", styleBackgroundColor(value))
 }
 
 // TextColor sets the corresponding style property.
 func (element *Element) TextColor(value any) *Element {
-	return element.configureStyle("TextColor", TextColor(value))
+	return element.configureStyle("TextColor", styleTextColor(value))
 }
 
 // Opacity sets the corresponding style property.
 func (element *Element) Opacity(value any) *Element {
-	return element.configureStyle("Opacity", Opacity(value))
+	return element.configureStyle("Opacity", styleOpacity(value))
 }
 
 // BorderWidth sets the corresponding style property.
 func (element *Element) BorderWidth(value any) *Element {
-	return element.configureStyle("BorderWidth", BorderWidth(value))
+	return element.configureStyle("BorderWidth", styleBorderWidth(value))
 }
 
 // BorderColor sets the corresponding style property.
 func (element *Element) BorderColor(value any) *Element {
-	return element.configureStyle("BorderColor", BorderColor(value))
+	return element.configureStyle("BorderColor", styleBorderColor(value))
 }
 
 // BorderRadius sets the corresponding style property.
 func (element *Element) BorderRadius(value any) *Element {
-	return element.configureStyle("BorderRadius", BorderRadius(value))
+	return element.configureStyle("BorderRadius", styleBorderRadius(value))
 }
 
 // FontSize sets the corresponding style property.
 func (element *Element) FontSize(value any) *Element {
-	return element.configureStyle("FontSize", FontSize(value))
+	return element.configureStyle("FontSize", styleFontSize(value))
 }
 
 // FontFamily sets the corresponding style property.
 func (element *Element) FontFamily(value string) *Element {
-	return element.configureStyle("FontFamily", FontFamily(value))
+	return element.configureStyle("FontFamily", styleFontFamily(value))
 }
 
 // FontWeight sets the corresponding style property.
 func (element *Element) FontWeight(value any) *Element {
-	return element.configureStyle("FontWeight", FontWeight(value))
+	return element.configureStyle("FontWeight", styleFontWeight(value))
 }
 
 // LineHeight sets the corresponding style property.
 func (element *Element) LineHeight(value any) *Element {
-	return element.configureStyle("LineHeight", LineHeight(value))
+	return element.configureStyle("LineHeight", styleLineHeight(value))
 }
 
 // TextAlign sets the corresponding style property.
 func (element *Element) TextAlign(value string) *Element {
-	return element.configureStyle("TextAlign", TextAlign(value))
+	return element.configureStyle("TextAlign", styleTextAlign(value))
 }
 
 // Cursor sets the corresponding style property.
 func (element *Element) Cursor(value string) *Element {
-	return element.configureStyle("Cursor", Cursor(value))
+	return element.configureStyle("Cursor", styleCursor(value))
 }
 
 // AppRegion sets the corresponding style property.
 func (element *Element) AppRegion(value string) *Element {
-	return element.configureStyle("AppRegion", AppRegion(value))
+	return element.configureStyle("AppRegion", styleAppRegion(value))
 }
 
 // UserSelect sets the corresponding style property.
 func (element *Element) UserSelect(value string) *Element {
-	return element.configureStyle("UserSelect", UserSelect(value))
+	return element.configureStyle("UserSelect", styleUserSelect(value))
 }
 
 // Position sets the corresponding style property.
 func (element *Element) Position(value string) *Element {
-	return element.configureStyle("Position", Position(value))
+	return element.configureStyle("Position", stylePosition(value))
 }
 
 // Overflow sets the corresponding style property.
 func (element *Element) Overflow(value string) *Element {
-	return element.configureStyle("Overflow", Overflow(value))
+	return element.configureStyle("Overflow", styleOverflow(value))
 }
 
 // OverflowX sets the corresponding style property.
 func (element *Element) OverflowX(value string) *Element {
-	return element.configureStyle("OverflowX", OverflowX(value))
+	return element.configureStyle("OverflowX", styleOverflowX(value))
 }
 
 // OverflowY sets the corresponding style property.
 func (element *Element) OverflowY(value string) *Element {
-	return element.configureStyle("OverflowY", OverflowY(value))
+	return element.configureStyle("OverflowY", styleOverflowY(value))
 }
 
 // Visibility sets the corresponding style property.
 func (element *Element) Visibility(value string) *Element {
-	return element.configureStyle("Visibility", Visibility(value))
+	return element.configureStyle("Visibility", styleVisibility(value))
 }
 
 // LetterSpacing sets the corresponding style property.
 func (element *Element) LetterSpacing(value any) *Element {
-	return element.configureStyle("LetterSpacing", LetterSpacing(value))
+	return element.configureStyle("LetterSpacing", styleLetterSpacing(value))
 }
 
 // TextTransform sets the corresponding style property.
 func (element *Element) TextTransform(value string) *Element {
-	return element.configureStyle("TextTransform", TextTransform(value))
+	return element.configureStyle("TextTransform", styleTextTransform(value))
 }
 
 // LineClamp sets the corresponding style property.
 func (element *Element) LineClamp(value any) *Element {
-	return element.configureStyle("LineClamp", LineClamp(value))
+	return element.configureStyle("LineClamp", styleLineClamp(value))
 }
 
 // WhiteSpace sets the corresponding style property.
 func (element *Element) WhiteSpace(value string) *Element {
-	return element.configureStyle("WhiteSpace", WhiteSpace(value))
+	return element.configureStyle("WhiteSpace", styleWhiteSpace(value))
 }
 
 // TextOverflow sets the corresponding style property.
 func (element *Element) TextOverflow(value string) *Element {
-	return element.configureStyle("TextOverflow", TextOverflow(value))
+	return element.configureStyle("TextOverflow", styleTextOverflow(value))
 }
 
 // Top sets the corresponding style property.
 func (element *Element) Top(value any) *Element {
-	return element.configureStyle("Top", Top(value))
+	return element.configureStyle("Top", styleTop(value))
 }
 
 // Right sets the corresponding style property.
 func (element *Element) Right(value any) *Element {
-	return element.configureStyle("Right", Right(value))
+	return element.configureStyle("Right", styleRight(value))
 }
 
 // Bottom sets the corresponding style property.
 func (element *Element) Bottom(value any) *Element {
-	return element.configureStyle("Bottom", Bottom(value))
+	return element.configureStyle("Bottom", styleBottom(value))
 }
 
 // Left sets the corresponding style property.
 func (element *Element) Left(value any) *Element {
-	return element.configureStyle("Left", Left(value))
+	return element.configureStyle("Left", styleLeft(value))
 }
 
 // Outline sets the corresponding style property.
 func (element *Element) Outline(value any) *Element {
-	return element.configureStyle("Outline", Outline(value))
+	return element.configureStyle("Outline", styleOutline(value))
 }
 
 // OutlineWidth sets the corresponding style property.
 func (element *Element) OutlineWidth(value any) *Element {
-	return element.configureStyle("OutlineWidth", OutlineWidth(value))
+	return element.configureStyle("OutlineWidth", styleOutlineWidth(value))
 }
 
 // OutlineColor sets the corresponding style property.
 func (element *Element) OutlineColor(value any) *Element {
-	return element.configureStyle("OutlineColor", OutlineColor(value))
+	return element.configureStyle("OutlineColor", styleOutlineColor(value))
 }
 
 // OutlineOffset sets the corresponding style property.
 func (element *Element) OutlineOffset(value any) *Element {
-	return element.configureStyle("OutlineOffset", OutlineOffset(value))
+	return element.configureStyle("OutlineOffset", styleOutlineOffset(value))
 }
 
 // OutlineStyle sets the corresponding style property.
 func (element *Element) OutlineStyle(value string) *Element {
-	return element.configureStyle("OutlineStyle", OutlineStyle(value))
+	return element.configureStyle("OutlineStyle", styleOutlineStyle(value))
 }
 
 // Transform sets the corresponding style property.
 func (element *Element) Transform(value any) *Element {
-	return element.configureStyle("Transform", Transform(value))
+	return element.configureStyle("Transform", styleTransform(value))
 }
 
 // TransformOrigin sets the corresponding style property.
 func (element *Element) TransformOrigin(value string) *Element {
-	return element.configureStyle("TransformOrigin", TransformOrigin(value))
+	return element.configureStyle("TransformOrigin", styleTransformOrigin(value))
 }
 
 // Hover merges the Hover interaction style.
-func (element *Element) Hover(options ...StyleDeclaration) *Element {
-	return element.configureStyle("Hover", Hover(options...))
+func (element *Element) Hover(build func(StyleBuilder) StyleBuilder) *Element {
+	return element.configureStyle("Hover", styleHover(build(Style())))
 }
 
 // Active merges the Active interaction style.
-func (element *Element) Active(options ...StyleDeclaration) *Element {
-	return element.configureStyle("Active", Active(options...))
+func (element *Element) Active(build func(StyleBuilder) StyleBuilder) *Element {
+	return element.configureStyle("Active", styleActive(build(Style())))
 }
 
 // FocusStyle merges the Focus interaction style.
-func (element *Element) FocusStyle(options ...StyleDeclaration) *Element {
-	return element.configureStyle("Focus", Focus(options...))
+func (element *Element) FocusStyle(build func(StyleBuilder) StyleBuilder) *Element {
+	return element.configureStyle("Focus", styleFocus(build(Style())))
 }
 
 // DisabledStyle merges the Disabled interaction style.
-func (element *Element) DisabledStyle(options ...StyleDeclaration) *Element {
-	return element.configureStyle("Disabled", DisabledStyle(options...))
+func (element *Element) DisabledStyle(build func(StyleBuilder) StyleBuilder) *Element {
+	return element.configureStyle("Disabled", styleDisabledStyle(build(Style())))
 }
 
 // SelectedStyle merges the Selected interaction style.
-func (element *Element) SelectedStyle(options ...StyleDeclaration) *Element {
-	return element.configureStyle("Selected", SelectedStyle(options...))
+func (element *Element) SelectedStyle(build func(StyleBuilder) StyleBuilder) *Element {
+	return element.configureStyle("Selected", styleSelectedStyle(build(Style())))
 }
 
 // OnMouseEnter configures the corresponding node property.

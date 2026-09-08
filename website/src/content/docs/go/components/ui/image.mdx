@@ -14,7 +14,7 @@ import (
 
 ```go
 func ImageExample(path string) {
-	ui.Image(ui.Value(path), ui.ObjectFit("cover"), ui.Width(160), ui.Height(120))
+	ui.Image(ui.Value(path)).ObjectFit("cover").Width(160).Height(120)
 }
 ```
 
@@ -24,4 +24,4 @@ func ImageExample(path string) {
 | --- | --- |
 | `Value` | Filesystem path, data URL, SVG document, or shader source expected by the component. |
 | `ObjectFit` | How image content fits its declared box. |
-| `ui.BackgroundColor(...)`, `ui.Padding(...)`, `ui.Hover(...)` | QuickGUI layout, paint, typography, and interaction-state styles. |
+| `ui.Style().BackgroundColor(...)`, `ui.Style().Padding(...)`, `ui.Style().Hover(...)` | QuickGUI layout, paint, typography, and interaction-state styles. |

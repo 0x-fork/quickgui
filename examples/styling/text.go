@@ -9,18 +9,10 @@ func TextAlignment() {
 			ui.View(
 				func() {
 					ui.Text(
-						"textAlign: \""+align+"\" — the core resolves start and end against the inherited direction.",
-						ui.Width("100%"),
-						ui.TextAlign(align),
-						ui.FontSize(13),
-						ui.TextColor(ink),
-					)
+						"textAlign: \"" + align + "\" — the core resolves start and end against the inherited direction.",
+					).Width("100%").TextAlign(align).FontSize(13).TextColor(ink)
 				},
-				ui.Width("100%"),
-				ui.Padding(8),
-				ui.BorderRadius(8),
-				ui.BackgroundColor("#1b2434"),
-			)
+			).Width("100%").Padding(8).BorderRadius(8).BackgroundColor("#1b2434")
 		}
 	})
 }
@@ -29,63 +21,29 @@ func TextStyling() {
 	Panel("Extended text styling", func() {
 		ui.Text(
 			"letterSpacing 2",
-			ui.FontSize(20),
-			ui.FontWeight(700),
-			ui.LetterSpacing(2),
-			ui.TextColor(ink),
-		)
+		).FontSize(20).FontWeight(700).LetterSpacing(2).TextColor(ink)
 		ui.Text(
 			"wordSpacing 8 pushes every space apart",
-			ui.FontSize(14),
-			ui.WordSpacing(8),
-			ui.TextColor(ink),
-		)
+		).FontSize(14).WordSpacing(8).TextColor(ink)
 		ui.Text(
 			"textTransform capitalize keeps selection on the original text",
-			ui.FontSize(14),
-			ui.TextTransform("capitalize"),
-			ui.TextColor(ink),
-		)
+		).FontSize(14).TextTransform("capitalize").TextColor(ink)
 		ui.Text(
 			"textShadow",
-			ui.FontSize(24),
-			ui.FontWeight(700),
-			ui.TextColor("#f8fafc"),
-			ui.TextShadow("0 3px 10px #38bdf8aa"),
-		)
+		).FontSize(24).FontWeight(700).TextColor("#f8fafc").TextShadow("0 3px 10px #38bdf8aa")
 		ui.Text(
 			"wavy underline in its own color",
-			ui.FontSize(14),
-			ui.TextColor(ink),
-			ui.TextDecoration("underline"),
-			ui.TextDecorationColor("#f97316"),
-			ui.TextDecorationStyle("wavy"),
-			ui.TextDecorationThickness(2),
-		)
+		).FontSize(14).TextColor(ink).TextDecoration("underline").TextDecorationColor("#f97316").TextDecorationStyle("wavy").TextDecorationThickness(2)
 		ui.Text(
 			"line-through and overline together",
-			ui.FontSize(14),
-			ui.TextColor(ink),
-			ui.TextDecoration("line-through overline"),
-			ui.TextDecorationColor("#f43f5e"),
-		)
+		).FontSize(14).TextColor(ink).TextDecoration("line-through overline").TextDecorationColor("#f43f5e")
 		ui.View(
 			func() {
 				ui.Text(
 					"wordBreak break-all with overflowWrap anywhere: supercalifragilisticexpialidocious",
-					ui.Width("100%"),
-					ui.FontSize(13),
-					ui.TextColor(muted),
-					ui.WordBreak("break-all"),
-					ui.OverflowWrap("anywhere"),
-					ui.Hyphens("manual"),
-				)
+				).Width("100%").FontSize(13).TextColor(muted).WordBreak("break-all").OverflowWrap("anywhere").Hyphens("manual")
 			},
-			ui.Width(200),
-			ui.Padding(8),
-			ui.BorderRadius(8),
-			ui.BackgroundColor("#1b2434"),
-		)
+		).Width(200).Padding(8).BorderRadius(8).BackgroundColor("#1b2434")
 	})
 }
 
@@ -93,41 +51,15 @@ func Direction() {
 	Panel("Right to left", func() {
 		ui.View(
 			func() {
-				ui.View(
-					ui.Width(28),
-					ui.Height(20),
-					ui.BorderRadius(6),
-					ui.BackgroundColor("#38bdf8"),
-				)
-				ui.View(
-					ui.Width(20),
-					ui.Height(20),
-					ui.BorderRadius(6),
-					ui.BackgroundColor("#334155"),
-				)
+				ui.View().Width(28).Height(20).BorderRadius(6).BackgroundColor("#38bdf8")
+				ui.View().Width(20).Height(20).BorderRadius(6).BackgroundColor("#334155")
 				ui.Text(
 					"مرحبا بالعالم — hello",
-					ui.FontSize(13),
-					ui.TextColor(ink),
-					ui.TextAlign("start"),
-					ui.TextDirection("rtl"),
-				)
+				).FontSize(13).TextColor(ink).TextAlign("start").TextDirection("rtl")
 			},
-			ui.Direction("rtl"),
-			ui.Display("flex"),
-			ui.Gap(8),
-			ui.AlignItems("center"),
-			ui.Padding(10),
-			ui.PaddingStart(20),
-			ui.BorderRadius(10),
-			ui.BorderStartWidth(3),
-			ui.BorderColor("#38bdf8"),
-			ui.BackgroundColor("#1b2434"),
-		)
+		).Direction("rtl").Display("flex").Gap(8).AlignItems("center").Padding(10).PaddingStart(20).BorderRadius(10).BorderStartWidth(3).BorderColor("#38bdf8").BackgroundColor("#1b2434")
 		ui.Text(
 			"paddingStart and borderStartWidth resolve to the right edge inside this subtree.",
-			ui.FontSize(12),
-			ui.TextColor(muted),
-		)
+		).FontSize(12).TextColor(muted)
 	})
 }

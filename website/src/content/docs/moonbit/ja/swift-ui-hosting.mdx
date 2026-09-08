@@ -1,6 +1,14 @@
 ホスト境界を明確にして SwiftUI と QuickGUI を組み合わせます。
 
-## ホスト境界
+## モディファイア
+
+QuickGUI のスタイルはホストに適用します。ネイティブコントロールには `.swift_ui_modifiers(...)` でコアの修飾子 JSON を渡し、`.label(...)` でラベルを追加します。
+
+## Liquid Glass
+
+対応する macOS では `.swift_ui_modifiers(...)` に `style: "glass"` の `buttonStyle` 修飾子を渡します。最終的な外観はシステムが管理します。QuickGUI の背景スタイルではなく SwiftUI の修飾子です。
+
+## リバースホスティング
 
 ネイティブコントロールを `swift_ui_host([])` に配置します。通常の QuickGUI レイアウトはホストの外側に置くか、逆方向ホストを使います。
 
@@ -16,9 +24,11 @@ fn embedded_content() -> @ui.Element {
 }
 ```
 
-## 逆方向のホスティング
-
 `swift_ui_quickgui_host_view(render, width=..., height=...)` で SwiftUI 内に QuickGUI サブツリーを作ります。コールバックは埋め込みビュー自身のウィンドウでノードを構築します。
+
+## SwiftUI ポップオーバー
+
+`swift_ui_popover([])` は SwiftUI ホスト内にトリガーと内容を組み合わせます。`swift_ui_popover_trigger([...])` と `swift_ui_popover_content([...])` を使い、必要に応じて QuickGUI 内容を逆方向ホストします。[SwiftUI Popover](/docs/moonbit/swift-ui/popover) に完全な例があります。
 
 ## ライフサイクル
 

@@ -25,9 +25,7 @@ func ViewExample() {
 			ui.Text("Hello from Go")
 			ui.Button("Continue", ui.OnClick(func() {}))
 		},
-		ui.Padding(20),
-		ui.Gap(12),
-	)
+	).Padding(20).Gap(12)
 }
 ```
 
@@ -63,3 +61,7 @@ The CLI checks `quickgui.toml` before `quickgui.config.ts`. `quickgui dev --conf
 Use `github.com/egoist/quickgui/go/native` for windows and platform services, `github.com/egoist/quickgui/go/ui` for UI, and `github.com/egoist/quickgui/go/reactive` for owners and contexts. `@quickgui/cli` is a development dependency. Pin the Go SDK and CLI to compatible release versions.
 
 To share your own components or build an optional native backend, see [Authoring Extensions](/docs/go/extensions).
+
+## Local development
+
+For SDK development, add a local `replace` directive in `go.mod` pointing `github.com/egoist/quickgui/go` to the checkout’s `go` directory. Run the checkout’s CLI with `bun packages/cli/src/cli.ts dev --project path/to/app`. Ordinary Go edits reuse the native shared library.

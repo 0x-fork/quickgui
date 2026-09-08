@@ -33,7 +33,7 @@ import (
 
 func App() {
 	message, _ := ui.CreateSignal("Hello")
-	extension.Notice(message, ui.FontSize(18))
+	extension.Notice(message, ui.Style().FontSize(18))
 }
 ```
 

@@ -76,7 +76,7 @@ export function docsNavGroups(locale: Locale, frontend: DocsFrontend): readonly 
         guide('project-structure'),
         guide('updater'),
         guide('extensions'),
-        ...(frontend === 'moonbit' ? [guide('native-services')] : []),
+        guide('native-services'),
       ],
     },
     {

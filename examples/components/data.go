@@ -30,43 +30,35 @@ func ScrollAreaDemo() {
 				},
 				OverflowEdgeThreshold: 2,
 				OnScrollStateChange:   change(setState),
-				PartProps: ui.PartProps{Style: ui.Styles(
-					ui.Display("flex"),
-					ui.Gap(4),
-					ui.Height(160),
-				)},
+				PartProps: ui.PartProps{Style: ui.Style().
+					Display("flex").
+					Gap(4).
+					Height(160)},
 			},
 			func() {
 				ui.ScrollArea.Viewport(
-					ui.PartProps{Style: ui.Styles(
-						ui.Width(320),
-						ui.Height(160),
-						ui.BackgroundColor(color(func(p palette) string { return p.PanelAlt })),
-						ui.BorderRadius(10),
-						ui.BorderWidth(1),
-						ui.BorderColor(color(func(p palette) string { return p.Border })),
-						ui.Overflow("hidden"),
-					)},
+					ui.PartProps{Style: ui.Style().
+						Width(320).
+						Height(160).
+						BackgroundColor(color(func(p palette) string { return p.PanelAlt })).
+						BorderRadius(10).
+						BorderWidth(1).
+						BorderColor(color(func(p palette) string { return p.Border })).
+						Overflow("hidden")},
 					func() {
 						ui.ScrollArea.Content(
-							ui.PartProps{Style: func() ui.Style {
-								return ui.Styles(
-									ui.Display("flex"),
-									ui.FlexDirection("column"),
-									ui.PaddingLeft(10),
-									ui.Transform("translateY("+strconv.FormatFloat(-state().Offset.Y, 'g', -1, 64)+"px)"),
-								)
+							ui.PartProps{Style: func() ui.StyleBuilder {
+								return ui.Style().
+									Display("flex").
+									FlexDirection("column").
+									PaddingLeft(10).
+									Transform("translateY(" + strconv.FormatFloat(-state().Offset.Y, 'g', -1, 64) + "px)")
 							}},
 							func() {
 								for i := range 40 {
 									ui.Text(
-										"log line "+strconv.Itoa(i+1),
-										ui.FontSize(12),
-										ui.Height(22),
-										ui.FlexShrink(0),
-										ui.LineHeight(22),
-										ui.TextColor(color(func(p palette) string { return p.Muted })),
-									)
+										"log line " + strconv.Itoa(i+1),
+									).FontSize(12).Height(22).FlexShrink(0).LineHeight(22).TextColor(color(func(p palette) string { return p.Muted }))
 								}
 							},
 						)
@@ -75,23 +67,21 @@ func ScrollAreaDemo() {
 				ui.ScrollArea.Scrollbar(
 					ui.ScrollAreaScrollbarProps{
 						Orientation: "vertical",
-						PartProps: ui.PartProps{Style: ui.Styles(
-							ui.Width(8),
-							ui.Height(160),
-							ui.BackgroundColor(color(func(p palette) string { return p.Track })),
-							ui.BorderRadius(4),
-						)},
+						PartProps: ui.PartProps{Style: ui.Style().
+							Width(8).
+							Height(160).
+							BackgroundColor(color(func(p palette) string { return p.Track })).
+							BorderRadius(4)},
 					},
 					func() {
 						live := ui.UseScrollAreaState()
 						ui.ScrollArea.Thumb(ui.ScrollAreaThumbProps{
 							Orientation: "vertical",
-							PartProps: ui.PartProps{Style: func() ui.Style {
-								return ui.Styles(
-									ui.Width(8),
-									ui.BorderRadius(4),
-									ui.BackgroundColor(choose(live().Scrolling, p().Accent, p().Border)),
-								)
+							PartProps: ui.PartProps{Style: func() ui.StyleBuilder {
+								return ui.Style().
+									Width(8).
+									BorderRadius(4).
+									BackgroundColor(choose(live().Scrolling, p().Accent, p().Border))
 							}},
 						})
 					},
@@ -175,27 +165,25 @@ func TableDemo() {
 				OnActivate: func(cell ui.TableCell, _ *native.Event) {
 					setActivated("row " + strconv.Itoa(cell.Row) + ", column " + strconv.Itoa(cell.Column))
 				},
-				PartProps: ui.PartProps{Style: ui.Styles(
-					ui.Height(260),
-					ui.BorderRadius(10),
-					ui.BorderWidth(1),
-					ui.BorderColor(color(func(p palette) string { return p.Border })),
-					ui.BackgroundColor(color(func(p palette) string { return p.PanelAlt })),
-					ui.OverflowY("scroll"),
-				)},
+				PartProps: ui.PartProps{Style: ui.Style().
+					Height(260).
+					BorderRadius(10).
+					BorderWidth(1).
+					BorderColor(color(func(p palette) string { return p.Border })).
+					BackgroundColor(color(func(p palette) string { return p.PanelAlt })).
+					OverflowY("scroll")},
 			},
 			func() {
 				for _, column := range columns {
 					ui.Table.Header(
 						ui.TableHeaderProps{
 							Column: column.ID,
-							PartProps: ui.PartProps{Style: ui.Styles(
-								ui.PaddingLeft(10),
-								ui.PaddingRight(10),
-								ui.FontSize(11),
-								ui.FontWeight(700),
-								ui.TextColor(color(func(p palette) string { return p.Faint })),
-							)},
+							PartProps: ui.PartProps{Style: ui.Style().
+								PaddingLeft(10).
+								PaddingRight(10).
+								FontSize(11).
+								FontWeight(700).
+								TextColor(color(func(p palette) string { return p.Faint }))},
 						},
 						func() {
 							ui.Text(func() string {
@@ -219,7 +207,7 @@ func TableDemo() {
 								ui.Table.Cell(
 									ui.TableCellProps{
 										Column:    "name",
-										PartProps: ui.PartProps{Style: ui.Styles(ui.PaddingLeft(10))},
+										PartProps: ui.PartProps{Style: ui.Style().PaddingLeft(10)},
 									},
 									func() {
 										label(func() string { return entry().Asset.Name })
@@ -228,10 +216,9 @@ func TableDemo() {
 								ui.Table.Cell(
 									ui.TableCellProps{
 										Column: "size",
-										PartProps: ui.PartProps{Style: ui.Styles(
-											ui.PaddingRight(10),
-											ui.JustifyContent("flex-end"),
-										)},
+										PartProps: ui.PartProps{Style: ui.Style().
+											PaddingRight(10).
+											JustifyContent("flex-end")},
 									},
 									func() {
 										muted(func() string { return strconv.Itoa(entry().Asset.Size) + " KB" })
@@ -309,14 +296,13 @@ func TreeDemo() {
 						Children: []ui.TreeNodeDeclaration{{ID: id + "/style.go", Label: "style.go"}, {ID: id + "/state.go", Label: "state.go"}},
 					})
 				},
-				PartProps: ui.PartProps{Style: ui.Styles(
-					ui.Height(220),
-					ui.BorderRadius(10),
-					ui.BorderWidth(1),
-					ui.BorderColor(color(func(p palette) string { return p.Border })),
-					ui.BackgroundColor(color(func(p palette) string { return p.PanelAlt })),
-					ui.OverflowY("scroll"),
-				)},
+				PartProps: ui.PartProps{Style: ui.Style().
+					Height(220).
+					BorderRadius(10).
+					BorderWidth(1).
+					BorderColor(color(func(p palette) string { return p.Border })).
+					BackgroundColor(color(func(p palette) string { return p.PanelAlt })).
+					OverflowY("scroll")},
 			},
 			func() {
 				ui.KeyedFor(
@@ -326,13 +312,12 @@ func TreeDemo() {
 						ui.Tree.Row(
 							ui.TreeRowProps{
 								NodeID: row().Node.ID,
-								PartProps: ui.PartProps{Style: func() ui.Style {
-									return ui.Styles(
-										ui.Display("flex"),
-										ui.AlignItems("center"),
-										ui.Height(26),
-										ui.PaddingLeft(10+row().Depth*16),
-									)
+								PartProps: ui.PartProps{Style: func() ui.StyleBuilder {
+									return ui.Style().
+										Display("flex").
+										AlignItems("center").
+										Height(26).
+										PaddingLeft(10 + row().Depth*16)
 								}},
 							},
 							func() { label(func() string { return row().Node.Label }) },

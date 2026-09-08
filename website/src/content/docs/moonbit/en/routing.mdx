@@ -1,5 +1,9 @@
 The router selects components from the current application path and keeps a navigation history. Routes render native QuickGUI content in the current window.
 
+## Routes
+
+Build a route tree with `@ui.router([...])` and `@ui.route(path, render)`. Each render callback receives the router and returns an element. Mount `router.outlet()` where the active route belongs; `initial="/settings"` selects a starting destination.
+
 ## Nested layouts
 
 Declare routes with `@ui.route`. Use `@ui.layout` to share surrounding content, and call its `outlet()` callback where the matched child belongs. Mount the router with `router.outlet()`.
@@ -25,6 +29,8 @@ fn routing_example() -> @ui.Element {
 }
 ```
 
+Outlets retain nodes by matched route identity. Navigating between sibling routes keeps their common layout and its state. Read `router.state()` in a binding for the current location and matched parameters; `router.is_active(path)` tests a navigation destination.
+
 ## Navigation
 
 Use `router.link(path, label)` for a navigation link. `router.navigate(path)` pushes history; pass `replace=true` to replace the current entry. `router.go(-1)` goes back and `router.go(1)` goes forward.
@@ -45,6 +51,6 @@ fn navigation_controls(router : @ui.Router) -> @ui.Element {
 }
 ```
 
-## Retained outlets
+## Route parameters
 
-Outlets retain nodes by matched route identity. Navigating between sibling routes keeps their common layout and its state. Read `router.state()` in a binding for the current location and matched parameters; `router.is_active(path)` tests a navigation destination.
+Dynamic route patterns such as `/projects/:id` share the native router’s matching rules. Read `router.state()` in a binding to inspect the current location and `matched.params` JSON. `router.is_active(path)` tests a navigation destination. Keep the router in the component that owns its history.

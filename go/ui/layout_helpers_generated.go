@@ -3,4509 +3,2957 @@
 package ui
 
 // Absolute matches Rust's absolute helper.
-func Absolute() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Position("absolute")} {
-			option.applyStyle(style)
-		}
-	}
+func (element *Element) Absolute() *Element {
+	return element.configureStyles([]string{"Position"}, stylePosition("absolute"))
 }
 
 // Absolute matches Rust's absolute helper.
-func (element *Element) Absolute() *Element {
-	return element.configureStyles([]string{"Position"}, Position("absolute"))
-}
-
-// AppRegionDrag matches Rust's app_region_drag helper.
-func AppRegionDrag() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{AppRegion("drag")} {
-			option.applyStyle(style)
-		}
-	}
-}
+func (style StyleBuilder) Absolute() StyleBuilder { return style.configure(stylePosition("absolute")) }
 
 // AppRegionDrag matches Rust's app_region_drag helper.
 func (element *Element) AppRegionDrag() *Element {
-	return element.configureStyles([]string{"AppRegion"}, AppRegion("drag"))
+	return element.configureStyles([]string{"AppRegion"}, styleAppRegion("drag"))
 }
 
-// AppRegionNoDrag matches Rust's app_region_no_drag helper.
-func AppRegionNoDrag() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{AppRegion("no-drag")} {
-			option.applyStyle(style)
-		}
-	}
+// AppRegionDrag matches Rust's app_region_drag helper.
+func (style StyleBuilder) AppRegionDrag() StyleBuilder {
+	return style.configure(styleAppRegion("drag"))
 }
 
 // AppRegionNoDrag matches Rust's app_region_no_drag helper.
 func (element *Element) AppRegionNoDrag() *Element {
-	return element.configureStyles([]string{"AppRegion"}, AppRegion("no-drag"))
+	return element.configureStyles([]string{"AppRegion"}, styleAppRegion("no-drag"))
 }
 
-// AspectSquare matches Rust's aspect_square helper.
-func AspectSquare() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{AspectRatio(1)} {
-			option.applyStyle(style)
-		}
-	}
+// AppRegionNoDrag matches Rust's app_region_no_drag helper.
+func (style StyleBuilder) AppRegionNoDrag() StyleBuilder {
+	return style.configure(styleAppRegion("no-drag"))
 }
 
 // AspectSquare matches Rust's aspect_square helper.
 func (element *Element) AspectSquare() *Element {
-	return element.configureStyles([]string{"AspectRatio"}, AspectRatio(1))
+	return element.configureStyles([]string{"AspectRatio"}, styleAspectRatio(1))
 }
 
-// Block matches Rust's block helper.
-func Block() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Display("block")} {
-			option.applyStyle(style)
-		}
-	}
-}
+// AspectSquare matches Rust's aspect_square helper.
+func (style StyleBuilder) AspectSquare() StyleBuilder { return style.configure(styleAspectRatio(1)) }
 
 // Block matches Rust's block helper.
 func (element *Element) Block() *Element {
-	return element.configureStyles([]string{"Display"}, Display("block"))
+	return element.configureStyles([]string{"Display"}, styleDisplay("block"))
 }
 
-// BorderDashed matches Rust's border_dashed helper.
-func BorderDashed() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{BorderStyle("dashed")} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Block matches Rust's block helper.
+func (style StyleBuilder) Block() StyleBuilder { return style.configure(styleDisplay("block")) }
 
 // BorderDashed matches Rust's border_dashed helper.
 func (element *Element) BorderDashed() *Element {
-	return element.configureStyles([]string{"BorderStyle"}, BorderStyle("dashed"))
+	return element.configureStyles([]string{"BorderStyle"}, styleBorderStyle("dashed"))
 }
 
-// BorderDotted matches Rust's border_dotted helper.
-func BorderDotted() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{BorderStyle("dotted")} {
-			option.applyStyle(style)
-		}
-	}
+// BorderDashed matches Rust's border_dashed helper.
+func (style StyleBuilder) BorderDashed() StyleBuilder {
+	return style.configure(styleBorderStyle("dashed"))
 }
 
 // BorderDotted matches Rust's border_dotted helper.
 func (element *Element) BorderDotted() *Element {
-	return element.configureStyles([]string{"BorderStyle"}, BorderStyle("dotted"))
+	return element.configureStyles([]string{"BorderStyle"}, styleBorderStyle("dotted"))
 }
 
-// BorderE matches Rust's border_e helper.
-func BorderE(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{BorderEndWidth(value)} {
-			option.applyStyle(style)
-		}
-	}
+// BorderDotted matches Rust's border_dotted helper.
+func (style StyleBuilder) BorderDotted() StyleBuilder {
+	return style.configure(styleBorderStyle("dotted"))
 }
 
 // BorderE matches Rust's border_e helper.
 func (element *Element) BorderE(value any) *Element {
-	return element.configureStyles([]string{"BorderEndWidth"}, BorderEndWidth(value))
+	return element.configureStyles([]string{"BorderEndWidth"}, styleBorderEndWidth(value))
 }
 
-// BorderS matches Rust's border_s helper.
-func BorderS(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{BorderStartWidth(value)} {
-			option.applyStyle(style)
-		}
-	}
+// BorderE matches Rust's border_e helper.
+func (style StyleBuilder) BorderE(value any) StyleBuilder {
+	return style.configure(styleBorderEndWidth(value))
 }
 
 // BorderS matches Rust's border_s helper.
 func (element *Element) BorderS(value any) *Element {
-	return element.configureStyles([]string{"BorderStartWidth"}, BorderStartWidth(value))
+	return element.configureStyles([]string{"BorderStartWidth"}, styleBorderStartWidth(value))
 }
 
-// BorderSolid matches Rust's border_solid helper.
-func BorderSolid() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{BorderStyle("solid")} {
-			option.applyStyle(style)
-		}
-	}
+// BorderS matches Rust's border_s helper.
+func (style StyleBuilder) BorderS(value any) StyleBuilder {
+	return style.configure(styleBorderStartWidth(value))
 }
 
 // BorderSolid matches Rust's border_solid helper.
 func (element *Element) BorderSolid() *Element {
-	return element.configureStyles([]string{"BorderStyle"}, BorderStyle("solid"))
+	return element.configureStyles([]string{"BorderStyle"}, styleBorderStyle("solid"))
 }
 
-// ColEnd matches Rust's col_end helper.
-func ColEnd(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{GridColumnEnd(value)} {
-			option.applyStyle(style)
-		}
-	}
+// BorderSolid matches Rust's border_solid helper.
+func (style StyleBuilder) BorderSolid() StyleBuilder {
+	return style.configure(styleBorderStyle("solid"))
 }
 
 // ColEnd matches Rust's col_end helper.
 func (element *Element) ColEnd(value any) *Element {
-	return element.configureStyles([]string{"GridColumnEnd"}, GridColumnEnd(value))
+	return element.configureStyles([]string{"GridColumnEnd"}, styleGridColumnEnd(value))
 }
 
-// ColEndAuto matches Rust's col_end_auto helper.
-func ColEndAuto() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{GridColumnEnd(0)} {
-			option.applyStyle(style)
-		}
-	}
+// ColEnd matches Rust's col_end helper.
+func (style StyleBuilder) ColEnd(value any) StyleBuilder {
+	return style.configure(styleGridColumnEnd(value))
 }
 
 // ColEndAuto matches Rust's col_end_auto helper.
 func (element *Element) ColEndAuto() *Element {
-	return element.configureStyles([]string{"GridColumnEnd"}, GridColumnEnd(0))
+	return element.configureStyles([]string{"GridColumnEnd"}, styleGridColumnEnd(0))
 }
 
-// ColSpan matches Rust's col_span helper.
-func ColSpan(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{GridColumnStart(clearStyleValue{}), GridColumnEnd(clearStyleValue{}), GridColumnSpan(value)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// ColEndAuto matches Rust's col_end_auto helper.
+func (style StyleBuilder) ColEndAuto() StyleBuilder { return style.configure(styleGridColumnEnd(0)) }
 
 // ColSpan matches Rust's col_span helper.
 func (element *Element) ColSpan(value any) *Element {
-	return element.configureStyles([]string{"GridColumnStart", "GridColumnEnd", "GridColumnSpan"}, GridColumnStart(clearStyleValue{}), GridColumnEnd(clearStyleValue{}), GridColumnSpan(value))
+	return element.configureStyles([]string{"GridColumnStart", "GridColumnEnd", "GridColumnSpan"}, styleGridColumnStart(clearStyleValue{}), styleGridColumnEnd(clearStyleValue{}), styleGridColumnSpan(value))
 }
 
-// ColSpanFull matches Rust's col_span_full helper.
-func ColSpanFull() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{GridColumnSpan(clearStyleValue{}), GridColumnStart(1), GridColumnEnd(-1)} {
-			option.applyStyle(style)
-		}
-	}
+// ColSpan matches Rust's col_span helper.
+func (style StyleBuilder) ColSpan(value any) StyleBuilder {
+	return style.configure(styleGridColumnStart(clearStyleValue{}), styleGridColumnEnd(clearStyleValue{}), styleGridColumnSpan(value))
 }
 
 // ColSpanFull matches Rust's col_span_full helper.
 func (element *Element) ColSpanFull() *Element {
-	return element.configureStyles([]string{"GridColumnSpan", "GridColumnStart", "GridColumnEnd"}, GridColumnSpan(clearStyleValue{}), GridColumnStart(1), GridColumnEnd(-1))
+	return element.configureStyles([]string{"GridColumnSpan", "GridColumnStart", "GridColumnEnd"}, styleGridColumnSpan(clearStyleValue{}), styleGridColumnStart(1), styleGridColumnEnd(-1))
 }
 
-// ColStart matches Rust's col_start helper.
-func ColStart(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{GridColumnStart(value)} {
-			option.applyStyle(style)
-		}
-	}
+// ColSpanFull matches Rust's col_span_full helper.
+func (style StyleBuilder) ColSpanFull() StyleBuilder {
+	return style.configure(styleGridColumnSpan(clearStyleValue{}), styleGridColumnStart(1), styleGridColumnEnd(-1))
 }
 
 // ColStart matches Rust's col_start helper.
 func (element *Element) ColStart(value any) *Element {
-	return element.configureStyles([]string{"GridColumnStart"}, GridColumnStart(value))
+	return element.configureStyles([]string{"GridColumnStart"}, styleGridColumnStart(value))
 }
 
-// ColStartAuto matches Rust's col_start_auto helper.
-func ColStartAuto() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{GridColumnStart(0)} {
-			option.applyStyle(style)
-		}
-	}
+// ColStart matches Rust's col_start helper.
+func (style StyleBuilder) ColStart(value any) StyleBuilder {
+	return style.configure(styleGridColumnStart(value))
 }
 
 // ColStartAuto matches Rust's col_start_auto helper.
 func (element *Element) ColStartAuto() *Element {
-	return element.configureStyles([]string{"GridColumnStart"}, GridColumnStart(0))
+	return element.configureStyles([]string{"GridColumnStart"}, styleGridColumnStart(0))
 }
 
-// ContentAround matches Rust's content_around helper.
-func ContentAround() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{AlignContent("space-around")} {
-			option.applyStyle(style)
-		}
-	}
+// ColStartAuto matches Rust's col_start_auto helper.
+func (style StyleBuilder) ColStartAuto() StyleBuilder {
+	return style.configure(styleGridColumnStart(0))
 }
 
 // ContentAround matches Rust's content_around helper.
 func (element *Element) ContentAround() *Element {
-	return element.configureStyles([]string{"AlignContent"}, AlignContent("space-around"))
+	return element.configureStyles([]string{"AlignContent"}, styleAlignContent("space-around"))
 }
 
-// ContentBetween matches Rust's content_between helper.
-func ContentBetween() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{AlignContent("space-between")} {
-			option.applyStyle(style)
-		}
-	}
+// ContentAround matches Rust's content_around helper.
+func (style StyleBuilder) ContentAround() StyleBuilder {
+	return style.configure(styleAlignContent("space-around"))
 }
 
 // ContentBetween matches Rust's content_between helper.
 func (element *Element) ContentBetween() *Element {
-	return element.configureStyles([]string{"AlignContent"}, AlignContent("space-between"))
+	return element.configureStyles([]string{"AlignContent"}, styleAlignContent("space-between"))
 }
 
-// ContentCenter matches Rust's content_center helper.
-func ContentCenter() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{AlignContent("center")} {
-			option.applyStyle(style)
-		}
-	}
+// ContentBetween matches Rust's content_between helper.
+func (style StyleBuilder) ContentBetween() StyleBuilder {
+	return style.configure(styleAlignContent("space-between"))
 }
 
 // ContentCenter matches Rust's content_center helper.
 func (element *Element) ContentCenter() *Element {
-	return element.configureStyles([]string{"AlignContent"}, AlignContent("center"))
+	return element.configureStyles([]string{"AlignContent"}, styleAlignContent("center"))
 }
 
-// ContentEnd matches Rust's content_end helper.
-func ContentEnd() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{AlignContent("flex-end")} {
-			option.applyStyle(style)
-		}
-	}
+// ContentCenter matches Rust's content_center helper.
+func (style StyleBuilder) ContentCenter() StyleBuilder {
+	return style.configure(styleAlignContent("center"))
 }
 
 // ContentEnd matches Rust's content_end helper.
 func (element *Element) ContentEnd() *Element {
-	return element.configureStyles([]string{"AlignContent"}, AlignContent("flex-end"))
+	return element.configureStyles([]string{"AlignContent"}, styleAlignContent("flex-end"))
 }
 
-// ContentEvenly matches Rust's content_evenly helper.
-func ContentEvenly() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{AlignContent("space-evenly")} {
-			option.applyStyle(style)
-		}
-	}
+// ContentEnd matches Rust's content_end helper.
+func (style StyleBuilder) ContentEnd() StyleBuilder {
+	return style.configure(styleAlignContent("flex-end"))
 }
 
 // ContentEvenly matches Rust's content_evenly helper.
 func (element *Element) ContentEvenly() *Element {
-	return element.configureStyles([]string{"AlignContent"}, AlignContent("space-evenly"))
+	return element.configureStyles([]string{"AlignContent"}, styleAlignContent("space-evenly"))
 }
 
-// ContentNormal matches Rust's content_normal helper.
-func ContentNormal() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{AlignContent("normal")} {
-			option.applyStyle(style)
-		}
-	}
+// ContentEvenly matches Rust's content_evenly helper.
+func (style StyleBuilder) ContentEvenly() StyleBuilder {
+	return style.configure(styleAlignContent("space-evenly"))
 }
 
 // ContentNormal matches Rust's content_normal helper.
 func (element *Element) ContentNormal() *Element {
-	return element.configureStyles([]string{"AlignContent"}, AlignContent("normal"))
+	return element.configureStyles([]string{"AlignContent"}, styleAlignContent("normal"))
 }
 
-// ContentStart matches Rust's content_start helper.
-func ContentStart() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{AlignContent("flex-start")} {
-			option.applyStyle(style)
-		}
-	}
+// ContentNormal matches Rust's content_normal helper.
+func (style StyleBuilder) ContentNormal() StyleBuilder {
+	return style.configure(styleAlignContent("normal"))
 }
 
 // ContentStart matches Rust's content_start helper.
 func (element *Element) ContentStart() *Element {
-	return element.configureStyles([]string{"AlignContent"}, AlignContent("flex-start"))
+	return element.configureStyles([]string{"AlignContent"}, styleAlignContent("flex-start"))
 }
 
-// ContentStretch matches Rust's content_stretch helper.
-func ContentStretch() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{AlignContent("stretch")} {
-			option.applyStyle(style)
-		}
-	}
+// ContentStart matches Rust's content_start helper.
+func (style StyleBuilder) ContentStart() StyleBuilder {
+	return style.configure(styleAlignContent("flex-start"))
 }
 
 // ContentStretch matches Rust's content_stretch helper.
 func (element *Element) ContentStretch() *Element {
-	return element.configureStyles([]string{"AlignContent"}, AlignContent("stretch"))
+	return element.configureStyles([]string{"AlignContent"}, styleAlignContent("stretch"))
 }
 
-// CursorAlias matches Rust's cursor_alias helper.
-func CursorAlias() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Cursor("drag-link")} {
-			option.applyStyle(style)
-		}
-	}
+// ContentStretch matches Rust's content_stretch helper.
+func (style StyleBuilder) ContentStretch() StyleBuilder {
+	return style.configure(styleAlignContent("stretch"))
 }
 
 // CursorAlias matches Rust's cursor_alias helper.
 func (element *Element) CursorAlias() *Element {
-	return element.configureStyles([]string{"Cursor"}, Cursor("drag-link"))
+	return element.configureStyles([]string{"Cursor"}, styleCursor("drag-link"))
 }
 
-// CursorColResize matches Rust's cursor_col_resize helper.
-func CursorColResize() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Cursor("resize-column")} {
-			option.applyStyle(style)
-		}
-	}
+// CursorAlias matches Rust's cursor_alias helper.
+func (style StyleBuilder) CursorAlias() StyleBuilder {
+	return style.configure(styleCursor("drag-link"))
 }
 
 // CursorColResize matches Rust's cursor_col_resize helper.
 func (element *Element) CursorColResize() *Element {
-	return element.configureStyles([]string{"Cursor"}, Cursor("resize-column"))
+	return element.configureStyles([]string{"Cursor"}, styleCursor("resize-column"))
 }
 
-// CursorContextMenu matches Rust's cursor_context_menu helper.
-func CursorContextMenu() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Cursor("contextual-menu")} {
-			option.applyStyle(style)
-		}
-	}
+// CursorColResize matches Rust's cursor_col_resize helper.
+func (style StyleBuilder) CursorColResize() StyleBuilder {
+	return style.configure(styleCursor("resize-column"))
 }
 
 // CursorContextMenu matches Rust's cursor_context_menu helper.
 func (element *Element) CursorContextMenu() *Element {
-	return element.configureStyles([]string{"Cursor"}, Cursor("contextual-menu"))
+	return element.configureStyles([]string{"Cursor"}, styleCursor("contextual-menu"))
 }
 
-// CursorCopy matches Rust's cursor_copy helper.
-func CursorCopy() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Cursor("drag-copy")} {
-			option.applyStyle(style)
-		}
-	}
+// CursorContextMenu matches Rust's cursor_context_menu helper.
+func (style StyleBuilder) CursorContextMenu() StyleBuilder {
+	return style.configure(styleCursor("contextual-menu"))
 }
 
 // CursorCopy matches Rust's cursor_copy helper.
 func (element *Element) CursorCopy() *Element {
-	return element.configureStyles([]string{"Cursor"}, Cursor("drag-copy"))
+	return element.configureStyles([]string{"Cursor"}, styleCursor("drag-copy"))
 }
 
-// CursorCrosshair matches Rust's cursor_crosshair helper.
-func CursorCrosshair() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Cursor("crosshair")} {
-			option.applyStyle(style)
-		}
-	}
-}
+// CursorCopy matches Rust's cursor_copy helper.
+func (style StyleBuilder) CursorCopy() StyleBuilder { return style.configure(styleCursor("drag-copy")) }
 
 // CursorCrosshair matches Rust's cursor_crosshair helper.
 func (element *Element) CursorCrosshair() *Element {
-	return element.configureStyles([]string{"Cursor"}, Cursor("crosshair"))
+	return element.configureStyles([]string{"Cursor"}, styleCursor("crosshair"))
 }
 
-// CursorDefault matches Rust's cursor_default helper.
-func CursorDefault() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Cursor("arrow")} {
-			option.applyStyle(style)
-		}
-	}
+// CursorCrosshair matches Rust's cursor_crosshair helper.
+func (style StyleBuilder) CursorCrosshair() StyleBuilder {
+	return style.configure(styleCursor("crosshair"))
 }
 
 // CursorDefault matches Rust's cursor_default helper.
 func (element *Element) CursorDefault() *Element {
-	return element.configureStyles([]string{"Cursor"}, Cursor("arrow"))
+	return element.configureStyles([]string{"Cursor"}, styleCursor("arrow"))
 }
 
-// CursorEResize matches Rust's cursor_e_resize helper.
-func CursorEResize() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Cursor("resize-right")} {
-			option.applyStyle(style)
-		}
-	}
-}
+// CursorDefault matches Rust's cursor_default helper.
+func (style StyleBuilder) CursorDefault() StyleBuilder { return style.configure(styleCursor("arrow")) }
 
 // CursorEResize matches Rust's cursor_e_resize helper.
 func (element *Element) CursorEResize() *Element {
-	return element.configureStyles([]string{"Cursor"}, Cursor("resize-right"))
+	return element.configureStyles([]string{"Cursor"}, styleCursor("resize-right"))
 }
 
-// CursorEwResize matches Rust's cursor_ew_resize helper.
-func CursorEwResize() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Cursor("resize-left-right")} {
-			option.applyStyle(style)
-		}
-	}
+// CursorEResize matches Rust's cursor_e_resize helper.
+func (style StyleBuilder) CursorEResize() StyleBuilder {
+	return style.configure(styleCursor("resize-right"))
 }
 
 // CursorEwResize matches Rust's cursor_ew_resize helper.
 func (element *Element) CursorEwResize() *Element {
-	return element.configureStyles([]string{"Cursor"}, Cursor("resize-left-right"))
+	return element.configureStyles([]string{"Cursor"}, styleCursor("resize-left-right"))
 }
 
-// CursorGrab matches Rust's cursor_grab helper.
-func CursorGrab() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Cursor("open-hand")} {
-			option.applyStyle(style)
-		}
-	}
+// CursorEwResize matches Rust's cursor_ew_resize helper.
+func (style StyleBuilder) CursorEwResize() StyleBuilder {
+	return style.configure(styleCursor("resize-left-right"))
 }
 
 // CursorGrab matches Rust's cursor_grab helper.
 func (element *Element) CursorGrab() *Element {
-	return element.configureStyles([]string{"Cursor"}, Cursor("open-hand"))
+	return element.configureStyles([]string{"Cursor"}, styleCursor("open-hand"))
 }
 
-// CursorGrabbing matches Rust's cursor_grabbing helper.
-func CursorGrabbing() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Cursor("closed-hand")} {
-			option.applyStyle(style)
-		}
-	}
-}
+// CursorGrab matches Rust's cursor_grab helper.
+func (style StyleBuilder) CursorGrab() StyleBuilder { return style.configure(styleCursor("open-hand")) }
 
 // CursorGrabbing matches Rust's cursor_grabbing helper.
 func (element *Element) CursorGrabbing() *Element {
-	return element.configureStyles([]string{"Cursor"}, Cursor("closed-hand"))
+	return element.configureStyles([]string{"Cursor"}, styleCursor("closed-hand"))
 }
 
-// CursorMove matches Rust's cursor_move helper.
-func CursorMove() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Cursor("closed-hand")} {
-			option.applyStyle(style)
-		}
-	}
+// CursorGrabbing matches Rust's cursor_grabbing helper.
+func (style StyleBuilder) CursorGrabbing() StyleBuilder {
+	return style.configure(styleCursor("closed-hand"))
 }
 
 // CursorMove matches Rust's cursor_move helper.
 func (element *Element) CursorMove() *Element {
-	return element.configureStyles([]string{"Cursor"}, Cursor("closed-hand"))
+	return element.configureStyles([]string{"Cursor"}, styleCursor("closed-hand"))
 }
 
-// CursorNResize matches Rust's cursor_n_resize helper.
-func CursorNResize() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Cursor("resize-up")} {
-			option.applyStyle(style)
-		}
-	}
+// CursorMove matches Rust's cursor_move helper.
+func (style StyleBuilder) CursorMove() StyleBuilder {
+	return style.configure(styleCursor("closed-hand"))
 }
 
 // CursorNResize matches Rust's cursor_n_resize helper.
 func (element *Element) CursorNResize() *Element {
-	return element.configureStyles([]string{"Cursor"}, Cursor("resize-up"))
+	return element.configureStyles([]string{"Cursor"}, styleCursor("resize-up"))
 }
 
-// CursorNeswResize matches Rust's cursor_nesw_resize helper.
-func CursorNeswResize() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Cursor("resize-up-right-down-left")} {
-			option.applyStyle(style)
-		}
-	}
+// CursorNResize matches Rust's cursor_n_resize helper.
+func (style StyleBuilder) CursorNResize() StyleBuilder {
+	return style.configure(styleCursor("resize-up"))
 }
 
 // CursorNeswResize matches Rust's cursor_nesw_resize helper.
 func (element *Element) CursorNeswResize() *Element {
-	return element.configureStyles([]string{"Cursor"}, Cursor("resize-up-right-down-left"))
+	return element.configureStyles([]string{"Cursor"}, styleCursor("resize-up-right-down-left"))
 }
 
-// CursorNoDrop matches Rust's cursor_no_drop helper.
-func CursorNoDrop() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Cursor("operation-not-allowed")} {
-			option.applyStyle(style)
-		}
-	}
+// CursorNeswResize matches Rust's cursor_nesw_resize helper.
+func (style StyleBuilder) CursorNeswResize() StyleBuilder {
+	return style.configure(styleCursor("resize-up-right-down-left"))
 }
 
 // CursorNoDrop matches Rust's cursor_no_drop helper.
 func (element *Element) CursorNoDrop() *Element {
-	return element.configureStyles([]string{"Cursor"}, Cursor("operation-not-allowed"))
+	return element.configureStyles([]string{"Cursor"}, styleCursor("operation-not-allowed"))
 }
 
-// CursorNotAllowed matches Rust's cursor_not_allowed helper.
-func CursorNotAllowed() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Cursor("operation-not-allowed")} {
-			option.applyStyle(style)
-		}
-	}
+// CursorNoDrop matches Rust's cursor_no_drop helper.
+func (style StyleBuilder) CursorNoDrop() StyleBuilder {
+	return style.configure(styleCursor("operation-not-allowed"))
 }
 
 // CursorNotAllowed matches Rust's cursor_not_allowed helper.
 func (element *Element) CursorNotAllowed() *Element {
-	return element.configureStyles([]string{"Cursor"}, Cursor("operation-not-allowed"))
+	return element.configureStyles([]string{"Cursor"}, styleCursor("operation-not-allowed"))
 }
 
-// CursorNsResize matches Rust's cursor_ns_resize helper.
-func CursorNsResize() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Cursor("resize-up-down")} {
-			option.applyStyle(style)
-		}
-	}
+// CursorNotAllowed matches Rust's cursor_not_allowed helper.
+func (style StyleBuilder) CursorNotAllowed() StyleBuilder {
+	return style.configure(styleCursor("operation-not-allowed"))
 }
 
 // CursorNsResize matches Rust's cursor_ns_resize helper.
 func (element *Element) CursorNsResize() *Element {
-	return element.configureStyles([]string{"Cursor"}, Cursor("resize-up-down"))
+	return element.configureStyles([]string{"Cursor"}, styleCursor("resize-up-down"))
 }
 
-// CursorNwseResize matches Rust's cursor_nwse_resize helper.
-func CursorNwseResize() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Cursor("resize-up-left-down-right")} {
-			option.applyStyle(style)
-		}
-	}
+// CursorNsResize matches Rust's cursor_ns_resize helper.
+func (style StyleBuilder) CursorNsResize() StyleBuilder {
+	return style.configure(styleCursor("resize-up-down"))
 }
 
 // CursorNwseResize matches Rust's cursor_nwse_resize helper.
 func (element *Element) CursorNwseResize() *Element {
-	return element.configureStyles([]string{"Cursor"}, Cursor("resize-up-left-down-right"))
+	return element.configureStyles([]string{"Cursor"}, styleCursor("resize-up-left-down-right"))
 }
 
-// CursorPointer matches Rust's cursor_pointer helper.
-func CursorPointer() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Cursor("pointing-hand")} {
-			option.applyStyle(style)
-		}
-	}
+// CursorNwseResize matches Rust's cursor_nwse_resize helper.
+func (style StyleBuilder) CursorNwseResize() StyleBuilder {
+	return style.configure(styleCursor("resize-up-left-down-right"))
 }
 
 // CursorPointer matches Rust's cursor_pointer helper.
 func (element *Element) CursorPointer() *Element {
-	return element.configureStyles([]string{"Cursor"}, Cursor("pointing-hand"))
+	return element.configureStyles([]string{"Cursor"}, styleCursor("pointing-hand"))
 }
 
-// CursorRowResize matches Rust's cursor_row_resize helper.
-func CursorRowResize() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Cursor("resize-row")} {
-			option.applyStyle(style)
-		}
-	}
+// CursorPointer matches Rust's cursor_pointer helper.
+func (style StyleBuilder) CursorPointer() StyleBuilder {
+	return style.configure(styleCursor("pointing-hand"))
 }
 
 // CursorRowResize matches Rust's cursor_row_resize helper.
 func (element *Element) CursorRowResize() *Element {
-	return element.configureStyles([]string{"Cursor"}, Cursor("resize-row"))
+	return element.configureStyles([]string{"Cursor"}, styleCursor("resize-row"))
 }
 
-// CursorSResize matches Rust's cursor_s_resize helper.
-func CursorSResize() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Cursor("resize-down")} {
-			option.applyStyle(style)
-		}
-	}
+// CursorRowResize matches Rust's cursor_row_resize helper.
+func (style StyleBuilder) CursorRowResize() StyleBuilder {
+	return style.configure(styleCursor("resize-row"))
 }
 
 // CursorSResize matches Rust's cursor_s_resize helper.
 func (element *Element) CursorSResize() *Element {
-	return element.configureStyles([]string{"Cursor"}, Cursor("resize-down"))
+	return element.configureStyles([]string{"Cursor"}, styleCursor("resize-down"))
 }
 
-// CursorText matches Rust's cursor_text helper.
-func CursorText() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Cursor("ibeam")} {
-			option.applyStyle(style)
-		}
-	}
+// CursorSResize matches Rust's cursor_s_resize helper.
+func (style StyleBuilder) CursorSResize() StyleBuilder {
+	return style.configure(styleCursor("resize-down"))
 }
 
 // CursorText matches Rust's cursor_text helper.
 func (element *Element) CursorText() *Element {
-	return element.configureStyles([]string{"Cursor"}, Cursor("ibeam"))
+	return element.configureStyles([]string{"Cursor"}, styleCursor("ibeam"))
 }
 
-// CursorVerticalText matches Rust's cursor_vertical_text helper.
-func CursorVerticalText() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Cursor("ibeam-cursor-for-vertical-layout")} {
-			option.applyStyle(style)
-		}
-	}
-}
+// CursorText matches Rust's cursor_text helper.
+func (style StyleBuilder) CursorText() StyleBuilder { return style.configure(styleCursor("ibeam")) }
 
 // CursorVerticalText matches Rust's cursor_vertical_text helper.
 func (element *Element) CursorVerticalText() *Element {
-	return element.configureStyles([]string{"Cursor"}, Cursor("ibeam-cursor-for-vertical-layout"))
+	return element.configureStyles([]string{"Cursor"}, styleCursor("ibeam-cursor-for-vertical-layout"))
 }
 
-// CursorWResize matches Rust's cursor_w_resize helper.
-func CursorWResize() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Cursor("resize-left")} {
-			option.applyStyle(style)
-		}
-	}
+// CursorVerticalText matches Rust's cursor_vertical_text helper.
+func (style StyleBuilder) CursorVerticalText() StyleBuilder {
+	return style.configure(styleCursor("ibeam-cursor-for-vertical-layout"))
 }
 
 // CursorWResize matches Rust's cursor_w_resize helper.
 func (element *Element) CursorWResize() *Element {
-	return element.configureStyles([]string{"Cursor"}, Cursor("resize-left"))
+	return element.configureStyles([]string{"Cursor"}, styleCursor("resize-left"))
 }
 
-// Flex1 matches Rust's flex_1 helper.
-func Flex1() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{FlexGrow(1), FlexShrink(1), FlexBasis(0)} {
-			option.applyStyle(style)
-		}
-	}
+// CursorWResize matches Rust's cursor_w_resize helper.
+func (style StyleBuilder) CursorWResize() StyleBuilder {
+	return style.configure(styleCursor("resize-left"))
 }
 
 // Flex1 matches Rust's flex_1 helper.
 func (element *Element) Flex1() *Element {
-	return element.configureStyles([]string{"FlexGrow", "FlexShrink", "FlexBasis"}, FlexGrow(1), FlexShrink(1), FlexBasis(0))
+	return element.configureStyles([]string{"FlexGrow", "FlexShrink", "FlexBasis"}, styleFlexGrow(1), styleFlexShrink(1), styleFlexBasis(0))
 }
 
-// FlexAuto matches Rust's flex_auto helper.
-func FlexAuto() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{FlexGrow(1), FlexShrink(1), FlexBasis("auto")} {
-			option.applyStyle(style)
-		}
-	}
+// Flex1 matches Rust's flex_1 helper.
+func (style StyleBuilder) Flex1() StyleBuilder {
+	return style.configure(styleFlexGrow(1), styleFlexShrink(1), styleFlexBasis(0))
 }
 
 // FlexAuto matches Rust's flex_auto helper.
 func (element *Element) FlexAuto() *Element {
-	return element.configureStyles([]string{"FlexGrow", "FlexShrink", "FlexBasis"}, FlexGrow(1), FlexShrink(1), FlexBasis("auto"))
+	return element.configureStyles([]string{"FlexGrow", "FlexShrink", "FlexBasis"}, styleFlexGrow(1), styleFlexShrink(1), styleFlexBasis("auto"))
 }
 
-// FlexBasisAuto matches Rust's flex_basis_auto helper.
-func FlexBasisAuto() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{FlexBasis("auto")} {
-			option.applyStyle(style)
-		}
-	}
+// FlexAuto matches Rust's flex_auto helper.
+func (style StyleBuilder) FlexAuto() StyleBuilder {
+	return style.configure(styleFlexGrow(1), styleFlexShrink(1), styleFlexBasis("auto"))
 }
 
 // FlexBasisAuto matches Rust's flex_basis_auto helper.
 func (element *Element) FlexBasisAuto() *Element {
-	return element.configureStyles([]string{"FlexBasis"}, FlexBasis("auto"))
+	return element.configureStyles([]string{"FlexBasis"}, styleFlexBasis("auto"))
 }
 
-// FlexCol matches Rust's flex_col helper.
-func FlexCol() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Display("flex"), FlexDirection("column")} {
-			option.applyStyle(style)
-		}
-	}
+// FlexBasisAuto matches Rust's flex_basis_auto helper.
+func (style StyleBuilder) FlexBasisAuto() StyleBuilder {
+	return style.configure(styleFlexBasis("auto"))
 }
 
 // FlexCol matches Rust's flex_col helper.
 func (element *Element) FlexCol() *Element {
-	return element.configureStyles([]string{"Display", "FlexDirection"}, Display("flex"), FlexDirection("column"))
+	return element.configureStyles([]string{"Display", "FlexDirection"}, styleDisplay("flex"), styleFlexDirection("column"))
 }
 
-// FlexColReverse matches Rust's flex_col_reverse helper.
-func FlexColReverse() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Display("flex"), FlexDirection("column-reverse")} {
-			option.applyStyle(style)
-		}
-	}
+// FlexCol matches Rust's flex_col helper.
+func (style StyleBuilder) FlexCol() StyleBuilder {
+	return style.configure(styleDisplay("flex"), styleFlexDirection("column"))
 }
 
 // FlexColReverse matches Rust's flex_col_reverse helper.
 func (element *Element) FlexColReverse() *Element {
-	return element.configureStyles([]string{"Display", "FlexDirection"}, Display("flex"), FlexDirection("column-reverse"))
+	return element.configureStyles([]string{"Display", "FlexDirection"}, styleDisplay("flex"), styleFlexDirection("column-reverse"))
 }
 
-// FlexGrow0 matches Rust's flex_grow_0 helper.
-func FlexGrow0() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{FlexGrow(0)} {
-			option.applyStyle(style)
-		}
-	}
+// FlexColReverse matches Rust's flex_col_reverse helper.
+func (style StyleBuilder) FlexColReverse() StyleBuilder {
+	return style.configure(styleDisplay("flex"), styleFlexDirection("column-reverse"))
 }
 
 // FlexGrow0 matches Rust's flex_grow_0 helper.
 func (element *Element) FlexGrow0() *Element {
-	return element.configureStyles([]string{"FlexGrow"}, FlexGrow(0))
+	return element.configureStyles([]string{"FlexGrow"}, styleFlexGrow(0))
 }
 
-// FlexGrow1 matches Rust's flex_grow_1 helper.
-func FlexGrow1() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{FlexGrow(1)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// FlexGrow0 matches Rust's flex_grow_0 helper.
+func (style StyleBuilder) FlexGrow0() StyleBuilder { return style.configure(styleFlexGrow(0)) }
 
 // FlexGrow1 matches Rust's flex_grow_1 helper.
 func (element *Element) FlexGrow1() *Element {
-	return element.configureStyles([]string{"FlexGrow"}, FlexGrow(1))
+	return element.configureStyles([]string{"FlexGrow"}, styleFlexGrow(1))
 }
 
-// FlexInitial matches Rust's flex_initial helper.
-func FlexInitial() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{FlexGrow(0), FlexShrink(1), FlexBasis("auto")} {
-			option.applyStyle(style)
-		}
-	}
-}
+// FlexGrow1 matches Rust's flex_grow_1 helper.
+func (style StyleBuilder) FlexGrow1() StyleBuilder { return style.configure(styleFlexGrow(1)) }
 
 // FlexInitial matches Rust's flex_initial helper.
 func (element *Element) FlexInitial() *Element {
-	return element.configureStyles([]string{"FlexGrow", "FlexShrink", "FlexBasis"}, FlexGrow(0), FlexShrink(1), FlexBasis("auto"))
+	return element.configureStyles([]string{"FlexGrow", "FlexShrink", "FlexBasis"}, styleFlexGrow(0), styleFlexShrink(1), styleFlexBasis("auto"))
 }
 
-// FlexNone matches Rust's flex_none helper.
-func FlexNone() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{FlexGrow(0), FlexShrink(0), FlexBasis("auto")} {
-			option.applyStyle(style)
-		}
-	}
+// FlexInitial matches Rust's flex_initial helper.
+func (style StyleBuilder) FlexInitial() StyleBuilder {
+	return style.configure(styleFlexGrow(0), styleFlexShrink(1), styleFlexBasis("auto"))
 }
 
 // FlexNone matches Rust's flex_none helper.
 func (element *Element) FlexNone() *Element {
-	return element.configureStyles([]string{"FlexGrow", "FlexShrink", "FlexBasis"}, FlexGrow(0), FlexShrink(0), FlexBasis("auto"))
+	return element.configureStyles([]string{"FlexGrow", "FlexShrink", "FlexBasis"}, styleFlexGrow(0), styleFlexShrink(0), styleFlexBasis("auto"))
 }
 
-// FlexNowrap matches Rust's flex_nowrap helper.
-func FlexNowrap() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{FlexWrap("nowrap")} {
-			option.applyStyle(style)
-		}
-	}
+// FlexNone matches Rust's flex_none helper.
+func (style StyleBuilder) FlexNone() StyleBuilder {
+	return style.configure(styleFlexGrow(0), styleFlexShrink(0), styleFlexBasis("auto"))
 }
 
 // FlexNowrap matches Rust's flex_nowrap helper.
 func (element *Element) FlexNowrap() *Element {
-	return element.configureStyles([]string{"FlexWrap"}, FlexWrap("nowrap"))
+	return element.configureStyles([]string{"FlexWrap"}, styleFlexWrap("nowrap"))
 }
 
-// FlexRow matches Rust's flex_row helper.
-func FlexRow() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Display("flex"), FlexDirection("row")} {
-			option.applyStyle(style)
-		}
-	}
-}
+// FlexNowrap matches Rust's flex_nowrap helper.
+func (style StyleBuilder) FlexNowrap() StyleBuilder { return style.configure(styleFlexWrap("nowrap")) }
 
 // FlexRow matches Rust's flex_row helper.
 func (element *Element) FlexRow() *Element {
-	return element.configureStyles([]string{"Display", "FlexDirection"}, Display("flex"), FlexDirection("row"))
+	return element.configureStyles([]string{"Display", "FlexDirection"}, styleDisplay("flex"), styleFlexDirection("row"))
 }
 
-// FlexRowReverse matches Rust's flex_row_reverse helper.
-func FlexRowReverse() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Display("flex"), FlexDirection("row-reverse")} {
-			option.applyStyle(style)
-		}
-	}
+// FlexRow matches Rust's flex_row helper.
+func (style StyleBuilder) FlexRow() StyleBuilder {
+	return style.configure(styleDisplay("flex"), styleFlexDirection("row"))
 }
 
 // FlexRowReverse matches Rust's flex_row_reverse helper.
 func (element *Element) FlexRowReverse() *Element {
-	return element.configureStyles([]string{"Display", "FlexDirection"}, Display("flex"), FlexDirection("row-reverse"))
+	return element.configureStyles([]string{"Display", "FlexDirection"}, styleDisplay("flex"), styleFlexDirection("row-reverse"))
 }
 
-// FlexShrink0 matches Rust's flex_shrink_0 helper.
-func FlexShrink0() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{FlexShrink(0)} {
-			option.applyStyle(style)
-		}
-	}
+// FlexRowReverse matches Rust's flex_row_reverse helper.
+func (style StyleBuilder) FlexRowReverse() StyleBuilder {
+	return style.configure(styleDisplay("flex"), styleFlexDirection("row-reverse"))
 }
 
 // FlexShrink0 matches Rust's flex_shrink_0 helper.
 func (element *Element) FlexShrink0() *Element {
-	return element.configureStyles([]string{"FlexShrink"}, FlexShrink(0))
+	return element.configureStyles([]string{"FlexShrink"}, styleFlexShrink(0))
 }
 
-// FlexShrink1 matches Rust's flex_shrink_1 helper.
-func FlexShrink1() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{FlexShrink(1)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// FlexShrink0 matches Rust's flex_shrink_0 helper.
+func (style StyleBuilder) FlexShrink0() StyleBuilder { return style.configure(styleFlexShrink(0)) }
 
 // FlexShrink1 matches Rust's flex_shrink_1 helper.
 func (element *Element) FlexShrink1() *Element {
-	return element.configureStyles([]string{"FlexShrink"}, FlexShrink(1))
+	return element.configureStyles([]string{"FlexShrink"}, styleFlexShrink(1))
 }
 
-// FlexWrapReverse matches Rust's flex_wrap_reverse helper.
-func FlexWrapReverse() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{FlexWrap("wrap-reverse")} {
-			option.applyStyle(style)
-		}
-	}
-}
+// FlexShrink1 matches Rust's flex_shrink_1 helper.
+func (style StyleBuilder) FlexShrink1() StyleBuilder { return style.configure(styleFlexShrink(1)) }
 
 // FlexWrapReverse matches Rust's flex_wrap_reverse helper.
 func (element *Element) FlexWrapReverse() *Element {
-	return element.configureStyles([]string{"FlexWrap"}, FlexWrap("wrap-reverse"))
+	return element.configureStyles([]string{"FlexWrap"}, styleFlexWrap("wrap-reverse"))
 }
 
-// FontBold matches Rust's font_bold helper.
-func FontBold() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{FontWeight(700)} {
-			option.applyStyle(style)
-		}
-	}
+// FlexWrapReverse matches Rust's flex_wrap_reverse helper.
+func (style StyleBuilder) FlexWrapReverse() StyleBuilder {
+	return style.configure(styleFlexWrap("wrap-reverse"))
 }
 
 // FontBold matches Rust's font_bold helper.
 func (element *Element) FontBold() *Element {
-	return element.configureStyles([]string{"FontWeight"}, FontWeight(700))
+	return element.configureStyles([]string{"FontWeight"}, styleFontWeight(700))
 }
 
-// FontMedium matches Rust's font_medium helper.
-func FontMedium() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{FontWeight(500)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// FontBold matches Rust's font_bold helper.
+func (style StyleBuilder) FontBold() StyleBuilder { return style.configure(styleFontWeight(700)) }
 
 // FontMedium matches Rust's font_medium helper.
 func (element *Element) FontMedium() *Element {
-	return element.configureStyles([]string{"FontWeight"}, FontWeight(500))
+	return element.configureStyles([]string{"FontWeight"}, styleFontWeight(500))
 }
 
-// FontNormal matches Rust's font_normal helper.
-func FontNormal() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{FontWeight(400)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// FontMedium matches Rust's font_medium helper.
+func (style StyleBuilder) FontMedium() StyleBuilder { return style.configure(styleFontWeight(500)) }
 
 // FontNormal matches Rust's font_normal helper.
 func (element *Element) FontNormal() *Element {
-	return element.configureStyles([]string{"FontWeight"}, FontWeight(400))
+	return element.configureStyles([]string{"FontWeight"}, styleFontWeight(400))
 }
 
-// FontSemibold matches Rust's font_semibold helper.
-func FontSemibold() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{FontWeight(600)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// FontNormal matches Rust's font_normal helper.
+func (style StyleBuilder) FontNormal() StyleBuilder { return style.configure(styleFontWeight(400)) }
 
 // FontSemibold matches Rust's font_semibold helper.
 func (element *Element) FontSemibold() *Element {
-	return element.configureStyles([]string{"FontWeight"}, FontWeight(600))
+	return element.configureStyles([]string{"FontWeight"}, styleFontWeight(600))
 }
+
+// FontSemibold matches Rust's font_semibold helper.
+func (style StyleBuilder) FontSemibold() StyleBuilder { return style.configure(styleFontWeight(600)) }
 
 // Gap1 matches Rust's gap_1 helper.
-func Gap1() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Gap(4)} {
-			option.applyStyle(style)
-		}
-	}
-}
+func (element *Element) Gap1() *Element { return element.configureStyles([]string{"Gap"}, styleGap(4)) }
 
 // Gap1 matches Rust's gap_1 helper.
-func (element *Element) Gap1() *Element { return element.configureStyles([]string{"Gap"}, Gap(4)) }
+func (style StyleBuilder) Gap1() StyleBuilder { return style.configure(styleGap(4)) }
 
 // Gap2 matches Rust's gap_2 helper.
-func Gap2() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Gap(8)} {
-			option.applyStyle(style)
-		}
-	}
-}
+func (element *Element) Gap2() *Element { return element.configureStyles([]string{"Gap"}, styleGap(8)) }
 
 // Gap2 matches Rust's gap_2 helper.
-func (element *Element) Gap2() *Element { return element.configureStyles([]string{"Gap"}, Gap(8)) }
+func (style StyleBuilder) Gap2() StyleBuilder { return style.configure(styleGap(8)) }
 
 // Gap3 matches Rust's gap_3 helper.
-func Gap3() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Gap(12)} {
-			option.applyStyle(style)
-		}
-	}
+func (element *Element) Gap3() *Element {
+	return element.configureStyles([]string{"Gap"}, styleGap(12))
 }
 
 // Gap3 matches Rust's gap_3 helper.
-func (element *Element) Gap3() *Element { return element.configureStyles([]string{"Gap"}, Gap(12)) }
+func (style StyleBuilder) Gap3() StyleBuilder { return style.configure(styleGap(12)) }
 
 // Gap4 matches Rust's gap_4 helper.
-func Gap4() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Gap(16)} {
-			option.applyStyle(style)
-		}
-	}
+func (element *Element) Gap4() *Element {
+	return element.configureStyles([]string{"Gap"}, styleGap(16))
 }
 
 // Gap4 matches Rust's gap_4 helper.
-func (element *Element) Gap4() *Element { return element.configureStyles([]string{"Gap"}, Gap(16)) }
+func (style StyleBuilder) Gap4() StyleBuilder { return style.configure(styleGap(16)) }
 
 // Gap5 matches Rust's gap_5 helper.
-func Gap5() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Gap(20)} {
-			option.applyStyle(style)
-		}
-	}
+func (element *Element) Gap5() *Element {
+	return element.configureStyles([]string{"Gap"}, styleGap(20))
 }
 
 // Gap5 matches Rust's gap_5 helper.
-func (element *Element) Gap5() *Element { return element.configureStyles([]string{"Gap"}, Gap(20)) }
+func (style StyleBuilder) Gap5() StyleBuilder { return style.configure(styleGap(20)) }
 
 // Gap6 matches Rust's gap_6 helper.
-func Gap6() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Gap(24)} {
-			option.applyStyle(style)
-		}
-	}
+func (element *Element) Gap6() *Element {
+	return element.configureStyles([]string{"Gap"}, styleGap(24))
 }
 
 // Gap6 matches Rust's gap_6 helper.
-func (element *Element) Gap6() *Element { return element.configureStyles([]string{"Gap"}, Gap(24)) }
-
-// GapX matches Rust's gap_x helper.
-func GapX(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{ColumnGap(value)} {
-			option.applyStyle(style)
-		}
-	}
-}
+func (style StyleBuilder) Gap6() StyleBuilder { return style.configure(styleGap(24)) }
 
 // GapX matches Rust's gap_x helper.
 func (element *Element) GapX(value any) *Element {
-	return element.configureStyles([]string{"ColumnGap"}, ColumnGap(value))
+	return element.configureStyles([]string{"ColumnGap"}, styleColumnGap(value))
 }
 
-// GapX0 matches Rust's gap_x_0 helper.
-func GapX0() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{ColumnGap(0)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// GapX matches Rust's gap_x helper.
+func (style StyleBuilder) GapX(value any) StyleBuilder { return style.configure(styleColumnGap(value)) }
 
 // GapX0 matches Rust's gap_x_0 helper.
 func (element *Element) GapX0() *Element {
-	return element.configureStyles([]string{"ColumnGap"}, ColumnGap(0))
+	return element.configureStyles([]string{"ColumnGap"}, styleColumnGap(0))
 }
 
-// GapX1 matches Rust's gap_x_1 helper.
-func GapX1() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{ColumnGap(4)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// GapX0 matches Rust's gap_x_0 helper.
+func (style StyleBuilder) GapX0() StyleBuilder { return style.configure(styleColumnGap(0)) }
 
 // GapX1 matches Rust's gap_x_1 helper.
 func (element *Element) GapX1() *Element {
-	return element.configureStyles([]string{"ColumnGap"}, ColumnGap(4))
+	return element.configureStyles([]string{"ColumnGap"}, styleColumnGap(4))
 }
 
-// GapX2 matches Rust's gap_x_2 helper.
-func GapX2() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{ColumnGap(8)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// GapX1 matches Rust's gap_x_1 helper.
+func (style StyleBuilder) GapX1() StyleBuilder { return style.configure(styleColumnGap(4)) }
 
 // GapX2 matches Rust's gap_x_2 helper.
 func (element *Element) GapX2() *Element {
-	return element.configureStyles([]string{"ColumnGap"}, ColumnGap(8))
+	return element.configureStyles([]string{"ColumnGap"}, styleColumnGap(8))
 }
 
-// GapX3 matches Rust's gap_x_3 helper.
-func GapX3() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{ColumnGap(12)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// GapX2 matches Rust's gap_x_2 helper.
+func (style StyleBuilder) GapX2() StyleBuilder { return style.configure(styleColumnGap(8)) }
 
 // GapX3 matches Rust's gap_x_3 helper.
 func (element *Element) GapX3() *Element {
-	return element.configureStyles([]string{"ColumnGap"}, ColumnGap(12))
+	return element.configureStyles([]string{"ColumnGap"}, styleColumnGap(12))
 }
 
-// GapX4 matches Rust's gap_x_4 helper.
-func GapX4() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{ColumnGap(16)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// GapX3 matches Rust's gap_x_3 helper.
+func (style StyleBuilder) GapX3() StyleBuilder { return style.configure(styleColumnGap(12)) }
 
 // GapX4 matches Rust's gap_x_4 helper.
 func (element *Element) GapX4() *Element {
-	return element.configureStyles([]string{"ColumnGap"}, ColumnGap(16))
+	return element.configureStyles([]string{"ColumnGap"}, styleColumnGap(16))
 }
 
-// GapX5 matches Rust's gap_x_5 helper.
-func GapX5() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{ColumnGap(20)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// GapX4 matches Rust's gap_x_4 helper.
+func (style StyleBuilder) GapX4() StyleBuilder { return style.configure(styleColumnGap(16)) }
 
 // GapX5 matches Rust's gap_x_5 helper.
 func (element *Element) GapX5() *Element {
-	return element.configureStyles([]string{"ColumnGap"}, ColumnGap(20))
+	return element.configureStyles([]string{"ColumnGap"}, styleColumnGap(20))
 }
 
-// GapX6 matches Rust's gap_x_6 helper.
-func GapX6() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{ColumnGap(24)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// GapX5 matches Rust's gap_x_5 helper.
+func (style StyleBuilder) GapX5() StyleBuilder { return style.configure(styleColumnGap(20)) }
 
 // GapX6 matches Rust's gap_x_6 helper.
 func (element *Element) GapX6() *Element {
-	return element.configureStyles([]string{"ColumnGap"}, ColumnGap(24))
+	return element.configureStyles([]string{"ColumnGap"}, styleColumnGap(24))
 }
 
-// GapY matches Rust's gap_y helper.
-func GapY(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{RowGap(value)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// GapX6 matches Rust's gap_x_6 helper.
+func (style StyleBuilder) GapX6() StyleBuilder { return style.configure(styleColumnGap(24)) }
 
 // GapY matches Rust's gap_y helper.
 func (element *Element) GapY(value any) *Element {
-	return element.configureStyles([]string{"RowGap"}, RowGap(value))
+	return element.configureStyles([]string{"RowGap"}, styleRowGap(value))
 }
 
-// GapY0 matches Rust's gap_y_0 helper.
-func GapY0() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{RowGap(0)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// GapY matches Rust's gap_y helper.
+func (style StyleBuilder) GapY(value any) StyleBuilder { return style.configure(styleRowGap(value)) }
 
 // GapY0 matches Rust's gap_y_0 helper.
 func (element *Element) GapY0() *Element {
-	return element.configureStyles([]string{"RowGap"}, RowGap(0))
+	return element.configureStyles([]string{"RowGap"}, styleRowGap(0))
 }
 
-// GapY1 matches Rust's gap_y_1 helper.
-func GapY1() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{RowGap(4)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// GapY0 matches Rust's gap_y_0 helper.
+func (style StyleBuilder) GapY0() StyleBuilder { return style.configure(styleRowGap(0)) }
 
 // GapY1 matches Rust's gap_y_1 helper.
 func (element *Element) GapY1() *Element {
-	return element.configureStyles([]string{"RowGap"}, RowGap(4))
+	return element.configureStyles([]string{"RowGap"}, styleRowGap(4))
 }
 
-// GapY2 matches Rust's gap_y_2 helper.
-func GapY2() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{RowGap(8)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// GapY1 matches Rust's gap_y_1 helper.
+func (style StyleBuilder) GapY1() StyleBuilder { return style.configure(styleRowGap(4)) }
 
 // GapY2 matches Rust's gap_y_2 helper.
 func (element *Element) GapY2() *Element {
-	return element.configureStyles([]string{"RowGap"}, RowGap(8))
+	return element.configureStyles([]string{"RowGap"}, styleRowGap(8))
 }
 
-// GapY3 matches Rust's gap_y_3 helper.
-func GapY3() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{RowGap(12)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// GapY2 matches Rust's gap_y_2 helper.
+func (style StyleBuilder) GapY2() StyleBuilder { return style.configure(styleRowGap(8)) }
 
 // GapY3 matches Rust's gap_y_3 helper.
 func (element *Element) GapY3() *Element {
-	return element.configureStyles([]string{"RowGap"}, RowGap(12))
+	return element.configureStyles([]string{"RowGap"}, styleRowGap(12))
 }
 
-// GapY4 matches Rust's gap_y_4 helper.
-func GapY4() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{RowGap(16)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// GapY3 matches Rust's gap_y_3 helper.
+func (style StyleBuilder) GapY3() StyleBuilder { return style.configure(styleRowGap(12)) }
 
 // GapY4 matches Rust's gap_y_4 helper.
 func (element *Element) GapY4() *Element {
-	return element.configureStyles([]string{"RowGap"}, RowGap(16))
+	return element.configureStyles([]string{"RowGap"}, styleRowGap(16))
 }
 
-// GapY5 matches Rust's gap_y_5 helper.
-func GapY5() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{RowGap(20)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// GapY4 matches Rust's gap_y_4 helper.
+func (style StyleBuilder) GapY4() StyleBuilder { return style.configure(styleRowGap(16)) }
 
 // GapY5 matches Rust's gap_y_5 helper.
 func (element *Element) GapY5() *Element {
-	return element.configureStyles([]string{"RowGap"}, RowGap(20))
+	return element.configureStyles([]string{"RowGap"}, styleRowGap(20))
 }
 
-// GapY6 matches Rust's gap_y_6 helper.
-func GapY6() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{RowGap(24)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// GapY5 matches Rust's gap_y_5 helper.
+func (style StyleBuilder) GapY5() StyleBuilder { return style.configure(styleRowGap(20)) }
 
 // GapY6 matches Rust's gap_y_6 helper.
 func (element *Element) GapY6() *Element {
-	return element.configureStyles([]string{"RowGap"}, RowGap(24))
+	return element.configureStyles([]string{"RowGap"}, styleRowGap(24))
 }
 
-// Grid matches Rust's grid helper.
-func Grid() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Display("grid")} {
-			option.applyStyle(style)
-		}
-	}
-}
+// GapY6 matches Rust's gap_y_6 helper.
+func (style StyleBuilder) GapY6() StyleBuilder { return style.configure(styleRowGap(24)) }
 
 // Grid matches Rust's grid helper.
 func (element *Element) Grid() *Element {
-	return element.configureStyles([]string{"Display"}, Display("grid"))
+	return element.configureStyles([]string{"Display"}, styleDisplay("grid"))
 }
 
-// GridCols matches Rust's grid_cols helper.
-func GridCols(count int) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{GridTemplateColumns(layoutGridTracks(count, "0", "1fr"))} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Grid matches Rust's grid helper.
+func (style StyleBuilder) Grid() StyleBuilder { return style.configure(styleDisplay("grid")) }
 
 // GridCols matches Rust's grid_cols helper.
 func (element *Element) GridCols(count int) *Element {
-	return element.configureStyles([]string{"GridTemplateColumns"}, GridTemplateColumns(layoutGridTracks(count, "0", "1fr")))
+	return element.configureStyles([]string{"GridTemplateColumns"}, styleGridTemplateColumns(layoutGridTracks(count, "0", "1fr")))
 }
 
-// GridColsMaxContent matches Rust's grid_cols_max_content helper.
-func GridColsMaxContent(count int) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{GridTemplateColumns(layoutGridTracks(count, "0", "max-content"))} {
-			option.applyStyle(style)
-		}
-	}
+// GridCols matches Rust's grid_cols helper.
+func (style StyleBuilder) GridCols(count int) StyleBuilder {
+	return style.configure(styleGridTemplateColumns(layoutGridTracks(count, "0", "1fr")))
 }
 
 // GridColsMaxContent matches Rust's grid_cols_max_content helper.
 func (element *Element) GridColsMaxContent(count int) *Element {
-	return element.configureStyles([]string{"GridTemplateColumns"}, GridTemplateColumns(layoutGridTracks(count, "0", "max-content")))
+	return element.configureStyles([]string{"GridTemplateColumns"}, styleGridTemplateColumns(layoutGridTracks(count, "0", "max-content")))
 }
 
-// GridColsMinContent matches Rust's grid_cols_min_content helper.
-func GridColsMinContent(count int) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{GridTemplateColumns(layoutGridTracks(count, "min-content", "1fr"))} {
-			option.applyStyle(style)
-		}
-	}
+// GridColsMaxContent matches Rust's grid_cols_max_content helper.
+func (style StyleBuilder) GridColsMaxContent(count int) StyleBuilder {
+	return style.configure(styleGridTemplateColumns(layoutGridTracks(count, "0", "max-content")))
 }
 
 // GridColsMinContent matches Rust's grid_cols_min_content helper.
 func (element *Element) GridColsMinContent(count int) *Element {
-	return element.configureStyles([]string{"GridTemplateColumns"}, GridTemplateColumns(layoutGridTracks(count, "min-content", "1fr")))
+	return element.configureStyles([]string{"GridTemplateColumns"}, styleGridTemplateColumns(layoutGridTracks(count, "min-content", "1fr")))
 }
 
-// GridFlowCol matches Rust's grid_flow_col helper.
-func GridFlowCol() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{GridAutoFlow("column")} {
-			option.applyStyle(style)
-		}
-	}
+// GridColsMinContent matches Rust's grid_cols_min_content helper.
+func (style StyleBuilder) GridColsMinContent(count int) StyleBuilder {
+	return style.configure(styleGridTemplateColumns(layoutGridTracks(count, "min-content", "1fr")))
 }
 
 // GridFlowCol matches Rust's grid_flow_col helper.
 func (element *Element) GridFlowCol() *Element {
-	return element.configureStyles([]string{"GridAutoFlow"}, GridAutoFlow("column"))
+	return element.configureStyles([]string{"GridAutoFlow"}, styleGridAutoFlow("column"))
 }
 
-// GridFlowColDense matches Rust's grid_flow_col_dense helper.
-func GridFlowColDense() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{GridAutoFlow("column dense")} {
-			option.applyStyle(style)
-		}
-	}
+// GridFlowCol matches Rust's grid_flow_col helper.
+func (style StyleBuilder) GridFlowCol() StyleBuilder {
+	return style.configure(styleGridAutoFlow("column"))
 }
 
 // GridFlowColDense matches Rust's grid_flow_col_dense helper.
 func (element *Element) GridFlowColDense() *Element {
-	return element.configureStyles([]string{"GridAutoFlow"}, GridAutoFlow("column dense"))
+	return element.configureStyles([]string{"GridAutoFlow"}, styleGridAutoFlow("column dense"))
 }
 
-// GridFlowRow matches Rust's grid_flow_row helper.
-func GridFlowRow() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{GridAutoFlow("row")} {
-			option.applyStyle(style)
-		}
-	}
+// GridFlowColDense matches Rust's grid_flow_col_dense helper.
+func (style StyleBuilder) GridFlowColDense() StyleBuilder {
+	return style.configure(styleGridAutoFlow("column dense"))
 }
 
 // GridFlowRow matches Rust's grid_flow_row helper.
 func (element *Element) GridFlowRow() *Element {
-	return element.configureStyles([]string{"GridAutoFlow"}, GridAutoFlow("row"))
+	return element.configureStyles([]string{"GridAutoFlow"}, styleGridAutoFlow("row"))
 }
 
-// GridFlowRowDense matches Rust's grid_flow_row_dense helper.
-func GridFlowRowDense() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{GridAutoFlow("row dense")} {
-			option.applyStyle(style)
-		}
-	}
+// GridFlowRow matches Rust's grid_flow_row helper.
+func (style StyleBuilder) GridFlowRow() StyleBuilder {
+	return style.configure(styleGridAutoFlow("row"))
 }
 
 // GridFlowRowDense matches Rust's grid_flow_row_dense helper.
 func (element *Element) GridFlowRowDense() *Element {
-	return element.configureStyles([]string{"GridAutoFlow"}, GridAutoFlow("row dense"))
+	return element.configureStyles([]string{"GridAutoFlow"}, styleGridAutoFlow("row dense"))
 }
 
-// GridRows matches Rust's grid_rows helper.
-func GridRows(count int) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{GridTemplateRows(layoutGridTracks(count, "0", "1fr"))} {
-			option.applyStyle(style)
-		}
-	}
+// GridFlowRowDense matches Rust's grid_flow_row_dense helper.
+func (style StyleBuilder) GridFlowRowDense() StyleBuilder {
+	return style.configure(styleGridAutoFlow("row dense"))
 }
 
 // GridRows matches Rust's grid_rows helper.
 func (element *Element) GridRows(count int) *Element {
-	return element.configureStyles([]string{"GridTemplateRows"}, GridTemplateRows(layoutGridTracks(count, "0", "1fr")))
+	return element.configureStyles([]string{"GridTemplateRows"}, styleGridTemplateRows(layoutGridTracks(count, "0", "1fr")))
 }
 
-// GridRowsMaxContent matches Rust's grid_rows_max_content helper.
-func GridRowsMaxContent(count int) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{GridTemplateRows(layoutGridTracks(count, "0", "max-content"))} {
-			option.applyStyle(style)
-		}
-	}
+// GridRows matches Rust's grid_rows helper.
+func (style StyleBuilder) GridRows(count int) StyleBuilder {
+	return style.configure(styleGridTemplateRows(layoutGridTracks(count, "0", "1fr")))
 }
 
 // GridRowsMaxContent matches Rust's grid_rows_max_content helper.
 func (element *Element) GridRowsMaxContent(count int) *Element {
-	return element.configureStyles([]string{"GridTemplateRows"}, GridTemplateRows(layoutGridTracks(count, "0", "max-content")))
+	return element.configureStyles([]string{"GridTemplateRows"}, styleGridTemplateRows(layoutGridTracks(count, "0", "max-content")))
 }
 
-// GridRowsMinContent matches Rust's grid_rows_min_content helper.
-func GridRowsMinContent(count int) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{GridTemplateRows(layoutGridTracks(count, "min-content", "1fr"))} {
-			option.applyStyle(style)
-		}
-	}
+// GridRowsMaxContent matches Rust's grid_rows_max_content helper.
+func (style StyleBuilder) GridRowsMaxContent(count int) StyleBuilder {
+	return style.configure(styleGridTemplateRows(layoutGridTracks(count, "0", "max-content")))
 }
 
 // GridRowsMinContent matches Rust's grid_rows_min_content helper.
 func (element *Element) GridRowsMinContent(count int) *Element {
-	return element.configureStyles([]string{"GridTemplateRows"}, GridTemplateRows(layoutGridTracks(count, "min-content", "1fr")))
+	return element.configureStyles([]string{"GridTemplateRows"}, styleGridTemplateRows(layoutGridTracks(count, "min-content", "1fr")))
 }
 
-// H matches Rust's h helper.
-func H(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Height(value)} {
-			option.applyStyle(style)
-		}
-	}
+// GridRowsMinContent matches Rust's grid_rows_min_content helper.
+func (style StyleBuilder) GridRowsMinContent(count int) StyleBuilder {
+	return style.configure(styleGridTemplateRows(layoutGridTracks(count, "min-content", "1fr")))
 }
 
 // H matches Rust's h helper.
 func (element *Element) H(value any) *Element {
-	return element.configureStyles([]string{"Height"}, Height(value))
+	return element.configureStyles([]string{"Height"}, styleHeight(value))
 }
 
-// H10 matches Rust's h_10 helper.
-func H10() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Height(40)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// H matches Rust's h helper.
+func (style StyleBuilder) H(value any) StyleBuilder { return style.configure(styleHeight(value)) }
 
 // H10 matches Rust's h_10 helper.
 func (element *Element) H10() *Element {
-	return element.configureStyles([]string{"Height"}, Height(40))
+	return element.configureStyles([]string{"Height"}, styleHeight(40))
 }
 
-// H12 matches Rust's h_12 helper.
-func H12() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Height(48)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// H10 matches Rust's h_10 helper.
+func (style StyleBuilder) H10() StyleBuilder { return style.configure(styleHeight(40)) }
 
 // H12 matches Rust's h_12 helper.
 func (element *Element) H12() *Element {
-	return element.configureStyles([]string{"Height"}, Height(48))
+	return element.configureStyles([]string{"Height"}, styleHeight(48))
+}
+
+// H12 matches Rust's h_12 helper.
+func (style StyleBuilder) H12() StyleBuilder { return style.configure(styleHeight(48)) }
+
+// H8 matches Rust's h_8 helper.
+func (element *Element) H8() *Element {
+	return element.configureStyles([]string{"Height"}, styleHeight(32))
 }
 
 // H8 matches Rust's h_8 helper.
-func H8() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Height(32)} {
-			option.applyStyle(style)
-		}
-	}
-}
-
-// H8 matches Rust's h_8 helper.
-func (element *Element) H8() *Element { return element.configureStyles([]string{"Height"}, Height(32)) }
-
-// HFraction matches Rust's h_fraction helper.
-func HFraction(fraction float64) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Height(layoutFraction(fraction))} {
-			option.applyStyle(style)
-		}
-	}
-}
+func (style StyleBuilder) H8() StyleBuilder { return style.configure(styleHeight(32)) }
 
 // HFraction matches Rust's h_fraction helper.
 func (element *Element) HFraction(fraction float64) *Element {
-	return element.configureStyles([]string{"Height"}, Height(layoutFraction(fraction)))
+	return element.configureStyles([]string{"Height"}, styleHeight(layoutFraction(fraction)))
 }
 
-// HFull matches Rust's h_full helper.
-func HFull() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Height("100%")} {
-			option.applyStyle(style)
-		}
-	}
+// HFraction matches Rust's h_fraction helper.
+func (style StyleBuilder) HFraction(fraction float64) StyleBuilder {
+	return style.configure(styleHeight(layoutFraction(fraction)))
 }
 
 // HFull matches Rust's h_full helper.
 func (element *Element) HFull() *Element {
-	return element.configureStyles([]string{"Height"}, Height("100%"))
+	return element.configureStyles([]string{"Height"}, styleHeight("100%"))
 }
 
-// Hidden matches Rust's hidden helper.
-func Hidden() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Display("none")} {
-			option.applyStyle(style)
-		}
-	}
-}
+// HFull matches Rust's h_full helper.
+func (style StyleBuilder) HFull() StyleBuilder { return style.configure(styleHeight("100%")) }
 
 // Hidden matches Rust's hidden helper.
 func (element *Element) Hidden() *Element {
-	return element.configureStyles([]string{"Display"}, Display("none"))
+	return element.configureStyles([]string{"Display"}, styleDisplay("none"))
 }
 
-// Inset0 matches Rust's inset_0 helper.
-func Inset0() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Top(0), Right(0), Bottom(0), Left(0)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Hidden matches Rust's hidden helper.
+func (style StyleBuilder) Hidden() StyleBuilder { return style.configure(styleDisplay("none")) }
 
 // Inset0 matches Rust's inset_0 helper.
 func (element *Element) Inset0() *Element {
-	return element.configureStyles([]string{"Top", "Right", "Bottom", "Left"}, Top(0), Right(0), Bottom(0), Left(0))
+	return element.configureStyles([]string{"Top", "Right", "Bottom", "Left"}, styleTop(0), styleRight(0), styleBottom(0), styleLeft(0))
 }
 
-// Invisible matches Rust's invisible helper.
-func Invisible() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Visibility("hidden")} {
-			option.applyStyle(style)
-		}
-	}
+// Inset0 matches Rust's inset_0 helper.
+func (style StyleBuilder) Inset0() StyleBuilder {
+	return style.configure(styleTop(0), styleRight(0), styleBottom(0), styleLeft(0))
 }
 
 // Invisible matches Rust's invisible helper.
 func (element *Element) Invisible() *Element {
-	return element.configureStyles([]string{"Visibility"}, Visibility("hidden"))
+	return element.configureStyles([]string{"Visibility"}, styleVisibility("hidden"))
 }
 
-// ItemsBaseline matches Rust's items_baseline helper.
-func ItemsBaseline() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{AlignItems("baseline")} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Invisible matches Rust's invisible helper.
+func (style StyleBuilder) Invisible() StyleBuilder { return style.configure(styleVisibility("hidden")) }
 
 // ItemsBaseline matches Rust's items_baseline helper.
 func (element *Element) ItemsBaseline() *Element {
-	return element.configureStyles([]string{"AlignItems"}, AlignItems("baseline"))
+	return element.configureStyles([]string{"AlignItems"}, styleAlignItems("baseline"))
 }
 
-// ItemsCenter matches Rust's items_center helper.
-func ItemsCenter() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{AlignItems("center")} {
-			option.applyStyle(style)
-		}
-	}
+// ItemsBaseline matches Rust's items_baseline helper.
+func (style StyleBuilder) ItemsBaseline() StyleBuilder {
+	return style.configure(styleAlignItems("baseline"))
 }
 
 // ItemsCenter matches Rust's items_center helper.
 func (element *Element) ItemsCenter() *Element {
-	return element.configureStyles([]string{"AlignItems"}, AlignItems("center"))
+	return element.configureStyles([]string{"AlignItems"}, styleAlignItems("center"))
 }
 
-// ItemsEnd matches Rust's items_end helper.
-func ItemsEnd() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{AlignItems("flex-end")} {
-			option.applyStyle(style)
-		}
-	}
+// ItemsCenter matches Rust's items_center helper.
+func (style StyleBuilder) ItemsCenter() StyleBuilder {
+	return style.configure(styleAlignItems("center"))
 }
 
 // ItemsEnd matches Rust's items_end helper.
 func (element *Element) ItemsEnd() *Element {
-	return element.configureStyles([]string{"AlignItems"}, AlignItems("flex-end"))
+	return element.configureStyles([]string{"AlignItems"}, styleAlignItems("flex-end"))
 }
 
-// ItemsStart matches Rust's items_start helper.
-func ItemsStart() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{AlignItems("flex-start")} {
-			option.applyStyle(style)
-		}
-	}
+// ItemsEnd matches Rust's items_end helper.
+func (style StyleBuilder) ItemsEnd() StyleBuilder {
+	return style.configure(styleAlignItems("flex-end"))
 }
 
 // ItemsStart matches Rust's items_start helper.
 func (element *Element) ItemsStart() *Element {
-	return element.configureStyles([]string{"AlignItems"}, AlignItems("flex-start"))
+	return element.configureStyles([]string{"AlignItems"}, styleAlignItems("flex-start"))
 }
 
-// ItemsStretch matches Rust's items_stretch helper.
-func ItemsStretch() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{AlignItems("stretch")} {
-			option.applyStyle(style)
-		}
-	}
+// ItemsStart matches Rust's items_start helper.
+func (style StyleBuilder) ItemsStart() StyleBuilder {
+	return style.configure(styleAlignItems("flex-start"))
 }
 
 // ItemsStretch matches Rust's items_stretch helper.
 func (element *Element) ItemsStretch() *Element {
-	return element.configureStyles([]string{"AlignItems"}, AlignItems("stretch"))
+	return element.configureStyles([]string{"AlignItems"}, styleAlignItems("stretch"))
 }
 
-// JustifyAround matches Rust's justify_around helper.
-func JustifyAround() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{JustifyContent("space-around")} {
-			option.applyStyle(style)
-		}
-	}
+// ItemsStretch matches Rust's items_stretch helper.
+func (style StyleBuilder) ItemsStretch() StyleBuilder {
+	return style.configure(styleAlignItems("stretch"))
 }
 
 // JustifyAround matches Rust's justify_around helper.
 func (element *Element) JustifyAround() *Element {
-	return element.configureStyles([]string{"JustifyContent"}, JustifyContent("space-around"))
+	return element.configureStyles([]string{"JustifyContent"}, styleJustifyContent("space-around"))
 }
 
-// JustifyBetween matches Rust's justify_between helper.
-func JustifyBetween() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{JustifyContent("space-between")} {
-			option.applyStyle(style)
-		}
-	}
+// JustifyAround matches Rust's justify_around helper.
+func (style StyleBuilder) JustifyAround() StyleBuilder {
+	return style.configure(styleJustifyContent("space-around"))
 }
 
 // JustifyBetween matches Rust's justify_between helper.
 func (element *Element) JustifyBetween() *Element {
-	return element.configureStyles([]string{"JustifyContent"}, JustifyContent("space-between"))
+	return element.configureStyles([]string{"JustifyContent"}, styleJustifyContent("space-between"))
 }
 
-// JustifyCenter matches Rust's justify_center helper.
-func JustifyCenter() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{JustifyContent("center")} {
-			option.applyStyle(style)
-		}
-	}
+// JustifyBetween matches Rust's justify_between helper.
+func (style StyleBuilder) JustifyBetween() StyleBuilder {
+	return style.configure(styleJustifyContent("space-between"))
 }
 
 // JustifyCenter matches Rust's justify_center helper.
 func (element *Element) JustifyCenter() *Element {
-	return element.configureStyles([]string{"JustifyContent"}, JustifyContent("center"))
+	return element.configureStyles([]string{"JustifyContent"}, styleJustifyContent("center"))
 }
 
-// JustifyEnd matches Rust's justify_end helper.
-func JustifyEnd() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{JustifyContent("end")} {
-			option.applyStyle(style)
-		}
-	}
+// JustifyCenter matches Rust's justify_center helper.
+func (style StyleBuilder) JustifyCenter() StyleBuilder {
+	return style.configure(styleJustifyContent("center"))
 }
 
 // JustifyEnd matches Rust's justify_end helper.
 func (element *Element) JustifyEnd() *Element {
-	return element.configureStyles([]string{"JustifyContent"}, JustifyContent("end"))
+	return element.configureStyles([]string{"JustifyContent"}, styleJustifyContent("end"))
 }
 
-// JustifyEvenly matches Rust's justify_evenly helper.
-func JustifyEvenly() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{JustifyContent("space-evenly")} {
-			option.applyStyle(style)
-		}
-	}
+// JustifyEnd matches Rust's justify_end helper.
+func (style StyleBuilder) JustifyEnd() StyleBuilder {
+	return style.configure(styleJustifyContent("end"))
 }
 
 // JustifyEvenly matches Rust's justify_evenly helper.
 func (element *Element) JustifyEvenly() *Element {
-	return element.configureStyles([]string{"JustifyContent"}, JustifyContent("space-evenly"))
+	return element.configureStyles([]string{"JustifyContent"}, styleJustifyContent("space-evenly"))
 }
 
-// JustifyStart matches Rust's justify_start helper.
-func JustifyStart() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{JustifyContent("start")} {
-			option.applyStyle(style)
-		}
-	}
+// JustifyEvenly matches Rust's justify_evenly helper.
+func (style StyleBuilder) JustifyEvenly() StyleBuilder {
+	return style.configure(styleJustifyContent("space-evenly"))
 }
 
 // JustifyStart matches Rust's justify_start helper.
 func (element *Element) JustifyStart() *Element {
-	return element.configureStyles([]string{"JustifyContent"}, JustifyContent("start"))
+	return element.configureStyles([]string{"JustifyContent"}, styleJustifyContent("start"))
 }
 
-// Ltr matches Rust's ltr helper.
-func Ltr() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Direction("ltr")} {
-			option.applyStyle(style)
-		}
-	}
+// JustifyStart matches Rust's justify_start helper.
+func (style StyleBuilder) JustifyStart() StyleBuilder {
+	return style.configure(styleJustifyContent("start"))
 }
 
 // Ltr matches Rust's ltr helper.
 func (element *Element) Ltr() *Element {
-	return element.configureStyles([]string{"Direction"}, Direction("ltr"))
+	return element.configureStyles([]string{"Direction"}, styleDirection("ltr"))
 }
 
-// M matches Rust's m helper.
-func M(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(value), MarginRight(value), MarginBottom(value), MarginLeft(value)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Ltr matches Rust's ltr helper.
+func (style StyleBuilder) Ltr() StyleBuilder { return style.configure(styleDirection("ltr")) }
 
 // M matches Rust's m helper.
 func (element *Element) M(value any) *Element {
-	return element.configureStyles([]string{"MarginTop", "MarginRight", "MarginBottom", "MarginLeft"}, MarginTop(value), MarginRight(value), MarginBottom(value), MarginLeft(value))
+	return element.configureStyles([]string{"MarginTop", "MarginRight", "MarginBottom", "MarginLeft"}, styleMarginTop(value), styleMarginRight(value), styleMarginBottom(value), styleMarginLeft(value))
 }
 
-// M0 matches Rust's m_0 helper.
-func M0() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(0), MarginRight(0), MarginBottom(0), MarginLeft(0)} {
-			option.applyStyle(style)
-		}
-	}
+// M matches Rust's m helper.
+func (style StyleBuilder) M(value any) StyleBuilder {
+	return style.configure(styleMarginTop(value), styleMarginRight(value), styleMarginBottom(value), styleMarginLeft(value))
 }
 
 // M0 matches Rust's m_0 helper.
 func (element *Element) M0() *Element {
-	return element.configureStyles([]string{"MarginTop", "MarginRight", "MarginBottom", "MarginLeft"}, MarginTop(0), MarginRight(0), MarginBottom(0), MarginLeft(0))
+	return element.configureStyles([]string{"MarginTop", "MarginRight", "MarginBottom", "MarginLeft"}, styleMarginTop(0), styleMarginRight(0), styleMarginBottom(0), styleMarginLeft(0))
 }
 
-// M1 matches Rust's m_1 helper.
-func M1() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(4), MarginRight(4), MarginBottom(4), MarginLeft(4)} {
-			option.applyStyle(style)
-		}
-	}
+// M0 matches Rust's m_0 helper.
+func (style StyleBuilder) M0() StyleBuilder {
+	return style.configure(styleMarginTop(0), styleMarginRight(0), styleMarginBottom(0), styleMarginLeft(0))
 }
 
 // M1 matches Rust's m_1 helper.
 func (element *Element) M1() *Element {
-	return element.configureStyles([]string{"MarginTop", "MarginRight", "MarginBottom", "MarginLeft"}, MarginTop(4), MarginRight(4), MarginBottom(4), MarginLeft(4))
+	return element.configureStyles([]string{"MarginTop", "MarginRight", "MarginBottom", "MarginLeft"}, styleMarginTop(4), styleMarginRight(4), styleMarginBottom(4), styleMarginLeft(4))
 }
 
-// M10 matches Rust's m_10 helper.
-func M10() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(40), MarginRight(40), MarginBottom(40), MarginLeft(40)} {
-			option.applyStyle(style)
-		}
-	}
+// M1 matches Rust's m_1 helper.
+func (style StyleBuilder) M1() StyleBuilder {
+	return style.configure(styleMarginTop(4), styleMarginRight(4), styleMarginBottom(4), styleMarginLeft(4))
 }
 
 // M10 matches Rust's m_10 helper.
 func (element *Element) M10() *Element {
-	return element.configureStyles([]string{"MarginTop", "MarginRight", "MarginBottom", "MarginLeft"}, MarginTop(40), MarginRight(40), MarginBottom(40), MarginLeft(40))
+	return element.configureStyles([]string{"MarginTop", "MarginRight", "MarginBottom", "MarginLeft"}, styleMarginTop(40), styleMarginRight(40), styleMarginBottom(40), styleMarginLeft(40))
 }
 
-// M12 matches Rust's m_12 helper.
-func M12() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(48), MarginRight(48), MarginBottom(48), MarginLeft(48)} {
-			option.applyStyle(style)
-		}
-	}
+// M10 matches Rust's m_10 helper.
+func (style StyleBuilder) M10() StyleBuilder {
+	return style.configure(styleMarginTop(40), styleMarginRight(40), styleMarginBottom(40), styleMarginLeft(40))
 }
 
 // M12 matches Rust's m_12 helper.
 func (element *Element) M12() *Element {
-	return element.configureStyles([]string{"MarginTop", "MarginRight", "MarginBottom", "MarginLeft"}, MarginTop(48), MarginRight(48), MarginBottom(48), MarginLeft(48))
+	return element.configureStyles([]string{"MarginTop", "MarginRight", "MarginBottom", "MarginLeft"}, styleMarginTop(48), styleMarginRight(48), styleMarginBottom(48), styleMarginLeft(48))
 }
 
-// M16 matches Rust's m_16 helper.
-func M16() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(64), MarginRight(64), MarginBottom(64), MarginLeft(64)} {
-			option.applyStyle(style)
-		}
-	}
+// M12 matches Rust's m_12 helper.
+func (style StyleBuilder) M12() StyleBuilder {
+	return style.configure(styleMarginTop(48), styleMarginRight(48), styleMarginBottom(48), styleMarginLeft(48))
 }
 
 // M16 matches Rust's m_16 helper.
 func (element *Element) M16() *Element {
-	return element.configureStyles([]string{"MarginTop", "MarginRight", "MarginBottom", "MarginLeft"}, MarginTop(64), MarginRight(64), MarginBottom(64), MarginLeft(64))
+	return element.configureStyles([]string{"MarginTop", "MarginRight", "MarginBottom", "MarginLeft"}, styleMarginTop(64), styleMarginRight(64), styleMarginBottom(64), styleMarginLeft(64))
 }
 
-// M2 matches Rust's m_2 helper.
-func M2() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(8), MarginRight(8), MarginBottom(8), MarginLeft(8)} {
-			option.applyStyle(style)
-		}
-	}
+// M16 matches Rust's m_16 helper.
+func (style StyleBuilder) M16() StyleBuilder {
+	return style.configure(styleMarginTop(64), styleMarginRight(64), styleMarginBottom(64), styleMarginLeft(64))
 }
 
 // M2 matches Rust's m_2 helper.
 func (element *Element) M2() *Element {
-	return element.configureStyles([]string{"MarginTop", "MarginRight", "MarginBottom", "MarginLeft"}, MarginTop(8), MarginRight(8), MarginBottom(8), MarginLeft(8))
+	return element.configureStyles([]string{"MarginTop", "MarginRight", "MarginBottom", "MarginLeft"}, styleMarginTop(8), styleMarginRight(8), styleMarginBottom(8), styleMarginLeft(8))
 }
 
-// M20 matches Rust's m_20 helper.
-func M20() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(80), MarginRight(80), MarginBottom(80), MarginLeft(80)} {
-			option.applyStyle(style)
-		}
-	}
+// M2 matches Rust's m_2 helper.
+func (style StyleBuilder) M2() StyleBuilder {
+	return style.configure(styleMarginTop(8), styleMarginRight(8), styleMarginBottom(8), styleMarginLeft(8))
 }
 
 // M20 matches Rust's m_20 helper.
 func (element *Element) M20() *Element {
-	return element.configureStyles([]string{"MarginTop", "MarginRight", "MarginBottom", "MarginLeft"}, MarginTop(80), MarginRight(80), MarginBottom(80), MarginLeft(80))
+	return element.configureStyles([]string{"MarginTop", "MarginRight", "MarginBottom", "MarginLeft"}, styleMarginTop(80), styleMarginRight(80), styleMarginBottom(80), styleMarginLeft(80))
 }
 
-// M24 matches Rust's m_24 helper.
-func M24() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(96), MarginRight(96), MarginBottom(96), MarginLeft(96)} {
-			option.applyStyle(style)
-		}
-	}
+// M20 matches Rust's m_20 helper.
+func (style StyleBuilder) M20() StyleBuilder {
+	return style.configure(styleMarginTop(80), styleMarginRight(80), styleMarginBottom(80), styleMarginLeft(80))
 }
 
 // M24 matches Rust's m_24 helper.
 func (element *Element) M24() *Element {
-	return element.configureStyles([]string{"MarginTop", "MarginRight", "MarginBottom", "MarginLeft"}, MarginTop(96), MarginRight(96), MarginBottom(96), MarginLeft(96))
+	return element.configureStyles([]string{"MarginTop", "MarginRight", "MarginBottom", "MarginLeft"}, styleMarginTop(96), styleMarginRight(96), styleMarginBottom(96), styleMarginLeft(96))
 }
 
-// M3 matches Rust's m_3 helper.
-func M3() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(12), MarginRight(12), MarginBottom(12), MarginLeft(12)} {
-			option.applyStyle(style)
-		}
-	}
+// M24 matches Rust's m_24 helper.
+func (style StyleBuilder) M24() StyleBuilder {
+	return style.configure(styleMarginTop(96), styleMarginRight(96), styleMarginBottom(96), styleMarginLeft(96))
 }
 
 // M3 matches Rust's m_3 helper.
 func (element *Element) M3() *Element {
-	return element.configureStyles([]string{"MarginTop", "MarginRight", "MarginBottom", "MarginLeft"}, MarginTop(12), MarginRight(12), MarginBottom(12), MarginLeft(12))
+	return element.configureStyles([]string{"MarginTop", "MarginRight", "MarginBottom", "MarginLeft"}, styleMarginTop(12), styleMarginRight(12), styleMarginBottom(12), styleMarginLeft(12))
 }
 
-// M32 matches Rust's m_32 helper.
-func M32() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(128), MarginRight(128), MarginBottom(128), MarginLeft(128)} {
-			option.applyStyle(style)
-		}
-	}
+// M3 matches Rust's m_3 helper.
+func (style StyleBuilder) M3() StyleBuilder {
+	return style.configure(styleMarginTop(12), styleMarginRight(12), styleMarginBottom(12), styleMarginLeft(12))
 }
 
 // M32 matches Rust's m_32 helper.
 func (element *Element) M32() *Element {
-	return element.configureStyles([]string{"MarginTop", "MarginRight", "MarginBottom", "MarginLeft"}, MarginTop(128), MarginRight(128), MarginBottom(128), MarginLeft(128))
+	return element.configureStyles([]string{"MarginTop", "MarginRight", "MarginBottom", "MarginLeft"}, styleMarginTop(128), styleMarginRight(128), styleMarginBottom(128), styleMarginLeft(128))
 }
 
-// M4 matches Rust's m_4 helper.
-func M4() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(16), MarginRight(16), MarginBottom(16), MarginLeft(16)} {
-			option.applyStyle(style)
-		}
-	}
+// M32 matches Rust's m_32 helper.
+func (style StyleBuilder) M32() StyleBuilder {
+	return style.configure(styleMarginTop(128), styleMarginRight(128), styleMarginBottom(128), styleMarginLeft(128))
 }
 
 // M4 matches Rust's m_4 helper.
 func (element *Element) M4() *Element {
-	return element.configureStyles([]string{"MarginTop", "MarginRight", "MarginBottom", "MarginLeft"}, MarginTop(16), MarginRight(16), MarginBottom(16), MarginLeft(16))
+	return element.configureStyles([]string{"MarginTop", "MarginRight", "MarginBottom", "MarginLeft"}, styleMarginTop(16), styleMarginRight(16), styleMarginBottom(16), styleMarginLeft(16))
 }
 
-// M5 matches Rust's m_5 helper.
-func M5() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(20), MarginRight(20), MarginBottom(20), MarginLeft(20)} {
-			option.applyStyle(style)
-		}
-	}
+// M4 matches Rust's m_4 helper.
+func (style StyleBuilder) M4() StyleBuilder {
+	return style.configure(styleMarginTop(16), styleMarginRight(16), styleMarginBottom(16), styleMarginLeft(16))
 }
 
 // M5 matches Rust's m_5 helper.
 func (element *Element) M5() *Element {
-	return element.configureStyles([]string{"MarginTop", "MarginRight", "MarginBottom", "MarginLeft"}, MarginTop(20), MarginRight(20), MarginBottom(20), MarginLeft(20))
+	return element.configureStyles([]string{"MarginTop", "MarginRight", "MarginBottom", "MarginLeft"}, styleMarginTop(20), styleMarginRight(20), styleMarginBottom(20), styleMarginLeft(20))
 }
 
-// M6 matches Rust's m_6 helper.
-func M6() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(24), MarginRight(24), MarginBottom(24), MarginLeft(24)} {
-			option.applyStyle(style)
-		}
-	}
+// M5 matches Rust's m_5 helper.
+func (style StyleBuilder) M5() StyleBuilder {
+	return style.configure(styleMarginTop(20), styleMarginRight(20), styleMarginBottom(20), styleMarginLeft(20))
 }
 
 // M6 matches Rust's m_6 helper.
 func (element *Element) M6() *Element {
-	return element.configureStyles([]string{"MarginTop", "MarginRight", "MarginBottom", "MarginLeft"}, MarginTop(24), MarginRight(24), MarginBottom(24), MarginLeft(24))
+	return element.configureStyles([]string{"MarginTop", "MarginRight", "MarginBottom", "MarginLeft"}, styleMarginTop(24), styleMarginRight(24), styleMarginBottom(24), styleMarginLeft(24))
 }
 
-// M8 matches Rust's m_8 helper.
-func M8() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(32), MarginRight(32), MarginBottom(32), MarginLeft(32)} {
-			option.applyStyle(style)
-		}
-	}
+// M6 matches Rust's m_6 helper.
+func (style StyleBuilder) M6() StyleBuilder {
+	return style.configure(styleMarginTop(24), styleMarginRight(24), styleMarginBottom(24), styleMarginLeft(24))
 }
 
 // M8 matches Rust's m_8 helper.
 func (element *Element) M8() *Element {
-	return element.configureStyles([]string{"MarginTop", "MarginRight", "MarginBottom", "MarginLeft"}, MarginTop(32), MarginRight(32), MarginBottom(32), MarginLeft(32))
+	return element.configureStyles([]string{"MarginTop", "MarginRight", "MarginBottom", "MarginLeft"}, styleMarginTop(32), styleMarginRight(32), styleMarginBottom(32), styleMarginLeft(32))
 }
 
-// MAuto matches Rust's m_auto helper.
-func MAuto() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop("auto"), MarginRight("auto"), MarginBottom("auto"), MarginLeft("auto")} {
-			option.applyStyle(style)
-		}
-	}
+// M8 matches Rust's m_8 helper.
+func (style StyleBuilder) M8() StyleBuilder {
+	return style.configure(styleMarginTop(32), styleMarginRight(32), styleMarginBottom(32), styleMarginLeft(32))
 }
 
 // MAuto matches Rust's m_auto helper.
 func (element *Element) MAuto() *Element {
-	return element.configureStyles([]string{"MarginTop", "MarginRight", "MarginBottom", "MarginLeft"}, MarginTop("auto"), MarginRight("auto"), MarginBottom("auto"), MarginLeft("auto"))
+	return element.configureStyles([]string{"MarginTop", "MarginRight", "MarginBottom", "MarginLeft"}, styleMarginTop("auto"), styleMarginRight("auto"), styleMarginBottom("auto"), styleMarginLeft("auto"))
 }
 
-// MaxH matches Rust's max_h helper.
-func MaxH(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MaxHeight(value)} {
-			option.applyStyle(style)
-		}
-	}
+// MAuto matches Rust's m_auto helper.
+func (style StyleBuilder) MAuto() StyleBuilder {
+	return style.configure(styleMarginTop("auto"), styleMarginRight("auto"), styleMarginBottom("auto"), styleMarginLeft("auto"))
 }
 
 // MaxH matches Rust's max_h helper.
 func (element *Element) MaxH(value any) *Element {
-	return element.configureStyles([]string{"MaxHeight"}, MaxHeight(value))
+	return element.configureStyles([]string{"MaxHeight"}, styleMaxHeight(value))
 }
 
-// MaxW matches Rust's max_w helper.
-func MaxW(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MaxWidth(value)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// MaxH matches Rust's max_h helper.
+func (style StyleBuilder) MaxH(value any) StyleBuilder { return style.configure(styleMaxHeight(value)) }
 
 // MaxW matches Rust's max_w helper.
 func (element *Element) MaxW(value any) *Element {
-	return element.configureStyles([]string{"MaxWidth"}, MaxWidth(value))
+	return element.configureStyles([]string{"MaxWidth"}, styleMaxWidth(value))
 }
 
-// Mb matches Rust's mb helper.
-func Mb(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginBottom(value)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// MaxW matches Rust's max_w helper.
+func (style StyleBuilder) MaxW(value any) StyleBuilder { return style.configure(styleMaxWidth(value)) }
 
 // Mb matches Rust's mb helper.
 func (element *Element) Mb(value any) *Element {
-	return element.configureStyles([]string{"MarginBottom"}, MarginBottom(value))
+	return element.configureStyles([]string{"MarginBottom"}, styleMarginBottom(value))
 }
 
-// Mb0 matches Rust's mb_0 helper.
-func Mb0() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginBottom(0)} {
-			option.applyStyle(style)
-		}
-	}
+// Mb matches Rust's mb helper.
+func (style StyleBuilder) Mb(value any) StyleBuilder {
+	return style.configure(styleMarginBottom(value))
 }
 
 // Mb0 matches Rust's mb_0 helper.
 func (element *Element) Mb0() *Element {
-	return element.configureStyles([]string{"MarginBottom"}, MarginBottom(0))
+	return element.configureStyles([]string{"MarginBottom"}, styleMarginBottom(0))
 }
 
-// Mb1 matches Rust's mb_1 helper.
-func Mb1() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginBottom(4)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mb0 matches Rust's mb_0 helper.
+func (style StyleBuilder) Mb0() StyleBuilder { return style.configure(styleMarginBottom(0)) }
 
 // Mb1 matches Rust's mb_1 helper.
 func (element *Element) Mb1() *Element {
-	return element.configureStyles([]string{"MarginBottom"}, MarginBottom(4))
+	return element.configureStyles([]string{"MarginBottom"}, styleMarginBottom(4))
 }
 
-// Mb10 matches Rust's mb_10 helper.
-func Mb10() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginBottom(40)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mb1 matches Rust's mb_1 helper.
+func (style StyleBuilder) Mb1() StyleBuilder { return style.configure(styleMarginBottom(4)) }
 
 // Mb10 matches Rust's mb_10 helper.
 func (element *Element) Mb10() *Element {
-	return element.configureStyles([]string{"MarginBottom"}, MarginBottom(40))
+	return element.configureStyles([]string{"MarginBottom"}, styleMarginBottom(40))
 }
 
-// Mb12 matches Rust's mb_12 helper.
-func Mb12() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginBottom(48)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mb10 matches Rust's mb_10 helper.
+func (style StyleBuilder) Mb10() StyleBuilder { return style.configure(styleMarginBottom(40)) }
 
 // Mb12 matches Rust's mb_12 helper.
 func (element *Element) Mb12() *Element {
-	return element.configureStyles([]string{"MarginBottom"}, MarginBottom(48))
+	return element.configureStyles([]string{"MarginBottom"}, styleMarginBottom(48))
 }
 
-// Mb16 matches Rust's mb_16 helper.
-func Mb16() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginBottom(64)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mb12 matches Rust's mb_12 helper.
+func (style StyleBuilder) Mb12() StyleBuilder { return style.configure(styleMarginBottom(48)) }
 
 // Mb16 matches Rust's mb_16 helper.
 func (element *Element) Mb16() *Element {
-	return element.configureStyles([]string{"MarginBottom"}, MarginBottom(64))
+	return element.configureStyles([]string{"MarginBottom"}, styleMarginBottom(64))
 }
 
-// Mb2 matches Rust's mb_2 helper.
-func Mb2() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginBottom(8)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mb16 matches Rust's mb_16 helper.
+func (style StyleBuilder) Mb16() StyleBuilder { return style.configure(styleMarginBottom(64)) }
 
 // Mb2 matches Rust's mb_2 helper.
 func (element *Element) Mb2() *Element {
-	return element.configureStyles([]string{"MarginBottom"}, MarginBottom(8))
+	return element.configureStyles([]string{"MarginBottom"}, styleMarginBottom(8))
 }
 
-// Mb20 matches Rust's mb_20 helper.
-func Mb20() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginBottom(80)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mb2 matches Rust's mb_2 helper.
+func (style StyleBuilder) Mb2() StyleBuilder { return style.configure(styleMarginBottom(8)) }
 
 // Mb20 matches Rust's mb_20 helper.
 func (element *Element) Mb20() *Element {
-	return element.configureStyles([]string{"MarginBottom"}, MarginBottom(80))
+	return element.configureStyles([]string{"MarginBottom"}, styleMarginBottom(80))
 }
 
-// Mb24 matches Rust's mb_24 helper.
-func Mb24() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginBottom(96)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mb20 matches Rust's mb_20 helper.
+func (style StyleBuilder) Mb20() StyleBuilder { return style.configure(styleMarginBottom(80)) }
 
 // Mb24 matches Rust's mb_24 helper.
 func (element *Element) Mb24() *Element {
-	return element.configureStyles([]string{"MarginBottom"}, MarginBottom(96))
+	return element.configureStyles([]string{"MarginBottom"}, styleMarginBottom(96))
 }
 
-// Mb3 matches Rust's mb_3 helper.
-func Mb3() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginBottom(12)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mb24 matches Rust's mb_24 helper.
+func (style StyleBuilder) Mb24() StyleBuilder { return style.configure(styleMarginBottom(96)) }
 
 // Mb3 matches Rust's mb_3 helper.
 func (element *Element) Mb3() *Element {
-	return element.configureStyles([]string{"MarginBottom"}, MarginBottom(12))
+	return element.configureStyles([]string{"MarginBottom"}, styleMarginBottom(12))
 }
 
-// Mb32 matches Rust's mb_32 helper.
-func Mb32() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginBottom(128)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mb3 matches Rust's mb_3 helper.
+func (style StyleBuilder) Mb3() StyleBuilder { return style.configure(styleMarginBottom(12)) }
 
 // Mb32 matches Rust's mb_32 helper.
 func (element *Element) Mb32() *Element {
-	return element.configureStyles([]string{"MarginBottom"}, MarginBottom(128))
+	return element.configureStyles([]string{"MarginBottom"}, styleMarginBottom(128))
 }
 
-// Mb4 matches Rust's mb_4 helper.
-func Mb4() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginBottom(16)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mb32 matches Rust's mb_32 helper.
+func (style StyleBuilder) Mb32() StyleBuilder { return style.configure(styleMarginBottom(128)) }
 
 // Mb4 matches Rust's mb_4 helper.
 func (element *Element) Mb4() *Element {
-	return element.configureStyles([]string{"MarginBottom"}, MarginBottom(16))
+	return element.configureStyles([]string{"MarginBottom"}, styleMarginBottom(16))
 }
 
-// Mb5 matches Rust's mb_5 helper.
-func Mb5() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginBottom(20)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mb4 matches Rust's mb_4 helper.
+func (style StyleBuilder) Mb4() StyleBuilder { return style.configure(styleMarginBottom(16)) }
 
 // Mb5 matches Rust's mb_5 helper.
 func (element *Element) Mb5() *Element {
-	return element.configureStyles([]string{"MarginBottom"}, MarginBottom(20))
+	return element.configureStyles([]string{"MarginBottom"}, styleMarginBottom(20))
 }
 
-// Mb6 matches Rust's mb_6 helper.
-func Mb6() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginBottom(24)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mb5 matches Rust's mb_5 helper.
+func (style StyleBuilder) Mb5() StyleBuilder { return style.configure(styleMarginBottom(20)) }
 
 // Mb6 matches Rust's mb_6 helper.
 func (element *Element) Mb6() *Element {
-	return element.configureStyles([]string{"MarginBottom"}, MarginBottom(24))
+	return element.configureStyles([]string{"MarginBottom"}, styleMarginBottom(24))
 }
 
-// Mb8 matches Rust's mb_8 helper.
-func Mb8() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginBottom(32)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mb6 matches Rust's mb_6 helper.
+func (style StyleBuilder) Mb6() StyleBuilder { return style.configure(styleMarginBottom(24)) }
 
 // Mb8 matches Rust's mb_8 helper.
 func (element *Element) Mb8() *Element {
-	return element.configureStyles([]string{"MarginBottom"}, MarginBottom(32))
+	return element.configureStyles([]string{"MarginBottom"}, styleMarginBottom(32))
 }
 
-// MbAuto matches Rust's mb_auto helper.
-func MbAuto() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginBottom("auto")} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mb8 matches Rust's mb_8 helper.
+func (style StyleBuilder) Mb8() StyleBuilder { return style.configure(styleMarginBottom(32)) }
 
 // MbAuto matches Rust's mb_auto helper.
 func (element *Element) MbAuto() *Element {
-	return element.configureStyles([]string{"MarginBottom"}, MarginBottom("auto"))
+	return element.configureStyles([]string{"MarginBottom"}, styleMarginBottom("auto"))
 }
 
-// Me matches Rust's me helper.
-func Me(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginEnd(value)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// MbAuto matches Rust's mb_auto helper.
+func (style StyleBuilder) MbAuto() StyleBuilder { return style.configure(styleMarginBottom("auto")) }
 
 // Me matches Rust's me helper.
 func (element *Element) Me(value any) *Element {
-	return element.configureStyles([]string{"MarginEnd"}, MarginEnd(value))
+	return element.configureStyles([]string{"MarginEnd"}, styleMarginEnd(value))
 }
 
-// MinH matches Rust's min_h helper.
-func MinH(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MinHeight(value)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Me matches Rust's me helper.
+func (style StyleBuilder) Me(value any) StyleBuilder { return style.configure(styleMarginEnd(value)) }
 
 // MinH matches Rust's min_h helper.
 func (element *Element) MinH(value any) *Element {
-	return element.configureStyles([]string{"MinHeight"}, MinHeight(value))
+	return element.configureStyles([]string{"MinHeight"}, styleMinHeight(value))
 }
 
-// MinW matches Rust's min_w helper.
-func MinW(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MinWidth(value)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// MinH matches Rust's min_h helper.
+func (style StyleBuilder) MinH(value any) StyleBuilder { return style.configure(styleMinHeight(value)) }
 
 // MinW matches Rust's min_w helper.
 func (element *Element) MinW(value any) *Element {
-	return element.configureStyles([]string{"MinWidth"}, MinWidth(value))
+	return element.configureStyles([]string{"MinWidth"}, styleMinWidth(value))
 }
 
-// Ml matches Rust's ml helper.
-func Ml(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginLeft(value)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// MinW matches Rust's min_w helper.
+func (style StyleBuilder) MinW(value any) StyleBuilder { return style.configure(styleMinWidth(value)) }
 
 // Ml matches Rust's ml helper.
 func (element *Element) Ml(value any) *Element {
-	return element.configureStyles([]string{"MarginLeft"}, MarginLeft(value))
+	return element.configureStyles([]string{"MarginLeft"}, styleMarginLeft(value))
 }
 
-// Ml0 matches Rust's ml_0 helper.
-func Ml0() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginLeft(0)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Ml matches Rust's ml helper.
+func (style StyleBuilder) Ml(value any) StyleBuilder { return style.configure(styleMarginLeft(value)) }
 
 // Ml0 matches Rust's ml_0 helper.
 func (element *Element) Ml0() *Element {
-	return element.configureStyles([]string{"MarginLeft"}, MarginLeft(0))
+	return element.configureStyles([]string{"MarginLeft"}, styleMarginLeft(0))
 }
 
-// Ml1 matches Rust's ml_1 helper.
-func Ml1() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginLeft(4)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Ml0 matches Rust's ml_0 helper.
+func (style StyleBuilder) Ml0() StyleBuilder { return style.configure(styleMarginLeft(0)) }
 
 // Ml1 matches Rust's ml_1 helper.
 func (element *Element) Ml1() *Element {
-	return element.configureStyles([]string{"MarginLeft"}, MarginLeft(4))
+	return element.configureStyles([]string{"MarginLeft"}, styleMarginLeft(4))
 }
 
-// Ml10 matches Rust's ml_10 helper.
-func Ml10() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginLeft(40)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Ml1 matches Rust's ml_1 helper.
+func (style StyleBuilder) Ml1() StyleBuilder { return style.configure(styleMarginLeft(4)) }
 
 // Ml10 matches Rust's ml_10 helper.
 func (element *Element) Ml10() *Element {
-	return element.configureStyles([]string{"MarginLeft"}, MarginLeft(40))
+	return element.configureStyles([]string{"MarginLeft"}, styleMarginLeft(40))
 }
 
-// Ml12 matches Rust's ml_12 helper.
-func Ml12() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginLeft(48)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Ml10 matches Rust's ml_10 helper.
+func (style StyleBuilder) Ml10() StyleBuilder { return style.configure(styleMarginLeft(40)) }
 
 // Ml12 matches Rust's ml_12 helper.
 func (element *Element) Ml12() *Element {
-	return element.configureStyles([]string{"MarginLeft"}, MarginLeft(48))
+	return element.configureStyles([]string{"MarginLeft"}, styleMarginLeft(48))
 }
 
-// Ml16 matches Rust's ml_16 helper.
-func Ml16() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginLeft(64)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Ml12 matches Rust's ml_12 helper.
+func (style StyleBuilder) Ml12() StyleBuilder { return style.configure(styleMarginLeft(48)) }
 
 // Ml16 matches Rust's ml_16 helper.
 func (element *Element) Ml16() *Element {
-	return element.configureStyles([]string{"MarginLeft"}, MarginLeft(64))
+	return element.configureStyles([]string{"MarginLeft"}, styleMarginLeft(64))
 }
 
-// Ml2 matches Rust's ml_2 helper.
-func Ml2() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginLeft(8)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Ml16 matches Rust's ml_16 helper.
+func (style StyleBuilder) Ml16() StyleBuilder { return style.configure(styleMarginLeft(64)) }
 
 // Ml2 matches Rust's ml_2 helper.
 func (element *Element) Ml2() *Element {
-	return element.configureStyles([]string{"MarginLeft"}, MarginLeft(8))
+	return element.configureStyles([]string{"MarginLeft"}, styleMarginLeft(8))
 }
 
-// Ml20 matches Rust's ml_20 helper.
-func Ml20() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginLeft(80)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Ml2 matches Rust's ml_2 helper.
+func (style StyleBuilder) Ml2() StyleBuilder { return style.configure(styleMarginLeft(8)) }
 
 // Ml20 matches Rust's ml_20 helper.
 func (element *Element) Ml20() *Element {
-	return element.configureStyles([]string{"MarginLeft"}, MarginLeft(80))
+	return element.configureStyles([]string{"MarginLeft"}, styleMarginLeft(80))
 }
 
-// Ml24 matches Rust's ml_24 helper.
-func Ml24() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginLeft(96)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Ml20 matches Rust's ml_20 helper.
+func (style StyleBuilder) Ml20() StyleBuilder { return style.configure(styleMarginLeft(80)) }
 
 // Ml24 matches Rust's ml_24 helper.
 func (element *Element) Ml24() *Element {
-	return element.configureStyles([]string{"MarginLeft"}, MarginLeft(96))
+	return element.configureStyles([]string{"MarginLeft"}, styleMarginLeft(96))
 }
 
-// Ml3 matches Rust's ml_3 helper.
-func Ml3() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginLeft(12)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Ml24 matches Rust's ml_24 helper.
+func (style StyleBuilder) Ml24() StyleBuilder { return style.configure(styleMarginLeft(96)) }
 
 // Ml3 matches Rust's ml_3 helper.
 func (element *Element) Ml3() *Element {
-	return element.configureStyles([]string{"MarginLeft"}, MarginLeft(12))
+	return element.configureStyles([]string{"MarginLeft"}, styleMarginLeft(12))
 }
 
-// Ml32 matches Rust's ml_32 helper.
-func Ml32() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginLeft(128)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Ml3 matches Rust's ml_3 helper.
+func (style StyleBuilder) Ml3() StyleBuilder { return style.configure(styleMarginLeft(12)) }
 
 // Ml32 matches Rust's ml_32 helper.
 func (element *Element) Ml32() *Element {
-	return element.configureStyles([]string{"MarginLeft"}, MarginLeft(128))
+	return element.configureStyles([]string{"MarginLeft"}, styleMarginLeft(128))
 }
 
-// Ml4 matches Rust's ml_4 helper.
-func Ml4() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginLeft(16)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Ml32 matches Rust's ml_32 helper.
+func (style StyleBuilder) Ml32() StyleBuilder { return style.configure(styleMarginLeft(128)) }
 
 // Ml4 matches Rust's ml_4 helper.
 func (element *Element) Ml4() *Element {
-	return element.configureStyles([]string{"MarginLeft"}, MarginLeft(16))
+	return element.configureStyles([]string{"MarginLeft"}, styleMarginLeft(16))
 }
 
-// Ml5 matches Rust's ml_5 helper.
-func Ml5() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginLeft(20)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Ml4 matches Rust's ml_4 helper.
+func (style StyleBuilder) Ml4() StyleBuilder { return style.configure(styleMarginLeft(16)) }
 
 // Ml5 matches Rust's ml_5 helper.
 func (element *Element) Ml5() *Element {
-	return element.configureStyles([]string{"MarginLeft"}, MarginLeft(20))
+	return element.configureStyles([]string{"MarginLeft"}, styleMarginLeft(20))
 }
 
-// Ml6 matches Rust's ml_6 helper.
-func Ml6() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginLeft(24)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Ml5 matches Rust's ml_5 helper.
+func (style StyleBuilder) Ml5() StyleBuilder { return style.configure(styleMarginLeft(20)) }
 
 // Ml6 matches Rust's ml_6 helper.
 func (element *Element) Ml6() *Element {
-	return element.configureStyles([]string{"MarginLeft"}, MarginLeft(24))
+	return element.configureStyles([]string{"MarginLeft"}, styleMarginLeft(24))
 }
 
-// Ml8 matches Rust's ml_8 helper.
-func Ml8() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginLeft(32)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Ml6 matches Rust's ml_6 helper.
+func (style StyleBuilder) Ml6() StyleBuilder { return style.configure(styleMarginLeft(24)) }
 
 // Ml8 matches Rust's ml_8 helper.
 func (element *Element) Ml8() *Element {
-	return element.configureStyles([]string{"MarginLeft"}, MarginLeft(32))
+	return element.configureStyles([]string{"MarginLeft"}, styleMarginLeft(32))
 }
 
-// MlAuto matches Rust's ml_auto helper.
-func MlAuto() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginLeft("auto")} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Ml8 matches Rust's ml_8 helper.
+func (style StyleBuilder) Ml8() StyleBuilder { return style.configure(styleMarginLeft(32)) }
 
 // MlAuto matches Rust's ml_auto helper.
 func (element *Element) MlAuto() *Element {
-	return element.configureStyles([]string{"MarginLeft"}, MarginLeft("auto"))
+	return element.configureStyles([]string{"MarginLeft"}, styleMarginLeft("auto"))
 }
 
-// Mr matches Rust's mr helper.
-func Mr(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginRight(value)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// MlAuto matches Rust's ml_auto helper.
+func (style StyleBuilder) MlAuto() StyleBuilder { return style.configure(styleMarginLeft("auto")) }
 
 // Mr matches Rust's mr helper.
 func (element *Element) Mr(value any) *Element {
-	return element.configureStyles([]string{"MarginRight"}, MarginRight(value))
+	return element.configureStyles([]string{"MarginRight"}, styleMarginRight(value))
 }
 
-// Mr0 matches Rust's mr_0 helper.
-func Mr0() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginRight(0)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mr matches Rust's mr helper.
+func (style StyleBuilder) Mr(value any) StyleBuilder { return style.configure(styleMarginRight(value)) }
 
 // Mr0 matches Rust's mr_0 helper.
 func (element *Element) Mr0() *Element {
-	return element.configureStyles([]string{"MarginRight"}, MarginRight(0))
+	return element.configureStyles([]string{"MarginRight"}, styleMarginRight(0))
 }
 
-// Mr1 matches Rust's mr_1 helper.
-func Mr1() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginRight(4)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mr0 matches Rust's mr_0 helper.
+func (style StyleBuilder) Mr0() StyleBuilder { return style.configure(styleMarginRight(0)) }
 
 // Mr1 matches Rust's mr_1 helper.
 func (element *Element) Mr1() *Element {
-	return element.configureStyles([]string{"MarginRight"}, MarginRight(4))
+	return element.configureStyles([]string{"MarginRight"}, styleMarginRight(4))
 }
 
-// Mr10 matches Rust's mr_10 helper.
-func Mr10() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginRight(40)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mr1 matches Rust's mr_1 helper.
+func (style StyleBuilder) Mr1() StyleBuilder { return style.configure(styleMarginRight(4)) }
 
 // Mr10 matches Rust's mr_10 helper.
 func (element *Element) Mr10() *Element {
-	return element.configureStyles([]string{"MarginRight"}, MarginRight(40))
+	return element.configureStyles([]string{"MarginRight"}, styleMarginRight(40))
 }
 
-// Mr12 matches Rust's mr_12 helper.
-func Mr12() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginRight(48)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mr10 matches Rust's mr_10 helper.
+func (style StyleBuilder) Mr10() StyleBuilder { return style.configure(styleMarginRight(40)) }
 
 // Mr12 matches Rust's mr_12 helper.
 func (element *Element) Mr12() *Element {
-	return element.configureStyles([]string{"MarginRight"}, MarginRight(48))
+	return element.configureStyles([]string{"MarginRight"}, styleMarginRight(48))
 }
 
-// Mr16 matches Rust's mr_16 helper.
-func Mr16() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginRight(64)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mr12 matches Rust's mr_12 helper.
+func (style StyleBuilder) Mr12() StyleBuilder { return style.configure(styleMarginRight(48)) }
 
 // Mr16 matches Rust's mr_16 helper.
 func (element *Element) Mr16() *Element {
-	return element.configureStyles([]string{"MarginRight"}, MarginRight(64))
+	return element.configureStyles([]string{"MarginRight"}, styleMarginRight(64))
 }
 
-// Mr2 matches Rust's mr_2 helper.
-func Mr2() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginRight(8)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mr16 matches Rust's mr_16 helper.
+func (style StyleBuilder) Mr16() StyleBuilder { return style.configure(styleMarginRight(64)) }
 
 // Mr2 matches Rust's mr_2 helper.
 func (element *Element) Mr2() *Element {
-	return element.configureStyles([]string{"MarginRight"}, MarginRight(8))
+	return element.configureStyles([]string{"MarginRight"}, styleMarginRight(8))
 }
 
-// Mr20 matches Rust's mr_20 helper.
-func Mr20() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginRight(80)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mr2 matches Rust's mr_2 helper.
+func (style StyleBuilder) Mr2() StyleBuilder { return style.configure(styleMarginRight(8)) }
 
 // Mr20 matches Rust's mr_20 helper.
 func (element *Element) Mr20() *Element {
-	return element.configureStyles([]string{"MarginRight"}, MarginRight(80))
+	return element.configureStyles([]string{"MarginRight"}, styleMarginRight(80))
 }
 
-// Mr24 matches Rust's mr_24 helper.
-func Mr24() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginRight(96)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mr20 matches Rust's mr_20 helper.
+func (style StyleBuilder) Mr20() StyleBuilder { return style.configure(styleMarginRight(80)) }
 
 // Mr24 matches Rust's mr_24 helper.
 func (element *Element) Mr24() *Element {
-	return element.configureStyles([]string{"MarginRight"}, MarginRight(96))
+	return element.configureStyles([]string{"MarginRight"}, styleMarginRight(96))
 }
 
-// Mr3 matches Rust's mr_3 helper.
-func Mr3() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginRight(12)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mr24 matches Rust's mr_24 helper.
+func (style StyleBuilder) Mr24() StyleBuilder { return style.configure(styleMarginRight(96)) }
 
 // Mr3 matches Rust's mr_3 helper.
 func (element *Element) Mr3() *Element {
-	return element.configureStyles([]string{"MarginRight"}, MarginRight(12))
+	return element.configureStyles([]string{"MarginRight"}, styleMarginRight(12))
 }
 
-// Mr32 matches Rust's mr_32 helper.
-func Mr32() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginRight(128)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mr3 matches Rust's mr_3 helper.
+func (style StyleBuilder) Mr3() StyleBuilder { return style.configure(styleMarginRight(12)) }
 
 // Mr32 matches Rust's mr_32 helper.
 func (element *Element) Mr32() *Element {
-	return element.configureStyles([]string{"MarginRight"}, MarginRight(128))
+	return element.configureStyles([]string{"MarginRight"}, styleMarginRight(128))
 }
 
-// Mr4 matches Rust's mr_4 helper.
-func Mr4() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginRight(16)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mr32 matches Rust's mr_32 helper.
+func (style StyleBuilder) Mr32() StyleBuilder { return style.configure(styleMarginRight(128)) }
 
 // Mr4 matches Rust's mr_4 helper.
 func (element *Element) Mr4() *Element {
-	return element.configureStyles([]string{"MarginRight"}, MarginRight(16))
+	return element.configureStyles([]string{"MarginRight"}, styleMarginRight(16))
 }
 
-// Mr5 matches Rust's mr_5 helper.
-func Mr5() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginRight(20)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mr4 matches Rust's mr_4 helper.
+func (style StyleBuilder) Mr4() StyleBuilder { return style.configure(styleMarginRight(16)) }
 
 // Mr5 matches Rust's mr_5 helper.
 func (element *Element) Mr5() *Element {
-	return element.configureStyles([]string{"MarginRight"}, MarginRight(20))
+	return element.configureStyles([]string{"MarginRight"}, styleMarginRight(20))
 }
 
-// Mr6 matches Rust's mr_6 helper.
-func Mr6() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginRight(24)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mr5 matches Rust's mr_5 helper.
+func (style StyleBuilder) Mr5() StyleBuilder { return style.configure(styleMarginRight(20)) }
 
 // Mr6 matches Rust's mr_6 helper.
 func (element *Element) Mr6() *Element {
-	return element.configureStyles([]string{"MarginRight"}, MarginRight(24))
+	return element.configureStyles([]string{"MarginRight"}, styleMarginRight(24))
 }
 
-// Mr8 matches Rust's mr_8 helper.
-func Mr8() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginRight(32)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mr6 matches Rust's mr_6 helper.
+func (style StyleBuilder) Mr6() StyleBuilder { return style.configure(styleMarginRight(24)) }
 
 // Mr8 matches Rust's mr_8 helper.
 func (element *Element) Mr8() *Element {
-	return element.configureStyles([]string{"MarginRight"}, MarginRight(32))
+	return element.configureStyles([]string{"MarginRight"}, styleMarginRight(32))
 }
 
-// MrAuto matches Rust's mr_auto helper.
-func MrAuto() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginRight("auto")} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mr8 matches Rust's mr_8 helper.
+func (style StyleBuilder) Mr8() StyleBuilder { return style.configure(styleMarginRight(32)) }
 
 // MrAuto matches Rust's mr_auto helper.
 func (element *Element) MrAuto() *Element {
-	return element.configureStyles([]string{"MarginRight"}, MarginRight("auto"))
+	return element.configureStyles([]string{"MarginRight"}, styleMarginRight("auto"))
 }
 
-// Ms matches Rust's ms helper.
-func Ms(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginStart(value)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// MrAuto matches Rust's mr_auto helper.
+func (style StyleBuilder) MrAuto() StyleBuilder { return style.configure(styleMarginRight("auto")) }
 
 // Ms matches Rust's ms helper.
 func (element *Element) Ms(value any) *Element {
-	return element.configureStyles([]string{"MarginStart"}, MarginStart(value))
+	return element.configureStyles([]string{"MarginStart"}, styleMarginStart(value))
 }
 
-// Mt matches Rust's mt helper.
-func Mt(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(value)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Ms matches Rust's ms helper.
+func (style StyleBuilder) Ms(value any) StyleBuilder { return style.configure(styleMarginStart(value)) }
 
 // Mt matches Rust's mt helper.
 func (element *Element) Mt(value any) *Element {
-	return element.configureStyles([]string{"MarginTop"}, MarginTop(value))
+	return element.configureStyles([]string{"MarginTop"}, styleMarginTop(value))
 }
 
-// Mt0 matches Rust's mt_0 helper.
-func Mt0() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(0)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mt matches Rust's mt helper.
+func (style StyleBuilder) Mt(value any) StyleBuilder { return style.configure(styleMarginTop(value)) }
 
 // Mt0 matches Rust's mt_0 helper.
 func (element *Element) Mt0() *Element {
-	return element.configureStyles([]string{"MarginTop"}, MarginTop(0))
+	return element.configureStyles([]string{"MarginTop"}, styleMarginTop(0))
 }
 
-// Mt1 matches Rust's mt_1 helper.
-func Mt1() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(4)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mt0 matches Rust's mt_0 helper.
+func (style StyleBuilder) Mt0() StyleBuilder { return style.configure(styleMarginTop(0)) }
 
 // Mt1 matches Rust's mt_1 helper.
 func (element *Element) Mt1() *Element {
-	return element.configureStyles([]string{"MarginTop"}, MarginTop(4))
+	return element.configureStyles([]string{"MarginTop"}, styleMarginTop(4))
 }
 
-// Mt10 matches Rust's mt_10 helper.
-func Mt10() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(40)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mt1 matches Rust's mt_1 helper.
+func (style StyleBuilder) Mt1() StyleBuilder { return style.configure(styleMarginTop(4)) }
 
 // Mt10 matches Rust's mt_10 helper.
 func (element *Element) Mt10() *Element {
-	return element.configureStyles([]string{"MarginTop"}, MarginTop(40))
+	return element.configureStyles([]string{"MarginTop"}, styleMarginTop(40))
 }
 
-// Mt12 matches Rust's mt_12 helper.
-func Mt12() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(48)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mt10 matches Rust's mt_10 helper.
+func (style StyleBuilder) Mt10() StyleBuilder { return style.configure(styleMarginTop(40)) }
 
 // Mt12 matches Rust's mt_12 helper.
 func (element *Element) Mt12() *Element {
-	return element.configureStyles([]string{"MarginTop"}, MarginTop(48))
+	return element.configureStyles([]string{"MarginTop"}, styleMarginTop(48))
 }
 
-// Mt16 matches Rust's mt_16 helper.
-func Mt16() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(64)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mt12 matches Rust's mt_12 helper.
+func (style StyleBuilder) Mt12() StyleBuilder { return style.configure(styleMarginTop(48)) }
 
 // Mt16 matches Rust's mt_16 helper.
 func (element *Element) Mt16() *Element {
-	return element.configureStyles([]string{"MarginTop"}, MarginTop(64))
+	return element.configureStyles([]string{"MarginTop"}, styleMarginTop(64))
 }
 
-// Mt2 matches Rust's mt_2 helper.
-func Mt2() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(8)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mt16 matches Rust's mt_16 helper.
+func (style StyleBuilder) Mt16() StyleBuilder { return style.configure(styleMarginTop(64)) }
 
 // Mt2 matches Rust's mt_2 helper.
 func (element *Element) Mt2() *Element {
-	return element.configureStyles([]string{"MarginTop"}, MarginTop(8))
+	return element.configureStyles([]string{"MarginTop"}, styleMarginTop(8))
 }
 
-// Mt20 matches Rust's mt_20 helper.
-func Mt20() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(80)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mt2 matches Rust's mt_2 helper.
+func (style StyleBuilder) Mt2() StyleBuilder { return style.configure(styleMarginTop(8)) }
 
 // Mt20 matches Rust's mt_20 helper.
 func (element *Element) Mt20() *Element {
-	return element.configureStyles([]string{"MarginTop"}, MarginTop(80))
+	return element.configureStyles([]string{"MarginTop"}, styleMarginTop(80))
 }
 
-// Mt24 matches Rust's mt_24 helper.
-func Mt24() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(96)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mt20 matches Rust's mt_20 helper.
+func (style StyleBuilder) Mt20() StyleBuilder { return style.configure(styleMarginTop(80)) }
 
 // Mt24 matches Rust's mt_24 helper.
 func (element *Element) Mt24() *Element {
-	return element.configureStyles([]string{"MarginTop"}, MarginTop(96))
+	return element.configureStyles([]string{"MarginTop"}, styleMarginTop(96))
 }
 
-// Mt3 matches Rust's mt_3 helper.
-func Mt3() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(12)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mt24 matches Rust's mt_24 helper.
+func (style StyleBuilder) Mt24() StyleBuilder { return style.configure(styleMarginTop(96)) }
 
 // Mt3 matches Rust's mt_3 helper.
 func (element *Element) Mt3() *Element {
-	return element.configureStyles([]string{"MarginTop"}, MarginTop(12))
+	return element.configureStyles([]string{"MarginTop"}, styleMarginTop(12))
 }
 
-// Mt32 matches Rust's mt_32 helper.
-func Mt32() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(128)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mt3 matches Rust's mt_3 helper.
+func (style StyleBuilder) Mt3() StyleBuilder { return style.configure(styleMarginTop(12)) }
 
 // Mt32 matches Rust's mt_32 helper.
 func (element *Element) Mt32() *Element {
-	return element.configureStyles([]string{"MarginTop"}, MarginTop(128))
+	return element.configureStyles([]string{"MarginTop"}, styleMarginTop(128))
 }
 
-// Mt4 matches Rust's mt_4 helper.
-func Mt4() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(16)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mt32 matches Rust's mt_32 helper.
+func (style StyleBuilder) Mt32() StyleBuilder { return style.configure(styleMarginTop(128)) }
 
 // Mt4 matches Rust's mt_4 helper.
 func (element *Element) Mt4() *Element {
-	return element.configureStyles([]string{"MarginTop"}, MarginTop(16))
+	return element.configureStyles([]string{"MarginTop"}, styleMarginTop(16))
 }
 
-// Mt5 matches Rust's mt_5 helper.
-func Mt5() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(20)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mt4 matches Rust's mt_4 helper.
+func (style StyleBuilder) Mt4() StyleBuilder { return style.configure(styleMarginTop(16)) }
 
 // Mt5 matches Rust's mt_5 helper.
 func (element *Element) Mt5() *Element {
-	return element.configureStyles([]string{"MarginTop"}, MarginTop(20))
+	return element.configureStyles([]string{"MarginTop"}, styleMarginTop(20))
 }
 
-// Mt6 matches Rust's mt_6 helper.
-func Mt6() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(24)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mt5 matches Rust's mt_5 helper.
+func (style StyleBuilder) Mt5() StyleBuilder { return style.configure(styleMarginTop(20)) }
 
 // Mt6 matches Rust's mt_6 helper.
 func (element *Element) Mt6() *Element {
-	return element.configureStyles([]string{"MarginTop"}, MarginTop(24))
+	return element.configureStyles([]string{"MarginTop"}, styleMarginTop(24))
 }
 
-// Mt8 matches Rust's mt_8 helper.
-func Mt8() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(32)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mt6 matches Rust's mt_6 helper.
+func (style StyleBuilder) Mt6() StyleBuilder { return style.configure(styleMarginTop(24)) }
 
 // Mt8 matches Rust's mt_8 helper.
 func (element *Element) Mt8() *Element {
-	return element.configureStyles([]string{"MarginTop"}, MarginTop(32))
+	return element.configureStyles([]string{"MarginTop"}, styleMarginTop(32))
 }
 
-// MtAuto matches Rust's mt_auto helper.
-func MtAuto() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop("auto")} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Mt8 matches Rust's mt_8 helper.
+func (style StyleBuilder) Mt8() StyleBuilder { return style.configure(styleMarginTop(32)) }
 
 // MtAuto matches Rust's mt_auto helper.
 func (element *Element) MtAuto() *Element {
-	return element.configureStyles([]string{"MarginTop"}, MarginTop("auto"))
+	return element.configureStyles([]string{"MarginTop"}, styleMarginTop("auto"))
 }
 
-// Mx matches Rust's mx helper.
-func Mx(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginLeft(value), MarginRight(value)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// MtAuto matches Rust's mt_auto helper.
+func (style StyleBuilder) MtAuto() StyleBuilder { return style.configure(styleMarginTop("auto")) }
 
 // Mx matches Rust's mx helper.
 func (element *Element) Mx(value any) *Element {
-	return element.configureStyles([]string{"MarginLeft", "MarginRight"}, MarginLeft(value), MarginRight(value))
+	return element.configureStyles([]string{"MarginLeft", "MarginRight"}, styleMarginLeft(value), styleMarginRight(value))
 }
 
-// Mx0 matches Rust's mx_0 helper.
-func Mx0() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginLeft(0), MarginRight(0)} {
-			option.applyStyle(style)
-		}
-	}
+// Mx matches Rust's mx helper.
+func (style StyleBuilder) Mx(value any) StyleBuilder {
+	return style.configure(styleMarginLeft(value), styleMarginRight(value))
 }
 
 // Mx0 matches Rust's mx_0 helper.
 func (element *Element) Mx0() *Element {
-	return element.configureStyles([]string{"MarginLeft", "MarginRight"}, MarginLeft(0), MarginRight(0))
+	return element.configureStyles([]string{"MarginLeft", "MarginRight"}, styleMarginLeft(0), styleMarginRight(0))
 }
 
-// Mx1 matches Rust's mx_1 helper.
-func Mx1() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginLeft(4), MarginRight(4)} {
-			option.applyStyle(style)
-		}
-	}
+// Mx0 matches Rust's mx_0 helper.
+func (style StyleBuilder) Mx0() StyleBuilder {
+	return style.configure(styleMarginLeft(0), styleMarginRight(0))
 }
 
 // Mx1 matches Rust's mx_1 helper.
 func (element *Element) Mx1() *Element {
-	return element.configureStyles([]string{"MarginLeft", "MarginRight"}, MarginLeft(4), MarginRight(4))
+	return element.configureStyles([]string{"MarginLeft", "MarginRight"}, styleMarginLeft(4), styleMarginRight(4))
 }
 
-// Mx10 matches Rust's mx_10 helper.
-func Mx10() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginLeft(40), MarginRight(40)} {
-			option.applyStyle(style)
-		}
-	}
+// Mx1 matches Rust's mx_1 helper.
+func (style StyleBuilder) Mx1() StyleBuilder {
+	return style.configure(styleMarginLeft(4), styleMarginRight(4))
 }
 
 // Mx10 matches Rust's mx_10 helper.
 func (element *Element) Mx10() *Element {
-	return element.configureStyles([]string{"MarginLeft", "MarginRight"}, MarginLeft(40), MarginRight(40))
+	return element.configureStyles([]string{"MarginLeft", "MarginRight"}, styleMarginLeft(40), styleMarginRight(40))
 }
 
-// Mx12 matches Rust's mx_12 helper.
-func Mx12() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginLeft(48), MarginRight(48)} {
-			option.applyStyle(style)
-		}
-	}
+// Mx10 matches Rust's mx_10 helper.
+func (style StyleBuilder) Mx10() StyleBuilder {
+	return style.configure(styleMarginLeft(40), styleMarginRight(40))
 }
 
 // Mx12 matches Rust's mx_12 helper.
 func (element *Element) Mx12() *Element {
-	return element.configureStyles([]string{"MarginLeft", "MarginRight"}, MarginLeft(48), MarginRight(48))
+	return element.configureStyles([]string{"MarginLeft", "MarginRight"}, styleMarginLeft(48), styleMarginRight(48))
 }
 
-// Mx16 matches Rust's mx_16 helper.
-func Mx16() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginLeft(64), MarginRight(64)} {
-			option.applyStyle(style)
-		}
-	}
+// Mx12 matches Rust's mx_12 helper.
+func (style StyleBuilder) Mx12() StyleBuilder {
+	return style.configure(styleMarginLeft(48), styleMarginRight(48))
 }
 
 // Mx16 matches Rust's mx_16 helper.
 func (element *Element) Mx16() *Element {
-	return element.configureStyles([]string{"MarginLeft", "MarginRight"}, MarginLeft(64), MarginRight(64))
+	return element.configureStyles([]string{"MarginLeft", "MarginRight"}, styleMarginLeft(64), styleMarginRight(64))
 }
 
-// Mx2 matches Rust's mx_2 helper.
-func Mx2() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginLeft(8), MarginRight(8)} {
-			option.applyStyle(style)
-		}
-	}
+// Mx16 matches Rust's mx_16 helper.
+func (style StyleBuilder) Mx16() StyleBuilder {
+	return style.configure(styleMarginLeft(64), styleMarginRight(64))
 }
 
 // Mx2 matches Rust's mx_2 helper.
 func (element *Element) Mx2() *Element {
-	return element.configureStyles([]string{"MarginLeft", "MarginRight"}, MarginLeft(8), MarginRight(8))
+	return element.configureStyles([]string{"MarginLeft", "MarginRight"}, styleMarginLeft(8), styleMarginRight(8))
 }
 
-// Mx20 matches Rust's mx_20 helper.
-func Mx20() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginLeft(80), MarginRight(80)} {
-			option.applyStyle(style)
-		}
-	}
+// Mx2 matches Rust's mx_2 helper.
+func (style StyleBuilder) Mx2() StyleBuilder {
+	return style.configure(styleMarginLeft(8), styleMarginRight(8))
 }
 
 // Mx20 matches Rust's mx_20 helper.
 func (element *Element) Mx20() *Element {
-	return element.configureStyles([]string{"MarginLeft", "MarginRight"}, MarginLeft(80), MarginRight(80))
+	return element.configureStyles([]string{"MarginLeft", "MarginRight"}, styleMarginLeft(80), styleMarginRight(80))
 }
 
-// Mx24 matches Rust's mx_24 helper.
-func Mx24() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginLeft(96), MarginRight(96)} {
-			option.applyStyle(style)
-		}
-	}
+// Mx20 matches Rust's mx_20 helper.
+func (style StyleBuilder) Mx20() StyleBuilder {
+	return style.configure(styleMarginLeft(80), styleMarginRight(80))
 }
 
 // Mx24 matches Rust's mx_24 helper.
 func (element *Element) Mx24() *Element {
-	return element.configureStyles([]string{"MarginLeft", "MarginRight"}, MarginLeft(96), MarginRight(96))
+	return element.configureStyles([]string{"MarginLeft", "MarginRight"}, styleMarginLeft(96), styleMarginRight(96))
 }
 
-// Mx3 matches Rust's mx_3 helper.
-func Mx3() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginLeft(12), MarginRight(12)} {
-			option.applyStyle(style)
-		}
-	}
+// Mx24 matches Rust's mx_24 helper.
+func (style StyleBuilder) Mx24() StyleBuilder {
+	return style.configure(styleMarginLeft(96), styleMarginRight(96))
 }
 
 // Mx3 matches Rust's mx_3 helper.
 func (element *Element) Mx3() *Element {
-	return element.configureStyles([]string{"MarginLeft", "MarginRight"}, MarginLeft(12), MarginRight(12))
+	return element.configureStyles([]string{"MarginLeft", "MarginRight"}, styleMarginLeft(12), styleMarginRight(12))
 }
 
-// Mx32 matches Rust's mx_32 helper.
-func Mx32() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginLeft(128), MarginRight(128)} {
-			option.applyStyle(style)
-		}
-	}
+// Mx3 matches Rust's mx_3 helper.
+func (style StyleBuilder) Mx3() StyleBuilder {
+	return style.configure(styleMarginLeft(12), styleMarginRight(12))
 }
 
 // Mx32 matches Rust's mx_32 helper.
 func (element *Element) Mx32() *Element {
-	return element.configureStyles([]string{"MarginLeft", "MarginRight"}, MarginLeft(128), MarginRight(128))
+	return element.configureStyles([]string{"MarginLeft", "MarginRight"}, styleMarginLeft(128), styleMarginRight(128))
 }
 
-// Mx4 matches Rust's mx_4 helper.
-func Mx4() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginLeft(16), MarginRight(16)} {
-			option.applyStyle(style)
-		}
-	}
+// Mx32 matches Rust's mx_32 helper.
+func (style StyleBuilder) Mx32() StyleBuilder {
+	return style.configure(styleMarginLeft(128), styleMarginRight(128))
 }
 
 // Mx4 matches Rust's mx_4 helper.
 func (element *Element) Mx4() *Element {
-	return element.configureStyles([]string{"MarginLeft", "MarginRight"}, MarginLeft(16), MarginRight(16))
+	return element.configureStyles([]string{"MarginLeft", "MarginRight"}, styleMarginLeft(16), styleMarginRight(16))
 }
 
-// Mx5 matches Rust's mx_5 helper.
-func Mx5() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginLeft(20), MarginRight(20)} {
-			option.applyStyle(style)
-		}
-	}
+// Mx4 matches Rust's mx_4 helper.
+func (style StyleBuilder) Mx4() StyleBuilder {
+	return style.configure(styleMarginLeft(16), styleMarginRight(16))
 }
 
 // Mx5 matches Rust's mx_5 helper.
 func (element *Element) Mx5() *Element {
-	return element.configureStyles([]string{"MarginLeft", "MarginRight"}, MarginLeft(20), MarginRight(20))
+	return element.configureStyles([]string{"MarginLeft", "MarginRight"}, styleMarginLeft(20), styleMarginRight(20))
 }
 
-// Mx6 matches Rust's mx_6 helper.
-func Mx6() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginLeft(24), MarginRight(24)} {
-			option.applyStyle(style)
-		}
-	}
+// Mx5 matches Rust's mx_5 helper.
+func (style StyleBuilder) Mx5() StyleBuilder {
+	return style.configure(styleMarginLeft(20), styleMarginRight(20))
 }
 
 // Mx6 matches Rust's mx_6 helper.
 func (element *Element) Mx6() *Element {
-	return element.configureStyles([]string{"MarginLeft", "MarginRight"}, MarginLeft(24), MarginRight(24))
+	return element.configureStyles([]string{"MarginLeft", "MarginRight"}, styleMarginLeft(24), styleMarginRight(24))
 }
 
-// Mx8 matches Rust's mx_8 helper.
-func Mx8() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginLeft(32), MarginRight(32)} {
-			option.applyStyle(style)
-		}
-	}
+// Mx6 matches Rust's mx_6 helper.
+func (style StyleBuilder) Mx6() StyleBuilder {
+	return style.configure(styleMarginLeft(24), styleMarginRight(24))
 }
 
 // Mx8 matches Rust's mx_8 helper.
 func (element *Element) Mx8() *Element {
-	return element.configureStyles([]string{"MarginLeft", "MarginRight"}, MarginLeft(32), MarginRight(32))
+	return element.configureStyles([]string{"MarginLeft", "MarginRight"}, styleMarginLeft(32), styleMarginRight(32))
 }
 
-// MxAuto matches Rust's mx_auto helper.
-func MxAuto() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginLeft("auto"), MarginRight("auto")} {
-			option.applyStyle(style)
-		}
-	}
+// Mx8 matches Rust's mx_8 helper.
+func (style StyleBuilder) Mx8() StyleBuilder {
+	return style.configure(styleMarginLeft(32), styleMarginRight(32))
 }
 
 // MxAuto matches Rust's mx_auto helper.
 func (element *Element) MxAuto() *Element {
-	return element.configureStyles([]string{"MarginLeft", "MarginRight"}, MarginLeft("auto"), MarginRight("auto"))
+	return element.configureStyles([]string{"MarginLeft", "MarginRight"}, styleMarginLeft("auto"), styleMarginRight("auto"))
 }
 
-// My matches Rust's my helper.
-func My(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(value), MarginBottom(value)} {
-			option.applyStyle(style)
-		}
-	}
+// MxAuto matches Rust's mx_auto helper.
+func (style StyleBuilder) MxAuto() StyleBuilder {
+	return style.configure(styleMarginLeft("auto"), styleMarginRight("auto"))
 }
 
 // My matches Rust's my helper.
 func (element *Element) My(value any) *Element {
-	return element.configureStyles([]string{"MarginTop", "MarginBottom"}, MarginTop(value), MarginBottom(value))
+	return element.configureStyles([]string{"MarginTop", "MarginBottom"}, styleMarginTop(value), styleMarginBottom(value))
 }
 
-// My0 matches Rust's my_0 helper.
-func My0() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(0), MarginBottom(0)} {
-			option.applyStyle(style)
-		}
-	}
+// My matches Rust's my helper.
+func (style StyleBuilder) My(value any) StyleBuilder {
+	return style.configure(styleMarginTop(value), styleMarginBottom(value))
 }
 
 // My0 matches Rust's my_0 helper.
 func (element *Element) My0() *Element {
-	return element.configureStyles([]string{"MarginTop", "MarginBottom"}, MarginTop(0), MarginBottom(0))
+	return element.configureStyles([]string{"MarginTop", "MarginBottom"}, styleMarginTop(0), styleMarginBottom(0))
 }
 
-// My1 matches Rust's my_1 helper.
-func My1() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(4), MarginBottom(4)} {
-			option.applyStyle(style)
-		}
-	}
+// My0 matches Rust's my_0 helper.
+func (style StyleBuilder) My0() StyleBuilder {
+	return style.configure(styleMarginTop(0), styleMarginBottom(0))
 }
 
 // My1 matches Rust's my_1 helper.
 func (element *Element) My1() *Element {
-	return element.configureStyles([]string{"MarginTop", "MarginBottom"}, MarginTop(4), MarginBottom(4))
+	return element.configureStyles([]string{"MarginTop", "MarginBottom"}, styleMarginTop(4), styleMarginBottom(4))
 }
 
-// My10 matches Rust's my_10 helper.
-func My10() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(40), MarginBottom(40)} {
-			option.applyStyle(style)
-		}
-	}
+// My1 matches Rust's my_1 helper.
+func (style StyleBuilder) My1() StyleBuilder {
+	return style.configure(styleMarginTop(4), styleMarginBottom(4))
 }
 
 // My10 matches Rust's my_10 helper.
 func (element *Element) My10() *Element {
-	return element.configureStyles([]string{"MarginTop", "MarginBottom"}, MarginTop(40), MarginBottom(40))
+	return element.configureStyles([]string{"MarginTop", "MarginBottom"}, styleMarginTop(40), styleMarginBottom(40))
 }
 
-// My12 matches Rust's my_12 helper.
-func My12() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(48), MarginBottom(48)} {
-			option.applyStyle(style)
-		}
-	}
+// My10 matches Rust's my_10 helper.
+func (style StyleBuilder) My10() StyleBuilder {
+	return style.configure(styleMarginTop(40), styleMarginBottom(40))
 }
 
 // My12 matches Rust's my_12 helper.
 func (element *Element) My12() *Element {
-	return element.configureStyles([]string{"MarginTop", "MarginBottom"}, MarginTop(48), MarginBottom(48))
+	return element.configureStyles([]string{"MarginTop", "MarginBottom"}, styleMarginTop(48), styleMarginBottom(48))
 }
 
-// My16 matches Rust's my_16 helper.
-func My16() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(64), MarginBottom(64)} {
-			option.applyStyle(style)
-		}
-	}
+// My12 matches Rust's my_12 helper.
+func (style StyleBuilder) My12() StyleBuilder {
+	return style.configure(styleMarginTop(48), styleMarginBottom(48))
 }
 
 // My16 matches Rust's my_16 helper.
 func (element *Element) My16() *Element {
-	return element.configureStyles([]string{"MarginTop", "MarginBottom"}, MarginTop(64), MarginBottom(64))
+	return element.configureStyles([]string{"MarginTop", "MarginBottom"}, styleMarginTop(64), styleMarginBottom(64))
 }
 
-// My2 matches Rust's my_2 helper.
-func My2() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(8), MarginBottom(8)} {
-			option.applyStyle(style)
-		}
-	}
+// My16 matches Rust's my_16 helper.
+func (style StyleBuilder) My16() StyleBuilder {
+	return style.configure(styleMarginTop(64), styleMarginBottom(64))
 }
 
 // My2 matches Rust's my_2 helper.
 func (element *Element) My2() *Element {
-	return element.configureStyles([]string{"MarginTop", "MarginBottom"}, MarginTop(8), MarginBottom(8))
+	return element.configureStyles([]string{"MarginTop", "MarginBottom"}, styleMarginTop(8), styleMarginBottom(8))
 }
 
-// My20 matches Rust's my_20 helper.
-func My20() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(80), MarginBottom(80)} {
-			option.applyStyle(style)
-		}
-	}
+// My2 matches Rust's my_2 helper.
+func (style StyleBuilder) My2() StyleBuilder {
+	return style.configure(styleMarginTop(8), styleMarginBottom(8))
 }
 
 // My20 matches Rust's my_20 helper.
 func (element *Element) My20() *Element {
-	return element.configureStyles([]string{"MarginTop", "MarginBottom"}, MarginTop(80), MarginBottom(80))
+	return element.configureStyles([]string{"MarginTop", "MarginBottom"}, styleMarginTop(80), styleMarginBottom(80))
 }
 
-// My24 matches Rust's my_24 helper.
-func My24() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(96), MarginBottom(96)} {
-			option.applyStyle(style)
-		}
-	}
+// My20 matches Rust's my_20 helper.
+func (style StyleBuilder) My20() StyleBuilder {
+	return style.configure(styleMarginTop(80), styleMarginBottom(80))
 }
 
 // My24 matches Rust's my_24 helper.
 func (element *Element) My24() *Element {
-	return element.configureStyles([]string{"MarginTop", "MarginBottom"}, MarginTop(96), MarginBottom(96))
+	return element.configureStyles([]string{"MarginTop", "MarginBottom"}, styleMarginTop(96), styleMarginBottom(96))
 }
 
-// My3 matches Rust's my_3 helper.
-func My3() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(12), MarginBottom(12)} {
-			option.applyStyle(style)
-		}
-	}
+// My24 matches Rust's my_24 helper.
+func (style StyleBuilder) My24() StyleBuilder {
+	return style.configure(styleMarginTop(96), styleMarginBottom(96))
 }
 
 // My3 matches Rust's my_3 helper.
 func (element *Element) My3() *Element {
-	return element.configureStyles([]string{"MarginTop", "MarginBottom"}, MarginTop(12), MarginBottom(12))
+	return element.configureStyles([]string{"MarginTop", "MarginBottom"}, styleMarginTop(12), styleMarginBottom(12))
 }
 
-// My32 matches Rust's my_32 helper.
-func My32() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(128), MarginBottom(128)} {
-			option.applyStyle(style)
-		}
-	}
+// My3 matches Rust's my_3 helper.
+func (style StyleBuilder) My3() StyleBuilder {
+	return style.configure(styleMarginTop(12), styleMarginBottom(12))
 }
 
 // My32 matches Rust's my_32 helper.
 func (element *Element) My32() *Element {
-	return element.configureStyles([]string{"MarginTop", "MarginBottom"}, MarginTop(128), MarginBottom(128))
+	return element.configureStyles([]string{"MarginTop", "MarginBottom"}, styleMarginTop(128), styleMarginBottom(128))
 }
 
-// My4 matches Rust's my_4 helper.
-func My4() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(16), MarginBottom(16)} {
-			option.applyStyle(style)
-		}
-	}
+// My32 matches Rust's my_32 helper.
+func (style StyleBuilder) My32() StyleBuilder {
+	return style.configure(styleMarginTop(128), styleMarginBottom(128))
 }
 
 // My4 matches Rust's my_4 helper.
 func (element *Element) My4() *Element {
-	return element.configureStyles([]string{"MarginTop", "MarginBottom"}, MarginTop(16), MarginBottom(16))
+	return element.configureStyles([]string{"MarginTop", "MarginBottom"}, styleMarginTop(16), styleMarginBottom(16))
 }
 
-// My5 matches Rust's my_5 helper.
-func My5() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(20), MarginBottom(20)} {
-			option.applyStyle(style)
-		}
-	}
+// My4 matches Rust's my_4 helper.
+func (style StyleBuilder) My4() StyleBuilder {
+	return style.configure(styleMarginTop(16), styleMarginBottom(16))
 }
 
 // My5 matches Rust's my_5 helper.
 func (element *Element) My5() *Element {
-	return element.configureStyles([]string{"MarginTop", "MarginBottom"}, MarginTop(20), MarginBottom(20))
+	return element.configureStyles([]string{"MarginTop", "MarginBottom"}, styleMarginTop(20), styleMarginBottom(20))
 }
 
-// My6 matches Rust's my_6 helper.
-func My6() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(24), MarginBottom(24)} {
-			option.applyStyle(style)
-		}
-	}
+// My5 matches Rust's my_5 helper.
+func (style StyleBuilder) My5() StyleBuilder {
+	return style.configure(styleMarginTop(20), styleMarginBottom(20))
 }
 
 // My6 matches Rust's my_6 helper.
 func (element *Element) My6() *Element {
-	return element.configureStyles([]string{"MarginTop", "MarginBottom"}, MarginTop(24), MarginBottom(24))
+	return element.configureStyles([]string{"MarginTop", "MarginBottom"}, styleMarginTop(24), styleMarginBottom(24))
 }
 
-// My8 matches Rust's my_8 helper.
-func My8() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop(32), MarginBottom(32)} {
-			option.applyStyle(style)
-		}
-	}
+// My6 matches Rust's my_6 helper.
+func (style StyleBuilder) My6() StyleBuilder {
+	return style.configure(styleMarginTop(24), styleMarginBottom(24))
 }
 
 // My8 matches Rust's my_8 helper.
 func (element *Element) My8() *Element {
-	return element.configureStyles([]string{"MarginTop", "MarginBottom"}, MarginTop(32), MarginBottom(32))
+	return element.configureStyles([]string{"MarginTop", "MarginBottom"}, styleMarginTop(32), styleMarginBottom(32))
 }
 
-// MyAuto matches Rust's my_auto helper.
-func MyAuto() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{MarginTop("auto"), MarginBottom("auto")} {
-			option.applyStyle(style)
-		}
-	}
+// My8 matches Rust's my_8 helper.
+func (style StyleBuilder) My8() StyleBuilder {
+	return style.configure(styleMarginTop(32), styleMarginBottom(32))
 }
 
 // MyAuto matches Rust's my_auto helper.
 func (element *Element) MyAuto() *Element {
-	return element.configureStyles([]string{"MarginTop", "MarginBottom"}, MarginTop("auto"), MarginBottom("auto"))
+	return element.configureStyles([]string{"MarginTop", "MarginBottom"}, styleMarginTop("auto"), styleMarginBottom("auto"))
 }
 
-// OverflowHidden matches Rust's overflow_hidden helper.
-func OverflowHidden() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{OverflowX("hidden"), OverflowY("hidden")} {
-			option.applyStyle(style)
-		}
-	}
+// MyAuto matches Rust's my_auto helper.
+func (style StyleBuilder) MyAuto() StyleBuilder {
+	return style.configure(styleMarginTop("auto"), styleMarginBottom("auto"))
 }
 
 // OverflowHidden matches Rust's overflow_hidden helper.
 func (element *Element) OverflowHidden() *Element {
-	return element.configureStyles([]string{"OverflowX", "OverflowY"}, OverflowX("hidden"), OverflowY("hidden"))
+	return element.configureStyles([]string{"OverflowX", "OverflowY"}, styleOverflowX("hidden"), styleOverflowY("hidden"))
 }
 
-// OverflowScroll matches Rust's overflow_scroll helper.
-func OverflowScroll() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{OverflowX("scroll"), OverflowY("scroll")} {
-			option.applyStyle(style)
-		}
-	}
+// OverflowHidden matches Rust's overflow_hidden helper.
+func (style StyleBuilder) OverflowHidden() StyleBuilder {
+	return style.configure(styleOverflowX("hidden"), styleOverflowY("hidden"))
 }
 
 // OverflowScroll matches Rust's overflow_scroll helper.
 func (element *Element) OverflowScroll() *Element {
-	return element.configureStyles([]string{"OverflowX", "OverflowY"}, OverflowX("scroll"), OverflowY("scroll"))
+	return element.configureStyles([]string{"OverflowX", "OverflowY"}, styleOverflowX("scroll"), styleOverflowY("scroll"))
 }
 
-// OverflowXScroll matches Rust's overflow_x_scroll helper.
-func OverflowXScroll() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{OverflowX("scroll"), OverflowY("hidden")} {
-			option.applyStyle(style)
-		}
-	}
+// OverflowScroll matches Rust's overflow_scroll helper.
+func (style StyleBuilder) OverflowScroll() StyleBuilder {
+	return style.configure(styleOverflowX("scroll"), styleOverflowY("scroll"))
 }
 
 // OverflowXScroll matches Rust's overflow_x_scroll helper.
 func (element *Element) OverflowXScroll() *Element {
-	return element.configureStyles([]string{"OverflowX", "OverflowY"}, OverflowX("scroll"), OverflowY("hidden"))
+	return element.configureStyles([]string{"OverflowX", "OverflowY"}, styleOverflowX("scroll"), styleOverflowY("hidden"))
 }
 
-// OverflowYScroll matches Rust's overflow_y_scroll helper.
-func OverflowYScroll() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{OverflowX("hidden"), OverflowY("scroll")} {
-			option.applyStyle(style)
-		}
-	}
+// OverflowXScroll matches Rust's overflow_x_scroll helper.
+func (style StyleBuilder) OverflowXScroll() StyleBuilder {
+	return style.configure(styleOverflowX("scroll"), styleOverflowY("hidden"))
 }
 
 // OverflowYScroll matches Rust's overflow_y_scroll helper.
 func (element *Element) OverflowYScroll() *Element {
-	return element.configureStyles([]string{"OverflowX", "OverflowY"}, OverflowX("hidden"), OverflowY("scroll"))
+	return element.configureStyles([]string{"OverflowX", "OverflowY"}, styleOverflowX("hidden"), styleOverflowY("scroll"))
 }
 
-// P matches Rust's p helper.
-func P(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{PaddingTop(value), PaddingRight(value), PaddingBottom(value), PaddingLeft(value)} {
-			option.applyStyle(style)
-		}
-	}
+// OverflowYScroll matches Rust's overflow_y_scroll helper.
+func (style StyleBuilder) OverflowYScroll() StyleBuilder {
+	return style.configure(styleOverflowX("hidden"), styleOverflowY("scroll"))
 }
 
 // P matches Rust's p helper.
 func (element *Element) P(value any) *Element {
-	return element.configureStyles([]string{"PaddingTop", "PaddingRight", "PaddingBottom", "PaddingLeft"}, PaddingTop(value), PaddingRight(value), PaddingBottom(value), PaddingLeft(value))
+	return element.configureStyles([]string{"PaddingTop", "PaddingRight", "PaddingBottom", "PaddingLeft"}, stylePaddingTop(value), stylePaddingRight(value), stylePaddingBottom(value), stylePaddingLeft(value))
 }
 
-// P1 matches Rust's p_1 helper.
-func P1() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{PaddingTop(4), PaddingRight(4), PaddingBottom(4), PaddingLeft(4)} {
-			option.applyStyle(style)
-		}
-	}
+// P matches Rust's p helper.
+func (style StyleBuilder) P(value any) StyleBuilder {
+	return style.configure(stylePaddingTop(value), stylePaddingRight(value), stylePaddingBottom(value), stylePaddingLeft(value))
 }
 
 // P1 matches Rust's p_1 helper.
 func (element *Element) P1() *Element {
-	return element.configureStyles([]string{"PaddingTop", "PaddingRight", "PaddingBottom", "PaddingLeft"}, PaddingTop(4), PaddingRight(4), PaddingBottom(4), PaddingLeft(4))
+	return element.configureStyles([]string{"PaddingTop", "PaddingRight", "PaddingBottom", "PaddingLeft"}, stylePaddingTop(4), stylePaddingRight(4), stylePaddingBottom(4), stylePaddingLeft(4))
 }
 
-// P2 matches Rust's p_2 helper.
-func P2() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{PaddingTop(8), PaddingRight(8), PaddingBottom(8), PaddingLeft(8)} {
-			option.applyStyle(style)
-		}
-	}
+// P1 matches Rust's p_1 helper.
+func (style StyleBuilder) P1() StyleBuilder {
+	return style.configure(stylePaddingTop(4), stylePaddingRight(4), stylePaddingBottom(4), stylePaddingLeft(4))
 }
 
 // P2 matches Rust's p_2 helper.
 func (element *Element) P2() *Element {
-	return element.configureStyles([]string{"PaddingTop", "PaddingRight", "PaddingBottom", "PaddingLeft"}, PaddingTop(8), PaddingRight(8), PaddingBottom(8), PaddingLeft(8))
+	return element.configureStyles([]string{"PaddingTop", "PaddingRight", "PaddingBottom", "PaddingLeft"}, stylePaddingTop(8), stylePaddingRight(8), stylePaddingBottom(8), stylePaddingLeft(8))
 }
 
-// P3 matches Rust's p_3 helper.
-func P3() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{PaddingTop(12), PaddingRight(12), PaddingBottom(12), PaddingLeft(12)} {
-			option.applyStyle(style)
-		}
-	}
+// P2 matches Rust's p_2 helper.
+func (style StyleBuilder) P2() StyleBuilder {
+	return style.configure(stylePaddingTop(8), stylePaddingRight(8), stylePaddingBottom(8), stylePaddingLeft(8))
 }
 
 // P3 matches Rust's p_3 helper.
 func (element *Element) P3() *Element {
-	return element.configureStyles([]string{"PaddingTop", "PaddingRight", "PaddingBottom", "PaddingLeft"}, PaddingTop(12), PaddingRight(12), PaddingBottom(12), PaddingLeft(12))
+	return element.configureStyles([]string{"PaddingTop", "PaddingRight", "PaddingBottom", "PaddingLeft"}, stylePaddingTop(12), stylePaddingRight(12), stylePaddingBottom(12), stylePaddingLeft(12))
 }
 
-// P4 matches Rust's p_4 helper.
-func P4() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{PaddingTop(16), PaddingRight(16), PaddingBottom(16), PaddingLeft(16)} {
-			option.applyStyle(style)
-		}
-	}
+// P3 matches Rust's p_3 helper.
+func (style StyleBuilder) P3() StyleBuilder {
+	return style.configure(stylePaddingTop(12), stylePaddingRight(12), stylePaddingBottom(12), stylePaddingLeft(12))
 }
 
 // P4 matches Rust's p_4 helper.
 func (element *Element) P4() *Element {
-	return element.configureStyles([]string{"PaddingTop", "PaddingRight", "PaddingBottom", "PaddingLeft"}, PaddingTop(16), PaddingRight(16), PaddingBottom(16), PaddingLeft(16))
+	return element.configureStyles([]string{"PaddingTop", "PaddingRight", "PaddingBottom", "PaddingLeft"}, stylePaddingTop(16), stylePaddingRight(16), stylePaddingBottom(16), stylePaddingLeft(16))
 }
 
-// P5 matches Rust's p_5 helper.
-func P5() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{PaddingTop(20), PaddingRight(20), PaddingBottom(20), PaddingLeft(20)} {
-			option.applyStyle(style)
-		}
-	}
+// P4 matches Rust's p_4 helper.
+func (style StyleBuilder) P4() StyleBuilder {
+	return style.configure(stylePaddingTop(16), stylePaddingRight(16), stylePaddingBottom(16), stylePaddingLeft(16))
 }
 
 // P5 matches Rust's p_5 helper.
 func (element *Element) P5() *Element {
-	return element.configureStyles([]string{"PaddingTop", "PaddingRight", "PaddingBottom", "PaddingLeft"}, PaddingTop(20), PaddingRight(20), PaddingBottom(20), PaddingLeft(20))
+	return element.configureStyles([]string{"PaddingTop", "PaddingRight", "PaddingBottom", "PaddingLeft"}, stylePaddingTop(20), stylePaddingRight(20), stylePaddingBottom(20), stylePaddingLeft(20))
 }
 
-// P6 matches Rust's p_6 helper.
-func P6() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{PaddingTop(24), PaddingRight(24), PaddingBottom(24), PaddingLeft(24)} {
-			option.applyStyle(style)
-		}
-	}
+// P5 matches Rust's p_5 helper.
+func (style StyleBuilder) P5() StyleBuilder {
+	return style.configure(stylePaddingTop(20), stylePaddingRight(20), stylePaddingBottom(20), stylePaddingLeft(20))
 }
 
 // P6 matches Rust's p_6 helper.
 func (element *Element) P6() *Element {
-	return element.configureStyles([]string{"PaddingTop", "PaddingRight", "PaddingBottom", "PaddingLeft"}, PaddingTop(24), PaddingRight(24), PaddingBottom(24), PaddingLeft(24))
+	return element.configureStyles([]string{"PaddingTop", "PaddingRight", "PaddingBottom", "PaddingLeft"}, stylePaddingTop(24), stylePaddingRight(24), stylePaddingBottom(24), stylePaddingLeft(24))
 }
 
-// Pe matches Rust's pe helper.
-func Pe(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{PaddingEnd(value)} {
-			option.applyStyle(style)
-		}
-	}
+// P6 matches Rust's p_6 helper.
+func (style StyleBuilder) P6() StyleBuilder {
+	return style.configure(stylePaddingTop(24), stylePaddingRight(24), stylePaddingBottom(24), stylePaddingLeft(24))
 }
 
 // Pe matches Rust's pe helper.
 func (element *Element) Pe(value any) *Element {
-	return element.configureStyles([]string{"PaddingEnd"}, PaddingEnd(value))
+	return element.configureStyles([]string{"PaddingEnd"}, stylePaddingEnd(value))
 }
 
-// Ps matches Rust's ps helper.
-func Ps(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{PaddingStart(value)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Pe matches Rust's pe helper.
+func (style StyleBuilder) Pe(value any) StyleBuilder { return style.configure(stylePaddingEnd(value)) }
 
 // Ps matches Rust's ps helper.
 func (element *Element) Ps(value any) *Element {
-	return element.configureStyles([]string{"PaddingStart"}, PaddingStart(value))
+	return element.configureStyles([]string{"PaddingStart"}, stylePaddingStart(value))
 }
 
-// Px matches Rust's px helper.
-func Px(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{PaddingLeft(value), PaddingRight(value)} {
-			option.applyStyle(style)
-		}
-	}
+// Ps matches Rust's ps helper.
+func (style StyleBuilder) Ps(value any) StyleBuilder {
+	return style.configure(stylePaddingStart(value))
 }
 
 // Px matches Rust's px helper.
 func (element *Element) Px(value any) *Element {
-	return element.configureStyles([]string{"PaddingLeft", "PaddingRight"}, PaddingLeft(value), PaddingRight(value))
+	return element.configureStyles([]string{"PaddingLeft", "PaddingRight"}, stylePaddingLeft(value), stylePaddingRight(value))
 }
 
-// Px2 matches Rust's px_2 helper.
-func Px2() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{PaddingLeft(8), PaddingRight(8)} {
-			option.applyStyle(style)
-		}
-	}
+// Px matches Rust's px helper.
+func (style StyleBuilder) Px(value any) StyleBuilder {
+	return style.configure(stylePaddingLeft(value), stylePaddingRight(value))
 }
 
 // Px2 matches Rust's px_2 helper.
 func (element *Element) Px2() *Element {
-	return element.configureStyles([]string{"PaddingLeft", "PaddingRight"}, PaddingLeft(8), PaddingRight(8))
+	return element.configureStyles([]string{"PaddingLeft", "PaddingRight"}, stylePaddingLeft(8), stylePaddingRight(8))
 }
 
-// Px3 matches Rust's px_3 helper.
-func Px3() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{PaddingLeft(12), PaddingRight(12)} {
-			option.applyStyle(style)
-		}
-	}
+// Px2 matches Rust's px_2 helper.
+func (style StyleBuilder) Px2() StyleBuilder {
+	return style.configure(stylePaddingLeft(8), stylePaddingRight(8))
 }
 
 // Px3 matches Rust's px_3 helper.
 func (element *Element) Px3() *Element {
-	return element.configureStyles([]string{"PaddingLeft", "PaddingRight"}, PaddingLeft(12), PaddingRight(12))
+	return element.configureStyles([]string{"PaddingLeft", "PaddingRight"}, stylePaddingLeft(12), stylePaddingRight(12))
 }
 
-// Px4 matches Rust's px_4 helper.
-func Px4() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{PaddingLeft(16), PaddingRight(16)} {
-			option.applyStyle(style)
-		}
-	}
+// Px3 matches Rust's px_3 helper.
+func (style StyleBuilder) Px3() StyleBuilder {
+	return style.configure(stylePaddingLeft(12), stylePaddingRight(12))
 }
 
 // Px4 matches Rust's px_4 helper.
 func (element *Element) Px4() *Element {
-	return element.configureStyles([]string{"PaddingLeft", "PaddingRight"}, PaddingLeft(16), PaddingRight(16))
+	return element.configureStyles([]string{"PaddingLeft", "PaddingRight"}, stylePaddingLeft(16), stylePaddingRight(16))
 }
 
-// Py matches Rust's py helper.
-func Py(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{PaddingTop(value), PaddingBottom(value)} {
-			option.applyStyle(style)
-		}
-	}
+// Px4 matches Rust's px_4 helper.
+func (style StyleBuilder) Px4() StyleBuilder {
+	return style.configure(stylePaddingLeft(16), stylePaddingRight(16))
 }
 
 // Py matches Rust's py helper.
 func (element *Element) Py(value any) *Element {
-	return element.configureStyles([]string{"PaddingTop", "PaddingBottom"}, PaddingTop(value), PaddingBottom(value))
+	return element.configureStyles([]string{"PaddingTop", "PaddingBottom"}, stylePaddingTop(value), stylePaddingBottom(value))
 }
 
-// Py1 matches Rust's py_1 helper.
-func Py1() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{PaddingTop(4), PaddingBottom(4)} {
-			option.applyStyle(style)
-		}
-	}
+// Py matches Rust's py helper.
+func (style StyleBuilder) Py(value any) StyleBuilder {
+	return style.configure(stylePaddingTop(value), stylePaddingBottom(value))
 }
 
 // Py1 matches Rust's py_1 helper.
 func (element *Element) Py1() *Element {
-	return element.configureStyles([]string{"PaddingTop", "PaddingBottom"}, PaddingTop(4), PaddingBottom(4))
+	return element.configureStyles([]string{"PaddingTop", "PaddingBottom"}, stylePaddingTop(4), stylePaddingBottom(4))
 }
 
-// Py2 matches Rust's py_2 helper.
-func Py2() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{PaddingTop(8), PaddingBottom(8)} {
-			option.applyStyle(style)
-		}
-	}
+// Py1 matches Rust's py_1 helper.
+func (style StyleBuilder) Py1() StyleBuilder {
+	return style.configure(stylePaddingTop(4), stylePaddingBottom(4))
 }
 
 // Py2 matches Rust's py_2 helper.
 func (element *Element) Py2() *Element {
-	return element.configureStyles([]string{"PaddingTop", "PaddingBottom"}, PaddingTop(8), PaddingBottom(8))
+	return element.configureStyles([]string{"PaddingTop", "PaddingBottom"}, stylePaddingTop(8), stylePaddingBottom(8))
 }
 
-// Relative matches Rust's relative helper.
-func Relative() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Position("relative")} {
-			option.applyStyle(style)
-		}
-	}
+// Py2 matches Rust's py_2 helper.
+func (style StyleBuilder) Py2() StyleBuilder {
+	return style.configure(stylePaddingTop(8), stylePaddingBottom(8))
 }
 
 // Relative matches Rust's relative helper.
 func (element *Element) Relative() *Element {
-	return element.configureStyles([]string{"Position"}, Position("relative"))
+	return element.configureStyles([]string{"Position"}, stylePosition("relative"))
 }
 
-// Rounded matches Rust's rounded helper.
-func Rounded(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{BorderRadius(value), BorderTopLeftRadius(clearStyleValue{}), BorderTopRightRadius(clearStyleValue{}), BorderBottomLeftRadius(clearStyleValue{}), BorderBottomRightRadius(clearStyleValue{})} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Relative matches Rust's relative helper.
+func (style StyleBuilder) Relative() StyleBuilder { return style.configure(stylePosition("relative")) }
 
 // Rounded matches Rust's rounded helper.
 func (element *Element) Rounded(value any) *Element {
-	return element.configureStyles([]string{"BorderRadius", "BorderTopLeftRadius", "BorderTopRightRadius", "BorderBottomLeftRadius", "BorderBottomRightRadius"}, BorderRadius(value), BorderTopLeftRadius(clearStyleValue{}), BorderTopRightRadius(clearStyleValue{}), BorderBottomLeftRadius(clearStyleValue{}), BorderBottomRightRadius(clearStyleValue{}))
+	return element.configureStyles([]string{"BorderRadius", "BorderTopLeftRadius", "BorderTopRightRadius", "BorderBottomLeftRadius", "BorderBottomRightRadius"}, styleBorderRadius(value), styleBorderTopLeftRadius(clearStyleValue{}), styleBorderTopRightRadius(clearStyleValue{}), styleBorderBottomLeftRadius(clearStyleValue{}), styleBorderBottomRightRadius(clearStyleValue{}))
 }
 
-// Rounded2xl matches Rust's rounded_2xl helper.
-func Rounded2xl() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{BorderRadius(16), BorderTopLeftRadius(clearStyleValue{}), BorderTopRightRadius(clearStyleValue{}), BorderBottomLeftRadius(clearStyleValue{}), BorderBottomRightRadius(clearStyleValue{})} {
-			option.applyStyle(style)
-		}
-	}
+// Rounded matches Rust's rounded helper.
+func (style StyleBuilder) Rounded(value any) StyleBuilder {
+	return style.configure(styleBorderRadius(value), styleBorderTopLeftRadius(clearStyleValue{}), styleBorderTopRightRadius(clearStyleValue{}), styleBorderBottomLeftRadius(clearStyleValue{}), styleBorderBottomRightRadius(clearStyleValue{}))
 }
 
 // Rounded2xl matches Rust's rounded_2xl helper.
 func (element *Element) Rounded2xl() *Element {
-	return element.configureStyles([]string{"BorderRadius", "BorderTopLeftRadius", "BorderTopRightRadius", "BorderBottomLeftRadius", "BorderBottomRightRadius"}, BorderRadius(16), BorderTopLeftRadius(clearStyleValue{}), BorderTopRightRadius(clearStyleValue{}), BorderBottomLeftRadius(clearStyleValue{}), BorderBottomRightRadius(clearStyleValue{}))
+	return element.configureStyles([]string{"BorderRadius", "BorderTopLeftRadius", "BorderTopRightRadius", "BorderBottomLeftRadius", "BorderBottomRightRadius"}, styleBorderRadius(16), styleBorderTopLeftRadius(clearStyleValue{}), styleBorderTopRightRadius(clearStyleValue{}), styleBorderBottomLeftRadius(clearStyleValue{}), styleBorderBottomRightRadius(clearStyleValue{}))
 }
 
-// RoundedB matches Rust's rounded_b helper.
-func RoundedB(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{BorderBottomLeftRadius(value), BorderBottomRightRadius(value)} {
-			option.applyStyle(style)
-		}
-	}
+// Rounded2xl matches Rust's rounded_2xl helper.
+func (style StyleBuilder) Rounded2xl() StyleBuilder {
+	return style.configure(styleBorderRadius(16), styleBorderTopLeftRadius(clearStyleValue{}), styleBorderTopRightRadius(clearStyleValue{}), styleBorderBottomLeftRadius(clearStyleValue{}), styleBorderBottomRightRadius(clearStyleValue{}))
 }
 
 // RoundedB matches Rust's rounded_b helper.
 func (element *Element) RoundedB(value any) *Element {
-	return element.configureStyles([]string{"BorderBottomLeftRadius", "BorderBottomRightRadius"}, BorderBottomLeftRadius(value), BorderBottomRightRadius(value))
+	return element.configureStyles([]string{"BorderBottomLeftRadius", "BorderBottomRightRadius"}, styleBorderBottomLeftRadius(value), styleBorderBottomRightRadius(value))
 }
 
-// RoundedBl matches Rust's rounded_bl helper.
-func RoundedBl(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{BorderBottomLeftRadius(value)} {
-			option.applyStyle(style)
-		}
-	}
+// RoundedB matches Rust's rounded_b helper.
+func (style StyleBuilder) RoundedB(value any) StyleBuilder {
+	return style.configure(styleBorderBottomLeftRadius(value), styleBorderBottomRightRadius(value))
 }
 
 // RoundedBl matches Rust's rounded_bl helper.
 func (element *Element) RoundedBl(value any) *Element {
-	return element.configureStyles([]string{"BorderBottomLeftRadius"}, BorderBottomLeftRadius(value))
+	return element.configureStyles([]string{"BorderBottomLeftRadius"}, styleBorderBottomLeftRadius(value))
 }
 
-// RoundedBr matches Rust's rounded_br helper.
-func RoundedBr(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{BorderBottomRightRadius(value)} {
-			option.applyStyle(style)
-		}
-	}
+// RoundedBl matches Rust's rounded_bl helper.
+func (style StyleBuilder) RoundedBl(value any) StyleBuilder {
+	return style.configure(styleBorderBottomLeftRadius(value))
 }
 
 // RoundedBr matches Rust's rounded_br helper.
 func (element *Element) RoundedBr(value any) *Element {
-	return element.configureStyles([]string{"BorderBottomRightRadius"}, BorderBottomRightRadius(value))
+	return element.configureStyles([]string{"BorderBottomRightRadius"}, styleBorderBottomRightRadius(value))
 }
 
-// RoundedFull matches Rust's rounded_full helper.
-func RoundedFull() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{BorderRadius(4096), BorderTopLeftRadius(clearStyleValue{}), BorderTopRightRadius(clearStyleValue{}), BorderBottomLeftRadius(clearStyleValue{}), BorderBottomRightRadius(clearStyleValue{})} {
-			option.applyStyle(style)
-		}
-	}
+// RoundedBr matches Rust's rounded_br helper.
+func (style StyleBuilder) RoundedBr(value any) StyleBuilder {
+	return style.configure(styleBorderBottomRightRadius(value))
 }
 
 // RoundedFull matches Rust's rounded_full helper.
 func (element *Element) RoundedFull() *Element {
-	return element.configureStyles([]string{"BorderRadius", "BorderTopLeftRadius", "BorderTopRightRadius", "BorderBottomLeftRadius", "BorderBottomRightRadius"}, BorderRadius(4096), BorderTopLeftRadius(clearStyleValue{}), BorderTopRightRadius(clearStyleValue{}), BorderBottomLeftRadius(clearStyleValue{}), BorderBottomRightRadius(clearStyleValue{}))
+	return element.configureStyles([]string{"BorderRadius", "BorderTopLeftRadius", "BorderTopRightRadius", "BorderBottomLeftRadius", "BorderBottomRightRadius"}, styleBorderRadius(4096), styleBorderTopLeftRadius(clearStyleValue{}), styleBorderTopRightRadius(clearStyleValue{}), styleBorderBottomLeftRadius(clearStyleValue{}), styleBorderBottomRightRadius(clearStyleValue{}))
 }
 
-// RoundedL matches Rust's rounded_l helper.
-func RoundedL(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{BorderTopLeftRadius(value), BorderBottomLeftRadius(value)} {
-			option.applyStyle(style)
-		}
-	}
+// RoundedFull matches Rust's rounded_full helper.
+func (style StyleBuilder) RoundedFull() StyleBuilder {
+	return style.configure(styleBorderRadius(4096), styleBorderTopLeftRadius(clearStyleValue{}), styleBorderTopRightRadius(clearStyleValue{}), styleBorderBottomLeftRadius(clearStyleValue{}), styleBorderBottomRightRadius(clearStyleValue{}))
 }
 
 // RoundedL matches Rust's rounded_l helper.
 func (element *Element) RoundedL(value any) *Element {
-	return element.configureStyles([]string{"BorderTopLeftRadius", "BorderBottomLeftRadius"}, BorderTopLeftRadius(value), BorderBottomLeftRadius(value))
+	return element.configureStyles([]string{"BorderTopLeftRadius", "BorderBottomLeftRadius"}, styleBorderTopLeftRadius(value), styleBorderBottomLeftRadius(value))
 }
 
-// RoundedLg matches Rust's rounded_lg helper.
-func RoundedLg() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{BorderRadius(8), BorderTopLeftRadius(clearStyleValue{}), BorderTopRightRadius(clearStyleValue{}), BorderBottomLeftRadius(clearStyleValue{}), BorderBottomRightRadius(clearStyleValue{})} {
-			option.applyStyle(style)
-		}
-	}
+// RoundedL matches Rust's rounded_l helper.
+func (style StyleBuilder) RoundedL(value any) StyleBuilder {
+	return style.configure(styleBorderTopLeftRadius(value), styleBorderBottomLeftRadius(value))
 }
 
 // RoundedLg matches Rust's rounded_lg helper.
 func (element *Element) RoundedLg() *Element {
-	return element.configureStyles([]string{"BorderRadius", "BorderTopLeftRadius", "BorderTopRightRadius", "BorderBottomLeftRadius", "BorderBottomRightRadius"}, BorderRadius(8), BorderTopLeftRadius(clearStyleValue{}), BorderTopRightRadius(clearStyleValue{}), BorderBottomLeftRadius(clearStyleValue{}), BorderBottomRightRadius(clearStyleValue{}))
+	return element.configureStyles([]string{"BorderRadius", "BorderTopLeftRadius", "BorderTopRightRadius", "BorderBottomLeftRadius", "BorderBottomRightRadius"}, styleBorderRadius(8), styleBorderTopLeftRadius(clearStyleValue{}), styleBorderTopRightRadius(clearStyleValue{}), styleBorderBottomLeftRadius(clearStyleValue{}), styleBorderBottomRightRadius(clearStyleValue{}))
 }
 
-// RoundedMd matches Rust's rounded_md helper.
-func RoundedMd() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{BorderRadius(6), BorderTopLeftRadius(clearStyleValue{}), BorderTopRightRadius(clearStyleValue{}), BorderBottomLeftRadius(clearStyleValue{}), BorderBottomRightRadius(clearStyleValue{})} {
-			option.applyStyle(style)
-		}
-	}
+// RoundedLg matches Rust's rounded_lg helper.
+func (style StyleBuilder) RoundedLg() StyleBuilder {
+	return style.configure(styleBorderRadius(8), styleBorderTopLeftRadius(clearStyleValue{}), styleBorderTopRightRadius(clearStyleValue{}), styleBorderBottomLeftRadius(clearStyleValue{}), styleBorderBottomRightRadius(clearStyleValue{}))
 }
 
 // RoundedMd matches Rust's rounded_md helper.
 func (element *Element) RoundedMd() *Element {
-	return element.configureStyles([]string{"BorderRadius", "BorderTopLeftRadius", "BorderTopRightRadius", "BorderBottomLeftRadius", "BorderBottomRightRadius"}, BorderRadius(6), BorderTopLeftRadius(clearStyleValue{}), BorderTopRightRadius(clearStyleValue{}), BorderBottomLeftRadius(clearStyleValue{}), BorderBottomRightRadius(clearStyleValue{}))
+	return element.configureStyles([]string{"BorderRadius", "BorderTopLeftRadius", "BorderTopRightRadius", "BorderBottomLeftRadius", "BorderBottomRightRadius"}, styleBorderRadius(6), styleBorderTopLeftRadius(clearStyleValue{}), styleBorderTopRightRadius(clearStyleValue{}), styleBorderBottomLeftRadius(clearStyleValue{}), styleBorderBottomRightRadius(clearStyleValue{}))
 }
 
-// RoundedR matches Rust's rounded_r helper.
-func RoundedR(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{BorderTopRightRadius(value), BorderBottomRightRadius(value)} {
-			option.applyStyle(style)
-		}
-	}
+// RoundedMd matches Rust's rounded_md helper.
+func (style StyleBuilder) RoundedMd() StyleBuilder {
+	return style.configure(styleBorderRadius(6), styleBorderTopLeftRadius(clearStyleValue{}), styleBorderTopRightRadius(clearStyleValue{}), styleBorderBottomLeftRadius(clearStyleValue{}), styleBorderBottomRightRadius(clearStyleValue{}))
 }
 
 // RoundedR matches Rust's rounded_r helper.
 func (element *Element) RoundedR(value any) *Element {
-	return element.configureStyles([]string{"BorderTopRightRadius", "BorderBottomRightRadius"}, BorderTopRightRadius(value), BorderBottomRightRadius(value))
+	return element.configureStyles([]string{"BorderTopRightRadius", "BorderBottomRightRadius"}, styleBorderTopRightRadius(value), styleBorderBottomRightRadius(value))
 }
 
-// RoundedSm matches Rust's rounded_sm helper.
-func RoundedSm() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{BorderRadius(4), BorderTopLeftRadius(clearStyleValue{}), BorderTopRightRadius(clearStyleValue{}), BorderBottomLeftRadius(clearStyleValue{}), BorderBottomRightRadius(clearStyleValue{})} {
-			option.applyStyle(style)
-		}
-	}
+// RoundedR matches Rust's rounded_r helper.
+func (style StyleBuilder) RoundedR(value any) StyleBuilder {
+	return style.configure(styleBorderTopRightRadius(value), styleBorderBottomRightRadius(value))
 }
 
 // RoundedSm matches Rust's rounded_sm helper.
 func (element *Element) RoundedSm() *Element {
-	return element.configureStyles([]string{"BorderRadius", "BorderTopLeftRadius", "BorderTopRightRadius", "BorderBottomLeftRadius", "BorderBottomRightRadius"}, BorderRadius(4), BorderTopLeftRadius(clearStyleValue{}), BorderTopRightRadius(clearStyleValue{}), BorderBottomLeftRadius(clearStyleValue{}), BorderBottomRightRadius(clearStyleValue{}))
+	return element.configureStyles([]string{"BorderRadius", "BorderTopLeftRadius", "BorderTopRightRadius", "BorderBottomLeftRadius", "BorderBottomRightRadius"}, styleBorderRadius(4), styleBorderTopLeftRadius(clearStyleValue{}), styleBorderTopRightRadius(clearStyleValue{}), styleBorderBottomLeftRadius(clearStyleValue{}), styleBorderBottomRightRadius(clearStyleValue{}))
 }
 
-// RoundedT matches Rust's rounded_t helper.
-func RoundedT(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{BorderTopLeftRadius(value), BorderTopRightRadius(value)} {
-			option.applyStyle(style)
-		}
-	}
+// RoundedSm matches Rust's rounded_sm helper.
+func (style StyleBuilder) RoundedSm() StyleBuilder {
+	return style.configure(styleBorderRadius(4), styleBorderTopLeftRadius(clearStyleValue{}), styleBorderTopRightRadius(clearStyleValue{}), styleBorderBottomLeftRadius(clearStyleValue{}), styleBorderBottomRightRadius(clearStyleValue{}))
 }
 
 // RoundedT matches Rust's rounded_t helper.
 func (element *Element) RoundedT(value any) *Element {
-	return element.configureStyles([]string{"BorderTopLeftRadius", "BorderTopRightRadius"}, BorderTopLeftRadius(value), BorderTopRightRadius(value))
+	return element.configureStyles([]string{"BorderTopLeftRadius", "BorderTopRightRadius"}, styleBorderTopLeftRadius(value), styleBorderTopRightRadius(value))
 }
 
-// RoundedTl matches Rust's rounded_tl helper.
-func RoundedTl(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{BorderTopLeftRadius(value)} {
-			option.applyStyle(style)
-		}
-	}
+// RoundedT matches Rust's rounded_t helper.
+func (style StyleBuilder) RoundedT(value any) StyleBuilder {
+	return style.configure(styleBorderTopLeftRadius(value), styleBorderTopRightRadius(value))
 }
 
 // RoundedTl matches Rust's rounded_tl helper.
 func (element *Element) RoundedTl(value any) *Element {
-	return element.configureStyles([]string{"BorderTopLeftRadius"}, BorderTopLeftRadius(value))
+	return element.configureStyles([]string{"BorderTopLeftRadius"}, styleBorderTopLeftRadius(value))
 }
 
-// RoundedTr matches Rust's rounded_tr helper.
-func RoundedTr(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{BorderTopRightRadius(value)} {
-			option.applyStyle(style)
-		}
-	}
+// RoundedTl matches Rust's rounded_tl helper.
+func (style StyleBuilder) RoundedTl(value any) StyleBuilder {
+	return style.configure(styleBorderTopLeftRadius(value))
 }
 
 // RoundedTr matches Rust's rounded_tr helper.
 func (element *Element) RoundedTr(value any) *Element {
-	return element.configureStyles([]string{"BorderTopRightRadius"}, BorderTopRightRadius(value))
+	return element.configureStyles([]string{"BorderTopRightRadius"}, styleBorderTopRightRadius(value))
 }
 
-// RoundedXl matches Rust's rounded_xl helper.
-func RoundedXl() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{BorderRadius(12), BorderTopLeftRadius(clearStyleValue{}), BorderTopRightRadius(clearStyleValue{}), BorderBottomLeftRadius(clearStyleValue{}), BorderBottomRightRadius(clearStyleValue{})} {
-			option.applyStyle(style)
-		}
-	}
+// RoundedTr matches Rust's rounded_tr helper.
+func (style StyleBuilder) RoundedTr(value any) StyleBuilder {
+	return style.configure(styleBorderTopRightRadius(value))
 }
 
 // RoundedXl matches Rust's rounded_xl helper.
 func (element *Element) RoundedXl() *Element {
-	return element.configureStyles([]string{"BorderRadius", "BorderTopLeftRadius", "BorderTopRightRadius", "BorderBottomLeftRadius", "BorderBottomRightRadius"}, BorderRadius(12), BorderTopLeftRadius(clearStyleValue{}), BorderTopRightRadius(clearStyleValue{}), BorderBottomLeftRadius(clearStyleValue{}), BorderBottomRightRadius(clearStyleValue{}))
+	return element.configureStyles([]string{"BorderRadius", "BorderTopLeftRadius", "BorderTopRightRadius", "BorderBottomLeftRadius", "BorderBottomRightRadius"}, styleBorderRadius(12), styleBorderTopLeftRadius(clearStyleValue{}), styleBorderTopRightRadius(clearStyleValue{}), styleBorderBottomLeftRadius(clearStyleValue{}), styleBorderBottomRightRadius(clearStyleValue{}))
 }
 
-// RowEnd matches Rust's row_end helper.
-func RowEnd(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{GridRowEnd(value)} {
-			option.applyStyle(style)
-		}
-	}
+// RoundedXl matches Rust's rounded_xl helper.
+func (style StyleBuilder) RoundedXl() StyleBuilder {
+	return style.configure(styleBorderRadius(12), styleBorderTopLeftRadius(clearStyleValue{}), styleBorderTopRightRadius(clearStyleValue{}), styleBorderBottomLeftRadius(clearStyleValue{}), styleBorderBottomRightRadius(clearStyleValue{}))
 }
 
 // RowEnd matches Rust's row_end helper.
 func (element *Element) RowEnd(value any) *Element {
-	return element.configureStyles([]string{"GridRowEnd"}, GridRowEnd(value))
+	return element.configureStyles([]string{"GridRowEnd"}, styleGridRowEnd(value))
 }
 
-// RowEndAuto matches Rust's row_end_auto helper.
-func RowEndAuto() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{GridRowEnd(0)} {
-			option.applyStyle(style)
-		}
-	}
+// RowEnd matches Rust's row_end helper.
+func (style StyleBuilder) RowEnd(value any) StyleBuilder {
+	return style.configure(styleGridRowEnd(value))
 }
 
 // RowEndAuto matches Rust's row_end_auto helper.
 func (element *Element) RowEndAuto() *Element {
-	return element.configureStyles([]string{"GridRowEnd"}, GridRowEnd(0))
+	return element.configureStyles([]string{"GridRowEnd"}, styleGridRowEnd(0))
 }
 
-// RowSpan matches Rust's row_span helper.
-func RowSpan(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{GridRowStart(clearStyleValue{}), GridRowEnd(clearStyleValue{}), GridRowSpan(value)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// RowEndAuto matches Rust's row_end_auto helper.
+func (style StyleBuilder) RowEndAuto() StyleBuilder { return style.configure(styleGridRowEnd(0)) }
 
 // RowSpan matches Rust's row_span helper.
 func (element *Element) RowSpan(value any) *Element {
-	return element.configureStyles([]string{"GridRowStart", "GridRowEnd", "GridRowSpan"}, GridRowStart(clearStyleValue{}), GridRowEnd(clearStyleValue{}), GridRowSpan(value))
+	return element.configureStyles([]string{"GridRowStart", "GridRowEnd", "GridRowSpan"}, styleGridRowStart(clearStyleValue{}), styleGridRowEnd(clearStyleValue{}), styleGridRowSpan(value))
 }
 
-// RowSpanFull matches Rust's row_span_full helper.
-func RowSpanFull() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{GridRowSpan(clearStyleValue{}), GridRowStart(1), GridRowEnd(-1)} {
-			option.applyStyle(style)
-		}
-	}
+// RowSpan matches Rust's row_span helper.
+func (style StyleBuilder) RowSpan(value any) StyleBuilder {
+	return style.configure(styleGridRowStart(clearStyleValue{}), styleGridRowEnd(clearStyleValue{}), styleGridRowSpan(value))
 }
 
 // RowSpanFull matches Rust's row_span_full helper.
 func (element *Element) RowSpanFull() *Element {
-	return element.configureStyles([]string{"GridRowSpan", "GridRowStart", "GridRowEnd"}, GridRowSpan(clearStyleValue{}), GridRowStart(1), GridRowEnd(-1))
+	return element.configureStyles([]string{"GridRowSpan", "GridRowStart", "GridRowEnd"}, styleGridRowSpan(clearStyleValue{}), styleGridRowStart(1), styleGridRowEnd(-1))
 }
 
-// RowStart matches Rust's row_start helper.
-func RowStart(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{GridRowStart(value)} {
-			option.applyStyle(style)
-		}
-	}
+// RowSpanFull matches Rust's row_span_full helper.
+func (style StyleBuilder) RowSpanFull() StyleBuilder {
+	return style.configure(styleGridRowSpan(clearStyleValue{}), styleGridRowStart(1), styleGridRowEnd(-1))
 }
 
 // RowStart matches Rust's row_start helper.
 func (element *Element) RowStart(value any) *Element {
-	return element.configureStyles([]string{"GridRowStart"}, GridRowStart(value))
+	return element.configureStyles([]string{"GridRowStart"}, styleGridRowStart(value))
 }
 
-// RowStartAuto matches Rust's row_start_auto helper.
-func RowStartAuto() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{GridRowStart(0)} {
-			option.applyStyle(style)
-		}
-	}
+// RowStart matches Rust's row_start helper.
+func (style StyleBuilder) RowStart(value any) StyleBuilder {
+	return style.configure(styleGridRowStart(value))
 }
 
 // RowStartAuto matches Rust's row_start_auto helper.
 func (element *Element) RowStartAuto() *Element {
-	return element.configureStyles([]string{"GridRowStart"}, GridRowStart(0))
+	return element.configureStyles([]string{"GridRowStart"}, styleGridRowStart(0))
 }
 
-// Rtl matches Rust's rtl helper.
-func Rtl() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Direction("rtl")} {
-			option.applyStyle(style)
-		}
-	}
-}
+// RowStartAuto matches Rust's row_start_auto helper.
+func (style StyleBuilder) RowStartAuto() StyleBuilder { return style.configure(styleGridRowStart(0)) }
 
 // Rtl matches Rust's rtl helper.
 func (element *Element) Rtl() *Element {
-	return element.configureStyles([]string{"Direction"}, Direction("rtl"))
+	return element.configureStyles([]string{"Direction"}, styleDirection("rtl"))
 }
 
-// Selectable matches Rust's selectable helper.
-func Selectable() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{UserSelect("text")} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Rtl matches Rust's rtl helper.
+func (style StyleBuilder) Rtl() StyleBuilder { return style.configure(styleDirection("rtl")) }
 
 // Selectable matches Rust's selectable helper.
 func (element *Element) Selectable() *Element {
-	return element.configureStyles([]string{"UserSelect"}, UserSelect("text"))
+	return element.configureStyles([]string{"UserSelect"}, styleUserSelect("text"))
 }
 
-// SelfBaseline matches Rust's self_baseline helper.
-func SelfBaseline() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{AlignSelf("baseline")} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Selectable matches Rust's selectable helper.
+func (style StyleBuilder) Selectable() StyleBuilder { return style.configure(styleUserSelect("text")) }
 
 // SelfBaseline matches Rust's self_baseline helper.
 func (element *Element) SelfBaseline() *Element {
-	return element.configureStyles([]string{"AlignSelf"}, AlignSelf("baseline"))
+	return element.configureStyles([]string{"AlignSelf"}, styleAlignSelf("baseline"))
 }
 
-// SelfCenter matches Rust's self_center helper.
-func SelfCenter() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{AlignSelf("center")} {
-			option.applyStyle(style)
-		}
-	}
+// SelfBaseline matches Rust's self_baseline helper.
+func (style StyleBuilder) SelfBaseline() StyleBuilder {
+	return style.configure(styleAlignSelf("baseline"))
 }
 
 // SelfCenter matches Rust's self_center helper.
 func (element *Element) SelfCenter() *Element {
-	return element.configureStyles([]string{"AlignSelf"}, AlignSelf("center"))
+	return element.configureStyles([]string{"AlignSelf"}, styleAlignSelf("center"))
 }
 
-// SelfEnd matches Rust's self_end helper.
-func SelfEnd() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{AlignSelf("end")} {
-			option.applyStyle(style)
-		}
-	}
-}
+// SelfCenter matches Rust's self_center helper.
+func (style StyleBuilder) SelfCenter() StyleBuilder { return style.configure(styleAlignSelf("center")) }
 
 // SelfEnd matches Rust's self_end helper.
 func (element *Element) SelfEnd() *Element {
-	return element.configureStyles([]string{"AlignSelf"}, AlignSelf("end"))
+	return element.configureStyles([]string{"AlignSelf"}, styleAlignSelf("end"))
 }
 
-// SelfFlexEnd matches Rust's self_flex_end helper.
-func SelfFlexEnd() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{AlignSelf("flex-end")} {
-			option.applyStyle(style)
-		}
-	}
-}
+// SelfEnd matches Rust's self_end helper.
+func (style StyleBuilder) SelfEnd() StyleBuilder { return style.configure(styleAlignSelf("end")) }
 
 // SelfFlexEnd matches Rust's self_flex_end helper.
 func (element *Element) SelfFlexEnd() *Element {
-	return element.configureStyles([]string{"AlignSelf"}, AlignSelf("flex-end"))
+	return element.configureStyles([]string{"AlignSelf"}, styleAlignSelf("flex-end"))
 }
 
-// SelfFlexStart matches Rust's self_flex_start helper.
-func SelfFlexStart() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{AlignSelf("flex-start")} {
-			option.applyStyle(style)
-		}
-	}
+// SelfFlexEnd matches Rust's self_flex_end helper.
+func (style StyleBuilder) SelfFlexEnd() StyleBuilder {
+	return style.configure(styleAlignSelf("flex-end"))
 }
 
 // SelfFlexStart matches Rust's self_flex_start helper.
 func (element *Element) SelfFlexStart() *Element {
-	return element.configureStyles([]string{"AlignSelf"}, AlignSelf("flex-start"))
+	return element.configureStyles([]string{"AlignSelf"}, styleAlignSelf("flex-start"))
 }
 
-// SelfStart matches Rust's self_start helper.
-func SelfStart() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{AlignSelf("start")} {
-			option.applyStyle(style)
-		}
-	}
+// SelfFlexStart matches Rust's self_flex_start helper.
+func (style StyleBuilder) SelfFlexStart() StyleBuilder {
+	return style.configure(styleAlignSelf("flex-start"))
 }
 
 // SelfStart matches Rust's self_start helper.
 func (element *Element) SelfStart() *Element {
-	return element.configureStyles([]string{"AlignSelf"}, AlignSelf("start"))
+	return element.configureStyles([]string{"AlignSelf"}, styleAlignSelf("start"))
 }
 
-// SelfStretch matches Rust's self_stretch helper.
-func SelfStretch() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{AlignSelf("stretch")} {
-			option.applyStyle(style)
-		}
-	}
-}
+// SelfStart matches Rust's self_start helper.
+func (style StyleBuilder) SelfStart() StyleBuilder { return style.configure(styleAlignSelf("start")) }
 
 // SelfStretch matches Rust's self_stretch helper.
 func (element *Element) SelfStretch() *Element {
-	return element.configureStyles([]string{"AlignSelf"}, AlignSelf("stretch"))
+	return element.configureStyles([]string{"AlignSelf"}, styleAlignSelf("stretch"))
 }
 
-// Size matches Rust's size helper.
-func Size(width any, height any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Width(width), Height(height)} {
-			option.applyStyle(style)
-		}
-	}
+// SelfStretch matches Rust's self_stretch helper.
+func (style StyleBuilder) SelfStretch() StyleBuilder {
+	return style.configure(styleAlignSelf("stretch"))
 }
 
 // Size matches Rust's size helper.
 func (element *Element) Size(width any, height any) *Element {
-	return element.configureStyles([]string{"Width", "Height"}, Width(width), Height(height))
+	return element.configureStyles([]string{"Width", "Height"}, styleWidth(width), styleHeight(height))
 }
 
-// SizeFull matches Rust's size_full helper.
-func SizeFull() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Width("100%"), Height("100%")} {
-			option.applyStyle(style)
-		}
-	}
+// Size matches Rust's size helper.
+func (style StyleBuilder) Size(width any, height any) StyleBuilder {
+	return style.configure(styleWidth(width), styleHeight(height))
 }
 
 // SizeFull matches Rust's size_full helper.
 func (element *Element) SizeFull() *Element {
-	return element.configureStyles([]string{"Width", "Height"}, Width("100%"), Height("100%"))
+	return element.configureStyles([]string{"Width", "Height"}, styleWidth("100%"), styleHeight("100%"))
 }
 
-// SnapAlign matches Rust's snap_align helper.
-func SnapAlign(value string) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{ScrollSnapAlign(value)} {
-			option.applyStyle(style)
-		}
-	}
+// SizeFull matches Rust's size_full helper.
+func (style StyleBuilder) SizeFull() StyleBuilder {
+	return style.configure(styleWidth("100%"), styleHeight("100%"))
 }
 
 // SnapAlign matches Rust's snap_align helper.
 func (element *Element) SnapAlign(value string) *Element {
-	return element.configureStyles([]string{"ScrollSnapAlign"}, ScrollSnapAlign(value))
+	return element.configureStyles([]string{"ScrollSnapAlign"}, styleScrollSnapAlign(value))
 }
 
-// SnapStopAlways matches Rust's snap_stop_always helper.
-func SnapStopAlways() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{ScrollSnapStop("always")} {
-			option.applyStyle(style)
-		}
-	}
+// SnapAlign matches Rust's snap_align helper.
+func (style StyleBuilder) SnapAlign(value string) StyleBuilder {
+	return style.configure(styleScrollSnapAlign(value))
 }
 
 // SnapStopAlways matches Rust's snap_stop_always helper.
 func (element *Element) SnapStopAlways() *Element {
-	return element.configureStyles([]string{"ScrollSnapStop"}, ScrollSnapStop("always"))
+	return element.configureStyles([]string{"ScrollSnapStop"}, styleScrollSnapStop("always"))
 }
 
-// Sticky matches Rust's sticky helper.
-func Sticky() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Position("sticky")} {
-			option.applyStyle(style)
-		}
-	}
+// SnapStopAlways matches Rust's snap_stop_always helper.
+func (style StyleBuilder) SnapStopAlways() StyleBuilder {
+	return style.configure(styleScrollSnapStop("always"))
 }
 
 // Sticky matches Rust's sticky helper.
 func (element *Element) Sticky() *Element {
-	return element.configureStyles([]string{"Position"}, Position("sticky"))
+	return element.configureStyles([]string{"Position"}, stylePosition("sticky"))
 }
 
-// StickyBottom matches Rust's sticky_bottom helper.
-func StickyBottom(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Position("sticky"), Bottom(value)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Sticky matches Rust's sticky helper.
+func (style StyleBuilder) Sticky() StyleBuilder { return style.configure(stylePosition("sticky")) }
 
 // StickyBottom matches Rust's sticky_bottom helper.
 func (element *Element) StickyBottom(value any) *Element {
-	return element.configureStyles([]string{"Position", "Bottom"}, Position("sticky"), Bottom(value))
+	return element.configureStyles([]string{"Position", "Bottom"}, stylePosition("sticky"), styleBottom(value))
 }
 
-// StickyLeft matches Rust's sticky_left helper.
-func StickyLeft(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Position("sticky"), Left(value)} {
-			option.applyStyle(style)
-		}
-	}
+// StickyBottom matches Rust's sticky_bottom helper.
+func (style StyleBuilder) StickyBottom(value any) StyleBuilder {
+	return style.configure(stylePosition("sticky"), styleBottom(value))
 }
 
 // StickyLeft matches Rust's sticky_left helper.
 func (element *Element) StickyLeft(value any) *Element {
-	return element.configureStyles([]string{"Position", "Left"}, Position("sticky"), Left(value))
+	return element.configureStyles([]string{"Position", "Left"}, stylePosition("sticky"), styleLeft(value))
 }
 
-// StickyRight matches Rust's sticky_right helper.
-func StickyRight(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Position("sticky"), Right(value)} {
-			option.applyStyle(style)
-		}
-	}
+// StickyLeft matches Rust's sticky_left helper.
+func (style StyleBuilder) StickyLeft(value any) StyleBuilder {
+	return style.configure(stylePosition("sticky"), styleLeft(value))
 }
 
 // StickyRight matches Rust's sticky_right helper.
 func (element *Element) StickyRight(value any) *Element {
-	return element.configureStyles([]string{"Position", "Right"}, Position("sticky"), Right(value))
+	return element.configureStyles([]string{"Position", "Right"}, stylePosition("sticky"), styleRight(value))
 }
 
-// StickyTop matches Rust's sticky_top helper.
-func StickyTop(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Position("sticky"), Top(value)} {
-			option.applyStyle(style)
-		}
-	}
+// StickyRight matches Rust's sticky_right helper.
+func (style StyleBuilder) StickyRight(value any) StyleBuilder {
+	return style.configure(stylePosition("sticky"), styleRight(value))
 }
 
 // StickyTop matches Rust's sticky_top helper.
 func (element *Element) StickyTop(value any) *Element {
-	return element.configureStyles([]string{"Position", "Top"}, Position("sticky"), Top(value))
+	return element.configureStyles([]string{"Position", "Top"}, stylePosition("sticky"), styleTop(value))
 }
 
-// Text2xl matches Rust's text_2xl helper.
-func Text2xl() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{FontSize(24), LineHeight(32)} {
-			option.applyStyle(style)
-		}
-	}
+// StickyTop matches Rust's sticky_top helper.
+func (style StyleBuilder) StickyTop(value any) StyleBuilder {
+	return style.configure(stylePosition("sticky"), styleTop(value))
 }
 
 // Text2xl matches Rust's text_2xl helper.
 func (element *Element) Text2xl() *Element {
-	return element.configureStyles([]string{"FontSize", "LineHeight"}, FontSize(24), LineHeight(32))
+	return element.configureStyles([]string{"FontSize", "LineHeight"}, styleFontSize(24), styleLineHeight(32))
 }
 
-// Text3xl matches Rust's text_3xl helper.
-func Text3xl() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{FontSize(30), LineHeight(36)} {
-			option.applyStyle(style)
-		}
-	}
+// Text2xl matches Rust's text_2xl helper.
+func (style StyleBuilder) Text2xl() StyleBuilder {
+	return style.configure(styleFontSize(24), styleLineHeight(32))
 }
 
 // Text3xl matches Rust's text_3xl helper.
 func (element *Element) Text3xl() *Element {
-	return element.configureStyles([]string{"FontSize", "LineHeight"}, FontSize(30), LineHeight(36))
+	return element.configureStyles([]string{"FontSize", "LineHeight"}, styleFontSize(30), styleLineHeight(36))
 }
 
-// TextBase matches Rust's text_base helper.
-func TextBase() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{FontSize(16), LineHeight(24)} {
-			option.applyStyle(style)
-		}
-	}
+// Text3xl matches Rust's text_3xl helper.
+func (style StyleBuilder) Text3xl() StyleBuilder {
+	return style.configure(styleFontSize(30), styleLineHeight(36))
 }
 
 // TextBase matches Rust's text_base helper.
 func (element *Element) TextBase() *Element {
-	return element.configureStyles([]string{"FontSize", "LineHeight"}, FontSize(16), LineHeight(24))
+	return element.configureStyles([]string{"FontSize", "LineHeight"}, styleFontSize(16), styleLineHeight(24))
 }
 
-// TextCenter matches Rust's text_center helper.
-func TextCenter() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{TextAlign("center")} {
-			option.applyStyle(style)
-		}
-	}
+// TextBase matches Rust's text_base helper.
+func (style StyleBuilder) TextBase() StyleBuilder {
+	return style.configure(styleFontSize(16), styleLineHeight(24))
 }
 
 // TextCenter matches Rust's text_center helper.
 func (element *Element) TextCenter() *Element {
-	return element.configureStyles([]string{"TextAlign"}, TextAlign("center"))
+	return element.configureStyles([]string{"TextAlign"}, styleTextAlign("center"))
 }
 
-// TextEllipsis matches Rust's text_ellipsis helper.
-func TextEllipsis() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{TextOverflow("ellipsis")} {
-			option.applyStyle(style)
-		}
-	}
-}
+// TextCenter matches Rust's text_center helper.
+func (style StyleBuilder) TextCenter() StyleBuilder { return style.configure(styleTextAlign("center")) }
 
 // TextEllipsis matches Rust's text_ellipsis helper.
 func (element *Element) TextEllipsis() *Element {
-	return element.configureStyles([]string{"TextOverflow"}, TextOverflow("ellipsis"))
+	return element.configureStyles([]string{"TextOverflow"}, styleTextOverflow("ellipsis"))
 }
 
-// TextEllipsisMiddle matches Rust's text_ellipsis_middle helper.
-func TextEllipsisMiddle() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{TextOverflow("ellipsis-middle")} {
-			option.applyStyle(style)
-		}
-	}
+// TextEllipsis matches Rust's text_ellipsis helper.
+func (style StyleBuilder) TextEllipsis() StyleBuilder {
+	return style.configure(styleTextOverflow("ellipsis"))
 }
 
 // TextEllipsisMiddle matches Rust's text_ellipsis_middle helper.
 func (element *Element) TextEllipsisMiddle() *Element {
-	return element.configureStyles([]string{"TextOverflow"}, TextOverflow("ellipsis-middle"))
+	return element.configureStyles([]string{"TextOverflow"}, styleTextOverflow("ellipsis-middle"))
 }
 
-// TextEllipsisStart matches Rust's text_ellipsis_start helper.
-func TextEllipsisStart() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{TextOverflow("ellipsis-start")} {
-			option.applyStyle(style)
-		}
-	}
+// TextEllipsisMiddle matches Rust's text_ellipsis_middle helper.
+func (style StyleBuilder) TextEllipsisMiddle() StyleBuilder {
+	return style.configure(styleTextOverflow("ellipsis-middle"))
 }
 
 // TextEllipsisStart matches Rust's text_ellipsis_start helper.
 func (element *Element) TextEllipsisStart() *Element {
-	return element.configureStyles([]string{"TextOverflow"}, TextOverflow("ellipsis-start"))
+	return element.configureStyles([]string{"TextOverflow"}, styleTextOverflow("ellipsis-start"))
 }
 
-// TextEnd matches Rust's text_end helper.
-func TextEnd() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{TextAlign("end")} {
-			option.applyStyle(style)
-		}
-	}
+// TextEllipsisStart matches Rust's text_ellipsis_start helper.
+func (style StyleBuilder) TextEllipsisStart() StyleBuilder {
+	return style.configure(styleTextOverflow("ellipsis-start"))
 }
 
 // TextEnd matches Rust's text_end helper.
 func (element *Element) TextEnd() *Element {
-	return element.configureStyles([]string{"TextAlign"}, TextAlign("end"))
+	return element.configureStyles([]string{"TextAlign"}, styleTextAlign("end"))
 }
 
-// TextJustify matches Rust's text_justify helper.
-func TextJustify() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{TextAlign("justify")} {
-			option.applyStyle(style)
-		}
-	}
-}
+// TextEnd matches Rust's text_end helper.
+func (style StyleBuilder) TextEnd() StyleBuilder { return style.configure(styleTextAlign("end")) }
 
 // TextJustify matches Rust's text_justify helper.
 func (element *Element) TextJustify() *Element {
-	return element.configureStyles([]string{"TextAlign"}, TextAlign("justify"))
+	return element.configureStyles([]string{"TextAlign"}, styleTextAlign("justify"))
 }
 
-// TextLeft matches Rust's text_left helper.
-func TextLeft() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{TextAlign("left")} {
-			option.applyStyle(style)
-		}
-	}
+// TextJustify matches Rust's text_justify helper.
+func (style StyleBuilder) TextJustify() StyleBuilder {
+	return style.configure(styleTextAlign("justify"))
 }
 
 // TextLeft matches Rust's text_left helper.
 func (element *Element) TextLeft() *Element {
-	return element.configureStyles([]string{"TextAlign"}, TextAlign("left"))
+	return element.configureStyles([]string{"TextAlign"}, styleTextAlign("left"))
 }
 
-// TextLg matches Rust's text_lg helper.
-func TextLg() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{FontSize(18), LineHeight(26)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// TextLeft matches Rust's text_left helper.
+func (style StyleBuilder) TextLeft() StyleBuilder { return style.configure(styleTextAlign("left")) }
 
 // TextLg matches Rust's text_lg helper.
 func (element *Element) TextLg() *Element {
-	return element.configureStyles([]string{"FontSize", "LineHeight"}, FontSize(18), LineHeight(26))
+	return element.configureStyles([]string{"FontSize", "LineHeight"}, styleFontSize(18), styleLineHeight(26))
 }
 
-// TextRight matches Rust's text_right helper.
-func TextRight() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{TextAlign("right")} {
-			option.applyStyle(style)
-		}
-	}
+// TextLg matches Rust's text_lg helper.
+func (style StyleBuilder) TextLg() StyleBuilder {
+	return style.configure(styleFontSize(18), styleLineHeight(26))
 }
 
 // TextRight matches Rust's text_right helper.
 func (element *Element) TextRight() *Element {
-	return element.configureStyles([]string{"TextAlign"}, TextAlign("right"))
+	return element.configureStyles([]string{"TextAlign"}, styleTextAlign("right"))
 }
 
-// TextSm matches Rust's text_sm helper.
-func TextSm() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{FontSize(14), LineHeight(20)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// TextRight matches Rust's text_right helper.
+func (style StyleBuilder) TextRight() StyleBuilder { return style.configure(styleTextAlign("right")) }
 
 // TextSm matches Rust's text_sm helper.
 func (element *Element) TextSm() *Element {
-	return element.configureStyles([]string{"FontSize", "LineHeight"}, FontSize(14), LineHeight(20))
+	return element.configureStyles([]string{"FontSize", "LineHeight"}, styleFontSize(14), styleLineHeight(20))
 }
 
-// TextStart matches Rust's text_start helper.
-func TextStart() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{TextAlign("start")} {
-			option.applyStyle(style)
-		}
-	}
+// TextSm matches Rust's text_sm helper.
+func (style StyleBuilder) TextSm() StyleBuilder {
+	return style.configure(styleFontSize(14), styleLineHeight(20))
 }
 
 // TextStart matches Rust's text_start helper.
 func (element *Element) TextStart() *Element {
-	return element.configureStyles([]string{"TextAlign"}, TextAlign("start"))
+	return element.configureStyles([]string{"TextAlign"}, styleTextAlign("start"))
 }
 
-// TextXl matches Rust's text_xl helper.
-func TextXl() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{FontSize(20), LineHeight(28)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// TextStart matches Rust's text_start helper.
+func (style StyleBuilder) TextStart() StyleBuilder { return style.configure(styleTextAlign("start")) }
 
 // TextXl matches Rust's text_xl helper.
 func (element *Element) TextXl() *Element {
-	return element.configureStyles([]string{"FontSize", "LineHeight"}, FontSize(20), LineHeight(28))
+	return element.configureStyles([]string{"FontSize", "LineHeight"}, styleFontSize(20), styleLineHeight(28))
 }
 
-// TextXs matches Rust's text_xs helper.
-func TextXs() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{FontSize(12), LineHeight(16)} {
-			option.applyStyle(style)
-		}
-	}
+// TextXl matches Rust's text_xl helper.
+func (style StyleBuilder) TextXl() StyleBuilder {
+	return style.configure(styleFontSize(20), styleLineHeight(28))
 }
 
 // TextXs matches Rust's text_xs helper.
 func (element *Element) TextXs() *Element {
-	return element.configureStyles([]string{"FontSize", "LineHeight"}, FontSize(12), LineHeight(16))
+	return element.configureStyles([]string{"FontSize", "LineHeight"}, styleFontSize(12), styleLineHeight(16))
 }
 
-// Truncate matches Rust's truncate helper.
-func Truncate() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{OverflowX("hidden"), OverflowY("hidden"), WhiteSpace("nowrap"), TextOverflow("ellipsis")} {
-			option.applyStyle(style)
-		}
-	}
+// TextXs matches Rust's text_xs helper.
+func (style StyleBuilder) TextXs() StyleBuilder {
+	return style.configure(styleFontSize(12), styleLineHeight(16))
 }
 
 // Truncate matches Rust's truncate helper.
 func (element *Element) Truncate() *Element {
-	return element.configureStyles([]string{"OverflowX", "OverflowY", "WhiteSpace", "TextOverflow"}, OverflowX("hidden"), OverflowY("hidden"), WhiteSpace("nowrap"), TextOverflow("ellipsis"))
+	return element.configureStyles([]string{"OverflowX", "OverflowY", "WhiteSpace", "TextOverflow"}, styleOverflowX("hidden"), styleOverflowY("hidden"), styleWhiteSpace("nowrap"), styleTextOverflow("ellipsis"))
 }
 
-// UserSelectNone matches Rust's user_select_none helper.
-func UserSelectNone() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{UserSelect("none")} {
-			option.applyStyle(style)
-		}
-	}
+// Truncate matches Rust's truncate helper.
+func (style StyleBuilder) Truncate() StyleBuilder {
+	return style.configure(styleOverflowX("hidden"), styleOverflowY("hidden"), styleWhiteSpace("nowrap"), styleTextOverflow("ellipsis"))
 }
 
 // UserSelectNone matches Rust's user_select_none helper.
 func (element *Element) UserSelectNone() *Element {
-	return element.configureStyles([]string{"UserSelect"}, UserSelect("none"))
+	return element.configureStyles([]string{"UserSelect"}, styleUserSelect("none"))
 }
 
-// UserSelectText matches Rust's user_select_text helper.
-func UserSelectText() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{UserSelect("text")} {
-			option.applyStyle(style)
-		}
-	}
+// UserSelectNone matches Rust's user_select_none helper.
+func (style StyleBuilder) UserSelectNone() StyleBuilder {
+	return style.configure(styleUserSelect("none"))
 }
 
 // UserSelectText matches Rust's user_select_text helper.
 func (element *Element) UserSelectText() *Element {
-	return element.configureStyles([]string{"UserSelect"}, UserSelect("text"))
+	return element.configureStyles([]string{"UserSelect"}, styleUserSelect("text"))
 }
 
-// Visible matches Rust's visible helper.
-func Visible() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Visibility("visible")} {
-			option.applyStyle(style)
-		}
-	}
+// UserSelectText matches Rust's user_select_text helper.
+func (style StyleBuilder) UserSelectText() StyleBuilder {
+	return style.configure(styleUserSelect("text"))
 }
 
 // Visible matches Rust's visible helper.
 func (element *Element) Visible() *Element {
-	return element.configureStyles([]string{"Visibility"}, Visibility("visible"))
+	return element.configureStyles([]string{"Visibility"}, styleVisibility("visible"))
 }
 
-// W matches Rust's w helper.
-func W(value any) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Width(value)} {
-			option.applyStyle(style)
-		}
-	}
-}
+// Visible matches Rust's visible helper.
+func (style StyleBuilder) Visible() StyleBuilder { return style.configure(styleVisibility("visible")) }
 
 // W matches Rust's w helper.
 func (element *Element) W(value any) *Element {
-	return element.configureStyles([]string{"Width"}, Width(value))
+	return element.configureStyles([]string{"Width"}, styleWidth(value))
 }
 
-// WFraction matches Rust's w_fraction helper.
-func WFraction(fraction float64) StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Width(layoutFraction(fraction))} {
-			option.applyStyle(style)
-		}
-	}
-}
+// W matches Rust's w helper.
+func (style StyleBuilder) W(value any) StyleBuilder { return style.configure(styleWidth(value)) }
 
 // WFraction matches Rust's w_fraction helper.
 func (element *Element) WFraction(fraction float64) *Element {
-	return element.configureStyles([]string{"Width"}, Width(layoutFraction(fraction)))
+	return element.configureStyles([]string{"Width"}, styleWidth(layoutFraction(fraction)))
 }
 
-// WFull matches Rust's w_full helper.
-func WFull() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{Width("100%")} {
-			option.applyStyle(style)
-		}
-	}
+// WFraction matches Rust's w_fraction helper.
+func (style StyleBuilder) WFraction(fraction float64) StyleBuilder {
+	return style.configure(styleWidth(layoutFraction(fraction)))
 }
 
 // WFull matches Rust's w_full helper.
 func (element *Element) WFull() *Element {
-	return element.configureStyles([]string{"Width"}, Width("100%"))
+	return element.configureStyles([]string{"Width"}, styleWidth("100%"))
 }
 
-// WhitespaceNormal matches Rust's whitespace_normal helper.
-func WhitespaceNormal() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{WhiteSpace("normal")} {
-			option.applyStyle(style)
-		}
-	}
-}
+// WFull matches Rust's w_full helper.
+func (style StyleBuilder) WFull() StyleBuilder { return style.configure(styleWidth("100%")) }
 
 // WhitespaceNormal matches Rust's whitespace_normal helper.
 func (element *Element) WhitespaceNormal() *Element {
-	return element.configureStyles([]string{"WhiteSpace"}, WhiteSpace("normal"))
+	return element.configureStyles([]string{"WhiteSpace"}, styleWhiteSpace("normal"))
 }
 
-// WhitespaceNowrap matches Rust's whitespace_nowrap helper.
-func WhitespaceNowrap() StyleOption {
-	return func(style *Style) {
-		for _, option := range []StyleOption{WhiteSpace("nowrap")} {
-			option.applyStyle(style)
-		}
-	}
+// WhitespaceNormal matches Rust's whitespace_normal helper.
+func (style StyleBuilder) WhitespaceNormal() StyleBuilder {
+	return style.configure(styleWhiteSpace("normal"))
 }
 
 // WhitespaceNowrap matches Rust's whitespace_nowrap helper.
 func (element *Element) WhitespaceNowrap() *Element {
-	return element.configureStyles([]string{"WhiteSpace"}, WhiteSpace("nowrap"))
+	return element.configureStyles([]string{"WhiteSpace"}, styleWhiteSpace("nowrap"))
+}
+
+// WhitespaceNowrap matches Rust's whitespace_nowrap helper.
+func (style StyleBuilder) WhitespaceNowrap() StyleBuilder {
+	return style.configure(styleWhiteSpace("nowrap"))
 }

@@ -1,6 +1,6 @@
 MoonBit から macOS のネイティブコントロールをホストします。
 
-## コントロールをホスト
+## Host
 
 `@ui.swift_ui_host([])` の内側で SwiftUI コントロールを作ります。macOS 専用です。対応する全コントロールをサイドバーに掲載しています。
 
@@ -16,10 +16,18 @@ fn native_toggle() -> @ui.Element {
 }
 ```
 
+## ネイティブコントロール
+
+SwiftUI ではボタン、スライダー、トグル、進行状況、ステッパー、通常・セキュア入力、ピッカー、日付・色ピッカー、ゲージを使えます。プロパティとイベントはサイドバーの各コントロールを参照してください。
+
 ## 制御値
 
 `.bind_value(...)`、`.bind_checked(...)`、`.bind_number(...)` でシグナルを接続し、対応する入力コールバックで更新します。
 
-## ネイティブ修飾子
+## サイズ
 
-QuickGUI のスタイルはホストに適用します。ネイティブコントロールには `.swift_ui_modifiers(...)` でコアの修飾子 JSON を渡し、`.label(...)` でラベルを追加します。
+ホストに `.swift_ui_match_contents_horizontal(true)` と `.swift_ui_match_contents_vertical(true)` を指定すると内容に合わせてサイズを決めます。`.width(...)` と `.height(...)` でホストを制限できます。QuickGUI スタイルはホスト境界に、ネイティブ修飾子は内部の SwiftUI コントロールに適用します。
+
+## 対応プラットフォーム
+
+SwiftUI ホスティングには macOS とホストライブラリーのネイティブブリッジが必要です。外観は OS のバージョンに従います。スタイルと逆方向ホストは[修飾子とホスティング](/docs/moonbit/swift-ui-hosting)を参照してください。

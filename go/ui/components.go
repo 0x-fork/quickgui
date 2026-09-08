@@ -33,7 +33,7 @@ func NativeElement(tag uint8, arguments ...any) *Element {
 }
 
 // View constructs a retained container from children. Configure it with fluent
-// properties, events, and Styles. Legacy constructor options remain supported.
+// properties, events, and styles. Apply reusable styles with Element.Style.
 func View(children ...any) *Element {
 	return newElement(protocol.TagView, children)
 }

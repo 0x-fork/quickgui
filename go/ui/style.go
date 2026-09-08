@@ -11,10 +11,9 @@ import (
 	"github.com/egoist/quickgui/go/protocol"
 )
 
-// Style stores a composed style, including nested interaction states.
-// Element methods configure styles fluently. Styles builds reusable values
-// for shared styles and compound parts.
-type Style struct {
+// styleData stores a composed style, including nested interaction states.
+// StyleBuilder exposes fluent composition over this internal record.
+type styleData struct {
 	ObjectFit                string
 	WordWrap                 string
 	TransitionTimingFunction any
@@ -44,11 +43,11 @@ type Style struct {
 	MarkdownCodeFontSize     any
 	ScrollToEndRevision      any
 	TextDecoration           string
-	Invalid                  *Style
-	Dragging                 *Style
-	DragOver                 *Style
-	FocusWithin              *Style
-	GroupActive              *Style
+	Invalid                  *styleData
+	Dragging                 *styleData
+	DragOver                 *styleData
+	FocusWithin              *styleData
+	GroupActive              *styleData
 	groupActiveRules         []groupHoverRule
 	GridTemplateColumns      any
 	GridTemplateRows         any
@@ -163,12 +162,12 @@ type Style struct {
 	OutlineStyle    string
 	Transform       any
 	TransformOrigin string
-	Hover           *Style
-	Active          *Style
-	Focus           *Style
-	Disabled        *Style
-	Selected        *Style
-	GroupHover      *Style
+	Hover           *styleData
+	Active          *styleData
+	Focus           *styleData
+	Disabled        *styleData
+	Selected        *styleData
+	GroupHover      *styleData
 	groupHoverRules []groupHoverRule
 }
 
@@ -280,8 +279,8 @@ func setFlex(node *native.Node, value any) {
 
 // Copy before merging so reusable themes and their nested states are never
 // mutated by a node's later or conditional styles.
-func mergeStateStyles(base, override *Style) *Style {
-	merged := &Style{}
+func mergeStateStyles(base, override *styleData) *styleData {
+	merged := &styleData{}
 	if base != nil {
 		mergeStyle(merged, *base)
 	}
@@ -291,7 +290,7 @@ func mergeStateStyles(base, override *Style) *Style {
 	return merged
 }
 
-func mergeStyle(target *Style, source Style) {
+func mergeStyle(target *styleData, source styleData) {
 	*target = normalizeStyleAliases(*target)
 	source = normalizeStyleAliases(source)
 	if source.ObjectFit != "" {
@@ -731,8 +730,8 @@ func mergeStyle(target *Style, source Style) {
 	}
 }
 
-func applyStyleList(node *native.Node, styles []Style) Style {
-	merged := Style{}
+func applyStyleList(node *native.Node, styles []styleData) styleData {
+	merged := styleData{}
 	for _, style := range styles {
 		mergeStyle(&merged, style)
 	}
@@ -740,13 +739,13 @@ func applyStyleList(node *native.Node, styles []Style) Style {
 	return merged
 }
 
-func bindStyleList(node *native.Node, styles func() []Style) {
+func bindStyleList(node *native.Node, styles func() []styleData) {
 	node.BindProperties(func() {
 		applyStyleList(node, styles())
 	})
 }
 
-func applyStyle(node *native.Node, style Style) {
+func applyStyle(node *native.Node, style styleData) {
 	style = normalizeStyleAliases(style)
 	if style.ObjectFit != "" {
 		setString(node, protocol.ObjectFit, style.ObjectFit)
@@ -1199,7 +1198,7 @@ type encodedStateStyle struct {
 	TransformOrigin string              `json:"transformOrigin,omitempty"`
 }
 
-func setStateStyle(node *native.Node, code uint16, state string, style *Style) {
+func setStateStyle(node *native.Node, code uint16, state string, style *styleData) {
 	node.Bind(func() {
 		encoded, anyField := encodeStateStyle(state, style)
 		if !anyField {
@@ -1218,7 +1217,7 @@ func setStateStyle(node *native.Node, code uint16, state string, style *Style) {
 	})
 }
 
-func encodeStateStyle(state string, style *Style) (encodedStateStyle, bool) {
+func encodeStateStyle(state string, style *styleData) (encodedStateStyle, bool) {
 	encoded := encodedStateStyle{}
 	anyField := false
 	if style.Background != nil {
@@ -1394,7 +1393,7 @@ func isFinite(value float64) bool {
 }
 
 // Normalize aliases before merging so later records override the same property.
-func normalizeStyleAliases(style Style) Style {
+func normalizeStyleAliases(style styleData) styleData {
 	if style.WordWrap != "" {
 		if style.OverflowWrap == "" {
 			style.OverflowWrap = style.WordWrap

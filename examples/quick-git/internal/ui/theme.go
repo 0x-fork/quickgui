@@ -68,80 +68,74 @@ func StatusColor(theme Theme, code string) string {
 	}
 }
 
-func (t Theme) Button(kind string) ui.Style {
-	style := ui.Styles(
-		ui.Display("flex"),
-		ui.Height(22),
-		ui.FlexShrink(0),
-		ui.AlignItems("center"),
-		ui.JustifyContent("center"),
-		ui.Gap(5),
-		ui.PaddingLeft(11),
-		ui.PaddingRight(11),
-		ui.BorderRadius(6),
-		ui.FontSize(UIFontSize),
-		ui.Cursor("default"),
-		ui.UserSelect("none"),
-		ui.AppRegion("no-drag"),
-		ui.DisabledStyle(ui.Opacity(0.4)),
-	)
+func (t Theme) Button(kind string) ui.StyleBuilder {
+	style := ui.Style().
+		Display("flex").
+		Height(22).
+		FlexShrink(0).
+		AlignItems("center").
+		JustifyContent("center").
+		Gap(5).
+		PaddingLeft(11).
+		PaddingRight(11).
+		BorderRadius(6).
+		FontSize(UIFontSize).
+		Cursor("default").
+		UserSelect("none").
+		AppRegion("no-drag").
+		DisabledStyle(func(s ui.StyleBuilder) ui.StyleBuilder { return s.Opacity(0.4) })
 	if kind == "primary" {
-		return ui.Styles(
-			style,
-			ui.BackgroundColor(t.Accent),
-			ui.TextColor(t.TextOnAccent),
-			ui.Hover(ui.BackgroundColor(t.AccentHover)),
-		)
+		return ui.Style().
+			Merge(style).
+			BackgroundColor(t.Accent).
+			TextColor(t.TextOnAccent).
+			Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor(t.AccentHover) })
 	}
 	color := t.Text
 	if kind == "danger" {
 		color = t.Danger
 	}
-	return ui.Styles(
-		style,
-		ui.BackgroundColor(t.Raised),
-		ui.TextColor(color),
-		ui.BorderWidth(1),
-		ui.BorderColor(t.BorderStrong),
-		ui.Hover(ui.BackgroundColor(t.Hover)),
-	)
+	return ui.Style().
+		Merge(style).
+		BackgroundColor(t.Raised).
+		TextColor(color).
+		BorderWidth(1).
+		BorderColor(t.BorderStrong).
+		Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor(t.Hover) })
 }
 
-func (t Theme) IconButton() ui.Style {
-	return ui.Styles(
-		ui.Display("flex"),
-		ui.Width(22),
-		ui.Height(22),
-		ui.FlexShrink(0),
-		ui.AlignItems("center"),
-		ui.JustifyContent("center"),
-		ui.TextColor(t.TextSecondary),
-		ui.BackgroundColor("transparent"),
-		ui.BorderRadius(5),
-		ui.Cursor("default"),
-		ui.AppRegion("no-drag"),
-		ui.Hover(
-			ui.BackgroundColor(t.Hover),
-			ui.TextColor(t.Text),
-		),
-		ui.Active(ui.BackgroundColor(t.Active)),
-		ui.DisabledStyle(ui.Opacity(0.4)),
-	)
+func (t Theme) IconButton() ui.StyleBuilder {
+	return ui.Style().
+		Display("flex").
+		Width(22).
+		Height(22).
+		FlexShrink(0).
+		AlignItems("center").
+		JustifyContent("center").
+		TextColor(t.TextSecondary).
+		BackgroundColor("transparent").
+		BorderRadius(5).
+		Cursor("default").
+		AppRegion("no-drag").
+		Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
+			return s.BackgroundColor(t.Hover).TextColor(t.Text)
+		}).
+		Active(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor(t.Active) }).
+		DisabledStyle(func(s ui.StyleBuilder) ui.StyleBuilder { return s.Opacity(0.4) })
 }
 
-func (t Theme) InputStyle() ui.Style {
-	return ui.Styles(
-		ui.Display("flex"),
-		ui.Height(22),
-		ui.PaddingLeft(7),
-		ui.PaddingRight(7),
-		ui.BackgroundColor(t.Input),
-		ui.TextColor(t.Text),
-		ui.BorderWidth(1),
-		ui.BorderColor(t.InputBorder),
-		ui.BorderRadius(6),
-		ui.FontSize(UIFontSize),
-		ui.AppRegion("no-drag"),
-		ui.Focus(ui.BorderColor(t.Accent)),
-	)
+func (t Theme) InputStyle() ui.StyleBuilder {
+	return ui.Style().
+		Display("flex").
+		Height(22).
+		PaddingLeft(7).
+		PaddingRight(7).
+		BackgroundColor(t.Input).
+		TextColor(t.Text).
+		BorderWidth(1).
+		BorderColor(t.InputBorder).
+		BorderRadius(6).
+		FontSize(UIFontSize).
+		AppRegion("no-drag").
+		FocusStyle(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BorderColor(t.Accent) })
 }

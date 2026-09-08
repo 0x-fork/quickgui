@@ -1,26 +1,11 @@
+import { docsOutline, docsTitle, DOCS_GUIDE_ORDER } from './docs-structure'
 import type { Locale } from '../i18n'
 import { MOONBIT_DOCS_PAGES } from './moonbit-docs'
 
 export const DOCS_FRONTENDS = ['go', 'moonbit'] as const
 export type DocsFrontend = (typeof DOCS_FRONTENDS)[number]
 
-export type GoDocsSlug =
-  | 'getting-started'
-  | 'project-structure'
-  | 'updater'
-  | 'extensions'
-  | 'reactivity'
-  | 'rendering'
-  | 'routing'
-  | 'styling'
-  | 'animations'
-  | 'components'
-  | 'forms-and-input'
-  | 'overlays-and-dialogs'
-  | 'swift-ui'
-  | 'swift-ui-hosting'
-
-export type DocsSlug = GoDocsSlug | 'native-services'
+export type DocsSlug = (typeof DOCS_GUIDE_ORDER)[number]
 
 export interface DocsOutlineItem {
   id: string
@@ -38,26 +23,42 @@ export interface DocsPageTranslation {
 export interface DocsPageMeta extends DocsPageTranslation {
   frontend: DocsFrontend
   slug: DocsSlug
-  translations?: Partial<Record<Locale, Omit<DocsPageTranslation, 'searchTerms'>>>
+  translations?: Partial<
+    Record<Locale, Omit<DocsPageTranslation, 'searchTerms' | 'outline' | 'title'>>
+  >
 }
 
 export const GO_DOCS_PAGES: readonly DocsPageMeta[] = [
   {
     frontend: 'go',
+    slug: 'getting-started',
+    outline: docsOutline('getting-started'),
+    title: docsTitle('getting-started'),
+    description: 'Create and run a native QuickGUI app with QuickGUI UI.',
+    searchTerms: ['install', 'create', 'cli', 'window', 'bun', 'macos'],
+  },
+  {
+    frontend: 'go',
+    slug: 'project-structure',
+    outline: docsOutline('project-structure'),
+    title: docsTitle('project-structure'),
+    description: 'Understand the files in a generated QuickGUI UI project.',
+    searchTerms: ['files', 'config', 'entry', 'package', 'quickgui.config'],
+  },
+  {
+    frontend: 'go',
+    slug: 'updater',
+    outline: docsOutline('updater'),
+    title: docsTitle('updater'),
+    description: 'Add optional Sparkle-compatible updates to a Go application.',
+    searchTerms: ['updater', 'sparkle', 'appcast', 'ed25519', 'extension', 'updates'],
+  },
+  {
+    frontend: 'go',
     slug: 'extensions',
-    title: 'Authoring Extensions',
+    outline: docsOutline('extensions'),
+    title: docsTitle('extensions'),
     description: 'Share Go components and build optional native providers for QuickGUI.',
-    outline: [
-      { id: 'choose-an-extension-type', title: 'Choose an extension type' },
-      { id: 'create-an-extension-project', title: 'Create an extension project' },
-      { id: 'share-a-go-component', title: 'Share a Go component' },
-      { id: 'lay-out-a-native-extension', title: 'Lay out a native extension' },
-      { id: 'declare-the-go-dependency', title: 'Declare the Go dependency' },
-      { id: 'implement-the-native-contract', title: 'Implement the native contract' },
-      { id: 'automatic-registration', title: 'Automatic registration' },
-      { id: 'build-and-package-artifacts', title: 'Build and package artifacts' },
-      { id: 'test-and-distribute', title: 'Test and distribute' },
-    ],
     searchTerms: [
       'extension',
       'authoring',
@@ -79,158 +80,61 @@ export const GO_DOCS_PAGES: readonly DocsPageMeta[] = [
   },
   {
     frontend: 'go',
-    slug: 'updater',
-    title: 'Auto Updater',
-    description: 'Add optional Sparkle-compatible updates to a Go application.',
-    outline: [
-      { id: 'configuration', title: 'Configuration' },
-      { id: 'application-usage', title: 'Application usage' },
-      { id: 'lifecycle', title: 'Lifecycle' },
-      { id: 'platforms', title: 'Platforms' },
-      { id: 'publishing', title: 'Publishing' },
-      { id: 'native-artifacts', title: 'Native artifacts' },
-    ],
-    searchTerms: ['updater', 'sparkle', 'appcast', 'ed25519', 'extension', 'updates'],
-  },
-  {
-    frontend: 'go',
-    slug: 'getting-started',
-    title: 'Getting Started',
-    description: 'Create and run a native QuickGUI app with QuickGUI UI.',
-    outline: [
-      { id: 'requirements', title: 'Requirements' },
-      { id: 'create-a-project', title: 'Create a project' },
-      { id: 'your-first-window', title: 'Your first window' },
-      { id: 'run-and-build', title: 'Run and build' },
-      { id: 'next-steps', title: 'Next steps' },
-    ],
-    searchTerms: ['install', 'create', 'cli', 'window', 'bun', 'macos'],
-  },
-  {
-    frontend: 'go',
-    slug: 'project-structure',
-    title: 'Project Structure',
-    description: 'Understand the files in a generated QuickGUI UI project.',
-    outline: [
-      { id: 'generated-files', title: 'Generated files' },
-      { id: 'application-entry', title: 'Application entry' },
-      { id: 'configuration', title: 'Configuration' },
-      { id: 'packages', title: 'Packages' },
-    ],
-    searchTerms: ['files', 'config', 'entry', 'package', 'quickgui.config'],
+    slug: 'native-services',
+    title: docsTitle('native-services'),
+    description: 'Manage window lifetimes and asynchronous native work.',
+    outline: docsOutline('native-services'),
+    searchTerms: ['window', 'native', 'lifecycle', 'services', 'WatchFiles', 'Dispatch', 'Async'],
   },
   {
     frontend: 'go',
     slug: 'reactivity',
-    title: 'Reactivity',
+    outline: docsOutline('reactivity'),
+    title: docsTitle('reactivity'),
     description:
       'Signals connect state to the text and properties that read it. Updates change retained nodes without rerunning the entire component.',
-    outline: [
-      {
-        id: 'reactive-state',
-        title: 'Reactive state',
-      },
-      {
-        id: 'derived-state',
-        title: 'Derived state',
-      },
-      {
-        id: 'effects-and-cleanup',
-        title: 'Effects and cleanup',
-      },
-      {
-        id: 'batched-updates',
-        title: 'Batched updates',
-      },
-    ],
     searchTerms: ['signal', 'reactivity', 'memo', 'effect', 'batch', 'cleanup'],
   },
   {
     frontend: 'go',
     slug: 'rendering',
-    title: 'Rendering',
+    outline: docsOutline('rendering'),
+    title: docsTitle('rendering'),
     description:
       'Components construct a retained tree once when mounted. Reactive bindings update the affected nodes; the native core handles layout, painting, and accessibility.',
-    outline: [
-      {
-        id: 'rendering-model',
-        title: 'Rendering model',
-      },
-      {
-        id: 'conditional-content',
-        title: 'Conditional content',
-      },
-      {
-        id: 'lists-and-identity',
-        title: 'Lists and identity',
-      },
-      {
-        id: 'window-lifecycle',
-        title: 'Window lifecycle',
-      },
-      {
-        id: 'current-window',
-        title: 'Current window',
-      },
-    ],
     searchTerms: ['rendering', 'retained', 'children', 'mount', 'lifecycle', 'keyed'],
   },
   {
     frontend: 'go',
+    slug: 'components',
+    outline: docsOutline('components'),
+    title: docsTitle('components'),
+    description: 'Choose between primitives and accessible compound components.',
+    searchTerms: ['view', 'text', 'button', 'tabs', 'checkbox', 'unstyled'],
+  },
+  {
+    frontend: 'go',
     slug: 'routing',
-    title: 'Routing',
+    outline: docsOutline('routing'),
+    title: docsTitle('routing'),
     description:
       'The router selects components from the current application path and keeps a navigation history. Routes render native QuickGUI content in the current window.',
-    outline: [
-      {
-        id: 'routes',
-        title: 'Routes',
-      },
-      {
-        id: 'nested-layouts',
-        title: 'Nested layouts',
-      },
-      {
-        id: 'navigation',
-        title: 'Navigation',
-      },
-      {
-        id: 'route-parameters',
-        title: 'Route parameters',
-      },
-    ],
     searchTerms: ['router', 'route', 'layout', 'outlet', 'navigation', 'history', 'parameters'],
   },
   {
     frontend: 'go',
     slug: 'styling',
-    title: 'Styling & Layout',
+    outline: docsOutline('styling'),
+    title: docsTitle('styling'),
     description: 'Lay out and style native nodes with familiar properties.',
-    outline: [
-      { id: 'style-props', title: 'Style props' },
-      { id: 'merging-styles', title: 'Merging styles' },
-      { id: 'reusable-styles', title: 'Reusable styles' },
-      { id: 'flexbox', title: 'Flexbox' },
-      { id: 'grid', title: 'Grid' },
-      { id: 'text-and-color', title: 'Text and color' },
-      { id: 'interaction-states', title: 'Interaction states' },
-      { id: 'groups-and-named-group-hover', title: 'Groups and named group hover' },
-    ],
     searchTerms: ['style', 'layout', 'flexbox', 'grid', 'color', 'hover'],
   },
   {
     frontend: 'go',
     slug: 'animations',
-    title: 'Transitions & Animation',
+    outline: docsOutline('animations'),
+    title: docsTitle('animations'),
     description: 'Animate native style changes and images with retained Go components.',
-    outline: [
-      { id: 'hover-transitions', title: 'Hover transitions' },
-      { id: 'state-driven-animation', title: 'State-driven animation' },
-      { id: 'timing-and-frame-rate', title: 'Timing and frame rate' },
-      { id: 'supported-properties', title: 'Supported properties' },
-      { id: 'mounting-and-reduced-motion', title: 'Mounting and reduced motion' },
-      { id: 'animated-images', title: 'Animated images' },
-    ],
     searchTerms: [
       'transition',
       'animation',
@@ -245,71 +149,34 @@ export const GO_DOCS_PAGES: readonly DocsPageMeta[] = [
   },
   {
     frontend: 'go',
-    slug: 'components',
-    title: 'Components',
-    description: 'Choose between primitives and accessible compound components.',
-    outline: [
-      { id: 'defining-components', title: 'Defining components' },
-      { id: 'primitives', title: 'Primitives' },
-      { id: 'compound-components', title: 'Compound components' },
-      { id: 'controlled-state', title: 'Controlled state' },
-      { id: 'component-families', title: 'Component families' },
-      { id: 'styling-parts', title: 'Styling parts' },
-    ],
-    searchTerms: ['view', 'text', 'button', 'tabs', 'checkbox', 'unstyled'],
-  },
-  {
-    frontend: 'go',
     slug: 'forms-and-input',
-    title: 'Forms & Input',
+    outline: docsOutline('forms-and-input'),
+    title: docsTitle('forms-and-input'),
     description: 'Build controlled fields, choices, and selection controls.',
-    outline: [
-      { id: 'text-input', title: 'Text input' },
-      { id: 'fields', title: 'Fields' },
-      { id: 'choices', title: 'Choices' },
-      { id: 'select', title: 'Select' },
-      { id: 'events', title: 'Events' },
-    ],
     searchTerms: ['input', 'field', 'checkbox', 'radio', 'select', 'events'],
   },
   {
     frontend: 'go',
     slug: 'overlays-and-dialogs',
-    title: 'Overlays & Dialogs',
+    outline: docsOutline('overlays-and-dialogs'),
+    title: docsTitle('overlays-and-dialogs'),
     description: 'Present in-window overlays and operating-system dialogs.',
-    outline: [
-      { id: 'popover', title: 'Popover' },
-      { id: 'dialog', title: 'Dialog' },
-      { id: 'system-popover', title: 'System popover' },
-      { id: 'native-dialogs', title: 'Native dialogs' },
-    ],
     searchTerms: ['popover', 'dialog', 'overlay', 'alert', 'file picker'],
   },
   {
     frontend: 'go',
     slug: 'swift-ui',
-    title: 'SwiftUI',
+    outline: docsOutline('swift-ui'),
+    title: docsTitle('swift-ui'),
     description: 'Mount real SwiftUI controls inside a QuickGUI UI application.',
-    outline: [
-      { id: 'host', title: 'Host' },
-      { id: 'native-controls', title: 'Native controls' },
-      { id: 'controlled-values', title: 'Controlled values' },
-      { id: 'sizing', title: 'Sizing' },
-      { id: 'platform-support', title: 'Platform support' },
-    ],
     searchTerms: ['swiftui', 'host', 'slider', 'toggle', 'picker', 'native'],
   },
   {
     frontend: 'go',
     slug: 'swift-ui-hosting',
-    title: 'Modifiers & Hosting',
+    outline: docsOutline('swift-ui-hosting'),
+    title: docsTitle('swift-ui-hosting'),
     description: 'Style SwiftUI controls and host QuickGUI content back inside them.',
-    outline: [
-      { id: 'modifiers', title: 'Modifiers' },
-      { id: 'liquid-glass', title: 'Liquid Glass' },
-      { id: 'reverse-hosting', title: 'Reverse hosting' },
-      { id: 'swiftui-popover', title: 'SwiftUI popover' },
-    ],
     searchTerms: ['modifier', 'glass', 'quickguihostview', 'popover', 'reverse host'],
   },
 ]

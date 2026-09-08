@@ -19,8 +19,7 @@ func TextExample() {
 		ui.Text(
 			"Count: ",
 			count,
-			ui.FontSize(20),
-		)
+		).FontSize(20)
 		ui.Button("Increment", ui.OnClick(func() { setCount(count() + 1) }))
 	})
 }
@@ -30,6 +29,6 @@ func TextExample() {
 
 | プロパティ | 説明 |
 | --- | --- |
-| `ui.BackgroundColor(...)`, `ui.Padding(...)`, `ui.Hover(...)` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
+| `ui.Style().BackgroundColor(...)`, `ui.Style().Padding(...)`, `ui.Style().Hover(...)` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
 | `children` | コンポーネント内にマウントする内容です。 |
 | `Ref` | 保持されたネイティブノードを受け取ります。 |

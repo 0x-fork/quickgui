@@ -1,6 +1,6 @@
 要素のメソッドと `@ui.style()` は同じネイティブスタイルのプロパティを使います。数値の寸法はピクセル、文字列はパーセントやネイティブのキーワードを指定します。
 
-## fluent レイアウト
+## スタイルメソッド
 
 ```moonbit
 fn card() -> @ui.Element {
@@ -18,7 +18,7 @@ fn card() -> @ui.Element {
 
 一般的な配置には `.flex_row()`、`.flex_col()`、`.items_center()`、`.justify_center()` を使います。`.flex_1()` は grow、shrink、ゼロの basis を設定します。スクロールする flex の子には `.min_height(0)` を指定し、親のサイズを制限します。
 
-## マージとリアクティブなスタイル
+## スタイルのマージ
 
 `.style(base).style(overrides)` は順番に宣言をマージし、後のプロパティが優先されます。スタイルビルダーの `.merge(other)` も同様です。適用時にスナップショットを取るため、その後ビルダーを変更してもマウント済みの要素は更新されません。
 
@@ -39,7 +39,47 @@ fn selectable() -> @ui.Element {
 
 コンパイラーは `.style(...)` と fluent メソッド内の getter をバインドします。更新のたびに後の宣言が優先され、消えた宣言は解除されるか前の値へ戻ります。操作状態のコールバックも getter を読めます。適用済みビルダーの変更はスナップショットの変更なので、動的スタイルはシグナルから導出してください。
 
-## 操作状態
+## スタイルの再利用
+
+`@ui.style()` は再利用できる `@ui.Style` を返します。要素や複合パーツに `.style(shared)` で適用します。ビルダーは変更可能なので、派生スタイルには `@ui.style().merge(base)` を使ってから上書きします。適用時に宣言をコピーするため、その後の変更はマウント済みノードに反映されません。
+
+```moonbit
+fn shared_cards() -> @ui.Element {
+  let card = @ui.style().padding(20).border_radius(12)
+  let emphasized = @ui.style().merge(card).padding_left(28)
+  @ui.div([
+    @ui.div([@ui.text("Hello")]).style(card),
+    @ui.div([@ui.text("Another card")]).style(emphasized),
+  ])
+  .flex_col()
+  .gap(12)
+}
+```
+
+## Flexbox
+
+flex レイアウトには `.flex()`、`.flex_row()`、`.flex_col()` を使います。`.flex_1()` は grow 1、shrink 1、basis 0 を設定します。スクロールする子には `.min_height(0)` や `.min_width(0)` と、サイズを制限した親が必要です。`@ui.style()` でも同じメソッドを使えます。
+
+## グリッド
+
+等幅の列には `.grid_cols(3)`、明示的なトラックには `.grid_template_columns("220px 1fr")` を使います。`.col_span_full()`、`.col_start(...)`、`.col_span(...)` で子要素を配置します。要素とスタイルは Rust のヘルパーと4ピクセル単位の間隔を共有します。
+
+```moonbit
+fn grid() -> @ui.Element {
+  @ui.div([@ui.text("Sidebar"), @ui.text("Content")])
+  .grid_template_columns("220px 1fr")
+  .display("grid")
+  .gap(16)
+}
+```
+
+## テキストと色
+
+`@ui.rgb8(r, g, b)` または `@ui.rgba8(r, g, b, a)` を使い、各成分は 0〜255 で指定します。ウィンドウ設定ではこれらの色を JSON 値として使えます。整数の場合は `0xAABBGGRR` 形式で、`0` は透明です。ウィンドウの `background` に CSS 色文字列を渡さないでください。
+
+`@ui.svg(source)` は `.text_color(...)` で着色するマスクになります。複数色のグラフは Quick Git のように、色ごとに SVG レイヤーを分けてください。
+
+## インタラクション状態
 
 ポインターとフォーカスの状態には `.hover(s => ...)`、`.active(s => ...)`、`.focus_style(s => ...)` を使います。`.selected_style` は複合パーツの選択状態を指定します。これらの状態はネイティブコアが解決します。ドロップ先のドラッグ中の外観には、`bind_json` と `@protocol.DRAG_OVER_STYLE` でスタイルの `.json()` を返します。ノードをドロップ先として設定する必要もあり、スタイルだけでドロップ動作は有効になりません。プロトコル定数を使う場合は `egoist/quickgui/protocol` をインポートします。
 
@@ -60,11 +100,8 @@ fn interaction_button() -> @ui.Element {
 }
 ```
 
-## 色と SVG
+## グループと名前付きグループのホバー
 
-`@ui.rgb8(r, g, b)` または `@ui.rgba8(r, g, b, a)` を使い、各成分は 0〜255 で指定します。ウィンドウ設定ではこれらの色を JSON 値として使えます。整数の場合は `0xAABBGGRR` 形式で、`0` は透明です。ウィンドウの `background` に CSS 色文字列を渡さないでください。
+`.group("card")` は祖先グループに名前を付けます。MoonBit では `.bind_json(@protocol.GROUP_HOVER_STYLE, read)` と `GROUP_ACTIVE_STYLE` でグループの描画ルールを指定します。`group` 名と描画フィールドを持つルール配列を渡します。スタイルビルダーの `.json()` で描画宣言を作成できます。定数には `egoist/quickgui/protocol` をインポートします。
 
-`@ui.svg(source)` は `.text_color(...)` で着色するマスクになります。複数色のグラフは Quick Git のように、色ごとに SVG レイヤーを分けてください。
-
-
-レイアウトのヘルパーは Rust と共通です：`.grid_cols(3)`、`.col_span_full()`、`.flex_col_reverse()`、`.justify_between()`、`.p_4()`、`.mx_auto()`、`.rounded_lg()`。数値付きの間隔プリセットは Rust と同じ 4 ピクセル単位で、`rounded_lg` の半径は 8 ピクセルです。`@ui.style()` でも同じヘルパーを使えます。`.flex()` は flex レイアウトを有効にし、`.flex_1()` は grow 1、shrink 1、basis 0 を設定します。
+名前付きルールは同名の最も近い祖先に、名前なしルールは最も近いグループに従います。ルールは順番に適用され、ノード自身のホバーが重複プロパティを上書きします。`FOCUS_WITHIN_STYLE` はノードや子孫のフォーカスに従います。これらの状態はレイアウトを変更せず、カーソルを設定できません。

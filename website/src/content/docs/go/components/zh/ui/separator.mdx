@@ -16,7 +16,7 @@ import (
 func SeparatorExample() {
 	ui.Separator.Root(ui.SeparatorProps{
 		Orientation: "horizontal",
-		PartProps:   ui.PartProps{Style: ui.Styles(ui.Height(1), ui.BackgroundColor("#d1d5db"))},
+		PartProps:   ui.PartProps{Style: ui.Style().Height(1).BackgroundColor("#d1d5db")},
 	})
 }
 ```

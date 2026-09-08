@@ -37,18 +37,6 @@ fn card_composition() -> @ui.Element {
 }
 ```
 
-## Interactive gallery
-
-The [MoonBit components example](https://github.com/egoist/quickgui/tree/main/examples/components-moonbit) includes all 43 demos from the Go gallery, with the same sidebar and light/dark appearance. Explore mixed and read-only controls, animated switches, pickers, native menus, dialogs, a virtual table with 5,000 rows, and lazy tree children.
-
-From a source checkout with MoonBit and the native host library installed:
-
-```sh
-bun --cwd examples/components-moonbit dev
-```
-
-Run `bun --cwd examples/components-moonbit check` for the SDK and gallery tests, or add `--native` to present every demo in both appearances through the native host.
-
 ## Primitives
 
 | Constructor | Content |
@@ -60,7 +48,41 @@ Run `bun --cwd examples/components-moonbit check` for the SDK and gallery tests,
 | `image(source)` / `svg(source)` | Images or tinted SVG masks. |
 | `markdown(source)` | Native Markdown content. |
 
-## Tables and visible rows
+## Compound components
+
+Create a root such as `checkbox([])`, `tabs([])` or `dialog([])`, then create related parts with `root.slot(@ui.Indicator)` or `root.slot(@ui.Panel, value="settings")`. Parts share the root scope automatically. Descendants of an accordion item also inherit its value and index. Set initial state with `.checked(false)` or `.active_value("overview")`; use `.bind_checked(...)` or `.bind_active_value(...)` and a change callback for controlled state. Every builder returns an `Element`. The raw `.part(...)` API remains available for extensions.
+
+## Controlled state
+
+Read signal getters in `.checked(checked())` or `.active_value(value())`, and write changes through the corresponding callbacks. Literals initialize component-owned state. Explicit `bind_*` methods remain available when composing bindings manually.
+
+```moonbit
+fn notifications() -> @ui.Element {
+  let (checked, set_checked) = @ui.create_signal(false)
+  let box = @ui.checkbox([])
+    .checked(checked())
+    .on_checked_change(value => set_checked(value))
+  box.children([box.slot(@ui.Indicator)]).width(20).height(20)
+}
+```
+
+Every native control has a dedicated page in the Components sidebar. For complete workflows, see [Forms & Input](/docs/moonbit/forms-and-input) and [Overlays & Dialogs](/docs/moonbit/overlays-and-dialogs).
+
+## Component families
+
+### Interactive gallery
+
+The [MoonBit components example](https://github.com/egoist/quickgui/tree/main/examples/components-moonbit) includes all 43 demos from the Go gallery, with the same sidebar and light/dark appearance. Explore mixed and read-only controls, animated switches, pickers, native menus, dialogs, a virtual table with 5,000 rows, and lazy tree children.
+
+From a source checkout with MoonBit and the native host library installed:
+
+```sh
+bun --cwd examples/components-moonbit dev
+```
+
+Run `bun --cwd examples/components-moonbit check` for the SDK and gallery tests, or add `--native` to present every demo in both appearances through the native host.
+
+### Tables and visible rows
 
 `table([]).columns(columns).row_count(rows).row_height(height)` binds column definitions and the full row count. Add `table_row([]).row_index(index)` and `table_cell([]).column(column_id)` parts. The core handles layout, scrolling, keyboard selection, and accessibility. This small table mounts all three rows:
 
@@ -86,7 +108,7 @@ For large data, listen to `.on_change(...)` and retain its `visibleRange` field 
 
 `selectedRanges` reports selection with inclusive range ends. Bind controlled selection through `@protocol.SELECTION`. See [Quick Git’s table usage](https://github.com/egoist/quickgui/tree/main/examples/quick-git-moonbit) for virtualized history and diff rows.
 
-## Resizable panels
+### Resizable panels
 
 ```moonbit
 fn split_view() -> @ui.Element {
@@ -107,18 +129,6 @@ fn split_view() -> @ui.Element {
 
 The core tracks the drag and updates pane geometry. The callback reports the width for application state or persistence; it is not part of pointer tracking.
 
-## Compound parts
+## Styling parts
 
-Create a root such as `checkbox([])`, `tabs([])` or `dialog([])`, then create related parts with `root.slot(@ui.Indicator)` or `root.slot(@ui.Panel, value="settings")`. Parts share the root scope automatically. Descendants of an accordion item also inherit its value and index. Set initial state with `.checked(false)` or `.active_value("overview")`; use `.bind_checked(...)` or `.bind_active_value(...)` and a change callback for controlled state. Every builder returns an `Element`. The raw `.part(...)` API remains available for extensions.
-
-```moonbit
-fn notifications() -> @ui.Element {
-  let (checked, set_checked) = @ui.create_signal(false)
-  let box = @ui.checkbox([])
-    .checked(checked())
-    .on_checked_change(value => set_checked(value))
-  box.children([box.slot(@ui.Indicator)]).width(20).height(20)
-}
-```
-
-Every native control has a dedicated page in the Components sidebar. For complete workflows, see [Forms & Input](/docs/moonbit/forms-and-input) and [Overlays & Dialogs](/docs/moonbit/overlays-and-dialogs).
+Every compound part is an `Element`, so it accepts the same `.style(shared)`, layout, typography, and interaction modifiers as a primitive. Create parts with `.slot(...)` to retain their root scope and item identity. Reuse builders as described in [Styling & Layout](/docs/moonbit/styling#reusable-styles).

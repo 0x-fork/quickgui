@@ -19,7 +19,7 @@ func TestNativeResizeReportsSizesWithoutRebuildingPanel(t *testing.T) {
 		root := captureComponent(func() {
 			ProvideApp(AppContext{Theme: theme, Store: &model.Store{}}, func() {
 				resizablePanel("Resize history", width, func(next float64) { setWidth(next) }, 260, 1000,
-					func() { gui.Text("Retained selection") }, gui.Styles(),
+					func() { gui.Text("Retained selection") }, gui.Style(),
 				)
 			})
 		})

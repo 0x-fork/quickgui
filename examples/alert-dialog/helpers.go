@@ -15,34 +15,17 @@ func run(options native.WindowOptions, component func()) {
 		ui.View(
 			func() {
 				ui.View(
-					func() { ui.Text(options.Title, ui.FontSize(14), ui.FontWeight(600)) },
-					ui.Display("flex"),
-					ui.Height(52),
-					ui.FlexShrink(0),
-					ui.AlignItems("center"),
-					ui.JustifyContent("center"),
-					ui.AppRegion("drag"),
-					ui.BorderColor("#1f2530"),
-					ui.BorderBottomWidth(1),
-				)
+					func() {
+						ui.Text(
+							options.Title,
+						).FontSize(14).FontWeight(600)
+					},
+				).Display("flex").Height(52).FlexShrink(0).AlignItems("center").JustifyContent("center").AppRegion("drag").BorderColor("#1f2530").BorderBottomWidth(1)
 				ui.View(
 					component,
-					ui.Display("flex"),
-					ui.Flex(1),
-					ui.MinHeight(0),
-					ui.Padding(36),
-					ui.AlignItems("center"),
-					ui.JustifyContent("center"),
-					ui.OverflowY("auto"),
-				)
+				).Display("flex").Flex(1).MinHeight(0).Padding(36).AlignItems("center").JustifyContent("center").OverflowY("auto")
 			},
-			ui.Display("flex"),
-			ui.FlexDirection("column"),
-			ui.Width("100%"),
-			ui.Height("100%"),
-			ui.BackgroundColor("#0b0e14"),
-			ui.TextColor("#f4f7fb"),
-		)
+		).Display("flex").FlexDirection("column").Width("100%").Height("100%").BackgroundColor("#0b0e14").TextColor("#f4f7fb")
 	}
 	if err := native.Run(func() {
 		open := func() { native.NewWindow(options) }
@@ -57,37 +40,35 @@ func run(options native.WindowOptions, component func()) {
 	}
 }
 
-var panelStyle = ui.Styles(
-	ui.Display("flex"),
-	ui.FlexDirection("column"),
-	ui.Width("100%"),
-	ui.MaxWidth(480),
-	ui.FlexShrink(0),
-	ui.Gap(20),
-	ui.Padding(28),
-	ui.BackgroundColor("#151922"),
-	ui.BorderColor("#2c3442"),
-	ui.BorderWidth(1),
-	ui.BorderRadius(16),
-)
+var panelStyle = ui.Style().
+	Display("flex").
+	FlexDirection("column").
+	Width("100%").
+	MaxWidth(480).
+	FlexShrink(0).
+	Gap(20).
+	Padding(28).
+	BackgroundColor("#151922").
+	BorderColor("#2c3442").
+	BorderWidth(1).
+	BorderRadius(16)
 
-var buttonStyle = ui.Styles(
-	ui.Display("flex"),
-	ui.Height(42),
-	ui.AlignItems("center"),
-	ui.JustifyContent("center"),
-	ui.PaddingLeft(16),
-	ui.PaddingRight(16),
-	ui.BackgroundColor("#262c38"),
-	ui.TextColor("#f4f7fb"),
-	ui.BorderColor("#3a4353"),
-	ui.BorderWidth(1),
-	ui.BorderRadius(9),
-	ui.Cursor("default"),
-	ui.AppRegion("no-drag"),
-	ui.UserSelect("none"),
-	ui.Hover(ui.BackgroundColor("#30394a")),
-)
+var buttonStyle = ui.Style().
+	Display("flex").
+	Height(42).
+	AlignItems("center").
+	JustifyContent("center").
+	PaddingLeft(16).
+	PaddingRight(16).
+	BackgroundColor("#262c38").
+	TextColor("#f4f7fb").
+	BorderColor("#3a4353").
+	BorderWidth(1).
+	BorderRadius(9).
+	Cursor("default").
+	AppRegion("no-drag").
+	UserSelect("none").
+	Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor("#30394a") })
 
 func button(label string, disabled func() bool, click func()) {
 	ui.Button(label, buttonStyle, ui.Disabled(disabled), ui.OnClick(click))
@@ -98,26 +79,13 @@ func dialogStatus(status func() string, pending func() bool) {
 		func() {
 			ui.Text(
 				status,
-				ui.FontSize(13),
-				ui.LineHeight(19),
-				ui.TextAlign("center"),
-				ui.UserSelect("text"),
-				ui.TextColor(func() string {
+			).FontSize(13).LineHeight(19).TextAlign("center").UserSelect("text").
+				TextColor(func() string {
 					if pending() {
 						return "#c7d2fe"
 					}
 					return "#aeb9c9"
-				}),
-			)
+				})
 		},
-		ui.Display("flex"),
-		ui.MinHeight(64),
-		ui.AlignItems("center"),
-		ui.JustifyContent("center"),
-		ui.Padding(14),
-		ui.BackgroundColor("#0f131a"),
-		ui.BorderColor("#252c38"),
-		ui.BorderWidth(1),
-		ui.BorderRadius(9),
-	)
+	).Display("flex").MinHeight(64).AlignItems("center").JustifyContent("center").Padding(14).BackgroundColor("#0f131a").BorderColor("#252c38").BorderWidth(1).BorderRadius(9)
 }

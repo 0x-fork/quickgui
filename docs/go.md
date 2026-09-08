@@ -47,7 +47,7 @@ func Counter() {
 			Padding(12).
 			RoundedLg().
 			Bg("#2563eb").
-			Hover(ui.BackgroundColor("#3b82f6")),
+			Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor("#3b82f6") }),
 	).FlexCol().
 		SizeFull().
 		ItemsCenter().
@@ -69,11 +69,20 @@ ui.View(
 ).Flex().PaddingLeft(20).TextAlign("center").RoundedLg()
 ```
 
-Go primitives return `*ui.Element`. `.Value`, `.Width`, `.PaddingLeft`, and the other modifiers return the same retained element. Accessors remain fine-grained bindings; later declarations replace earlier values without remounting children. `.OnClick(func() { ... })` handles clicks, and `.OnInput(func(value string) { ... })` receives text. Use `.OnClickEvent`, `.OnInputEvent`, or `.OnSubmitEvent` for the full native event. `.Styles(ui.Padding(12), ui.TextAlign("center"))` composes several style options; `.Style(shared)` applies a reusable style. Legacy options inside constructors remain supported.
+Go primitives return `*ui.Element`. `.Value`, `.Width`, `.PaddingLeft`, and the other modifiers return the same retained element. Accessors remain fine-grained bindings; later declarations replace earlier values without remounting children. `.OnClick(func() { ... })` handles clicks, and `.OnInput(func(value string) { ... })` receives text. Use `.OnClickEvent`, `.OnInputEvent`, or `.OnSubmitEvent` for the full native event. `.Style(shared)` applies a reusable style built with `ui.Style()`.
 
 Rust's layout helpers are available with Go names: `.FlexCol()`, `.FlexRowReverse()`, `.Flex1()`, `.ItemsCenter()`, `.JustifyBetween()`, `.GridCols(3)`, `.ColSpanFull()`, `.P4()`, `.MxAuto()`, `.SizeFull()`, `.RoundedLg()`, and `.TextSm()`. The generator checks 325 layout and style conveniences against Rust, including its four-pixel spacing scale and radius values. `.Flex()` selects flex display; `.Flex1()` sets grow 1, shrink 1, and zero basis.
 
-Use `ui.Styles(ui.Padding(12), ui.BorderRadius(8))` to share styles or fill a compound control’s `PartProps.Style` field. It returns a reusable `ui.Style` value; composing it with more options does not mutate it. Scalar accessors are bound independently when mounted, without rerunning the component.
+Use `ui.Style().Padding(12).BorderRadius(8)` to share styles or fill a compound control’s `PartProps.Style` field. It returns a reusable `ui.StyleBuilder` value; fluent modifiers and `.Merge(other)` return new values without mutating it. Scalar accessors are bound independently when mounted, without rerunning the component.
+
+```go
+card := ui.Style().Padding(20).RoundedLg().
+	Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.Bg("#1e293b") })
+ui.View("Hello").Style(card)
+ui.View("Another card").Style(card.PaddingLeft(28))
+```
+
+Builder `.When(condition, func(s ui.StyleBuilder) ui.StyleBuilder { ... })` takes a boolean setup value. Use the element’s `.When(getter, style)` or a part’s style accessor for reactive conditions. Save the returned value when deriving styles; applying a style keeps a snapshot with its scalar accessors.
 
 ## Conditional options
 
@@ -85,7 +94,7 @@ ui.Button("Toggle selection").
 	Padding(12).
 	Bg("#ccc").
 	RoundedLg().
-	When(selected, ui.BackgroundColor("#2563eb"), ui.TextColor("white")).
+	When(selected, ui.Style().BackgroundColor("#2563eb"), ui.Style().TextColor("white")).
 	OnClick(func() { setSelected(!selected()) })
 ```
 
@@ -97,37 +106,25 @@ Use `quickgui fmt --check` in CI or `quickgui fmt --project path/to/app` for ano
 
 ## Groups and named group hover
 
-`ui.Group(true)` marks an unnamed hover group; `ui.Group("card")` names it. A descendant’s `ui.GroupHover(...)` follows its nearest ancestor group, including named groups. `ui.GroupHoverNamed("card", ...)` follows the nearest ancestor with that name, skipping intervening groups with other names.
+`.Group(true)` marks an unnamed hover group; `.Group("card")` names it. A descendant’s `.GroupHover(...)` follows its nearest ancestor group. `.GroupHoverNamed("card", ...)` follows the nearest ancestor with that name, skipping groups with other names. Elements and reusable style builders accept the same style callbacks.
 
 ```go
 func GroupExample() {
 	ui.View(
-		func() {
-			ui.Text(
-				"Changes when the card is hovered",
-				ui.TextColor("#64748b"),
-				ui.GroupHover(ui.TextColor("#2563eb")),
-			)
-			ui.View(
-				func() {
-					ui.Text(
-						"Follows the card and the nested toolbar",
-						ui.GroupHoverNamed("card", ui.TextColor("#2563eb")),
-						ui.GroupHoverNamed("toolbar", ui.Opacity(0.8)),
-					)
-				},
-				ui.Group("toolbar"),
-			)
-		},
-		ui.Group("card"),
-		ui.Padding(20),
-	)
+		ui.Text("Changes when the card is hovered").TextColor("#64748b").
+			GroupHover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.TextColor("#2563eb") }),
+		ui.View(
+			ui.Text("Follows the card and the nested toolbar").
+				GroupHoverNamed("card", func(s ui.StyleBuilder) ui.StyleBuilder { return s.TextColor("#2563eb") }).
+				GroupHoverNamed("toolbar", func(s ui.StyleBuilder) ui.StyleBuilder { return s.Opacity(0.8) }),
+		).Group("toolbar"),
+	).Group("card").Padding(20)
 }
 ```
 
-Hovering any part of the group, including its padding and descendants, activates its rules. A nested group becomes the target for unnamed rules; named rules can still follow an outer group. With no matching ancestor, the rule has no effect. Repeated group rules accumulate in declaration order; a node’s own `Hover` style wins for overlapping properties. Use paint properties such as colors, opacity, outlines, and transforms. Hover updates are handled natively without rerunning components or changing layout.
+Hovering group padding or descendants activates its rules. Repeated group rules accumulate in declaration order; a node’s own `.Hover(...)` wins for overlapping properties. Use paint properties such as colors, opacity, outlines, and transforms. Hover updates run natively without rerunning components or changing layout.
 
-`ui.GroupActive(...)` and `ui.GroupActiveNamed("card", ui.Opacity(0.8))` use the same group lookup while the group is pressed. `ui.FocusWithin(...)` follows focus in the node or its descendants. Group and focus-within states accept paint styles and cannot set the cursor.
+`.GroupActive(...)` and `.GroupActiveNamed(...)` follow pressed groups. `.FocusWithin(...)` follows focus in the node or its descendants. Group and focus-within states accept paint styles and cannot set the cursor.
 
 ## Conditional content and lists
 
@@ -169,7 +166,7 @@ Go and Rust exchange bounded binary mutation batches and copied event data throu
 ## Packages and controls
 
 - `native`: application/window lifecycle, nodes, events, asynchronous dialogs and services, menus, OS filesystem watchers, and the Rust router.
-- `ui`: functional options, primitives, `Show`, `For`, `KeyedFor`, compound controls, routing, and macOS SwiftUI hosting.
+- `ui`: fluent styles, primitives, `Show`, `For`, `KeyedFor`, compound controls, routing, and macOS SwiftUI hosting.
 - `reactive`: signals, memos, batching, effects, owners, and contexts.
 - `host`: the purego C ABI adapter and a replaceable host interface for tests.
 

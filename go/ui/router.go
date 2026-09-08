@@ -286,8 +286,8 @@ type LinkProps struct {
 	Href          string
 	Replace       bool
 	End           bool
-	ActiveStyle   *Style
-	InactiveStyle *Style
+	ActiveStyle   *StyleBuilder
+	InactiveStyle *StyleBuilder
 }
 
 // Link is a native link button backed by the current router. ActiveStyle layers over Style while active.
@@ -300,19 +300,19 @@ func Link(props LinkProps, children ...any) *native.Node {
 	if props.Role == "" {
 		setString(node, protocol.Role, "link")
 	}
-	bindStyleList(node, func() []Style {
-		styles := []Style{}
+	bindStyleList(node, func() []styleData {
+		styles := []styleData{}
 		if base := resolveStyle(props.Style); base != nil {
 			styles = append(styles, *base)
 		}
 		if router.IsActive(props.Href, props.End) {
 			if props.ActiveStyle != nil {
-				styles = append(styles, *props.ActiveStyle)
+				styles = append(styles, props.ActiveStyle.style)
 			}
 		} else if props.InactiveStyle != nil {
-			styles = append(styles, *props.InactiveStyle)
+			styles = append(styles, props.InactiveStyle.style)
 		}
-		styles = append(styles, Style{AppRegion: "no-drag"})
+		styles = append(styles, styleData{AppRegion: "no-drag"})
 		return styles
 	})
 	setListener(node, protocol.EventClick, forwardClick(props.OnClick, func(*native.Event) {

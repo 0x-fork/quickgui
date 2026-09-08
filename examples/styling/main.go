@@ -40,31 +40,27 @@ func Styling() {
 			func() {
 				ui.View(
 					func() {
-						ui.Text("Declared styling", ui.FontSize(14), ui.FontWeight(700))
+						ui.Text(
+							"Declared styling",
+						).FontSize(14).FontWeight(700)
 						ui.Button(
 							"Switch palette",
-							ui.Height(28),
-							ui.PaddingLeft(12),
-							ui.PaddingRight(12),
-							ui.BorderRadius(7),
-							ui.BackgroundColor("#1b2434"),
-							ui.TextColor(ink),
-							ui.FontSize(12),
-							ui.AppRegion("no-drag"),
-							ui.UserSelect("none"),
-							ui.Hover(ui.BackgroundColor("#243047")),
+							ui.Style().Height(28),
+							ui.Style().PaddingLeft(12),
+							ui.Style().PaddingRight(12),
+							ui.Style().BorderRadius(7),
+							ui.Style().BackgroundColor("#1b2434"),
+							ui.Style().TextColor(ink),
+							ui.Style().FontSize(12),
+							ui.Style().AppRegion("no-drag"),
+							ui.Style().UserSelect("none"),
+							ui.Style().Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
+								return s.BackgroundColor("#243047")
+							}),
 							ui.OnClick(func() { setWarm(!warm()) }),
 						)
 					},
-					ui.Display("flex"),
-					ui.Height(52),
-					ui.FlexShrink(0),
-					ui.AlignItems("center"),
-					ui.JustifyContent("space-between"),
-					ui.PaddingLeft(96),
-					ui.PaddingRight(20),
-					ui.AppRegion("drag"),
-				)
+				).Display("flex").Height(52).FlexShrink(0).AlignItems("center").JustifyContent("space-between").PaddingLeft(96).PaddingRight(20).AppRegion("drag")
 				ui.View(
 					func() {
 						TextAlignment()
@@ -78,22 +74,15 @@ func Styling() {
 						StickyHeaders()
 						ScrollSnap()
 					},
-					ui.Flex(1),
-					ui.MinHeight(0),
-					ui.OverflowY("scroll"),
-					ui.Padding(20),
-					ui.Display("grid"),
-					ui.GridTemplateColumns("1fr 1fr"),
-					ui.Gap(16),
-				)
+				).Flex(1).MinHeight(0).OverflowY("scroll").Padding(20).Display("grid").GridTemplateColumns("1fr 1fr").Gap(16)
 			},
-			ui.Display("flex"),
-			ui.FlexDirection("column"),
-			ui.Width("100%"),
-			ui.Height("100%"),
-			ui.BackgroundColor("#0b0f17"),
-			ui.TextColor(ink),
-			ui.When(warm, ui.BackgroundColor("#251b13")),
+			ui.Style().Display("flex"),
+			ui.Style().FlexDirection("column"),
+			ui.Style().Width("100%"),
+			ui.Style().Height("100%"),
+			ui.Style().BackgroundColor("#0b0f17"),
+			ui.Style().TextColor(ink),
+			ui.When(warm, ui.Style().BackgroundColor("#251b13")),
 		)
 	})
 }

@@ -16,13 +16,13 @@ import (
 func ButtonExample(save func()) {
 	ui.Button(
 		"Save changes",
-		ui.Height(40),
-		ui.PaddingLeft(16),
-		ui.PaddingRight(16),
-		ui.BackgroundColor("#2563eb"),
-		ui.TextColor("white"),
-		ui.BorderRadius(8),
-		ui.Hover(ui.BackgroundColor("#3b82f6")),
+		ui.Style().Height(40),
+		ui.Style().PaddingLeft(16),
+		ui.Style().PaddingRight(16),
+		ui.Style().BackgroundColor("#2563eb"),
+		ui.Style().TextColor("white"),
+		ui.Style().BorderRadius(8),
+		ui.Style().Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor("#3b82f6") }),
 		ui.OnClick(save),
 	)
 }
@@ -32,7 +32,7 @@ func ButtonExample(save func()) {
 
 | 属性 | 说明 |
 | --- | --- |
-| `ui.BackgroundColor(...)`, `ui.Padding(...)`, `ui.Hover(...)` | QuickGUI 的布局、绘制、排版和交互状态样式。 |
+| `ui.Style().BackgroundColor(...)`, `ui.Style().Padding(...)`, `ui.Style().Hover(...)` | QuickGUI 的布局、绘制、排版和交互状态样式。 |
 | `children` | 挂载在组件内部的内容。 |
 | `OnClick` | 在核心完成激活判定后运行。 |
 | `Disabled` | 禁止交互，并暴露禁用状态。 |

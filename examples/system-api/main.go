@@ -96,31 +96,15 @@ func SystemAPIs() {
 		func() {
 			ui.View(
 				"Native system APIs",
-				ui.Display("flex"),
-				ui.Height(52),
-				ui.FlexShrink(0),
-				ui.AlignItems("center"),
-				ui.JustifyContent("center"),
-				ui.FontSize(14),
-				ui.FontWeight(600),
-				ui.AppRegion("drag"),
-				ui.BorderColor("#1f2530"),
-				ui.BorderBottomWidth(1),
-			)
+			).Display("flex").Height(52).FlexShrink(0).AlignItems("center").JustifyContent("center").FontSize(14).FontWeight(600).AppRegion("drag").BorderColor("#1f2530").BorderBottomWidth(1)
 			ui.View(
 				func() {
 					ui.Text(
 						"Native integrations",
-						ui.FontSize(26),
-						ui.LineHeight(32),
-						ui.FontWeight(700),
-					)
+					).FontSize(26).LineHeight(32).FontWeight(700)
 					ui.Text(
 						"Typed Go APIs for application state, desktop services, notifications, and native resources.",
-						ui.TextColor("#9aa6b7"),
-						ui.FontSize(14),
-						ui.LineHeight(21),
-					)
+					).TextColor("#9aa6b7").FontSize(14).LineHeight(21)
 					ui.View(
 						func() {
 							for _, item := range state.actions() {
@@ -132,48 +116,22 @@ func SystemAPIs() {
 								)
 							}
 						},
-						ui.Display("flex"),
-						ui.FlexWrap("wrap"),
-						ui.Gap(10),
-					)
+					).Display("flex").FlexWrap("wrap").Gap(10)
 					ui.View(
 						func() {
 							ui.Text(
 								status,
-								ui.FontSize(13),
-								ui.LineHeight(19),
-								ui.UserSelect("text"),
-								ui.FontFamily("monospace"),
-								ui.TextColor(func() string {
+							).FontSize(13).LineHeight(19).UserSelect("text").FontFamily("monospace").
+								TextColor(func() string {
 									if busy() {
 										return "#c7d2fe"
 									}
 									return "#aeb9c9"
-								}),
-							)
+								})
 						},
-						ui.MinHeight(68),
-						ui.Padding(16),
-						ui.BackgroundColor("#111620"),
-						ui.BorderColor("#293242"),
-						ui.BorderWidth(1),
-						ui.BorderRadius(10),
-					)
+					).MinHeight(68).Padding(16).BackgroundColor("#111620").BorderColor("#293242").BorderWidth(1).BorderRadius(10)
 				},
-				ui.Display("flex"),
-				ui.FlexDirection("column"),
-				ui.Flex(1),
-				ui.MinHeight(0),
-				ui.Gap(18),
-				ui.Padding(28),
-				ui.OverflowY("auto"),
-			)
+			).Display("flex").FlexDirection("column").Flex(1).MinHeight(0).Gap(18).Padding(28).OverflowY("auto")
 		},
-		ui.Display("flex"),
-		ui.FlexDirection("column"),
-		ui.Width("100%"),
-		ui.Height("100%"),
-		ui.BackgroundColor("#0b0e14"),
-		ui.TextColor("#f4f7fb"),
-	)
+	).Display("flex").FlexDirection("column").Width("100%").Height("100%").BackgroundColor("#0b0e14").TextColor("#f4f7fb")
 }

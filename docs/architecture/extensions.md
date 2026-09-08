@@ -17,7 +17,7 @@ func Console() {
 		Program: "/bin/zsh",
 		Args:    []string{"-l"},
 		Props: ui.Props{
-			Style: ui.Styles(ui.Width("100%"), ui.Height(320)),
+			Style: ui.Style().Width("100%").Height(320),
 		},
 	})
 }

@@ -33,10 +33,7 @@ func SwiftUiQuickguiHostViewExample() {
 				func() {
 					ui.View(
 						"QuickGUI inside SwiftUI",
-						ui.Width("100%"),
-						ui.Height("100%"),
-						ui.Padding(16),
-					)
+					).Width("100%").Height("100%").Padding(16)
 				},
 			)
 		},
@@ -76,3 +73,7 @@ func SwiftUiPopoverExample() {
 	)
 }
 ```
+
+## Lifetime
+
+The host creates its embedded surface after the owner window is mounted and closes it when removed. Declare reverse-hosted children inside the provided callback so their bindings and resources belong to that embedded window. Do not move retained nodes between windows.

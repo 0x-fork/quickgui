@@ -1,5 +1,9 @@
 ルーターは現在のアプリ内パスからコンポーネントを選び、ナビゲーション履歴を管理します。ルートは現在のウィンドウにネイティブ QuickGUI コンテンツを描画します。
 
+## ルートの宣言
+
+`@ui.router([...])` と `@ui.route(path, render)` でルートツリーを作成します。render はルーターを受け取り要素を返します。現在のルートを表示する位置に `router.outlet()` を置きます。`initial="/settings"` で開始位置を指定できます。
+
 ## 入れ子のレイアウト
 
 `@ui.route` でルートを宣言し、`@ui.layout` で周囲のコンテンツを共有します。該当する子の位置で `outlet()` コールバックを呼び、`router.outlet()` でルーターをマウントします。
@@ -25,6 +29,8 @@ fn routing_example() -> @ui.Element {
 }
 ```
 
+アウトレットは該当するルートの同一性でノードを保持します。兄弟ルート間の移動でも共通レイアウトと状態は残ります。現在位置とパラメーターはバインディング内で `router.state()` を読み、移動先の判定には `router.is_active(path)` を使います。
+
 ## ナビゲーション
 
 `router.link(path, label)` でリンクを作成します。`router.navigate(path)` は履歴に追加し、`replace=true` を渡すと現在の履歴を置き換えます。`router.go(-1)` は戻る、`router.go(1)` は進む操作です。
@@ -45,6 +51,6 @@ fn navigation_controls(router : @ui.Router) -> @ui.Element {
 }
 ```
 
-## 保持されるアウトレット
+## ルートパラメーター
 
-アウトレットは該当するルートの同一性でノードを保持します。兄弟ルート間の移動でも共通レイアウトと状態は残ります。現在位置とパラメーターはバインディング内で `router.state()` を読み、移動先の判定には `router.is_active(path)` を使います。
+`/projects/:id` のような動的パターンはネイティブルーターのマッチ規則を使います。バインディング内で `router.state()` を読み、現在地や `matched.params` の JSON を確認します。`router.is_active(path)` は移動先の一致を判定します。履歴を所有するコンポーネントでルーターを保持します。

@@ -1,6 +1,14 @@
 Compose SwiftUI and QuickGUI subtrees with explicit host boundaries.
 
-## Host boundaries
+## Modifiers
+
+QuickGUI styles apply to the host. Use `.swift_ui_modifiers(...)` on a native control to forward the core modifier JSON schema. Labels use `.label(...)`.
+
+## Liquid Glass
+
+On supported macOS versions, pass the native `buttonStyle` modifier with `style: "glass"` through `.swift_ui_modifiers(...)`. The system owns the final appearance; this is a SwiftUI modifier rather than a QuickGUI background style.
+
+## Reverse hosting
 
 Place native controls inside `swift_ui_host([])`. Keep ordinary QuickGUI layout outside this host unless it is explicitly reverse-hosted.
 
@@ -16,9 +24,11 @@ fn embedded_content() -> @ui.Element {
 }
 ```
 
-## Reverse hosting
-
 Use `swift_ui_quickgui_host_view(render, width=..., height=...)` to build a QuickGUI subtree inside SwiftUI. The callback creates nodes in the embedded view’s own window.
+
+## SwiftUI popover
+
+`swift_ui_popover([])` composes native trigger and content elements under a SwiftUI host. Use `swift_ui_popover_trigger([...])` and `swift_ui_popover_content([...])`; reverse-host QuickGUI content when needed. See [SwiftUI Popover](/docs/moonbit/swift-ui/popover) for the complete example.
 
 ## Lifetime
 

@@ -1,6 +1,10 @@
 扩展在不修改核心的情况下添加可选原生服务。Go 与 MoonBit 共用清单和服务 ABI，各前端提供自己的公开包装 API。
 
-## 创建原生后端
+## 选择扩展类型
+
+命令支持 `moonbit`、`rust`、`zig` 和 `go`。MoonBit 模板使用 Bun、MoonBit（已测试 v0.10.11）和原生 C 编译器构建独立服务库。Windows 需在 MSVC 开发者命令行中使用 `cl` 或 `clang-cl` 及 Windows SDK。可通过 `MOON`、`MOON_HOME`、`CC` 选择工具。后端本身无需 Go 或 QuickGUI SDK；附带的 Go 封装和演示展示了跨前端调用。
+
+## 创建扩展项目
 
 在 QuickGUI 源码仓库中创建后端项目：
 
@@ -11,7 +15,42 @@ bun run build
 moon -C native test --target native --release
 ```
 
-命令支持 `moonbit`、`rust`、`zig` 和 `go`。MoonBit 模板使用 Bun、MoonBit（已测试 v0.10.11）和原生 C 编译器构建独立服务库。Windows 需在 MSVC 开发者命令行中使用 `cl` 或 `clang-cl` 及 Windows SDK。可通过 `MOON`、`MOON_HOME`、`CC` 选择工具。后端本身无需 Go 或 QuickGUI SDK；附带的 Go 封装和演示展示了跨前端调用。
+## 共享组件
+
+可复用的 MoonBit UI 组件是返回 `@ui.Element` 的普通函数。将其放入 MoonBit 包，通过参数接收内容、回调或 getter。纯 UI 组件使用现有 SDK，无需服务提供程序或新的原生库。
+
+```moonbit
+pub fn notice(message : String) -> @ui.Element {
+  @ui.text(message).padding(16).border_radius(8)
+}
+```
+
+## 组织原生扩展
+
+脚手架将 `native/` 提供程序源码、`artifacts/` 库以及可选的 Go 包装器和演示分开。产物目录包含 `quickgui.extension.json`、目标库和包元数据。应用包装器应与提供程序实现分离。
+
+## 声明依赖
+
+```toml
+[native]
+extensions = ["vendor/my-service"]
+```
+
+目录路径相对于应用项目。CLI 读取各目录中的 `quickgui.extension.json`，该清单声明后端名称、版本和目标产物。为每个支持的目标构建库。CLI 验证并打包明确选择的后端，在应用启动前加载。MoonBit 不会通过 Go 导入发现扩展。
+
+### 调用服务
+
+生成的 `my-service` 后端可通过 MoonBit 包装层调用：
+
+```moonbit
+fn echo(message : String, done : (Result[Json, String]) -> Unit) -> Unit {
+  @native.invoke("extension/my-service/echo", Json::string(message), done)
+}
+```
+
+在有效的组件、事件或应用所有者内调用包装层。回复使用注册时所有者的生命周期。持续会话可使用 `window=0` 订阅 `extension-event`，按会话过滤 `event.target`，并在清理时关闭会话。原生工作线程必须通过服务 ABI 完成请求，不能直接调用 MoonBit。
+
+## 实现原生接口
 
 在 `native/extension.mbt` 中编写服务操作：
 
@@ -31,36 +70,21 @@ fn handle(
 
 输入和成功回复是 UTF-8 JSON 字节，错误是字符串。直接返回原始字节可保留 null 和大整数。适配器将输入复制到 MoonBit 管理的内存，检查 64 KiB 上限、发送回复，并恰好释放一次原生 sink。可恢复错误返回 `Err`；`abort` 会终止应用。
 
-构建先将 MoonBit 编译为 C，再链接包含私有运行时的共享库，只导出服务描述符，因此能与 MoonBit 应用和其他后端共存。MoonBit 的直接原生后端尚不能生成共享库包；此构建方式仍是同进程原生执行。普通应用编辑复用已构建的库。
-
 生成的适配器在应用 UI 工作线程执行有界同步操作。非阻塞门控串行化运行时访问：与处理函数重叠的主线程关闭会延迟至函数返回，并发或重入请求会收到 busy 错误。耗时原生任务或持续会话需要扩展 C 适配器，复制输入并持有 sink 至完成。后台线程通过原生回复和事件回调完成工作，不能调用 MoonBit 函数、保留借用的请求上下文或访问 MoonBit 对象。关闭逻辑不得阻塞。
-
-清单提供名称、发布版本和产物包。通过 `bun run build` 构建，修改后端后重启演示。`--module` 设置可选 Go 封装的模块名；MoonBit 模块名在 `native/moon.mod` 中修改。`moon -C native fmt` 格式化后端。生成的 README 包含 Go 演示及发布前使用本地依赖的说明。
 
 实现[扩展契约](https://github.com/egoist/quickgui/blob/main/docs/architecture/extensions.md)，包括版本注册、方法分发、异步完成和可选会话事件，无需集成进核心。
 
-## 选择与打包
+## 自动注册
 
-```toml
-[native]
-extensions = ["vendor/my-service"]
-```
+CLI 验证显式选择的清单，并在应用启动前加载每个提供程序。核心检查名称、版本、ABI 和服务表，再按提供程序名称路由操作。MoonBit 不会通过 Go 导入发现提供程序。
 
-目录路径相对于应用项目。CLI 读取各目录中的 `quickgui.extension.json`，该清单声明后端名称、版本和目标产物。为每个支持的目标构建库。CLI 验证并打包明确选择的后端，在应用启动前加载。MoonBit 不会通过 Go 导入发现扩展。
+## 构建与打包产物
 
-## 调用服务
+构建先将 MoonBit 编译为 C，再链接包含私有运行时的共享库，只导出服务描述符，因此能与 MoonBit 应用和其他后端共存。MoonBit 的直接原生后端尚不能生成共享库包；此构建方式仍是同进程原生执行。普通应用编辑复用已构建的库。
 
-生成的 `my-service` 后端可通过 MoonBit 包装层调用：
+清单提供名称、发布版本和产物包。通过 `bun run build` 构建，修改后端后重启演示。`--module` 设置可选 Go 封装的模块名；MoonBit 模块名在 `native/moon.mod` 中修改。`moon -C native fmt` 格式化后端。生成的 README 包含 Go 演示及发布前使用本地依赖的说明。
 
-```moonbit
-fn echo(message : String, done : (Result[Json, String]) -> Unit) -> Unit {
-  @native.invoke("extension/my-service/echo", Json::string(message), done)
-}
-```
-
-在有效的组件、事件或应用所有者内调用包装层。回复使用注册时所有者的生命周期。持续会话可使用 `window=0` 订阅 `extension-event`，按会话过滤 `event.target`，并在清理时关闭会话。原生工作线程必须通过服务 ABI 完成请求，不能直接调用 MoonBit。
-
-## 分发与示例
+## 测试与分发
 
 分发清单、各目标原生产物及暴露服务的 MoonBit 包。模板将当前主机的库放入 `artifacts/lib/<platform>-<arch>/`；收集各支持主机的构建后，将 `artifacts/` 连同生成的 MoonBit 许可证和 NOTICE 一起发布。使用者在 `quickgui.toml` 中选择扩展目录。本地开发将 `QUICKGUI_EXTENSION_DIR` 设为该目标目录的绝对路径。直接运行可执行文件时，还需在 `run` 前声明 `@native.require_extension(name, version)` 并提供 `QUICKGUI_LIBRARY`。
 

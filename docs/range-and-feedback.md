@@ -436,12 +436,13 @@ func VolumeSlider() {
 			)
 			ui.Slider.Thumb(ui.SliderThumbProps{
 				Index: &thumb,
-				PartProps: ui.PartProps{Style: ui.Styles(ui.Opacity(func() float64 {
+				PartProps: ui.PartProps{Style: ui.Style().
+					Opacity(func() float64 {
 					if slider().Dragging {
 						return 0.8
 					}
 					return 1
-				}))},
+				})},
 			})
 		},
 	)

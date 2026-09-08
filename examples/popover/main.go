@@ -60,23 +60,17 @@ func Popovers() {
 		Placement:      "bottom-start",
 		Gap:            &gap,
 		ViewportMargin: &margin,
-		PartProps:      ui.PartProps{Style: ui.Styles(ui.Width("100%"), ui.Height("100%"))},
+		PartProps:      ui.PartProps{Style: ui.Style().Width("100%").Height("100%")},
 	}
 	ui.View(
 		func() {
 			ui.View(
 				func() {
-					ui.Text("Native popover surfaces", ui.FontSize(14), ui.FontWeight(600))
+					ui.Text(
+						"Native popover surfaces",
+					).FontSize(14).FontWeight(600)
 				},
-				ui.Display("flex"),
-				ui.Height(52),
-				ui.FlexShrink(0),
-				ui.AlignItems("center"),
-				ui.JustifyContent("center"),
-				ui.AppRegion("drag"),
-				ui.BorderColor("#202838"),
-				ui.BorderBottomWidth(1),
-			)
+			).Display("flex").Height(52).FlexShrink(0).AlignItems("center").JustifyContent("center").AppRegion("drag").BorderColor("#202838").BorderBottomWidth(1)
 			ui.View(
 				func() {
 					ui.View(
@@ -85,21 +79,12 @@ func Popovers() {
 								func() {
 									ui.Text(
 										"System and in-window popovers",
-										ui.FontSize(28),
-										ui.LineHeight(34),
-										ui.FontWeight(700),
-									)
+									).FontSize(28).LineHeight(34).FontWeight(700)
 									ui.Text(
 										"Both use the same controlled Go API. SystemPopover opens a native child window; Popover stays in this window's retained overlay plane.",
-										ui.TextColor("#9ba8bc"),
-										ui.FontSize(14),
-										ui.LineHeight(21),
-									)
+									).TextColor("#9ba8bc").FontSize(14).LineHeight(21)
 								},
-								ui.Display("flex"),
-								ui.FlexDirection("column"),
-								ui.Gap(8),
-							)
+							).Display("flex").FlexDirection("column").Gap(8)
 							ui.View(
 								func() {
 									card("SystemPopover", "A child window that may cross the owner's edge and stays within the display.", func() {
@@ -157,45 +142,18 @@ func Popovers() {
 										)
 									})
 								},
-								ui.Display("flex"),
-								ui.Gap(14),
-							)
+							).Display("flex").Gap(14)
 							ui.View(
 								func() {
-									ui.Text(status, ui.TextColor("#b8c4d6"), ui.FontSize(13))
+									ui.Text(
+										status,
+									).TextColor("#b8c4d6").FontSize(13)
 								},
-								ui.Display("flex"),
-								ui.MinHeight(50),
-								ui.AlignItems("center"),
-								ui.JustifyContent("center"),
-								ui.PaddingLeft(16),
-								ui.PaddingRight(16),
-								ui.BackgroundColor("#10151e"),
-								ui.BorderColor("#293244"),
-								ui.BorderWidth(1),
-								ui.BorderRadius(9),
-							)
+							).Display("flex").MinHeight(50).AlignItems("center").JustifyContent("center").PaddingLeft(16).PaddingRight(16).BackgroundColor("#10151e").BorderColor("#293244").BorderWidth(1).BorderRadius(9)
 						},
-						ui.Display("flex"),
-						ui.FlexDirection("column"),
-						ui.Width("100%"),
-						ui.MaxWidth(680),
-						ui.Gap(20),
-					)
+					).Display("flex").FlexDirection("column").Width("100%").MaxWidth(680).Gap(20)
 				},
-				ui.Display("flex"),
-				ui.Flex(1),
-				ui.MinHeight(0),
-				ui.AlignItems("center"),
-				ui.JustifyContent("center"),
-				ui.Padding(36),
-			)
+			).Display("flex").Flex(1).MinHeight(0).AlignItems("center").JustifyContent("center").Padding(36)
 		},
-		ui.Display("flex"),
-		ui.FlexDirection("column"),
-		ui.Width("100%"),
-		ui.Height("100%"),
-		ui.BackgroundColor("#0b0f17"),
-		ui.TextColor("#f5f7fb"),
-	)
+	).Display("flex").FlexDirection("column").Width("100%").Height("100%").BackgroundColor("#0b0f17").TextColor("#f5f7fb")
 }

@@ -43,42 +43,39 @@ func dialogFrame(title, description string, body *gui.Element, actions *gui.Elem
 		func() {
 			gui.Dialog.Portal(
 				gui.PartProps{
-					Style: gui.Styles(
-						gui.Position("absolute"),
-						gui.Top(0),
-						gui.Right(0),
-						gui.Bottom(0),
-						gui.Left(0),
-						gui.Display("flex"),
-						gui.AlignItems("center"),
-						gui.JustifyContent("center"),
-					),
+					Style: gui.Style().
+						Position("absolute").
+						Top(0).
+						Right(0).
+						Bottom(0).
+						Left(0).
+						Display("flex").
+						AlignItems("center").
+						JustifyContent("center"),
 				},
 				func() {
 					gui.Dialog.Backdrop(gui.PartProps{
-						Style: gui.Styles(
-							gui.Position("absolute"),
-							gui.Top(0),
-							gui.Right(0),
-							gui.Bottom(0),
-							gui.Left(0),
-							gui.BackgroundColor(app.Theme().Scrim),
-						),
+						Style: gui.Style().
+							Position("absolute").
+							Top(0).
+							Right(0).
+							Bottom(0).
+							Left(0).
+							BackgroundColor(app.Theme().Scrim),
 					})
 					gui.Dialog.Popup(
 						gui.DialogPopupProps{
 							PartProps: gui.PartProps{
-								Style: gui.Styles(
-									gui.Display("flex"),
-									gui.FlexDirection("column"),
-									gui.Width(440),
-									gui.Gap(14),
-									gui.Padding(20),
-									gui.BackgroundColor(app.Theme().Raised),
-									gui.BorderWidth(1),
-									gui.BorderColor(app.Theme().BorderStrong),
-									gui.BorderRadius(10),
-								),
+								Style: gui.Style().
+									Display("flex").
+									FlexDirection("column").
+									Width(440).
+									Gap(14).
+									Padding(20).
+									BackgroundColor(app.Theme().Raised).
+									BorderWidth(1).
+									BorderColor(app.Theme().BorderStrong).
+									BorderRadius(10),
 							},
 						},
 						func() {
@@ -87,10 +84,7 @@ func dialogFrame(title, description string, body *gui.Element, actions *gui.Elem
 								func() {
 									gui.Text(
 										title,
-										gui.FontSize(15),
-										gui.FontWeight(700),
-										gui.TextColor(app.Theme().Text),
-									)
+									).FontSize(15).FontWeight(700).TextColor(app.Theme().Text)
 								},
 							)
 							gui.Show(
@@ -101,22 +95,18 @@ func dialogFrame(title, description string, body *gui.Element, actions *gui.Elem
 										func() {
 											gui.Text(
 												description,
-												gui.FontSize(12.5),
-												gui.LineHeight(18),
-												gui.TextColor(app.Theme().TextSecondary),
-											)
+											).FontSize(12.5).LineHeight(18).TextColor(app.Theme().TextSecondary)
 										},
 									)
 								},
 							)
 							gui.Dialog.Viewport(
 								gui.PartProps{
-									Style: gui.Styles(
-										gui.Display("flex"),
-										gui.FlexDirection("column"),
-										gui.Gap(12),
-										gui.Padding(2),
-									),
+									Style: gui.Style().
+										Display("flex").
+										FlexDirection("column").
+										Gap(12).
+										Padding(2),
 								},
 								func() { gui.Child(body) },
 							)
@@ -132,12 +122,7 @@ func dialogFrame(title, description string, body *gui.Element, actions *gui.Elem
 									)
 									gui.Child(actions)
 								},
-								gui.Display("flex"),
-								gui.FlexDirection("row"),
-								gui.JustifyContent("flex-end"),
-								gui.Gap(8),
-								gui.MarginTop(4),
-							)
+							).Display("flex").FlexDirection("row").JustifyContent("flex-end").Gap(8).MarginTop(4)
 						},
 					)
 				},
@@ -151,18 +136,19 @@ func CheckRow(label string, checked func() bool, onChange func(bool)) {
 	gui.Checkbox.Root(
 		gui.CheckboxProps{
 			PartProps: gui.PartProps{
-				Style: gui.Styles(
-					gui.Display("flex"),
-					gui.FlexDirection("row"),
-					gui.AlignItems("center"),
-					gui.Gap(8),
-					gui.Height(24),
-					gui.Cursor("default"),
-					gui.UserSelect("none"),
-					gui.BorderRadius(4),
-					gui.Focus(gui.Outline("2px solid "+app.Theme().FocusRing)),
-					gui.DisabledStyle(gui.Opacity(0.5)),
-				),
+				Style: gui.Style().
+					Display("flex").
+					FlexDirection("row").
+					AlignItems("center").
+					Gap(8).
+					Height(24).
+					Cursor("default").
+					UserSelect("none").
+					BorderRadius(4).
+					FocusStyle(func(s gui.StyleBuilder) gui.StyleBuilder {
+						return s.Outline("2px solid " + app.Theme().FocusRing)
+					}).
+					DisabledStyle(func(s gui.StyleBuilder) gui.StyleBuilder { return s.Opacity(0.5) }),
 			},
 			Checked:         func() gui.CheckedState { return checked() },
 			OnCheckedChange: func(next bool, _ *native.Event) { onChange(next) },
@@ -170,7 +156,7 @@ func CheckRow(label string, checked func() bool, onChange func(bool)) {
 		func() {
 			gui.Checkbox.Indicator(
 				gui.PartProps{
-					Style: func() gui.Style { return checkboxBox(app.Theme(), checked()) },
+					Style: func() gui.StyleBuilder { return checkboxBox(app.Theme(), checked()) },
 				},
 				func() {
 					gui.Show(
@@ -179,30 +165,29 @@ func CheckRow(label string, checked func() bool, onChange func(bool)) {
 					)
 				},
 			)
-			gui.Text(label, gui.FontSize(12.5), gui.TextColor(app.Theme().Text))
+			gui.Text(label).FontSize(12.5).TextColor(app.Theme().Text)
 		},
 	)
 }
 
-func checkboxBox(theme Theme, checked bool) gui.Style {
+func checkboxBox(theme Theme, checked bool) gui.StyleBuilder {
 	border := theme.InputBorder
 	background := theme.Input
 	if checked {
 		border = theme.Accent
 		background = theme.Accent
 	}
-	return gui.Styles(
-		gui.Display("flex"),
-		gui.Width(15),
-		gui.Height(15),
-		gui.FlexShrink(0),
-		gui.AlignItems("center"),
-		gui.JustifyContent("center"),
-		gui.BorderRadius(3.5),
-		gui.BorderWidth(1),
-		gui.BorderColor(border),
-		gui.BackgroundColor(background),
-	)
+	return gui.Style().
+		Display("flex").
+		Width(15).
+		Height(15).
+		FlexShrink(0).
+		AlignItems("center").
+		JustifyContent("center").
+		BorderRadius(3.5).
+		BorderWidth(1).
+		BorderColor(border).
+		BackgroundColor(background)
 }
 
 func checkboxMark(checked bool) {
@@ -266,10 +251,7 @@ func newBranchDialog() {
 		func() {
 			gui.Text(
 				"Name",
-				gui.FontSize(12),
-				gui.FontWeight(600),
-				gui.TextColor(app.Theme().TextSecondary),
-			)
+			).FontSize(12).FontWeight(600).TextColor(app.Theme().TextSecondary)
 			gui.Input(
 				gui.Placeholder("feature/great-idea"),
 				gui.Value(func() string { return name() }),
@@ -284,27 +266,25 @@ func newBranchDialog() {
 					if text == "" {
 						text = "A branch with this name already exists."
 					}
-					gui.Text(text, gui.FontSize(11.5), gui.TextColor(app.Theme().Danger))
+					gui.Text(
+						text,
+					).FontSize(11.5).TextColor(app.Theme().Danger)
 				},
 			)
 			gui.Text(
 				"Based on",
-				gui.FontSize(12),
-				gui.FontWeight(600),
-				gui.TextColor(app.Theme().TextSecondary),
-			)
+			).FontSize(12).FontWeight(600).TextColor(app.Theme().TextSecondary)
 			gui.Select.Root(
 				gui.SelectRootProps{
 					PickerSourceProps: gui.PickerSourceProps{
 						PartProps: gui.PartProps{
 							AriaLabel: "Base branch",
-							Style: gui.Styles(
-								app.Theme().InputStyle(),
-								gui.FlexDirection("row"),
-								gui.AlignItems("center"),
-								gui.JustifyContent("space-between"),
-								gui.Gap(8),
-							),
+							Style: gui.Style().
+								Merge(app.Theme().InputStyle()).
+								FlexDirection("row").
+								AlignItems("center").
+								JustifyContent("space-between").
+								Gap(8),
 						},
 						Items: options,
 					},
@@ -321,17 +301,12 @@ func newBranchDialog() {
 				func() {
 					gui.Text(
 						func() string { return base() },
-						gui.FontSize(13),
-						gui.TextColor(app.Theme().Text),
-					)
+					).FontSize(13).TextColor(app.Theme().Text)
 				},
 			)
 			CheckRow("Switch to the new branch", checkout, setCheckout)
 		},
-		gui.Display("flex"),
-		gui.FlexDirection("column"),
-		gui.Gap(10),
-	), gui.Button(
+	).Display("flex").FlexDirection("column").Gap(10), gui.Button(
 		func() string {
 			if checkout() {
 				return "Create and Switch"
@@ -373,10 +348,7 @@ func newWorktreeDialog() {
 			CheckRow("Create a new branch", createNew, setCreateNew)
 			gui.Text(
 				"Branch",
-				gui.FontSize(12),
-				gui.FontWeight(600),
-				gui.TextColor(app.Theme().TextSecondary),
-			)
+			).FontSize(12).FontWeight(600).TextColor(app.Theme().TextSecondary)
 			gui.Input(
 				gui.Value(func() string { return branch() }),
 				gui.OnInput(func(event *native.Event) {
@@ -388,25 +360,23 @@ func newWorktreeDialog() {
 			gui.Show(
 				func() bool { return problem() != "" },
 				func() {
-					gui.Text(gui.FontSize(11.5), gui.TextColor(app.Theme().Danger), problem())
+					gui.Text(
+						gui.Style().FontSize(11.5),
+						gui.Style().TextColor(app.Theme().Danger),
+						problem(),
+					)
 				},
 			)
 			gui.Text(
 				"Path",
-				gui.FontSize(12),
-				gui.FontWeight(600),
-				gui.TextColor(app.Theme().TextSecondary),
-			)
+			).FontSize(12).FontWeight(600).TextColor(app.Theme().TextSecondary)
 			gui.Input(
 				gui.Value(func() string { return path() }),
 				gui.OnInput(func(event *native.Event) { setPath(event.Value) }),
 				app.Theme().InputStyle(),
 			)
 		},
-		gui.Display("flex"),
-		gui.FlexDirection("column"),
-		gui.Gap(10),
-	), gui.Button(
+	).Display("flex").FlexDirection("column").Gap(10), gui.Button(
 		"Add Worktree",
 		gui.OnClick(func() { submit() }),
 		app.Theme().Button("primary"),
@@ -433,10 +403,7 @@ func stashDialog() {
 			)
 			CheckRow("Include untracked files", include, setInclude)
 		},
-		gui.Display("flex"),
-		gui.FlexDirection("column"),
-		gui.Gap(10),
-	), gui.Button(
+	).Display("flex").FlexDirection("column").Gap(10), gui.Button(
 		"Stash",
 		gui.OnClick(func() { submit() }),
 		app.Theme().Button("primary"),

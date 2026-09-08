@@ -10,309 +10,309 @@ import (
 func applyElementBinding(node *native.Node, props *Props, field elementBinding) {
 	switch field {
 	case 0:
-		applyStyle(node, Style{ObjectFit: props.Style.ObjectFit})
+		applyStyle(node, styleData{ObjectFit: props.Style.style.ObjectFit})
 	case 1:
-		applyStyle(node, Style{WordWrap: props.Style.WordWrap})
+		applyStyle(node, styleData{WordWrap: props.Style.style.WordWrap})
 	case 2:
-		applyStyle(node, Style{TransitionTimingFunction: props.Style.TransitionTimingFunction})
+		applyStyle(node, styleData{TransitionTimingFunction: props.Style.style.TransitionTimingFunction})
 	case 3:
-		applyStyle(node, Style{PaddingInlineStart: props.Style.PaddingInlineStart})
+		applyStyle(node, styleData{PaddingInlineStart: props.Style.style.PaddingInlineStart})
 	case 4:
-		applyStyle(node, Style{PaddingInlineEnd: props.Style.PaddingInlineEnd})
+		applyStyle(node, styleData{PaddingInlineEnd: props.Style.style.PaddingInlineEnd})
 	case 5:
-		applyStyle(node, Style{MarginInlineStart: props.Style.MarginInlineStart})
+		applyStyle(node, styleData{MarginInlineStart: props.Style.style.MarginInlineStart})
 	case 6:
-		applyStyle(node, Style{MarginInlineEnd: props.Style.MarginInlineEnd})
+		applyStyle(node, styleData{MarginInlineEnd: props.Style.style.MarginInlineEnd})
 	case 7:
-		applyStyle(node, Style{BorderInlineStartWidth: props.Style.BorderInlineStartWidth})
+		applyStyle(node, styleData{BorderInlineStartWidth: props.Style.style.BorderInlineStartWidth})
 	case 8:
-		applyStyle(node, Style{BorderInlineEndWidth: props.Style.BorderInlineEndWidth})
+		applyStyle(node, styleData{BorderInlineEndWidth: props.Style.style.BorderInlineEndWidth})
 	case 9:
-		applyStyle(node, Style{AspectRatio: props.Style.AspectRatio})
+		applyStyle(node, styleData{AspectRatio: props.Style.style.AspectRatio})
 	case 10:
-		applyStyle(node, Style{GridColumn: props.Style.GridColumn})
+		applyStyle(node, styleData{GridColumn: props.Style.style.GridColumn})
 	case 11:
-		applyStyle(node, Style{GridRow: props.Style.GridRow})
+		applyStyle(node, styleData{GridRow: props.Style.style.GridRow})
 	case 12:
-		applyStyle(node, Style{BorderStartWidth: props.Style.BorderStartWidth})
+		applyStyle(node, styleData{BorderStartWidth: props.Style.style.BorderStartWidth})
 	case 13:
-		applyStyle(node, Style{BorderEndWidth: props.Style.BorderEndWidth})
+		applyStyle(node, styleData{BorderEndWidth: props.Style.style.BorderEndWidth})
 	case 14:
-		applyStyle(node, Style{Background: props.Style.Background})
+		applyStyle(node, styleData{Background: props.Style.style.Background})
 	case 15:
-		applyStyle(node, Style{BackgroundGradient: props.Style.BackgroundGradient})
+		applyStyle(node, styleData{BackgroundGradient: props.Style.style.BackgroundGradient})
 	case 16:
-		applyStyle(node, Style{TransitionProperty: props.Style.TransitionProperty})
+		applyStyle(node, styleData{TransitionProperty: props.Style.style.TransitionProperty})
 	case 17:
-		applyStyle(node, Style{TransitionDuration: props.Style.TransitionDuration})
+		applyStyle(node, styleData{TransitionDuration: props.Style.style.TransitionDuration})
 	case 18:
-		applyStyle(node, Style{TransitionEasing: props.Style.TransitionEasing})
+		applyStyle(node, styleData{TransitionEasing: props.Style.style.TransitionEasing})
 	case 19:
-		applyStyle(node, Style{TransitionMaxFps: props.Style.TransitionMaxFps})
+		applyStyle(node, styleData{TransitionMaxFps: props.Style.style.TransitionMaxFps})
 	case 20:
-		applyStyle(node, Style{MarkdownCodeBackground: props.Style.MarkdownCodeBackground})
+		applyStyle(node, styleData{MarkdownCodeBackground: props.Style.style.MarkdownCodeBackground})
 	case 21:
-		applyStyle(node, Style{MarkdownBorderColor: props.Style.MarkdownBorderColor})
+		applyStyle(node, styleData{MarkdownBorderColor: props.Style.style.MarkdownBorderColor})
 	case 22:
-		applyStyle(node, Style{MarkdownMutedColor: props.Style.MarkdownMutedColor})
+		applyStyle(node, styleData{MarkdownMutedColor: props.Style.style.MarkdownMutedColor})
 	case 23:
-		applyStyle(node, Style{MarkdownLinkColor: props.Style.MarkdownLinkColor})
+		applyStyle(node, styleData{MarkdownLinkColor: props.Style.style.MarkdownLinkColor})
 	case 24:
-		applyStyle(node, Style{MarkdownCodeTextColor: props.Style.MarkdownCodeTextColor})
+		applyStyle(node, styleData{MarkdownCodeTextColor: props.Style.style.MarkdownCodeTextColor})
 	case 25:
-		applyStyle(node, Style{MarkdownBlockGap: props.Style.MarkdownBlockGap})
+		applyStyle(node, styleData{MarkdownBlockGap: props.Style.style.MarkdownBlockGap})
 	case 26:
-		applyStyle(node, Style{MarkdownCodeFontSize: props.Style.MarkdownCodeFontSize})
+		applyStyle(node, styleData{MarkdownCodeFontSize: props.Style.style.MarkdownCodeFontSize})
 	case 27:
-		applyStyle(node, Style{ScrollToEndRevision: props.Style.ScrollToEndRevision})
+		applyStyle(node, styleData{ScrollToEndRevision: props.Style.style.ScrollToEndRevision})
 	case 28:
-		applyStyle(node, Style{TextDecoration: props.Style.TextDecoration})
+		applyStyle(node, styleData{TextDecoration: props.Style.style.TextDecoration})
 	case 29:
-		applyStyle(node, Style{Invalid: props.Style.Invalid})
+		applyStyle(node, styleData{Invalid: props.Style.style.Invalid})
 	case 30:
-		applyStyle(node, Style{Dragging: props.Style.Dragging})
+		applyStyle(node, styleData{Dragging: props.Style.style.Dragging})
 	case 31:
-		applyStyle(node, Style{DragOver: props.Style.DragOver})
+		applyStyle(node, styleData{DragOver: props.Style.style.DragOver})
 	case 32:
-		applyStyle(node, Style{FocusWithin: props.Style.FocusWithin})
+		applyStyle(node, styleData{FocusWithin: props.Style.style.FocusWithin})
 	case 33:
-		applyStyle(node, Style{GroupActive: props.Style.GroupActive, groupActiveRules: props.Style.groupActiveRules})
+		applyStyle(node, styleData{GroupActive: props.Style.style.GroupActive, groupActiveRules: props.Style.style.groupActiveRules})
 	case 35:
-		applyStyle(node, Style{GridTemplateColumns: props.Style.GridTemplateColumns})
+		applyStyle(node, styleData{GridTemplateColumns: props.Style.style.GridTemplateColumns})
 	case 36:
-		applyStyle(node, Style{GridTemplateRows: props.Style.GridTemplateRows})
+		applyStyle(node, styleData{GridTemplateRows: props.Style.style.GridTemplateRows})
 	case 37:
-		applyStyle(node, Style{GridAutoFlow: props.Style.GridAutoFlow})
+		applyStyle(node, styleData{GridAutoFlow: props.Style.style.GridAutoFlow})
 	case 38:
-		applyStyle(node, Style{GridColumnStart: props.Style.GridColumnStart})
+		applyStyle(node, styleData{GridColumnStart: props.Style.style.GridColumnStart})
 	case 39:
-		applyStyle(node, Style{GridColumnEnd: props.Style.GridColumnEnd})
+		applyStyle(node, styleData{GridColumnEnd: props.Style.style.GridColumnEnd})
 	case 40:
-		applyStyle(node, Style{GridColumnSpan: props.Style.GridColumnSpan})
+		applyStyle(node, styleData{GridColumnSpan: props.Style.style.GridColumnSpan})
 	case 41:
-		applyStyle(node, Style{GridRowStart: props.Style.GridRowStart})
+		applyStyle(node, styleData{GridRowStart: props.Style.style.GridRowStart})
 	case 42:
-		applyStyle(node, Style{GridRowEnd: props.Style.GridRowEnd})
+		applyStyle(node, styleData{GridRowEnd: props.Style.style.GridRowEnd})
 	case 43:
-		applyStyle(node, Style{GridRowSpan: props.Style.GridRowSpan})
+		applyStyle(node, styleData{GridRowSpan: props.Style.style.GridRowSpan})
 	case 44:
-		applyStyle(node, Style{PaddingStart: props.Style.PaddingStart})
+		applyStyle(node, styleData{PaddingStart: props.Style.style.PaddingStart})
 	case 45:
-		applyStyle(node, Style{PaddingEnd: props.Style.PaddingEnd})
+		applyStyle(node, styleData{PaddingEnd: props.Style.style.PaddingEnd})
 	case 46:
-		applyStyle(node, Style{MarginStart: props.Style.MarginStart})
+		applyStyle(node, styleData{MarginStart: props.Style.style.MarginStart})
 	case 47:
-		applyStyle(node, Style{MarginEnd: props.Style.MarginEnd})
+		applyStyle(node, styleData{MarginEnd: props.Style.style.MarginEnd})
 	case 48:
-		applyStyle(node, Style{BorderTopWidth: props.Style.BorderTopWidth})
+		applyStyle(node, styleData{BorderTopWidth: props.Style.style.BorderTopWidth})
 	case 49:
-		applyStyle(node, Style{BorderRightWidth: props.Style.BorderRightWidth})
+		applyStyle(node, styleData{BorderRightWidth: props.Style.style.BorderRightWidth})
 	case 50:
-		applyStyle(node, Style{BorderBottomWidth: props.Style.BorderBottomWidth})
+		applyStyle(node, styleData{BorderBottomWidth: props.Style.style.BorderBottomWidth})
 	case 51:
-		applyStyle(node, Style{BorderLeftWidth: props.Style.BorderLeftWidth})
+		applyStyle(node, styleData{BorderLeftWidth: props.Style.style.BorderLeftWidth})
 	case 52:
-		applyStyle(node, Style{BorderTopLeftRadius: props.Style.BorderTopLeftRadius})
+		applyStyle(node, styleData{BorderTopLeftRadius: props.Style.style.BorderTopLeftRadius})
 	case 53:
-		applyStyle(node, Style{BorderTopRightRadius: props.Style.BorderTopRightRadius})
+		applyStyle(node, styleData{BorderTopRightRadius: props.Style.style.BorderTopRightRadius})
 	case 54:
-		applyStyle(node, Style{BorderBottomLeftRadius: props.Style.BorderBottomLeftRadius})
+		applyStyle(node, styleData{BorderBottomLeftRadius: props.Style.style.BorderBottomLeftRadius})
 	case 55:
-		applyStyle(node, Style{BorderBottomRightRadius: props.Style.BorderBottomRightRadius})
+		applyStyle(node, styleData{BorderBottomRightRadius: props.Style.style.BorderBottomRightRadius})
 	case 56:
-		applyStyle(node, Style{BorderStyle: props.Style.BorderStyle})
+		applyStyle(node, styleData{BorderStyle: props.Style.style.BorderStyle})
 	case 57:
-		applyStyle(node, Style{BoxShadow: props.Style.BoxShadow})
+		applyStyle(node, styleData{BoxShadow: props.Style.style.BoxShadow})
 	case 58:
-		applyStyle(node, Style{TextShadow: props.Style.TextShadow})
+		applyStyle(node, styleData{TextShadow: props.Style.style.TextShadow})
 	case 59:
-		applyStyle(node, Style{TextDecorationLine: props.Style.TextDecorationLine})
+		applyStyle(node, styleData{TextDecorationLine: props.Style.style.TextDecorationLine})
 	case 60:
-		applyStyle(node, Style{TextDecorationColor: props.Style.TextDecorationColor})
+		applyStyle(node, styleData{TextDecorationColor: props.Style.style.TextDecorationColor})
 	case 61:
-		applyStyle(node, Style{TextDecorationStyle: props.Style.TextDecorationStyle})
+		applyStyle(node, styleData{TextDecorationStyle: props.Style.style.TextDecorationStyle})
 	case 62:
-		applyStyle(node, Style{TextDecorationThickness: props.Style.TextDecorationThickness})
+		applyStyle(node, styleData{TextDecorationThickness: props.Style.style.TextDecorationThickness})
 	case 63:
-		applyStyle(node, Style{WordSpacing: props.Style.WordSpacing})
+		applyStyle(node, styleData{WordSpacing: props.Style.style.WordSpacing})
 	case 64:
-		applyStyle(node, Style{WordBreak: props.Style.WordBreak})
+		applyStyle(node, styleData{WordBreak: props.Style.style.WordBreak})
 	case 65:
-		applyStyle(node, Style{OverflowWrap: props.Style.OverflowWrap})
+		applyStyle(node, styleData{OverflowWrap: props.Style.style.OverflowWrap})
 	case 66:
-		applyStyle(node, Style{Hyphens: props.Style.Hyphens})
+		applyStyle(node, styleData{Hyphens: props.Style.style.Hyphens})
 	case 67:
-		applyStyle(node, Style{TextDirection: props.Style.TextDirection})
+		applyStyle(node, styleData{TextDirection: props.Style.style.TextDirection})
 	case 68:
-		applyStyle(node, Style{Direction: props.Style.Direction})
+		applyStyle(node, styleData{Direction: props.Style.style.Direction})
 	case 69:
-		applyStyle(node, Style{BackgroundImage: props.Style.BackgroundImage})
+		applyStyle(node, styleData{BackgroundImage: props.Style.style.BackgroundImage})
 	case 70:
-		applyStyle(node, Style{BackgroundSize: props.Style.BackgroundSize})
+		applyStyle(node, styleData{BackgroundSize: props.Style.style.BackgroundSize})
 	case 71:
-		applyStyle(node, Style{BackgroundRepeat: props.Style.BackgroundRepeat})
+		applyStyle(node, styleData{BackgroundRepeat: props.Style.style.BackgroundRepeat})
 	case 72:
-		applyStyle(node, Style{BackgroundPosition: props.Style.BackgroundPosition})
+		applyStyle(node, styleData{BackgroundPosition: props.Style.style.BackgroundPosition})
 	case 73:
-		applyStyle(node, Style{Filter: props.Style.Filter})
+		applyStyle(node, styleData{Filter: props.Style.style.Filter})
 	case 74:
-		applyStyle(node, Style{BackdropFilter: props.Style.BackdropFilter})
+		applyStyle(node, styleData{BackdropFilter: props.Style.style.BackdropFilter})
 	case 75:
-		applyStyle(node, Style{MixBlendMode: props.Style.MixBlendMode})
+		applyStyle(node, styleData{MixBlendMode: props.Style.style.MixBlendMode})
 	case 76:
-		applyStyle(node, Style{Transition: props.Style.Transition})
+		applyStyle(node, styleData{Transition: props.Style.style.Transition})
 	case 77:
-		applyStyle(node, Style{ScrollSnapType: props.Style.ScrollSnapType})
+		applyStyle(node, styleData{ScrollSnapType: props.Style.style.ScrollSnapType})
 	case 78:
-		applyStyle(node, Style{ScrollSnapX: props.Style.ScrollSnapX})
+		applyStyle(node, styleData{ScrollSnapX: props.Style.style.ScrollSnapX})
 	case 79:
-		applyStyle(node, Style{ScrollSnapY: props.Style.ScrollSnapY})
+		applyStyle(node, styleData{ScrollSnapY: props.Style.style.ScrollSnapY})
 	case 80:
-		applyStyle(node, Style{ScrollSnapAlign: props.Style.ScrollSnapAlign})
+		applyStyle(node, styleData{ScrollSnapAlign: props.Style.style.ScrollSnapAlign})
 	case 81:
-		applyStyle(node, Style{ScrollSnapStop: props.Style.ScrollSnapStop})
+		applyStyle(node, styleData{ScrollSnapStop: props.Style.style.ScrollSnapStop})
 	case 82:
-		applyStyle(node, Style{Display: props.Style.Display})
+		applyStyle(node, styleData{Display: props.Style.style.Display})
 	case 83:
-		applyStyle(node, Style{Flex: props.Style.Flex})
+		applyStyle(node, styleData{Flex: props.Style.style.Flex})
 	case 84:
-		applyStyle(node, Style{FlexDirection: props.Style.FlexDirection})
+		applyStyle(node, styleData{FlexDirection: props.Style.style.FlexDirection})
 	case 85:
-		applyStyle(node, Style{FlexWrap: props.Style.FlexWrap})
+		applyStyle(node, styleData{FlexWrap: props.Style.style.FlexWrap})
 	case 86:
-		applyStyle(node, Style{FlexGrow: props.Style.FlexGrow})
+		applyStyle(node, styleData{FlexGrow: props.Style.style.FlexGrow})
 	case 87:
-		applyStyle(node, Style{FlexShrink: props.Style.FlexShrink})
+		applyStyle(node, styleData{FlexShrink: props.Style.style.FlexShrink})
 	case 88:
-		applyStyle(node, Style{FlexBasis: props.Style.FlexBasis})
+		applyStyle(node, styleData{FlexBasis: props.Style.style.FlexBasis})
 	case 89:
-		applyStyle(node, Style{AlignItems: props.Style.AlignItems})
+		applyStyle(node, styleData{AlignItems: props.Style.style.AlignItems})
 	case 90:
-		applyStyle(node, Style{AlignSelf: props.Style.AlignSelf})
+		applyStyle(node, styleData{AlignSelf: props.Style.style.AlignSelf})
 	case 91:
-		applyStyle(node, Style{JustifyContent: props.Style.JustifyContent})
+		applyStyle(node, styleData{JustifyContent: props.Style.style.JustifyContent})
 	case 92:
-		applyStyle(node, Style{AlignContent: props.Style.AlignContent})
+		applyStyle(node, styleData{AlignContent: props.Style.style.AlignContent})
 	case 93:
-		applyStyle(node, Style{Gap: props.Style.Gap})
+		applyStyle(node, styleData{Gap: props.Style.style.Gap})
 	case 94:
-		applyStyle(node, Style{ColumnGap: props.Style.ColumnGap})
+		applyStyle(node, styleData{ColumnGap: props.Style.style.ColumnGap})
 	case 95:
-		applyStyle(node, Style{RowGap: props.Style.RowGap})
+		applyStyle(node, styleData{RowGap: props.Style.style.RowGap})
 	case 96:
-		applyStyle(node, Style{Width: props.Style.Width})
+		applyStyle(node, styleData{Width: props.Style.style.Width})
 	case 97:
-		applyStyle(node, Style{Height: props.Style.Height})
+		applyStyle(node, styleData{Height: props.Style.style.Height})
 	case 98:
-		applyStyle(node, Style{MinWidth: props.Style.MinWidth})
+		applyStyle(node, styleData{MinWidth: props.Style.style.MinWidth})
 	case 99:
-		applyStyle(node, Style{MinHeight: props.Style.MinHeight})
+		applyStyle(node, styleData{MinHeight: props.Style.style.MinHeight})
 	case 100:
-		applyStyle(node, Style{MaxWidth: props.Style.MaxWidth})
+		applyStyle(node, styleData{MaxWidth: props.Style.style.MaxWidth})
 	case 101:
-		applyStyle(node, Style{MaxHeight: props.Style.MaxHeight})
+		applyStyle(node, styleData{MaxHeight: props.Style.style.MaxHeight})
 	case 102:
-		applyStyle(node, Style{Padding: props.Style.Padding})
+		applyStyle(node, styleData{Padding: props.Style.style.Padding})
 	case 103:
-		applyStyle(node, Style{PaddingTop: props.Style.PaddingTop})
+		applyStyle(node, styleData{PaddingTop: props.Style.style.PaddingTop})
 	case 104:
-		applyStyle(node, Style{PaddingRight: props.Style.PaddingRight})
+		applyStyle(node, styleData{PaddingRight: props.Style.style.PaddingRight})
 	case 105:
-		applyStyle(node, Style{PaddingBottom: props.Style.PaddingBottom})
+		applyStyle(node, styleData{PaddingBottom: props.Style.style.PaddingBottom})
 	case 106:
-		applyStyle(node, Style{PaddingLeft: props.Style.PaddingLeft})
+		applyStyle(node, styleData{PaddingLeft: props.Style.style.PaddingLeft})
 	case 107:
-		applyStyle(node, Style{Margin: props.Style.Margin})
+		applyStyle(node, styleData{Margin: props.Style.style.Margin})
 	case 108:
-		applyStyle(node, Style{MarginTop: props.Style.MarginTop})
+		applyStyle(node, styleData{MarginTop: props.Style.style.MarginTop})
 	case 109:
-		applyStyle(node, Style{MarginRight: props.Style.MarginRight})
+		applyStyle(node, styleData{MarginRight: props.Style.style.MarginRight})
 	case 110:
-		applyStyle(node, Style{MarginBottom: props.Style.MarginBottom})
+		applyStyle(node, styleData{MarginBottom: props.Style.style.MarginBottom})
 	case 111:
-		applyStyle(node, Style{MarginLeft: props.Style.MarginLeft})
+		applyStyle(node, styleData{MarginLeft: props.Style.style.MarginLeft})
 	case 112:
-		applyStyle(node, Style{BackgroundColor: props.Style.BackgroundColor})
+		applyStyle(node, styleData{BackgroundColor: props.Style.style.BackgroundColor})
 	case 113:
-		applyStyle(node, Style{TextColor: props.Style.TextColor})
+		applyStyle(node, styleData{TextColor: props.Style.style.TextColor})
 	case 114:
-		applyStyle(node, Style{Opacity: props.Style.Opacity})
+		applyStyle(node, styleData{Opacity: props.Style.style.Opacity})
 	case 115:
-		applyStyle(node, Style{BorderWidth: props.Style.BorderWidth})
+		applyStyle(node, styleData{BorderWidth: props.Style.style.BorderWidth})
 	case 116:
-		applyStyle(node, Style{BorderColor: props.Style.BorderColor})
+		applyStyle(node, styleData{BorderColor: props.Style.style.BorderColor})
 	case 117:
-		applyStyle(node, Style{BorderRadius: props.Style.BorderRadius})
+		applyStyle(node, styleData{BorderRadius: props.Style.style.BorderRadius})
 	case 118:
-		applyStyle(node, Style{FontSize: props.Style.FontSize})
+		applyStyle(node, styleData{FontSize: props.Style.style.FontSize})
 	case 119:
-		applyStyle(node, Style{FontFamily: props.Style.FontFamily})
+		applyStyle(node, styleData{FontFamily: props.Style.style.FontFamily})
 	case 120:
-		applyStyle(node, Style{FontWeight: props.Style.FontWeight})
+		applyStyle(node, styleData{FontWeight: props.Style.style.FontWeight})
 	case 121:
-		applyStyle(node, Style{LineHeight: props.Style.LineHeight})
+		applyStyle(node, styleData{LineHeight: props.Style.style.LineHeight})
 	case 122:
-		applyStyle(node, Style{TextAlign: props.Style.TextAlign})
+		applyStyle(node, styleData{TextAlign: props.Style.style.TextAlign})
 	case 123:
-		applyStyle(node, Style{Cursor: props.Style.Cursor})
+		applyStyle(node, styleData{Cursor: props.Style.style.Cursor})
 	case 124:
-		applyStyle(node, Style{AppRegion: props.Style.AppRegion})
+		applyStyle(node, styleData{AppRegion: props.Style.style.AppRegion})
 	case 125:
-		applyStyle(node, Style{UserSelect: props.Style.UserSelect})
+		applyStyle(node, styleData{UserSelect: props.Style.style.UserSelect})
 	case 126:
-		applyStyle(node, Style{Position: props.Style.Position})
+		applyStyle(node, styleData{Position: props.Style.style.Position})
 	case 127:
-		applyStyle(node, Style{Overflow: props.Style.Overflow})
+		applyStyle(node, styleData{Overflow: props.Style.style.Overflow})
 	case 128:
-		applyStyle(node, Style{OverflowX: props.Style.OverflowX})
+		applyStyle(node, styleData{OverflowX: props.Style.style.OverflowX})
 	case 129:
-		applyStyle(node, Style{OverflowY: props.Style.OverflowY})
+		applyStyle(node, styleData{OverflowY: props.Style.style.OverflowY})
 	case 130:
-		applyStyle(node, Style{Visibility: props.Style.Visibility})
+		applyStyle(node, styleData{Visibility: props.Style.style.Visibility})
 	case 131:
-		applyStyle(node, Style{LetterSpacing: props.Style.LetterSpacing})
+		applyStyle(node, styleData{LetterSpacing: props.Style.style.LetterSpacing})
 	case 132:
-		applyStyle(node, Style{TextTransform: props.Style.TextTransform})
+		applyStyle(node, styleData{TextTransform: props.Style.style.TextTransform})
 	case 133:
-		applyStyle(node, Style{LineClamp: props.Style.LineClamp})
+		applyStyle(node, styleData{LineClamp: props.Style.style.LineClamp})
 	case 134:
-		applyStyle(node, Style{WhiteSpace: props.Style.WhiteSpace})
+		applyStyle(node, styleData{WhiteSpace: props.Style.style.WhiteSpace})
 	case 135:
-		applyStyle(node, Style{TextOverflow: props.Style.TextOverflow})
+		applyStyle(node, styleData{TextOverflow: props.Style.style.TextOverflow})
 	case 136:
-		applyStyle(node, Style{Top: props.Style.Top})
+		applyStyle(node, styleData{Top: props.Style.style.Top})
 	case 137:
-		applyStyle(node, Style{Right: props.Style.Right})
+		applyStyle(node, styleData{Right: props.Style.style.Right})
 	case 138:
-		applyStyle(node, Style{Bottom: props.Style.Bottom})
+		applyStyle(node, styleData{Bottom: props.Style.style.Bottom})
 	case 139:
-		applyStyle(node, Style{Left: props.Style.Left})
+		applyStyle(node, styleData{Left: props.Style.style.Left})
 	case 140:
-		applyStyle(node, Style{Outline: props.Style.Outline})
+		applyStyle(node, styleData{Outline: props.Style.style.Outline})
 	case 141:
-		applyStyle(node, Style{OutlineWidth: props.Style.OutlineWidth})
+		applyStyle(node, styleData{OutlineWidth: props.Style.style.OutlineWidth})
 	case 142:
-		applyStyle(node, Style{OutlineColor: props.Style.OutlineColor})
+		applyStyle(node, styleData{OutlineColor: props.Style.style.OutlineColor})
 	case 143:
-		applyStyle(node, Style{OutlineOffset: props.Style.OutlineOffset})
+		applyStyle(node, styleData{OutlineOffset: props.Style.style.OutlineOffset})
 	case 144:
-		applyStyle(node, Style{OutlineStyle: props.Style.OutlineStyle})
+		applyStyle(node, styleData{OutlineStyle: props.Style.style.OutlineStyle})
 	case 145:
-		applyStyle(node, Style{Transform: props.Style.Transform})
+		applyStyle(node, styleData{Transform: props.Style.style.Transform})
 	case 146:
-		applyStyle(node, Style{TransformOrigin: props.Style.TransformOrigin})
+		applyStyle(node, styleData{TransformOrigin: props.Style.style.TransformOrigin})
 	case 147:
-		applyStyle(node, Style{Hover: props.Style.Hover})
+		applyStyle(node, styleData{Hover: props.Style.style.Hover})
 	case 148:
-		applyStyle(node, Style{Active: props.Style.Active})
+		applyStyle(node, styleData{Active: props.Style.style.Active})
 	case 149:
-		applyStyle(node, Style{Focus: props.Style.Focus})
+		applyStyle(node, styleData{Focus: props.Style.style.Focus})
 	case 150:
-		applyStyle(node, Style{Disabled: props.Style.Disabled})
+		applyStyle(node, styleData{Disabled: props.Style.style.Disabled})
 	case 151:
-		applyStyle(node, Style{Selected: props.Style.Selected})
+		applyStyle(node, styleData{Selected: props.Style.style.Selected})
 	case 152:
-		applyStyle(node, Style{GroupHover: props.Style.GroupHover, groupHoverRules: props.Style.groupHoverRules})
+		applyStyle(node, styleData{GroupHover: props.Style.style.GroupHover, groupHoverRules: props.Style.style.groupHoverRules})
 	case propertyBindingOffset + 2:
 		setFluentListener(node, protocol.EventClick, props.OnClick)
 	case propertyBindingOffset + 3:

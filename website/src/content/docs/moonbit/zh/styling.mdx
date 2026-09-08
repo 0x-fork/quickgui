@@ -1,6 +1,6 @@
 元素方法与 `@ui.style()` 使用相同的原生样式属性。数字尺寸表示像素，字符串支持百分比和原生关键字。
 
-## 链式布局
+## 样式方法
 
 ```moonbit
 fn card() -> @ui.Element {
@@ -18,7 +18,7 @@ fn card() -> @ui.Element {
 
 常见布局可使用 `.flex_row()`、`.flex_col()`、`.items_center()` 和 `.justify_center()`。`.flex_1()` 设置伸展、收缩和零基础尺寸。可滚动的弹性子节点应设置 `.min_height(0)`，且父节点尺寸需要有界。
 
-## 合并与响应式样式
+## 合并样式
 
 `.style(base).style(overrides)` 按顺序合并声明，后面的同名属性优先。样式构建器的 `.merge(other)` 也如此。应用样式时会保存快照，之后修改构建器不会更新已挂载的元素。
 
@@ -38,6 +38,46 @@ fn selectable() -> @ui.Element {
 ```
 
 编译器会绑定 `.style(...)` 和链式方法中的访问器读取。每次更新都保留后声明属性的优先级；消失的声明会被清除，或回退到更早的声明。交互样式回调也可读取访问器。修改已应用的可复用构建器仍只改变快照，因此动态样式应从信号派生。
+
+## 复用样式
+
+`@ui.style()` 返回可复用的 `@ui.Style`，通过 `.style(shared)` 应用到元素或复合部件。构建器是可变的；派生样式时先使用 `@ui.style().merge(base)` 创建独立样式，再覆盖属性。应用样式会保存声明快照，之后修改构建器不会更新已挂载节点。
+
+```moonbit
+fn shared_cards() -> @ui.Element {
+  let card = @ui.style().padding(20).border_radius(12)
+  let emphasized = @ui.style().merge(card).padding_left(28)
+  @ui.div([
+    @ui.div([@ui.text("Hello")]).style(card),
+    @ui.div([@ui.text("Another card")]).style(emphasized),
+  ])
+  .flex_col()
+  .gap(12)
+}
+```
+
+## Flexbox
+
+使用 `.flex()`、`.flex_row()` 或 `.flex_col()` 设置弹性布局。`.flex_1()` 设置 grow 1、shrink 1 和 basis 0。滚动子节点需要 `.min_height(0)` 或 `.min_width(0)`，且父节点尺寸有界。`@ui.style()` 提供相同的方法。
+
+## 网格布局
+
+使用 `.grid_cols(3)` 创建等宽列，或通过 `.grid_template_columns("220px 1fr")` 指定轨道。`.col_span_full()`、`.col_start(...)` 和 `.col_span(...)` 控制子节点的位置。元素和样式共享 Rust 的辅助方法及四像素间距单位。
+
+```moonbit
+fn grid() -> @ui.Element {
+  @ui.div([@ui.text("Sidebar"), @ui.text("Content")])
+  .grid_template_columns("220px 1fr")
+  .display("grid")
+  .gap(16)
+}
+```
+
+## 文本与颜色
+
+使用 `@ui.rgb8(r, g, b)` 或 `@ui.rgba8(r, g, b, a)`，通道取值为 0–255。窗口选项接受颜色的 JSON 值；原始整数采用 `0xAABBGGRR`（`0` 表示透明）。不要将 CSS 颜色字符串传给窗口 `background`。
+
+`@ui.svg(source)` 生成由 `.text_color(...)` 着色的蒙版。多色图形可像 Quick Git 一样使用独立的着色 SVG 图层。
 
 ## 交互状态
 
@@ -60,11 +100,8 @@ fn interaction_button() -> @ui.Element {
 }
 ```
 
-## 颜色与 SVG
+## 分组与具名分组悬停
 
-使用 `@ui.rgb8(r, g, b)` 或 `@ui.rgba8(r, g, b, a)`，通道取值为 0–255。窗口选项接受颜色的 JSON 值；原始整数采用 `0xAABBGGRR`（`0` 表示透明）。不要将 CSS 颜色字符串传给窗口 `background`。
+`.group("card")` 为祖先分组命名。MoonBit 通过 `.bind_json(@protocol.GROUP_HOVER_STYLE, read)` 和 `GROUP_ACTIVE_STYLE` 设置分组绘制规则。传入包含 `group` 名称和绘制字段的规则数组；样式构建器的 `.json()` 可生成绘制声明。使用这些常量需要导入 `egoist/quickgui/protocol`。
 
-`@ui.svg(source)` 生成由 `.text_color(...)` 着色的蒙版。多色图形可像 Quick Git 一样使用独立的着色 SVG 图层。
-
-
-布局辅助方法与 Rust 保持一致：`.grid_cols(3)`、`.col_span_full()`、`.flex_col_reverse()`、`.justify_between()`、`.p_4()`、`.mx_auto()` 和 `.rounded_lg()`。数字间距预设采用 Rust 的四像素单位，`rounded_lg` 的圆角半径为八像素。这些方法也可用于 `@ui.style()`。`.flex()` 启用弹性布局，`.flex_1()` 设置伸展系数 1、收缩系数 1 和零基础尺寸。
+具名规则跟随最近的同名祖先，未命名规则跟随最近的分组。规则按顺序应用，节点自身的悬停样式优先覆盖重复属性。`FOCUS_WITHIN_STYLE` 跟随节点或后代的焦点。这些状态不会改变布局，也不能设置光标。

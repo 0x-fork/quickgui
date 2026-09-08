@@ -8,7 +8,7 @@ QuickGUI for MoonBit uses child lists, fluent properties, and fine-grained signa
 
 Build on the OS and architecture you are targeting. macOS has native runtime validation; Linux and Windows still need runtime and visual acceptance.
 
-## Run the counter
+## Create a project
 
 The CLI and MoonBit SDK are not published yet. Start from the [QuickGUI checkout](https://github.com/egoist/quickgui); its `moon.work` resolves the SDK locally:
 
@@ -60,7 +60,7 @@ fn main {
 }
 ```
 
-## Build and examples
+## Run and build
 
 From the checkout, format and package the example:
 
@@ -70,5 +70,7 @@ bun packages/cli/src/cli.ts build --project examples/moonbit-counter
 ```
 
 Development uses the fast native backend on Apple Silicon macOS and x64 Linux/Windows, reusing bridge and runtime objects in `.quickgui/moonbit`. Release builds and other hosts use the optimizing C backend. Set `MOONBIT_NEW_NATIVE=0` to try the C backend during development.
+
+## Next steps
 
 For a larger application, run `bun --cwd examples/quick-git-moonbit dev`. [Quick Git](https://github.com/egoist/quickgui/tree/main/examples/quick-git-moonbit) demonstrates multiple windows, menus, virtualized diffs, a history graph, and an independent I/O extension.

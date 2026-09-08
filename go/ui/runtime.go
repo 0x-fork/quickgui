@@ -13,7 +13,7 @@ import (
 
 // Props configure a primitive node. Accessor children and values create bindings.
 type Props struct {
-	Style                   Style
+	Style                   StyleBuilder
 	Children                any
 	OnClick                 func(*native.Event)
 	OnMouseEnter            func(*native.Event)
@@ -102,7 +102,7 @@ func applyProps(node *native.Node, props Props) {
 }
 
 func applyPropValues(node *native.Node, props Props) {
-	applyStyle(node, props.Style)
+	applyStyle(node, props.Style.style)
 	if props.Disabled != nil {
 		bindExplicitBool(node, protocol.Disabled, props.Disabled)
 	}

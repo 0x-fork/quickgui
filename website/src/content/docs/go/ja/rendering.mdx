@@ -11,9 +11,7 @@ func ViewExample() {
 			ui.Text("Hello from Go")
 			ui.Button("Continue", ui.OnClick(func() {}))
 		},
-		ui.Padding(20),
-		ui.Gap(12),
-	)
+	).Padding(20).Gap(12)
 }
 ```
 
@@ -104,3 +102,7 @@ func CloseButton() {
 	ui.Button("Close window", ui.OnClick(func() { window.Close() }))
 }
 ```
+
+## チェック・テスト・デバッグ
+
+アプリのモジュールで `CGO_ENABLED=0` を設定して `go test ./...` を実行します。`quickgui fmt --check` で書式を確認します。アプリはネイティブ Go 実行ファイルなので、通常の Go 診断やデバッガーは元のソースを使用します。

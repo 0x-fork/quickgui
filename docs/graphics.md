@@ -529,7 +529,7 @@ animations.
 
 ## Go components
 
-`ui.Image(ui.Value(path), ui.Style{ObjectFit: "contain"})` declares an image source.
+`ui.Image(ui.Value(path)).ObjectFit("contain")` declares an image source.
 It accepts a filesystem path, a `file://` URL, or a base64 `data:` URL. A path stays a
 lazy core `ImageResource`; decoding runs on the bounded worker pool. Animated
 formats keep their frames and repeat policy inside the core decoder.

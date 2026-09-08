@@ -1,6 +1,6 @@
 Element methods and `@ui.style()` share the same native style properties. Numeric dimensions are pixels; strings support percentages and native keywords.
 
-## Fluent layout
+## Style modifiers
 
 ```moonbit
 fn card() -> @ui.Element {
@@ -18,7 +18,7 @@ fn card() -> @ui.Element {
 
 Use `.flex_row()`, `.flex_col()`, `.items_center()`, and `.justify_center()` for common layouts. `.flex_1()` sets grow, shrink, and a zero basis. Give scrollable flex children `.min_height(0)` and a bounded parent size.
 
-## Merging and reactive styles
+## Merging styles
 
 `.style(base).style(overrides)` merges declarations in order; later properties win. `.merge(other)` does the same for style builders. Applying a style takes a snapshot. Changing the builder later does not update the mounted element.
 
@@ -38,6 +38,46 @@ fn selectable() -> @ui.Element {
 ```
 
 The compiler binds getter reads inside `.style(...)` and fluent modifiers. Later declarations keep precedence on every update; disappearing declarations are cleared or reveal an earlier fallback. Interaction-style callbacks can also read getters. Mutating an already-applied reusable builder is still a snapshot mutation, so derive styles from signals instead.
+
+## Reusable styles
+
+`@ui.style()` returns a reusable `@ui.Style`. Apply it to elements or compound parts with `.style(shared)`. Builders are mutable: derive a separate style with `@ui.style().merge(base)` before adding overrides. Applying a style snapshots its declarations; later builder changes do not update mounted nodes.
+
+```moonbit
+fn shared_cards() -> @ui.Element {
+  let card = @ui.style().padding(20).border_radius(12)
+  let emphasized = @ui.style().merge(card).padding_left(28)
+  @ui.div([
+    @ui.div([@ui.text("Hello")]).style(card),
+    @ui.div([@ui.text("Another card")]).style(emphasized),
+  ])
+  .flex_col()
+  .gap(12)
+}
+```
+
+## Flexbox
+
+Use `.flex()`, `.flex_row()`, or `.flex_col()` for flex layouts. `.flex_1()` sets grow 1, shrink 1, and zero basis. Scrolling children need `.min_height(0)` or `.min_width(0)` and a bounded parent. The same methods work on `@ui.style()`.
+
+## Grid
+
+Use `.grid_cols(3)` for equal columns or `.grid_template_columns("220px 1fr")` for explicit tracks. `.col_span_full()`, `.col_start(...)`, and `.col_span(...)` place children. Elements and styles share Rust’s layout helpers and four-pixel spacing scale.
+
+```moonbit
+fn grid() -> @ui.Element {
+  @ui.div([@ui.text("Sidebar"), @ui.text("Content")])
+  .grid_template_columns("220px 1fr")
+  .display("grid")
+  .gap(16)
+}
+```
+
+## Text and color
+
+Use `@ui.rgb8(r, g, b)` or `@ui.rgba8(r, g, b, a)`, with channels from 0 to 255. Window options accept these colors as JSON values; a raw integer uses `0xAABBGGRR` (`0` for transparent). Do not pass CSS color strings as a window’s `background`.
+
+`@ui.svg(source)` produces a mask tinted by `.text_color(...)`. For multiple graph colors, use separate tinted SVG layers, as shown in Quick Git.
 
 ## Interaction states
 
@@ -60,11 +100,8 @@ fn interaction_button() -> @ui.Element {
 }
 ```
 
-## Colors and SVG
+## Groups and named group hover
 
-Use `@ui.rgb8(r, g, b)` or `@ui.rgba8(r, g, b, a)`, with channels from 0 to 255. Window options accept these colors as JSON values; a raw integer uses `0xAABBGGRR` (`0` for transparent). Do not pass CSS color strings as a window’s `background`.
+`.group("card")` names an ancestor group. MoonBit exposes group paint rules through `.bind_json(@protocol.GROUP_HOVER_STYLE, read)` and `GROUP_ACTIVE_STYLE`. Supply the core’s rule array with a `group` name and paint fields; a style builder’s `.json()` produces the paint declaration. Import `egoist/quickgui/protocol` for these constants.
 
-`@ui.svg(source)` produces a mask tinted by `.text_color(...)`. For multiple graph colors, use separate tinted SVG layers, as shown in Quick Git.
-
-
-Layout helpers match Rust: `.grid_cols(3)`, `.col_span_full()`, `.flex_col_reverse()`, `.justify_between()`, `.p_4()`, `.mx_auto()`, and `.rounded_lg()`. Numeric spacing presets use Rust's four-pixel unit; `rounded_lg` uses an eight-pixel radius. The same helpers work on `@ui.style()`. `.flex()` selects flex display; `.flex_1()` sets grow 1, shrink 1, and zero basis.
+Named rules follow the nearest ancestor with the matching name; unnamed rules follow the nearest group. Repeated rules apply in order, and the node’s own hover style wins for overlapping properties. `FOCUS_WITHIN_STYLE` follows focus in the node or descendants. These states do not change layout and cannot set the cursor.

@@ -355,7 +355,7 @@ func createInWindowContent(props PopoverContentProps, state *popoverState) *nati
 		return Fragment(nil)
 	}
 	node := createViewPart(props.PartProps)
-	applyStyle(node, Style{Width: props.Width, Height: props.Height})
+	applyStyle(node, styleData{Width: props.Width, Height: props.Height})
 	setString(node, protocol.AnchorTarget, fmt.Sprintf("%d", anchor.ID))
 	placement := props.Placement
 	if placement == "" {

@@ -34,7 +34,7 @@ Zig テンプレートには Zig 0.16.x、Rust テンプレートには安定版
 
 `moonbit` では `native/extension.mbt` に操作を実装し、MoonBit とネイティブ C コンパイラでビルドします。Bun スクリプトは MoonBit の C バックエンドでコンパイルし、専用ランタイムを共有ライブラリへリンクします。Go アプリからは引き続き purego で読み込みます。プロバイダー単体のビルドにコア変更や Go は不要です。ハンドラー API、メモリ所有権、ツールチェーン、両フロントエンドからの利用は [MoonBit 拡張ガイド](/ja/docs/moonbit/extensions)を参照してください。
 
-## Go コンポーネントを共有する
+## コンポーネントの共有
 
 自分のリポジトリに Go モジュールを作成し、Go SDK に依存してコンポーネント関数を公開します。この形式にはネイティブマニフェストや npm パッケージは不要です。
 
@@ -43,19 +43,14 @@ package notice
 
 import "github.com/egoist/quickgui/go/ui"
 
-func Notice(message func() string, styles ...ui.StyleDeclaration) {
+func Notice(message func() string, styles ...ui.StyleBuilder) {
 	ui.Text(
 		message,
-		ui.Padding(12),
-		ui.BackgroundColor("#eff6ff"),
-		ui.TextColor("#1e40af"),
-		ui.BorderRadius(8),
-		ui.Styles(styles...),
-	)
+	).Padding(12).BackgroundColor("#eff6ff").TextColor("#1e40af").BorderRadius(8).Style(ui.Style().Merge(styles...))
 }
 ```
 
-コンポーネントや children コールバックから `notice.Notice(message, ui.Padding(16))` を呼び出します。アクセサーはリアクティブなままで、呼び出し側のスタイルが既定値の後にマージされます。関数はノードを返さずに子要素を宣言します。コンポーネントが所有するリソースには `ui.OnCleanup` を使い、アプリ全体のサービスはその所有権の外に置きます。
+コンポーネントや children コールバックから `notice.Notice(message, ui.Style().Padding(16))` を呼び出します。アクセサーはリアクティブなままで、呼び出し側のスタイルが既定値の後にマージされます。関数はノードを返さずに子要素を宣言します。コンポーネントが所有するリソースには `ui.OnCleanup` を使い、アプリ全体のサービスはその所有権の外に置きます。
 
 Go のバージョンタグで公開し、対応 SDK バージョンを記載してください。利用者はモジュールパスを指定して `go get` します。`terminal` や `updater` の間接インポートも対応バックエンドを取り込むため、オプションの連携は別パッケージやビルドタグ付きファイルに分けます。
 
@@ -81,7 +76,7 @@ build-extension.ts
 
 この例の独立したリリース番号は `1.0.0` です。記述子、マニフェスト、npm パッケージ、`RequireExtension` のバージョンを一致させます。コアとの互換性はサービス ABI バージョンとテーブルのレイアウトで判定され、プロバイダーのリリース番号を QuickGUI に合わせる必要はありません。必要な Go SDK と ABI を明記してください。組み込み terminal の型付き描画契約は引き続きコアのリリースに一致する必要があります。
 
-## Go 依存関係を宣言する
+## 依存関係の宣言
 
 マニフェストは、実際にインポートする Go パッケージのソースの隣に置きます。モジュールのルートやアプリ設定に置くだけでは不十分です。
 

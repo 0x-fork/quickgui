@@ -23,15 +23,9 @@ import {
 pkgtype(kind: "executable")
 ```
 
-## ローカル開発
+## アプリケーションのエントリ
 
-SDK が公開されるまでは、アプリと QuickGUI チェックアウトの共通の親ディレクトリに `moon.work` を作ります。パスはワークスペースからの相対パスです。
-
-```toml
-members = ["quickgui/moonbit", "my-app"]
-```
-
-`quickgui` から `bun packages/cli/src/cli.ts dev --project ../my-app` を実行すると、公開パッケージを使わずローカル CLI を利用できます。
+`main/main.mbt` に `main` とコンポーネントを定義します。`@native.run` を一度呼び、`@ui.window(component)` でウィンドウを作成します。各コンポーネントは `@ui.Element` を返します。大きなアプリは通常の MoonBit パッケージに分割します。
 
 ## 設定
 
@@ -54,3 +48,13 @@ extensions = []
 | `egoist/quickgui/ui` | コンポーネント、スタイル、シグナル、メモ、副作用、クリーンアップ、ルーティング。 |
 | `egoist/quickgui/native` | ウィンドウ、イベント、ダイアログ、メニュー、サービス、拡張。 |
 | `egoist/quickgui/protocol` | コアのプロパティ定数と変更値の型。 |
+
+## ローカル開発
+
+SDK が公開されるまでは、アプリと QuickGUI チェックアウトの共通の親ディレクトリに `moon.work` を作ります。パスはワークスペースからの相対パスです。
+
+```toml
+members = ["quickgui/moonbit", "my-app"]
+```
+
+`quickgui` から `bun packages/cli/src/cli.ts dev --project ../my-app` を実行すると、公開パッケージを使わずローカル CLI を利用できます。

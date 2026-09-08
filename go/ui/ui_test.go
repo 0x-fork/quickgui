@@ -48,7 +48,7 @@ func TestSignalChangesOnlyItsBoundText(t *testing.T) {
 func TestViewAppliesStyleAndChildren(t *testing.T) {
 	native.ResetTreeStateForTests()
 	node := View(Props{
-		Style: Style{Display: "flex", Width: "100%", Gap: 12, BackgroundColor: "#112233"},
+		Style: Style().Flex().Width("100%").Gap(12).Bg("#112233"),
 		Children: []any{
 			Text(Props{Children: "hello"}),
 		},

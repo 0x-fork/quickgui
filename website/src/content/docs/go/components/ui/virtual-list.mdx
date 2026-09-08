@@ -17,10 +17,10 @@ func VirtualListExample(rows []string) {
 	ui.VirtualList(
 		func() {
 			for _, row := range rows {
-				ui.Text(row, ui.Height(36))
+				ui.Text(row).Height(36)
 			}
 		},
-		ui.Height(320),
+		ui.Style().Height(320),
 		ui.EstimatedItemHeight(36),
 		ui.Overscan(6),
 		ui.FollowMode("normal"),

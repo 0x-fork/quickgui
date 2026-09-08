@@ -13,8 +13,7 @@ func TextExample() {
 		ui.Text(
 			"Count: ",
 			count,
-			ui.FontSize(20),
-		)
+		).FontSize(20)
 		ui.Button("Increment", ui.OnClick(func() { setCount(count() + 1) }))
 	})
 }

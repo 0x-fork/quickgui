@@ -36,7 +36,7 @@ Before the packages are published, use `bun packages/cli/src/cli.ts init-extensi
 
 For `moonbit`, implement operations in `native/extension.mbt` using MoonBit and a native C compiler. The Bun script compiles through MoonBit's C backend and links a private runtime into the shared library; the Go application still loads it through purego. No core changes or Go toolchain are needed to build the provider alone. See [MoonBit extension authoring](/docs/moonbit/extensions) for the handler API, memory ownership, toolchain setup, and use from either frontend.
 
-## Share a Go component
+## Share a component
 
 Create a module under your own repository path, depend on the Go SDK, and export component functions. This package needs neither a native manifest nor an npm package:
 
@@ -45,19 +45,14 @@ package notice
 
 import "github.com/egoist/quickgui/go/ui"
 
-func Notice(message func() string, styles ...ui.StyleDeclaration) {
+func Notice(message func() string, styles ...ui.StyleBuilder) {
 	ui.Text(
 		message,
-		ui.Padding(12),
-		ui.BackgroundColor("#eff6ff"),
-		ui.TextColor("#1e40af"),
-		ui.BorderRadius(8),
-		ui.Styles(styles...),
-	)
+	).Padding(12).BackgroundColor("#eff6ff").TextColor("#1e40af").BorderRadius(8).Style(ui.Style().Merge(styles...))
 }
 ```
 
-Call `notice.Notice(message, ui.Padding(16))` inside a component or children block. The accessor stays reactive, and the caller's style merges after the defaults. Component functions declare children without returning a node. Use `ui.OnCleanup` for resources owned by a mounted component; keep application-wide services outside component ownership.
+Call `notice.Notice(message, ui.Style().Padding(16))` inside a component or children block. The accessor stays reactive, and the caller's style merges after the defaults. Component functions declare children without returning a node. Use `ui.OnCleanup` for resources owned by a mounted component; keep application-wide services outside component ownership.
 
 Publish the module using Go version tags, and document the SDK versions you support. Consumers add it with `go get` using your module path. Transitive imports of `terminal` or `updater` still opt the application into those native extensions, so keep optional integrations in separate packages or build-tagged files.
 
@@ -83,7 +78,7 @@ Vendor the small header into your project. C, C++, Rust, and other languages tha
 
 The provider in this guide uses its own release `1.0.0`. Its descriptor, manifest, npm package, and `RequireExtension` version must agree. The service ABI version and table layout determine core compatibility; the provider's release does not need to match QuickGUI's release. Document the Go SDK and service ABI versions your package requires. The built-in terminal's typed rendering contract remains tied to its matching core release.
 
-## Declare the Go dependency
+## Declare dependencies
 
 Place this manifest **beside the imported Go package's source**, not just at the module root or in application configuration:
 

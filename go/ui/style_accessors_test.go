@@ -16,7 +16,7 @@ func TestScalarStyleBindingsUpdateIndependentlyAndDispose(t *testing.T) {
 		color := reactive.NewSignal("#112233")
 		mounts := 0
 		parent := View()
-		node := View(Width(width.Read), BackgroundColor(color.Read), func() { mounts++; Text("kept") })
+		node := View(styleWidth(width.Read), styleBackgroundColor(color.Read), func() { mounts++; Text("kept") })
 		native.InsertNode(parent.Node, node.Node, nil)
 		child := node.Children[0]
 		offset := len(parent.Pending.Body())
@@ -49,7 +49,7 @@ func TestConditionalStyleAccessorsReleaseAndRestoreBase(t *testing.T) {
 		defer dispose()
 		active, setActive := CreateSignal(true)
 		width := reactive.NewSignal(50)
-		node := View(Width(20), When(active, Width(width.Read)))
+		node := View(styleWidth(20), When(active, styleWidth(width.Read)))
 		for range 3 {
 			if len(width.Observers) != 1 {
 				t.Fatal("missing or duplicate conditional style observer")
@@ -75,7 +75,7 @@ func TestStateStyleTracksThemeAndReleasesBindings(t *testing.T) {
 		defer dispose()
 		accent := reactive.NewSignal("#112233")
 		parent := View()
-		node := Button(Hover(BackgroundColor(accent.Read)), Focus(OutlineWidth(2), OutlineColor(accent.Read)), "Retained")
+		node := Button(styleHover(styleBackgroundColor(accent.Read)), styleFocus(styleOutlineWidth(2), styleOutlineColor(accent.Read)), "Retained")
 		native.InsertNode(parent.Node, node.Node, nil)
 		child := node.Children[0]
 		before := len(parent.Pending.Body())

@@ -150,70 +150,79 @@ func (m *model) color(get func(theme) string) func() string {
 
 const colorTransition = "background-color 70ms, border-color 70ms, color 70ms"
 
-func (m *model) iconStyle(size float64) ui.Style {
-	return ui.Styles(
-		ui.Display("flex"),
-		ui.Width(size),
-		ui.Height(size),
-		ui.FlexShrink(0),
-		ui.AlignItems("center"),
-		ui.JustifyContent("center"),
-		ui.TextColor(m.color(func(t theme) string { return t.TextTertiary })),
-		ui.BackgroundColor("transparent"),
-		ui.Hover(
-			ui.BackgroundColor(m.color(func(t theme) string { return t.Hover })),
-			ui.TextColor(m.color(func(t theme) string { return t.Text })),
-		),
-		ui.Active(ui.BackgroundColor(m.color(func(t theme) string { return t.Active }))),
-		ui.Transition(colorTransition),
-		ui.BorderRadius(5),
-		ui.Cursor("default"),
-		ui.AppRegion("no-drag"),
-		ui.UserSelect("none"),
-	)
+func (m *model) iconStyle(size float64) ui.StyleBuilder {
+	return ui.Style().
+		Display("flex").
+		Width(size).
+		Height(size).
+		FlexShrink(0).
+		AlignItems("center").
+		JustifyContent("center").
+		TextColor(m.color(func(t theme) string { return t.TextTertiary })).
+		BackgroundColor("transparent").
+		Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
+			return s.
+				BackgroundColor(m.color(func(t theme) string { return t.Hover })).
+				TextColor(m.color(func(t theme) string { return t.Text }))
+		}).
+		Active(func(s ui.StyleBuilder) ui.StyleBuilder {
+			return s.BackgroundColor(m.color(func(t theme) string { return t.Active }))
+		}).
+		Transition(colorTransition).
+		BorderRadius(5).
+		Cursor("default").
+		AppRegion("no-drag").
+		UserSelect("none")
 }
-func (m *model) rowStyle(selected func() bool) ui.Style {
-	return ui.Styles(
-		ui.Display("flex"),
-		ui.Width("100%"),
-		ui.MinWidth(0),
-		ui.Height(48),
-		ui.FlexShrink(0),
-		ui.AlignItems("center"),
-		ui.Gap(8),
-		ui.PaddingLeft(8),
-		ui.PaddingRight(8),
-		ui.BackgroundColor(func() string { return choose(selected(), m.theme().Selected, "transparent") }),
-		ui.Hover(ui.BackgroundColor(func() string { return choose(selected(), m.theme().SelectedStrong, m.theme().Hover) })),
-		ui.Active(ui.BackgroundColor(m.color(func(t theme) string { return t.Active }))),
-		ui.Transition(colorTransition),
-		ui.BorderRadius(6),
-		ui.Cursor("default"),
-		ui.UserSelect("none"),
-		ui.AppRegion("no-drag"),
-	)
+func (m *model) rowStyle(selected func() bool) ui.StyleBuilder {
+	return ui.Style().
+		Display("flex").
+		Width("100%").
+		MinWidth(0).
+		Height(48).
+		FlexShrink(0).
+		AlignItems("center").
+		Gap(8).
+		PaddingLeft(8).
+		PaddingRight(8).
+		BackgroundColor(func() string { return choose(selected(), m.theme().Selected, "transparent") }).
+		Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
+			return s.
+				BackgroundColor(func() string { return choose(selected(), m.theme().SelectedStrong, m.theme().Hover) })
+		}).
+		Active(func(s ui.StyleBuilder) ui.StyleBuilder {
+			return s.BackgroundColor(m.color(func(t theme) string { return t.Active }))
+		}).
+		Transition(colorTransition).
+		BorderRadius(6).
+		Cursor("default").
+		UserSelect("none").
+		AppRegion("no-drag")
 }
-func (m *model) buttonStyle(primary bool) ui.Style {
-	return ui.Styles(
-		ui.Display("flex"),
-		ui.Height(30),
-		ui.FlexShrink(0),
-		ui.AlignItems("center"),
-		ui.JustifyContent("center"),
-		ui.PaddingLeft(11),
-		ui.PaddingRight(11),
-		ui.BackgroundColor(func() string { return choose(primary, m.theme().Accent, "transparent") }),
-		ui.TextColor(func() string { return choose(primary, m.theme().AccentText, m.theme().TextSecondary) }),
-		ui.BorderWidth(choose(primary, 0, 1)),
-		ui.BorderColor(m.color(func(t theme) string { return t.Border })),
-		ui.BorderRadius(5),
-		ui.Hover(ui.BackgroundColor(func() string { return choose(primary, m.theme().AccentHover, m.theme().Hover) })),
-		ui.Active(ui.BackgroundColor(func() string { return choose(primary, m.theme().AccentHover, m.theme().Active) })),
-		ui.FontSize(11),
-		ui.FontWeight(choose(primary, 680, 500)),
-		ui.Cursor("default"),
-		ui.AppRegion("no-drag"),
-		ui.UserSelect("none"),
-		ui.Transition(colorTransition),
-	)
+func (m *model) buttonStyle(primary bool) ui.StyleBuilder {
+	return ui.Style().
+		Display("flex").
+		Height(30).
+		FlexShrink(0).
+		AlignItems("center").
+		JustifyContent("center").
+		PaddingLeft(11).
+		PaddingRight(11).
+		BackgroundColor(func() string { return choose(primary, m.theme().Accent, "transparent") }).
+		TextColor(func() string { return choose(primary, m.theme().AccentText, m.theme().TextSecondary) }).
+		BorderWidth(choose(primary, 0, 1)).
+		BorderColor(m.color(func(t theme) string { return t.Border })).
+		BorderRadius(5).
+		Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
+			return s.BackgroundColor(func() string { return choose(primary, m.theme().AccentHover, m.theme().Hover) })
+		}).
+		Active(func(s ui.StyleBuilder) ui.StyleBuilder {
+			return s.BackgroundColor(func() string { return choose(primary, m.theme().AccentHover, m.theme().Active) })
+		}).
+		FontSize(11).
+		FontWeight(choose(primary, 680, 500)).
+		Cursor("default").
+		AppRegion("no-drag").
+		UserSelect("none").
+		Transition(colorTransition)
 }

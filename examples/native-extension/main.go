@@ -37,15 +37,7 @@ func App() {
 						setMessage(reply)
 					})
 				}),
-				ui.Padding(12),
-				ui.BackgroundColor("#2563eb"),
-				ui.TextColor("white"),
-				ui.BorderRadius(8),
-			)
+			).Padding(12).BackgroundColor("#2563eb").TextColor("white").BorderRadius(8)
 		},
-		ui.Display("flex"),
-		ui.FlexDirection("column"),
-		ui.Padding(24),
-		ui.Gap(16),
-	)
+	).Display("flex").FlexDirection("column").Padding(24).Gap(16)
 }

@@ -1,6 +1,6 @@
 QuickGUI 的 MoonBit 前端使用子节点列表、链式属性与细粒度信号。组件创建保留的原生节点，状态变化只更新相关绑定。侧栏选择器也提供 Go 文档。
 
-## 环境要求
+## 系统要求
 
 - [MoonBit 工具链](https://www.moonbitlang.com/download/)（已测试 `moon 0.1.20260827` / `moonc v0.10.11`）
 - Bun 1.3 或更新版本
@@ -8,7 +8,7 @@ QuickGUI 的 MoonBit 前端使用子节点列表、链式属性与细粒度信�
 
 请在目标操作系统和架构上构建。macOS 已验证原生运行，Linux 和 Windows 仍需运行与视觉验收。
 
-## 运行计数器
+## 创建项目
 
 CLI 和 MoonBit SDK 尚未发布。先使用 [QuickGUI 源码仓库](https://github.com/egoist/quickgui)，其中的 `moon.work` 会解析本地 SDK：
 
@@ -60,7 +60,7 @@ fn main {
 }
 ```
 
-## 构建与示例
+## 运行与构建
 
 在源码仓库中格式化并打包示例：
 
@@ -70,5 +70,7 @@ bun packages/cli/src/cli.ts build --project examples/moonbit-counter
 ```
 
 Apple Silicon macOS 和 x64 Linux/Windows 的开发构建使用快速原生后端，并复用 `.quickgui/moonbit` 中的桥接与运行时对象。发布构建及其他主机使用优化的 C 后端。开发时可设置 `MOONBIT_NEW_NATIVE=0` 来使用 C 后端。
+
+## 后续步骤
 
 更完整的应用可运行 `bun --cwd examples/quick-git-moonbit dev`。[Quick Git](https://github.com/egoist/quickgui/tree/main/examples/quick-git-moonbit) 展示了多窗口、菜单、虚拟化差异、历史图和独立 I/O 扩展。

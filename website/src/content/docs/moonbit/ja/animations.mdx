@@ -18,7 +18,22 @@ fn animated_button() -> @ui.Element {
 
 状態に入るときも出るときも動くように、時間設定は基本要素に指定します。シグナルによる `bind_style` の目標にも同じトランジションが適用されます。途中で目標を変えると現在の表示値から開始します。
 
-## 時間の設定
+## 状態によるアニメーション
+
+fluent な目標スタイルでシグナルを読みます。ビューコンパイラーが保持された要素に目標値をバインドし、ネイティブコアが変化を補間します。値が変わる間も同じノードをマウントしたままにします。
+
+```moonbit
+fn animated_state() -> @ui.Element {
+  let (dimmed, set_dimmed) = @ui.create_signal(false)
+  @ui.button("Toggle opacity")
+  .on_click(() => set_dimmed(!dimmed()))
+  .opacity(if dimmed() { 0.4 } else { 1.0 })
+  .transition_property("opacity")
+  .transition_duration(160)
+}
+```
+
+## 時間とフレームレート
 
 時間はミリ秒で、0〜10 秒に制限されます。`.transition_easing(...)` は `linear`、`ease`、`ease-in`、`ease-out`、`ease-in-out` を受け取ります。`.transition_max_fps(30)` でフレームレートを制限でき、省略すると表示に合わせます。一つの要素の対象プロパティは時間、イージング、フレームレート上限を共有します。遅延と独自の cubic Bézier 曲線には対応していません。
 
@@ -26,8 +41,10 @@ fn animated_button() -> @ui.Element {
 
 `background-color`、`border-color`、`border-width`、`border-radius`、`color`、`opacity`、`box-shadow`、`transform` を補間できます。`all` はこれらの描画プロパティを選択します。幅、高さ、余白、グラデーションなどのレイアウト変更は補間されません。スライドするつまみにはレイアウト位置ではなく transform を使います。
 
-アニメーション画像は GIF または WebP のパスを `@ui.image(path)` に渡します。ネイティブデコーダーがフレームと繰り返し設定を保持するため、シグナルのタイマーは不要です。
-
-## ライフタイムと視差効果の軽減
+## マウントと視差効果の抑制
 
 初期スタイルは即座に適用されます。目標変更をアニメーションにするには要素をマウントしたままにします。`child_if` は分岐を即座に削除し、フェードアウトを待ちません。透明度がゼロでもレイアウトと入力は残ります。トランジションはシステムの視差効果を減らす設定に従い、非表示や遮蔽されたウィンドウではローカルのトランジションを一時停止します。
+
+## アニメーション画像
+
+アニメーション画像は GIF または WebP のパスを `@ui.image(path)` に渡します。ネイティブデコーダーがフレームと繰り返し設定を保持するため、シグナルのタイマーは不要です。

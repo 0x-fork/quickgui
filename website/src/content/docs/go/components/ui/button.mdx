@@ -16,13 +16,13 @@ import (
 func ButtonExample(save func()) {
 	ui.Button(
 		"Save changes",
-		ui.Height(40),
-		ui.PaddingLeft(16),
-		ui.PaddingRight(16),
-		ui.BackgroundColor("#2563eb"),
-		ui.TextColor("white"),
-		ui.BorderRadius(8),
-		ui.Hover(ui.BackgroundColor("#3b82f6")),
+		ui.Style().Height(40),
+		ui.Style().PaddingLeft(16),
+		ui.Style().PaddingRight(16),
+		ui.Style().BackgroundColor("#2563eb"),
+		ui.Style().TextColor("white"),
+		ui.Style().BorderRadius(8),
+		ui.Style().Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor("#3b82f6") }),
 		ui.OnClick(save),
 	)
 }
@@ -32,7 +32,7 @@ func ButtonExample(save func()) {
 
 | Prop | Purpose |
 | --- | --- |
-| `ui.BackgroundColor(...)`, `ui.Padding(...)`, `ui.Hover(...)` | QuickGUI layout, paint, typography, and interaction-state styles. |
+| `ui.Style().BackgroundColor(...)`, `ui.Style().Padding(...)`, `ui.Style().Hover(...)` | QuickGUI layout, paint, typography, and interaction-state styles. |
 | `children` | Content mounted inside the component. |
 | `OnClick` | Runs after the core resolves an activation. |
 | `Disabled` | Prevents interaction and exposes the disabled state. |

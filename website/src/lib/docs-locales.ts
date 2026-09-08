@@ -1,32 +1,23 @@
+import { docsOutline, docsTitle } from './docs-structure'
 import type { Locale } from '../i18n'
 import type { ComponentDoc } from './component-docs'
-import type { DocsOutlineItem, DocsPageMeta, GoDocsSlug } from './docs'
+import type { DocsOutlineItem, DocsPageMeta, DocsSlug } from './docs'
 
 type TranslatedLocale = Exclude<Locale, 'en'>
 
 interface GuideTranslation {
-  title: string
   description: string
-  outline: readonly DocsOutlineItem[]
   searchTerms: readonly string[]
 }
 
-const GUIDE_TRANSLATIONS: Record<TranslatedLocale, Record<GoDocsSlug, GuideTranslation>> = {
+const GUIDE_TRANSLATIONS: Record<TranslatedLocale, Record<DocsSlug, GuideTranslation>> = {
   zh: {
+    'native-services': {
+      description: '管理窗口生命周期和异步原生操作。',
+      searchTerms: ['window', 'native', 'lifecycle', 'services', 'WatchFiles'],
+    },
     extensions: {
-      title: '编写扩展',
       description: '共享 Go 组件，并为 QuickGUI 构建可选的原生后端。',
-      outline: [
-        { id: '选择扩展类型', title: '选择扩展类型' },
-        { id: '创建扩展项目', title: '创建扩展项目' },
-        { id: '共享-go-组件', title: '共享 Go 组件' },
-        { id: '组织原生扩展', title: '组织原生扩展' },
-        { id: '声明-go-依赖', title: '声明 Go 依赖' },
-        { id: '实现原生接口', title: '实现原生接口' },
-        { id: '自动注册', title: '自动注册' },
-        { id: '构建与打包产物', title: '构建与打包产物' },
-        { id: '测试与分发', title: '测试与分发' },
-      ],
       searchTerms: [
         '扩展',
         '插件',
@@ -45,143 +36,38 @@ const GUIDE_TRANSLATIONS: Record<TranslatedLocale, Record<GoDocsSlug, GuideTrans
       ],
     },
     updater: {
-      title: '自动更新',
       description: '通过可选扩展为 Go 应用添加兼容 Sparkle 的更新功能。',
-      outline: [
-        { id: '配置', title: '配置' },
-        { id: '应用用法', title: '应用用法' },
-        { id: '生命周期', title: '生命周期' },
-        { id: '平台支持', title: '平台支持' },
-        { id: '发布更新', title: '发布更新' },
-        { id: '原生产物', title: '原生产物' },
-      ],
       searchTerms: ['更新', 'Sparkle', 'appcast', '扩展', '签名'],
     },
     'getting-started': {
-      title: '入门',
       description: '使用 QuickGUI UI 创建并运行原生 QuickGUI 应用。',
-      outline: [
-        { id: '系统要求', title: '系统要求' },
-        { id: '创建项目', title: '创建项目' },
-        { id: '第一个窗口', title: '第一个窗口' },
-        { id: '运行与构建', title: '运行与构建' },
-        { id: '后续步骤', title: '后续步骤' },
-      ],
       searchTerms: ['安装', '创建', '命令行', '窗口', 'Bun', 'macOS'],
     },
     'project-structure': {
-      title: '项目结构',
       description: '了解生成的 QuickGUI UI 项目中各个文件的用途。',
-      outline: [
-        { id: '生成的文件', title: '生成的文件' },
-        { id: '应用入口', title: '应用入口' },
-        { id: '配置', title: '配置' },
-        { id: '软件包', title: '软件包' },
-      ],
       searchTerms: ['文件', '配置', '入口', '软件包', 'quickgui.config'],
     },
     reactivity: {
-      title: '响应式',
       description:
         '信号将状态连接到读取它的文本和属性。更新只改变保留的节点，不会重新执行整个组件。',
-      outline: [
-        {
-          id: '响应式状态',
-          title: '响应式状态',
-        },
-        {
-          id: '派生状态',
-          title: '派生状态',
-        },
-        {
-          id: '副作用与清理',
-          title: '副作用与清理',
-        },
-        {
-          id: '批量更新',
-          title: '批量更新',
-        },
-      ],
       searchTerms: ['signal', 'reactivity', 'memo', 'effect', 'batch', 'cleanup'],
     },
     rendering: {
-      title: '渲染',
       description:
         '组件在挂载时创建保留树。响应式绑定更新受影响的节点，原生核心负责布局、绘制和无障碍行为。',
-      outline: [
-        {
-          id: '渲染模型',
-          title: '渲染模型',
-        },
-        {
-          id: '条件内容',
-          title: '条件内容',
-        },
-        {
-          id: '列表与节点身份',
-          title: '列表与节点身份',
-        },
-        {
-          id: '窗口生命周期',
-          title: '窗口生命周期',
-        },
-        {
-          id: '当前窗口',
-          title: '当前窗口',
-        },
-      ],
       searchTerms: ['rendering', 'retained', 'children', 'mount', 'lifecycle', 'keyed'],
     },
     routing: {
-      title: '路由',
       description:
         '路由根据应用当前路径选择组件并维护导航历史。路由内容在当前窗口中以原生 QuickGUI 节点渲染。',
-      outline: [
-        {
-          id: '路由声明',
-          title: '路由声明',
-        },
-        {
-          id: '嵌套布局',
-          title: '嵌套布局',
-        },
-        {
-          id: '导航',
-          title: '导航',
-        },
-        {
-          id: '路由参数',
-          title: '路由参数',
-        },
-      ],
       searchTerms: ['router', 'route', 'layout', 'outlet', 'navigation', 'history', 'parameters'],
     },
     styling: {
-      title: '样式与布局',
       description: '使用熟悉的属性布局并设置原生节点样式。',
-      outline: [
-        { id: '样式选项', title: '样式选项' },
-        { id: '合并样式', title: '合并样式' },
-        { id: '复用样式', title: '复用样式' },
-        { id: 'flexbox', title: 'Flexbox' },
-        { id: '网格布局', title: '网格布局' },
-        { id: '文本与颜色', title: '文本与颜色' },
-        { id: '交互状态', title: '交互状态' },
-        { id: '分组与具名分组悬停', title: '分组与具名分组悬停' },
-      ],
       searchTerms: ['样式', '布局', 'Flexbox', '网格', '颜色', '悬停'],
     },
     animations: {
-      title: '过渡与动画',
       description: '在保留式 Go 组件中为原生样式变化和图像添加动画。',
-      outline: [
-        { id: '悬停过渡', title: '悬停过渡' },
-        { id: '状态驱动的动画', title: '状态驱动的动画' },
-        { id: '时长与帧率', title: '时长与帧率' },
-        { id: '支持的属性', title: '支持的属性' },
-        { id: '挂载与减少动态效果', title: '挂载与减少动态效果' },
-        { id: '动态图像', title: '动态图像' },
-      ],
       searchTerms: [
         '过渡',
         '动画',
@@ -195,84 +81,34 @@ const GUIDE_TRANSLATIONS: Record<TranslatedLocale, Record<GoDocsSlug, GuideTrans
       ],
     },
     components: {
-      title: '组件',
       description: '在基础组件与具备无障碍行为的复合组件之间进行选择。',
-      outline: [
-        { id: '定义组件', title: '定义组件' },
-        { id: '基础组件', title: '基础组件' },
-        { id: '复合组件', title: '复合组件' },
-        { id: '受控状态', title: '受控状态' },
-        { id: '组件类别', title: '组件类别' },
-        { id: '设置各部件的样式', title: '设置各部件的样式' },
-      ],
       searchTerms: ['基础组件', '复合组件', '按钮', '标签页', '复选框', '无样式'],
     },
     'forms-and-input': {
-      title: '表单与输入',
       description: '构建受控字段、选项和选择控件。',
-      outline: [
-        { id: '文本输入', title: '文本输入' },
-        { id: '字段', title: '字段' },
-        { id: '选项', title: '选项' },
-        { id: '选择器', title: '选择器' },
-        { id: '事件', title: '事件' },
-      ],
       searchTerms: ['输入', '字段', '复选框', '单选框', '选择器', '事件'],
     },
     'overlays-and-dialogs': {
-      title: '浮层与对话框',
       description: '显示窗口内浮层和操作系统原生对话框。',
-      outline: [
-        { id: 'popover', title: 'Popover' },
-        { id: 'dialog', title: 'Dialog' },
-        { id: '系统浮窗', title: '系统浮窗' },
-        { id: '原生对话框', title: '原生对话框' },
-      ],
       searchTerms: ['浮层', '对话框', '弹窗', '警告', '文件选择器'],
     },
     'swift-ui': {
-      title: 'SwiftUI',
       description: '在 QuickGUI UI 应用中挂载真正的 SwiftUI 控件。',
-      outline: [
-        { id: 'host', title: 'Host' },
-        { id: '原生控件', title: '原生控件' },
-        { id: '受控值', title: '受控值' },
-        { id: '尺寸', title: '尺寸' },
-        { id: '平台支持', title: '平台支持' },
-      ],
       searchTerms: ['SwiftUI', '托管', '滑块', '开关', '选择器', '原生'],
     },
     'swift-ui-hosting': {
-      title: '修饰器与托管',
       description: '设置 SwiftUI 控件样式，并在其中反向托管 QuickGUI 内容。',
-      outline: [
-        { id: '修饰器', title: '修饰器' },
-        { id: 'liquid-glass', title: 'Liquid Glass' },
-        { id: '反向托管', title: '反向托管' },
-        { id: 'swiftui-popover', title: 'SwiftUI Popover' },
-      ],
       searchTerms: ['修饰器', '玻璃效果', 'QuickGUIHostView', '浮窗', '反向托管'],
     },
   },
   ja: {
+    'native-services': {
+      description: 'ウィンドウのライフサイクルと非同期のネイティブ処理を管理します。',
+      searchTerms: ['window', 'native', 'lifecycle', 'services', 'WatchFiles'],
+    },
     extensions: {
-      title: '拡張の作成',
       description:
         'Go コンポーネントを共有し、QuickGUI のオプションのネイティブバックエンドを作成します。',
-      outline: [
-        { id: '拡張の種類を選ぶ', title: '拡張の種類を選ぶ' },
-        { id: '拡張プロジェクトを作成する', title: '拡張プロジェクトを作成する' },
-        { id: 'go-コンポーネントを共有する', title: 'Go コンポーネントを共有する' },
-        { id: 'ネイティブ拡張の構成', title: 'ネイティブ拡張の構成' },
-        { id: 'go-依存関係を宣言する', title: 'Go 依存関係を宣言する' },
-        {
-          id: 'ネイティブインターフェースを実装する',
-          title: 'ネイティブインターフェースを実装する',
-        },
-        { id: '自動登録', title: '自動登録' },
-        { id: '成果物のビルドとパッケージ化', title: '成果物のビルドとパッケージ化' },
-        { id: 'テストと配布', title: 'テストと配布' },
-      ],
       searchTerms: [
         '拡張',
         'プラグイン',
@@ -291,144 +127,39 @@ const GUIDE_TRANSLATIONS: Record<TranslatedLocale, Record<GoDocsSlug, GuideTrans
       ],
     },
     updater: {
-      title: '自動更新',
       description: 'Go アプリに Sparkle 互換の更新機能を追加します。',
-      outline: [
-        { id: '設定', title: '設定' },
-        { id: 'アプリでの使用', title: 'アプリでの使用' },
-        { id: 'ライフサイクル', title: 'ライフサイクル' },
-        { id: '対応プラットフォーム', title: '対応プラットフォーム' },
-        { id: '更新の公開', title: '更新の公開' },
-        { id: 'ネイティブ成果物', title: 'ネイティブ成果物' },
-      ],
       searchTerms: ['更新', 'Sparkle', 'appcast', '拡張', '署名'],
     },
     'getting-started': {
-      title: 'はじめに',
       description: 'QuickGUI UI を使ってネイティブ QuickGUI アプリを作成し、実行します。',
-      outline: [
-        { id: '動作要件', title: '動作要件' },
-        { id: 'プロジェクトを作成', title: 'プロジェクトを作成' },
-        { id: '最初のウィンドウ', title: '最初のウィンドウ' },
-        { id: '実行とビルド', title: '実行とビルド' },
-        { id: '次のステップ', title: '次のステップ' },
-      ],
       searchTerms: ['インストール', '作成', 'CLI', 'ウィンドウ', 'Bun', 'macOS'],
     },
     'project-structure': {
-      title: 'プロジェクト構成',
       description: '生成された QuickGUI UI プロジェクトの各ファイルを理解します。',
-      outline: [
-        { id: '生成されるファイル', title: '生成されるファイル' },
-        { id: 'アプリケーションのエントリ', title: 'アプリケーションのエントリ' },
-        { id: '設定', title: '設定' },
-        { id: 'パッケージ', title: 'パッケージ' },
-      ],
       searchTerms: ['ファイル', '設定', 'エントリ', 'パッケージ', 'quickgui.config'],
     },
     reactivity: {
-      title: 'リアクティビティ',
       description:
         'シグナルは状態を、それを読むテキストやプロパティに結び付けます。更新時は保持されたノードだけを変更し、コンポーネント全体を再実行しません。',
-      outline: [
-        {
-          id: 'リアクティブな状態',
-          title: 'リアクティブな状態',
-        },
-        {
-          id: '派生状態',
-          title: '派生状態',
-        },
-        {
-          id: '副作用とクリーンアップ',
-          title: '副作用とクリーンアップ',
-        },
-        {
-          id: '更新のバッチ処理',
-          title: '更新のバッチ処理',
-        },
-      ],
       searchTerms: ['signal', 'reactivity', 'memo', 'effect', 'batch', 'cleanup'],
     },
     rendering: {
-      title: 'レンダリング',
       description:
         'コンポーネントはマウント時に保持ツリーを作成します。リアクティブなバインディングが対象ノードを更新し、レイアウト、描画、アクセシビリティはネイティブコアが担当します。',
-      outline: [
-        {
-          id: 'レンダリングモデル',
-          title: 'レンダリングモデル',
-        },
-        {
-          id: '条件付きコンテンツ',
-          title: '条件付きコンテンツ',
-        },
-        {
-          id: 'リストとノードの同一性',
-          title: 'リストとノードの同一性',
-        },
-        {
-          id: 'ウィンドウのライフサイクル',
-          title: 'ウィンドウのライフサイクル',
-        },
-        {
-          id: '現在のウィンドウ',
-          title: '現在のウィンドウ',
-        },
-      ],
       searchTerms: ['rendering', 'retained', 'children', 'mount', 'lifecycle', 'keyed'],
     },
     routing: {
-      title: 'ルーティング',
       description:
         'ルーターは現在のアプリ内パスからコンポーネントを選び、ナビゲーション履歴を管理します。ルートは現在のウィンドウにネイティブ QuickGUI コンテンツを描画します。',
-      outline: [
-        {
-          id: 'ルートの宣言',
-          title: 'ルートの宣言',
-        },
-        {
-          id: '入れ子のレイアウト',
-          title: '入れ子のレイアウト',
-        },
-        {
-          id: 'ナビゲーション',
-          title: 'ナビゲーション',
-        },
-        {
-          id: 'ルートパラメーター',
-          title: 'ルートパラメーター',
-        },
-      ],
       searchTerms: ['router', 'route', 'layout', 'outlet', 'navigation', 'history', 'parameters'],
     },
     styling: {
-      title: 'スタイルとレイアウト',
       description: '使い慣れたプロパティでネイティブノードを配置し、スタイルします。',
-      outline: [
-        { id: 'スタイルオプション', title: 'スタイルオプション' },
-        { id: 'スタイルのマージ', title: 'スタイルのマージ' },
-        { id: 'スタイルの再利用', title: 'スタイルの再利用' },
-        { id: 'flexbox', title: 'Flexbox' },
-        { id: 'グリッド', title: 'グリッド' },
-        { id: 'テキストと色', title: 'テキストと色' },
-        { id: 'インタラクション状態', title: 'インタラクション状態' },
-        { id: 'グループと名前付きグループのホバー', title: 'グループと名前付きグループのホバー' },
-      ],
       searchTerms: ['スタイル', 'レイアウト', 'Flexbox', 'グリッド', '色', 'ホバー'],
     },
     animations: {
-      title: 'トランジションとアニメーション',
       description:
         '保持型の Go コンポーネントでネイティブのスタイル変更や画像をアニメーション化します。',
-      outline: [
-        { id: 'ホバーのトランジション', title: 'ホバーのトランジション' },
-        { id: '状態によるアニメーション', title: '状態によるアニメーション' },
-        { id: '時間とフレームレート', title: '時間とフレームレート' },
-        { id: '対応するプロパティ', title: '対応するプロパティ' },
-        { id: 'マウントと視差効果の抑制', title: 'マウントと視差効果の抑制' },
-        { id: 'アニメーション画像', title: 'アニメーション画像' },
-      ],
       searchTerms: [
         'トランジション',
         'アニメーション',
@@ -442,16 +173,7 @@ const GUIDE_TRANSLATIONS: Record<TranslatedLocale, Record<GoDocsSlug, GuideTrans
       ],
     },
     components: {
-      title: 'コンポーネント',
       description: 'プリミティブと、アクセシブルな複合コンポーネントを使い分けます。',
-      outline: [
-        { id: 'コンポーネントの定義', title: 'コンポーネントの定義' },
-        { id: 'プリミティブ', title: 'プリミティブ' },
-        { id: '複合コンポーネント', title: '複合コンポーネント' },
-        { id: '制御された状態', title: '制御された状態' },
-        { id: 'コンポーネントの種類', title: 'コンポーネントの種類' },
-        { id: '各パーツのスタイル', title: '各パーツのスタイル' },
-      ],
       searchTerms: [
         'プリミティブ',
         '複合コンポーネント',
@@ -462,50 +184,20 @@ const GUIDE_TRANSLATIONS: Record<TranslatedLocale, Record<GoDocsSlug, GuideTrans
       ],
     },
     'forms-and-input': {
-      title: 'フォームと入力',
       description: '制御されたフィールド、選択肢、選択コントロールを作成します。',
-      outline: [
-        { id: 'テキスト入力', title: 'テキスト入力' },
-        { id: 'フィールド', title: 'フィールド' },
-        { id: '選択コントロール', title: '選択コントロール' },
-        { id: 'select', title: 'Select' },
-        { id: 'イベント', title: 'イベント' },
-      ],
       searchTerms: ['入力', 'フィールド', 'チェックボックス', 'ラジオ', '選択', 'イベント'],
     },
     'overlays-and-dialogs': {
-      title: 'オーバーレイとダイアログ',
       description: 'ウィンドウ内オーバーレイと OS のネイティブダイアログを表示します。',
-      outline: [
-        { id: 'popover', title: 'Popover' },
-        { id: 'dialog', title: 'Dialog' },
-        { id: 'システムポップオーバー', title: 'システムポップオーバー' },
-        { id: 'ネイティブダイアログ', title: 'ネイティブダイアログ' },
-      ],
       searchTerms: ['ポップオーバー', 'ダイアログ', 'オーバーレイ', 'アラート', 'ファイルピッカー'],
     },
     'swift-ui': {
-      title: 'SwiftUI',
       description: 'QuickGUI UI アプリ内に本物の SwiftUI コントロールをマウントします。',
-      outline: [
-        { id: 'host', title: 'Host' },
-        { id: 'ネイティブコントロール', title: 'ネイティブコントロール' },
-        { id: '制御値', title: '制御値' },
-        { id: 'サイズ', title: 'サイズ' },
-        { id: '対応プラットフォーム', title: '対応プラットフォーム' },
-      ],
       searchTerms: ['SwiftUI', 'ホスト', 'スライダー', 'トグル', 'ピッカー', 'ネイティブ'],
     },
     'swift-ui-hosting': {
-      title: 'モディファイアとホスティング',
       description:
         'SwiftUI コントロールをスタイルし、その中に QuickGUI の内容をリバースホストします。',
-      outline: [
-        { id: 'モディファイア', title: 'モディファイア' },
-        { id: 'liquid-glass', title: 'Liquid Glass' },
-        { id: 'リバースホスティング', title: 'リバースホスティング' },
-        { id: 'swiftui-ポップオーバー', title: 'SwiftUI ポップオーバー' },
-      ],
       searchTerms: [
         'モディファイア',
         'ガラス',
@@ -729,8 +421,13 @@ export function localizedDocsPage(page: DocsPageMeta, locale: Locale): DocsPageM
   const translation =
     page.frontend === 'moonbit'
       ? page.translations?.[locale]
-      : GUIDE_TRANSLATIONS[locale][page.slug as GoDocsSlug]
-  return { ...page, ...translation }
+      : GUIDE_TRANSLATIONS[locale][page.slug as DocsSlug]
+  return {
+    ...page,
+    ...translation,
+    title: docsTitle(page.slug, locale),
+    outline: docsOutline(page.slug, locale),
+  }
 }
 
 export function localizedComponentDescription(component: ComponentDoc, locale: Locale): string {

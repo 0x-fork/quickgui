@@ -10,7 +10,7 @@ type elementBinding int
 
 const propertyBindingOffset = 1024
 
-var styleBindingNames = bindingNames(reflect.TypeOf(Style{}), 0)
+var styleBindingNames = bindingNames(reflect.TypeOf(styleData{}), 0)
 var propertyBindingNames = bindingNames(reflect.TypeOf(Props{}), propertyBindingOffset)
 
 func bindingNames(record reflect.Type, offset int) map[string]elementBinding {
@@ -26,7 +26,7 @@ func bindingNames(record reflect.Type, offset int) map[string]elementBinding {
 
 // Reflection only enumerates a constructor or reusable style record. Generated
 // modifiers name their field directly and dispatch to typed binding setters.
-func populatedStyleBindings(style Style) []elementBinding {
+func populatedStyleBindings(style styleData) []elementBinding {
 	var fields []elementBinding
 	value := reflect.ValueOf(style)
 	for index := 0; index < value.NumField(); index++ {
@@ -44,7 +44,7 @@ func populatedStyleBindings(style Style) []elementBinding {
 }
 
 func populatedElementBindings(props Props) []elementBinding {
-	fields := populatedStyleBindings(props.Style)
+	fields := populatedStyleBindings(props.Style.style)
 	value := reflect.ValueOf(props)
 	for index := 0; index < value.NumField(); index++ {
 		name := value.Type().Field(index).Name
@@ -96,7 +96,7 @@ func conditionalArguments(arguments []any) bool {
 
 // These shorthands write overlapping native property groups. Keep the complete
 // declaration fallback so later overrides and conditional clearing stay ordered.
-func overlappingStyle(style Style) bool {
+func overlappingStyle(style styleData) bool {
 	return style.Flex != nil || style.Background != nil || style.BackgroundGradient != nil ||
 		style.Transition != nil || style.GridColumn != nil || style.GridRow != nil ||
 		style.Outline != nil || style.TextDecoration != ""

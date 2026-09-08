@@ -19,8 +19,7 @@ func TextExample() {
 		ui.Text(
 			"Count: ",
 			count,
-			ui.FontSize(20),
-		)
+		).FontSize(20)
 		ui.Button("Increment", ui.OnClick(func() { setCount(count() + 1) }))
 	})
 }
@@ -30,6 +29,6 @@ func TextExample() {
 
 | Prop | Purpose |
 | --- | --- |
-| `ui.BackgroundColor(...)`, `ui.Padding(...)`, `ui.Hover(...)` | QuickGUI layout, paint, typography, and interaction-state styles. |
+| `ui.Style().BackgroundColor(...)`, `ui.Style().Padding(...)`, `ui.Style().Hover(...)` | QuickGUI layout, paint, typography, and interaction-state styles. |
 | `children` | Content mounted inside the component. |
 | `Ref` | Receives the retained native node. |

@@ -6,6 +6,7 @@ import { SUPPORTED_LOCALES } from '../src/i18n'
 import { ALL_COMPONENT_DOCS, UI_COMPONENTS, componentDocsPath } from '../src/lib/component-docs'
 import { DOCS_FRONTENDS, docsPages, docsPath, switchDocsFrontend } from '../src/lib/docs'
 import { docsNavGroups } from '../src/lib/docs-navigation'
+import { DOCS_GUIDE_ORDER } from '../src/lib/docs-structure'
 import { localizedDocsPage } from '../src/lib/docs-locales'
 import { resolveDocsRoute } from '../src/lib/docs-routing'
 import { searchDocs } from '../src/lib/docs-search'
@@ -44,7 +45,7 @@ describe('frontend documentation routes', () => {
     expect(resolveDocsRoute('unknown', 'styling')).toBeUndefined()
   })
 
-  test('switches shared topics and falls back for frontend-specific pages', () => {
+  test('switches shared topics and falls back for unknown pages', () => {
     expect(switchDocsFrontend('/docs/go/styling', 'moonbit')).toBe('/docs/moonbit/styling')
     expect(switchDocsFrontend('/docs/moonbit/ui', 'go')).toBe('/docs/go/rendering')
     expect(switchDocsFrontend('/docs/go', 'moonbit')).toBe('/docs/moonbit')
@@ -53,7 +54,10 @@ describe('frontend documentation routes', () => {
       '/docs/moonbit/components/button',
     )
     expect(switchDocsFrontend('/docs/go/swift-ui', 'moonbit')).toBe('/docs/moonbit/swift-ui')
-    expect(switchDocsFrontend('/docs/moonbit/native-services', 'go')).toBe('/docs/go')
+    expect(switchDocsFrontend('/docs/moonbit/native-services', 'go')).toBe(
+      '/docs/go/native-services',
+    )
+    expect(switchDocsFrontend('/docs/moonbit/missing', 'go')).toBe('/docs/go')
   })
 
   test('redirects the former UI guide to Rendering in either frontend', () => {
@@ -69,6 +73,34 @@ describe('frontend documentation routes', () => {
     }
     expect(resolveDocsRoute('ui')).toEqual({ kind: 'redirect', path: '/docs/go/rendering' })
   })
+})
+
+test('Go and MoonBit share guide order, localized sections, and sidebar structure', () => {
+  const go = docsPages('go')
+  const moonbit = docsPages('moonbit')
+  expect(go.map((page) => page.slug)).toEqual(DOCS_GUIDE_ORDER)
+  expect(moonbit.map((page) => page.slug)).toEqual(DOCS_GUIDE_ORDER)
+  for (const locale of SUPPORTED_LOCALES) {
+    for (let index = 0; index < go.length; index++) {
+      expect(localizedDocsPage(go[index], locale).title).toBe(
+        localizedDocsPage(moonbit[index], locale).title,
+      )
+      expect(localizedDocsPage(go[index], locale).outline).toEqual(
+        localizedDocsPage(moonbit[index], locale).outline,
+      )
+      expect(switchDocsFrontend(docsPath('go', go[index].slug), 'moonbit')).toBe(
+        docsPath('moonbit', go[index].slug),
+      )
+    }
+    const structure = (frontend: 'go' | 'moonbit') =>
+      docsNavGroups(locale, frontend).map((group) => ({
+        id: group.id,
+        title: group.title,
+        titles: group.items.map((item) => item.title),
+        paths: group.items.map((item) => item.path.replace(`/docs/${frontend}`, '')),
+      }))
+    expect(structure('go')).toEqual(structure('moonbit'))
+  }
 })
 
 test('the sidebar separates concepts from one complete component reference', async () => {
@@ -123,11 +155,6 @@ test('localized concepts and MoonBit guides keep matching outlines and examples'
           resolve(root, 'src/content/docs', frontend, locale, `${source.slug}.mdx`),
           'utf8',
         )
-        if (
-          frontend !== 'moonbit' &&
-          !['reactivity', 'rendering', 'components', 'routing', 'styling'].includes(source.slug)
-        )
-          continue
         const page = localizedDocsPage(source, locale)
         const slugger = new GithubSlugger()
         const headings = [...content.matchAll(/^## (.+)$/gm)].map((match) => ({
@@ -135,6 +162,11 @@ test('localized concepts and MoonBit guides keep matching outlines and examples'
           title: match[1],
         }))
         expect(headings).toEqual(page.outline)
+        if (
+          frontend !== 'moonbit' &&
+          !['reactivity', 'rendering', 'components', 'routing', 'styling'].includes(source.slug)
+        )
+          continue
         const examples = [...content.matchAll(/```[^\n]*\n[\s\S]*?```/g)].map((match) => match[0])
         if (locale === 'en') englishExamples = examples
         else expect(examples).toEqual(englishExamples)

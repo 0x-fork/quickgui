@@ -19,9 +19,7 @@ func ViewExample() {
 			ui.Text("Hello from Go")
 			ui.Button("Continue", ui.OnClick(func() {}))
 		},
-		ui.Padding(20),
-		ui.Gap(12),
-	)
+	).Padding(20).Gap(12)
 }
 ```
 
@@ -29,7 +27,7 @@ func ViewExample() {
 
 | Prop | Purpose |
 | --- | --- |
-| `ui.BackgroundColor(...)`, `ui.Padding(...)`, `ui.Hover(...)` | QuickGUI layout, paint, typography, and interaction-state styles. |
+| `ui.Style().BackgroundColor(...)`, `ui.Style().Padding(...)`, `ui.Style().Hover(...)` | QuickGUI layout, paint, typography, and interaction-state styles. |
 | `children` | Content mounted inside the component. |
 | `OnClick` | Runs after the core resolves an activation. |
 | `Ref` | Receives the retained native node. |

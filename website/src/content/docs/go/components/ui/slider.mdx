@@ -27,7 +27,7 @@ func SliderExample() {
 		func() {
 			ui.Slider.Label(ui.PartProps{}, "Volume")
 			ui.Slider.Control(
-				ui.PartProps{Style: ui.Styles(ui.Width(240), ui.Height(24))},
+				ui.PartProps{Style: ui.Style().Width(240).Height(24)},
 				func() {
 					ui.Slider.Track(
 						ui.PartProps{},

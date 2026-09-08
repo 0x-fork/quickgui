@@ -19,9 +19,7 @@ func ViewExample() {
 			ui.Text("Hello from Go")
 			ui.Button("Continue", ui.OnClick(func() {}))
 		},
-		ui.Padding(20),
-		ui.Gap(12),
-	)
+	).Padding(20).Gap(12)
 }
 ```
 
@@ -29,7 +27,7 @@ func ViewExample() {
 
 | 属性 | 说明 |
 | --- | --- |
-| `ui.BackgroundColor(...)`, `ui.Padding(...)`, `ui.Hover(...)` | QuickGUI 的布局、绘制、排版和交互状态样式。 |
+| `ui.Style().BackgroundColor(...)`, `ui.Style().Padding(...)`, `ui.Style().Hover(...)` | QuickGUI 的布局、绘制、排版和交互状态样式。 |
 | `children` | 挂载在组件内部的内容。 |
 | `OnClick` | 在核心完成激活判定后运行。 |
 | `Ref` | 接收保留式原生节点。 |

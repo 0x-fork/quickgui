@@ -189,11 +189,10 @@ func ReleaseNotification() {
 			OnCheckedChange: func(value bool, _ *native.Event) { setEnabled(value) },
 		},
 		func() {
-			ui.Checkbox.Indicator(ui.PartProps{Style: ui.Styles(
-				ui.Width(12),
-				ui.Height(12),
-				ui.BackgroundColor("#2563eb"),
-			)})
+			ui.Checkbox.Indicator(ui.PartProps{Style: ui.Style().
+				Width(12).
+				Height(12).
+				BackgroundColor("#2563eb")})
 			ui.Text("Email me about releases")
 		},
 	)

@@ -23,25 +23,22 @@ func CheckboxExample() {
 		},
 		func() {
 			ui.Checkbox.Indicator(
-				ui.PartProps{Style: ui.Styles(
-					ui.Width(16),
-					ui.Height(16),
-					ui.BorderWidth(1),
-					ui.BorderRadius(4),
-					ui.BorderColor("#2563eb"),
-					ui.Display("flex"),
-					ui.AlignItems("center"),
-					ui.JustifyContent("center"),
-				)},
+				ui.PartProps{Style: ui.Style().
+					Width(16).
+					Height(16).
+					BorderWidth(1).
+					BorderRadius(4).
+					BorderColor("#2563eb").
+					Display("flex").
+					AlignItems("center").
+					JustifyContent("center")},
 				func() {
 					ui.Show(
 						checked,
 						func() {
 							ui.SVG(
 								ui.Value(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12"><path d="M3 6l2 2 4-4" fill="none" stroke="#2563eb" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`),
-								ui.Width(12),
-								ui.Height(12),
-							)
+							).Width(12).Height(12)
 						},
 					)
 				},

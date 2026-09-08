@@ -46,10 +46,7 @@ func NestedRouterExample() {
 							ui.Link(ui.LinkProps{Href: "/settings"}, "Settings")
 							ui.Outlet()
 						},
-						ui.Display("flex"),
-						ui.FlexDirection("column"),
-						ui.Gap(12),
-					)
+					).Display("flex").FlexDirection("column").Gap(12)
 				},
 				ui.Route(
 					"/",

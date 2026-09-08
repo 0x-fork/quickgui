@@ -78,12 +78,11 @@ func Gallery() {
 					Orientation:   "vertical",
 					Activation:    "manual",
 					PartProps: ui.PartProps{
-						Style: ui.Styles(
-							ui.Display("flex"),
-							ui.FlexDirection("row"),
-							ui.Width("100%"),
-							ui.Height("100%"),
-						),
+						Style: ui.Style().
+							Display("flex").
+							FlexDirection("row").
+							Width("100%").
+							Height("100%"),
 					},
 				},
 				func() {
@@ -94,12 +93,7 @@ func Gallery() {
 				},
 			)
 		},
-		ui.Display("flex"),
-		ui.FlexDirection("row"),
-		ui.Width("100%"),
-		ui.Height("100%"),
-		ui.BackgroundColor("transparent"),
-	)
+	).Display("flex").FlexDirection("row").Width("100%").Height("100%").BackgroundColor("transparent")
 }
 
 type galleryState struct {
@@ -163,38 +157,25 @@ func sidebar(state *galleryState) {
 		func() {
 			ui.View(
 				func() {
-					ui.Text("SwiftUI", ui.TextColor("#252a33"), ui.FontSize(13), ui.FontWeight(700))
+					ui.Text(
+						"SwiftUI",
+					).TextColor("#252a33").FontSize(13).FontWeight(700)
 				},
-				ui.Display("flex"),
-				ui.FlexDirection("row"),
-				ui.AlignItems("center"),
-				ui.Height(54),
-				ui.FlexShrink(0),
-				ui.PaddingLeft(82),
-				ui.AppRegion("drag"),
-			)
+			).Display("flex").FlexDirection("row").AlignItems("center").Height(54).FlexShrink(0).PaddingLeft(82).AppRegion("drag")
 			ui.Text(
 				"COMPONENTS",
-				ui.FlexShrink(0),
-				ui.PaddingLeft(18),
-				ui.PaddingBottom(7),
-				ui.TextColor("#747b87"),
-				ui.FontSize(10),
-				ui.FontWeight(700),
-				ui.LetterSpacing(0.7),
-			)
+			).FlexShrink(0).PaddingLeft(18).PaddingBottom(7).TextColor("#747b87").FontSize(10).FontWeight(700).LetterSpacing(0.7)
 			ui.View(
 				func() {
 					ui.Tabs.List(
 						ui.PartProps{
-							Style: ui.Styles(
-								ui.Display("flex"),
-								ui.FlexDirection("column"),
-								ui.Gap(2),
-								ui.PaddingLeft(9),
-								ui.PaddingRight(9),
-								ui.PaddingBottom(12),
-							),
+							Style: ui.Style().
+								Display("flex").
+								FlexDirection("column").
+								Gap(2).
+								PaddingLeft(9).
+								PaddingRight(9).
+								PaddingBottom(12),
 						},
 						func() {
 							ui.For(
@@ -207,35 +188,36 @@ func sidebar(state *galleryState) {
 											Value: string(id),
 											Index: &idx,
 											PartProps: ui.PartProps{
-												Style: func() ui.Style {
+												Style: func() ui.StyleBuilder {
 													background, color, weight := "transparent", "#303641", any(400)
-													var hover ui.Style
+													var hover ui.StyleBuilder
 													if state.page() == id {
 														background, color, weight = "#2878d4", "#ffffff", 600
 													} else {
-														hover = ui.Styles(ui.BackgroundColor("#ffffff66"))
+														hover = ui.Style().BackgroundColor("#ffffff66")
 													}
-													return ui.Styles(
-														ui.Display("flex"),
-														ui.FlexDirection("row"),
-														ui.AlignItems("center"),
-														ui.Height(29),
-														ui.FlexShrink(0),
-														ui.PaddingLeft(10),
-														ui.PaddingRight(10),
-														ui.BorderRadius(7),
-														ui.Cursor("default"),
-														ui.UserSelect("none"),
-														ui.BackgroundColor(background),
-														ui.TextColor(color),
-														ui.FontWeight(weight),
-														ui.Hover(hover),
-													)
+													return ui.Style().
+														Display("flex").
+														FlexDirection("row").
+														AlignItems("center").
+														Height(29).
+														FlexShrink(0).
+														PaddingLeft(10).
+														PaddingRight(10).
+														BorderRadius(7).
+														Cursor("default").
+														UserSelect("none").
+														BackgroundColor(background).
+														TextColor(color).
+														FontWeight(weight).
+														Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
+															return s.Merge(hover)
+														})
 												},
 											},
 										},
 										func() {
-											ui.Text(item.Label, ui.FontSize(12))
+											ui.Text(item.Label).FontSize(12)
 										},
 									)
 								},
@@ -245,35 +227,16 @@ func sidebar(state *galleryState) {
 						},
 					)
 				},
-				ui.Display("flex"),
-				ui.FlexDirection("column"),
-				ui.Flex(1),
-				ui.MinHeight(0),
-				ui.OverflowY("scroll"),
-			)
+			).Display("flex").FlexDirection("column").Flex(1).MinHeight(0).OverflowY("scroll")
 			ui.View(
 				func() {
 					ui.Text(
-						strconv.Itoa(len(demos))+" native components",
-						ui.TextColor("#747b87"),
-						ui.FontSize(11),
-					)
+						strconv.Itoa(len(demos)) + " native components",
+					).TextColor("#747b87").FontSize(11)
 				},
-				ui.FlexShrink(0),
-				ui.Padding(13),
-				ui.BorderWidth(1),
-				ui.BorderColor("#c9cbd0"),
-			)
+			).FlexShrink(0).Padding(13).BorderWidth(1).BorderColor("#c9cbd0")
 		},
-		ui.Display("flex"),
-		ui.FlexDirection("column"),
-		ui.Width(220),
-		ui.Height("100%"),
-		ui.FlexShrink(0),
-		ui.BackgroundColor("transparent"),
-		ui.BorderWidth(1),
-		ui.BorderColor("#c9cbd0"),
-	)
+	).Display("flex").FlexDirection("column").Width(220).Height("100%").FlexShrink(0).BackgroundColor("transparent").BorderWidth(1).BorderColor("#c9cbd0")
 }
 
 func pane(state *galleryState, body func()) {
@@ -283,48 +246,19 @@ func pane(state *galleryState, body func()) {
 				func() {
 					ui.Text(
 						func() string { return state.current().Label },
-						ui.TextColor("#20242c"),
-						ui.FontSize(15),
-						ui.FontWeight(700),
-					)
+					).TextColor("#20242c").FontSize(15).FontWeight(700)
 					ui.Text(
 						"Native SwiftUI · QuickGUI state",
-						ui.TextColor("#858b96"),
-						ui.FontSize(11),
-					)
+					).TextColor("#858b96").FontSize(11)
 				},
-				ui.Display("flex"),
-				ui.FlexDirection("row"),
-				ui.AlignItems("center"),
-				ui.JustifyContent("space-between"),
-				ui.Height(54),
-				ui.FlexShrink(0),
-				ui.PaddingLeft(22),
-				ui.PaddingRight(22),
-				ui.BorderWidth(1),
-				ui.BorderColor("#d7d8dc"),
-				ui.AppRegion("drag"),
-			)
+			).Display("flex").FlexDirection("row").AlignItems("center").JustifyContent("space-between").Height(54).FlexShrink(0).PaddingLeft(22).PaddingRight(22).BorderWidth(1).BorderColor("#d7d8dc").AppRegion("drag")
 			ui.View(
 				func() {
 					body()
 				},
-				ui.Display("flex"),
-				ui.FlexDirection("column"),
-				ui.Flex(1),
-				ui.MinHeight(0),
-				ui.AlignItems("center"),
-				ui.OverflowY("scroll"),
-				ui.Padding(30),
-			)
+			).Display("flex").FlexDirection("column").Flex(1).MinHeight(0).AlignItems("center").OverflowY("scroll").Padding(30)
 		},
-		ui.Display("flex"),
-		ui.FlexDirection("column"),
-		ui.Flex(1),
-		ui.MinWidth(0),
-		ui.Height("100%"),
-		ui.BackgroundColor("#f6f6f8"),
-	)
+	).Display("flex").FlexDirection("column").Flex(1).MinWidth(0).Height("100%").BackgroundColor("#f6f6f8")
 }
 
 func renderDemo(state *galleryState) {
@@ -341,66 +275,29 @@ func renderDemo(state *galleryState) {
 func demoPage(description string, status func() string, control ui.Component) {
 	ui.View(
 		func() {
-			ui.Text(description, ui.TextColor("#5f6672"), ui.FontSize(14), ui.LineHeight(21))
+			ui.Text(
+				description,
+			).TextColor("#5f6672").FontSize(14).LineHeight(21)
 			ui.View(
 				func() {
 					ui.Text(
 						"LIVE SWIFTUI DEMO",
-						ui.TextColor("#858b96"),
-						ui.FontSize(11),
-						ui.FontWeight(700),
-						ui.LetterSpacing(0.8),
-					)
+					).TextColor("#858b96").FontSize(11).FontWeight(700).LetterSpacing(0.8)
 					ui.View(
 						control,
-						ui.Display("flex"),
-						ui.Flex(1),
-						ui.MinHeight(170),
-						ui.Width("100%"),
-						ui.AlignItems("center"),
-						ui.JustifyContent("center"),
-					)
+					).Display("flex").Flex(1).MinHeight(170).Width("100%").AlignItems("center").JustifyContent("center")
 				},
-				ui.Display("flex"),
-				ui.FlexDirection("column"),
-				ui.Width("100%"),
-				ui.MinHeight(250),
-				ui.Padding(22),
-				ui.Gap(16),
-				ui.BorderWidth(1),
-				ui.BorderColor("#dedfe3"),
-				ui.BorderRadius(14),
-				ui.BackgroundColor("#ffffff"),
-			)
+			).Display("flex").FlexDirection("column").Width("100%").MinHeight(250).Padding(22).Gap(16).BorderWidth(1).BorderColor("#dedfe3").BorderRadius(14).BackgroundColor("#ffffff")
 			ui.View(
 				func() {
 					ui.Text(
 						"NATIVE STATE",
-						ui.TextColor("#727985"),
-						ui.FontSize(11),
-						ui.FontWeight(700),
-					)
-					ui.Text(status, ui.TextColor("#252a33"), ui.FontSize(12))
+					).TextColor("#727985").FontSize(11).FontWeight(700)
+					ui.Text(status).TextColor("#252a33").FontSize(12)
 				},
-				ui.Display("flex"),
-				ui.FlexDirection("row"),
-				ui.AlignItems("center"),
-				ui.JustifyContent("space-between"),
-				ui.Gap(16),
-				ui.Width("100%"),
-				ui.MinHeight(42),
-				ui.PaddingLeft(14),
-				ui.PaddingRight(14),
-				ui.BorderRadius(10),
-				ui.BackgroundColor("#eceef2"),
-			)
+			).Display("flex").FlexDirection("row").AlignItems("center").JustifyContent("space-between").Gap(16).Width("100%").MinHeight(42).PaddingLeft(14).PaddingRight(14).BorderRadius(10).BackgroundColor("#eceef2")
 		},
-		ui.Display("flex"),
-		ui.FlexDirection("column"),
-		ui.Width("100%"),
-		ui.MaxWidth(680),
-		ui.Gap(18),
-	)
+	).Display("flex").FlexDirection("column").Width("100%").MaxWidth(680).Gap(18)
 }
 
 func demoStatus(state *galleryState) func() string {
@@ -444,7 +341,7 @@ func demoStatus(state *galleryState) func() string {
 	}
 }
 
-func host(match any, style ui.Style, child *native.Node) {
+func host(match any, style ui.StyleBuilder, child *native.Node) {
 	ui.SwiftUI.Host(
 		ui.SwiftUIHostProps{
 			MatchContents: match,
@@ -457,11 +354,11 @@ func host(match any, style ui.Style, child *native.Node) {
 }
 
 func demoControl(state *galleryState) {
-	wide := ui.Styles(ui.Width(440))
-	field := ui.Styles(ui.Width(360))
+	wide := ui.Style().Width(440)
+	field := ui.Style().Width(360)
 	switch state.page() {
 	case "button":
-		host(true, ui.Styles(), ui.SwiftUI.Button(ui.SwiftUIButtonProps{
+		host(true, ui.Style(), ui.SwiftUI.Button(ui.SwiftUIButtonProps{
 			Label:       "Continue",
 			SystemImage: "arrow.right",
 			Modifiers:   []ui.SwiftUIModifier{ui.SwiftUI.ButtonStyle("glass"), ui.SwiftUI.ControlSize("large")},
@@ -481,7 +378,7 @@ func demoControl(state *galleryState) {
 		return
 
 	case "toggle":
-		host(true, ui.Styles(), ui.SwiftUI.Toggle(ui.SwiftUIToggleProps{
+		host(true, ui.Style(), ui.SwiftUI.Toggle(ui.SwiftUIToggleProps{
 			Label:        "Notifications",
 			IsOn:         state.notifications,
 			OnIsOnChange: func(next bool, _ *native.Event) { state.setNotifications(next) },
@@ -498,7 +395,7 @@ func demoControl(state *galleryState) {
 		return
 
 	case "stepper":
-		host(true, ui.Styles(), ui.SwiftUI.Stepper(ui.SwiftUIStepperProps{
+		host(true, ui.Style(), ui.SwiftUI.Stepper(ui.SwiftUIStepperProps{
 			Label:         func() string { return "Copies: " + strconv.FormatFloat(state.copies(), 'g', -1, 64) },
 			Value:         state.copies,
 			Min:           1,
@@ -508,7 +405,7 @@ func demoControl(state *galleryState) {
 		return
 
 	case "segmented-control":
-		host(ui.SwiftUIMatchContents{Vertical: true}, ui.Styles(ui.Width(340)), ui.SwiftUI.SegmentedControl(ui.SwiftUISegmentedControlProps{
+		host(ui.SwiftUIMatchContents{Vertical: true}, ui.Style().Width(340), ui.SwiftUI.SegmentedControl(ui.SwiftUISegmentedControlProps{
 			Role:              "tabs",
 			Selection:         state.layout,
 			Options:           []ui.SwiftUIPickerOption{{Value: "list", Label: "List"}, {Value: "grid", Label: "Grid"}},
@@ -517,7 +414,7 @@ func demoControl(state *galleryState) {
 		return
 
 	case "picker":
-		host(true, ui.Styles(), ui.SwiftUI.Picker(ui.SwiftUIPickerProps{
+		host(true, ui.Style(), ui.SwiftUI.Picker(ui.SwiftUIPickerProps{
 			Label:             "Report interval",
 			Selection:         state.interval,
 			Style:             "menu",
@@ -527,7 +424,7 @@ func demoControl(state *galleryState) {
 		return
 
 	case "date-picker":
-		host(true, ui.Styles(), ui.SwiftUI.DatePicker(ui.SwiftUIDatePickerProps{
+		host(true, ui.Style(), ui.SwiftUI.DatePicker(ui.SwiftUIDatePickerProps{
 			Label:               "Schedule",
 			Value:               state.scheduledAt,
 			DisplayedComponents: "dateAndTime",
@@ -537,7 +434,7 @@ func demoControl(state *galleryState) {
 		return
 
 	case "color-picker":
-		host(true, ui.Styles(), ui.SwiftUI.ColorPicker(ui.SwiftUIColorPickerProps{
+		host(true, ui.Style(), ui.SwiftUI.ColorPicker(ui.SwiftUIColorPickerProps{
 			Label:             "Accent",
 			Selection:         state.accent,
 			OnSelectionChange: func(next string, _ *native.Event) { state.setAccent(next) },
@@ -574,27 +471,12 @@ func demoControl(state *galleryState) {
 							state.setName(text)
 						}
 					}),
-					ui.Width(360),
-					ui.Height(28),
-					ui.FlexShrink(0),
-					ui.PaddingLeft(8),
-					ui.PaddingRight(8),
-					ui.TextColor("#111827"),
-					ui.BackgroundColor("#ffffff"),
-					ui.BorderWidth(1),
-					ui.BorderColor("#d1d5db"),
-					ui.BorderRadius(6),
-					ui.Focus(
-						ui.BorderColor("#2563eb"),
-						ui.Outline("3px solid #2563eb55"),
-					),
-				)
+				).Width(360).Height(28).FlexShrink(0).PaddingLeft(8).PaddingRight(8).TextColor("#111827").BackgroundColor("#ffffff").BorderWidth(1).BorderColor("#d1d5db").BorderRadius(6).
+					FocusStyle(func(s ui.StyleBuilder) ui.StyleBuilder {
+						return s.BorderColor("#2563eb").Outline("3px solid #2563eb55")
+					})
 			},
-			ui.Display("flex"),
-			ui.FlexDirection("column"),
-			ui.Gap(16),
-			ui.AlignItems("center"),
-		)
+		).Display("flex").FlexDirection("column").Gap(16).AlignItems("center")
 		return
 
 	case "secure-field":
@@ -607,7 +489,7 @@ func demoControl(state *galleryState) {
 		return
 
 	case "popover":
-		host(true, ui.Styles(), ui.SwiftUI.Popover.Root(
+		host(true, ui.Style(), ui.SwiftUI.Popover.Root(
 			ui.SwiftUIPopoverProps{
 				IsPresented:         state.open,
 				OnIsPresentedChange: state.setOpen,
@@ -636,10 +518,7 @@ func demoControl(state *galleryState) {
 									func() {
 										ui.Text(
 											"QuickGUI inside SwiftUI",
-											ui.TextColor("#111827"),
-											ui.FontSize(15),
-											ui.FlexShrink(0),
-										)
+										).TextColor("#111827").FontSize(15).FlexShrink(0)
 										ui.Input(
 											ui.Value(state.name),
 											ui.OnInput(func(event *native.Event) {
@@ -647,38 +526,13 @@ func demoControl(state *galleryState) {
 													state.setName(text)
 												}
 											}),
-											ui.Width("100%"),
-											ui.Height(36),
-											ui.FlexShrink(0),
-											ui.Padding(8),
-											ui.TextColor("#111827"),
-											ui.BackgroundColor("#ffffff"),
-											ui.BorderWidth(1),
-											ui.BorderColor("#d1d5db"),
-											ui.BorderRadius(8),
-										)
+										).Width("100%").Height(36).FlexShrink(0).Padding(8).TextColor("#111827").BackgroundColor("#ffffff").BorderWidth(1).BorderColor("#d1d5db").BorderRadius(8)
 										ui.Button(
 											func() string { return "Save " + state.name() },
 											ui.OnClick(func() { state.setOpen(false) }),
-											ui.Width("100%"),
-											ui.Height(34),
-											ui.FlexShrink(0),
-											ui.Padding(8),
-											ui.TextColor("#ffffff"),
-											ui.BackgroundColor("#2563eb"),
-											ui.BorderRadius(8),
-											ui.JustifyContent("center"),
-										)
+										).Width("100%").Height(34).FlexShrink(0).Padding(8).TextColor("#ffffff").BackgroundColor("#2563eb").BorderRadius(8).JustifyContent("center")
 									},
-									ui.Display("flex"),
-									ui.FlexDirection("column"),
-									ui.Width(300),
-									ui.Height("100%"),
-									ui.Padding(20),
-									ui.Gap(12),
-									ui.OverflowY("auto"),
-									ui.BackgroundColor("transparent"),
-								)
+								).Display("flex").FlexDirection("column").Width(300).Height("100%").Padding(20).Gap(12).OverflowY("auto").BackgroundColor("transparent")
 							},
 						)
 					},

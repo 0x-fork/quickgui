@@ -53,7 +53,7 @@ func TestNamedGroupRulesAccumulateAndTrackColorsWithoutRemounting(t *testing.T) 
 		color := reactive.NewSignal("#112233")
 		enabled := reactive.NewSignal(true)
 		parent := View()
-		node := View(GroupHover(Opacity(.5)), When(enabled.Read, GroupHoverNamed("card", TextColor(color.Read))), "kept")
+		node := View(styleGroupHover(styleOpacity(.5)), When(enabled.Read, styleGroupHoverNamed("card", styleTextColor(color.Read))), "kept")
 		native.InsertNode(parent.Node, node.Node, nil)
 		child := node.Children[0]
 		offset := len(parent.Pending.Body())
@@ -82,10 +82,10 @@ func TestNamedGroupRulesAccumulateAndTrackColorsWithoutRemounting(t *testing.T) 
 	})
 }
 func TestReusingGroupStylesDoesNotMutateOtherDeclarations(t *testing.T) {
-	base := Style{GroupHover: &Style{Opacity: .25}}
-	first := resolveProps([]any{WithStyle(base), GroupHoverNamed("card", Opacity(.5))})
-	second := resolveProps([]any{WithStyle(base), GroupHoverNamed("toolbar", Opacity(1))})
-	left, right := groupHoverRules(first.Style), groupHoverRules(second.Style)
+	base := styleData{GroupHover: &styleData{Opacity: .25}}
+	first := resolveProps([]any{base, styleGroupHoverNamed("card", styleOpacity(.5))})
+	second := resolveProps([]any{base, styleGroupHoverNamed("toolbar", styleOpacity(1))})
+	left, right := groupHoverRules(first.Style.style), groupHoverRules(second.Style.style)
 	if len(left) != 2 || len(right) != 2 || left[1].name != "card" || right[1].name != "toolbar" || len(groupHoverRules(base)) != 1 {
 		t.Fatal("shared group styles mutated another declaration")
 	}

@@ -18,7 +18,22 @@ fn animated_button() -> @ui.Element {
 
 Put timing on the base element so both entering and leaving a state animate. A signal-driven `bind_style` target uses the same transition. Changing a target mid-transition starts from the current visible value.
 
-## Timing
+## State-driven animation
+
+Read a signal in a fluent target style. The view compiler binds that target on the retained element, and the native core interpolates its changes. Keep the same node mounted while the value changes.
+
+```moonbit
+fn animated_state() -> @ui.Element {
+  let (dimmed, set_dimmed) = @ui.create_signal(false)
+  @ui.button("Toggle opacity")
+  .on_click(() => set_dimmed(!dimmed()))
+  .opacity(if dimmed() { 0.4 } else { 1.0 })
+  .transition_property("opacity")
+  .transition_duration(160)
+}
+```
+
+## Timing and frame rate
 
 Durations are milliseconds, bounded to 0–10 seconds. `.transition_easing(...)` accepts `linear`, `ease`, `ease-in`, `ease-out`, or `ease-in-out`. `.transition_max_fps(30)` optionally caps the frame rate; omit it to follow presentation. One element has one duration, easing, and frame-rate cap for its selected properties. Delays and custom cubic Bézier curves are not supported.
 
@@ -26,8 +41,10 @@ Durations are milliseconds, bounded to 0–10 seconds. `.transition_easing(...)`
 
 Transition `background-color`, `border-color`, `border-width`, `border-radius`, `color`, `opacity`, `box-shadow`, and `transform`. `all` selects these paint properties. Width, height, padding, gradients, and other layout changes do not interpolate. Use a transform for a sliding thumb instead of animating its layout position.
 
-For an animated image, use `@ui.image(path)` with a GIF or WebP. The native decoder retains frames and repeat policy; no signal timer is needed.
-
-## Lifetime and reduced motion
+## Mounting and reduced motion
 
 Initial styles apply directly. Keep an element mounted to animate a target change; `child_if` removes a branch immediately and does not wait for an exit fade. Zero opacity still occupies layout and accepts input. Transitions respect the system Reduce Motion preference. Hidden or occluded windows pause local transitions.
+
+## Animated images
+
+For an animated image, use `@ui.image(path)` with a GIF or WebP. The native decoder retains frames and repeat policy; no signal timer is needed.

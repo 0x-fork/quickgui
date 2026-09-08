@@ -1,6 +1,6 @@
 Host native macOS controls from MoonBit.
 
-## Host a control
+## Host
 
 Create SwiftUI controls under `@ui.swift_ui_host([])`. They require macOS. The sidebar lists every supported SwiftUI control.
 
@@ -16,10 +16,18 @@ fn native_toggle() -> @ui.Element {
 }
 ```
 
+## Native controls
+
+The SwiftUI family includes buttons, sliders, toggles, progress views, steppers, text and secure fields, pickers, date and color pickers, and gauges. Open each control’s sidebar reference for its properties and events.
+
 ## Controlled values
 
 Bind a signal with `.bind_value(...)`, `.bind_checked(...)` or `.bind_number(...)`. Use `.on_input(...)`, `.on_bool_input(...)` or `.on_number_input(...)` to update it.
 
-## Native modifiers
+## Sizing
 
-QuickGUI styles apply to the host. Use `.swift_ui_modifiers(...)` on a native control to forward the core modifier JSON schema. Labels use `.label(...)`.
+Set `.swift_ui_match_contents_horizontal(true)` and `.swift_ui_match_contents_vertical(true)` on the host for intrinsic sizing. Use `.width(...)` and `.height(...)` to constrain the QuickGUI host. QuickGUI styles apply at the host boundary; native modifiers style the SwiftUI controls inside it.
+
+## Platform support
+
+SwiftUI hosting requires macOS and the native bridge in the host library. Appearance follows the operating-system version. See [Modifiers & Hosting](/docs/moonbit/swift-ui-hosting) for native styling and reverse hosting.

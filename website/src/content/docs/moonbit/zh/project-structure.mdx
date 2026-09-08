@@ -23,15 +23,9 @@ import {
 pkgtype(kind: "executable")
 ```
 
-## 本地开发
+## 应用入口
 
-SDK 发布前，在应用与 QuickGUI 源码仓库的共同父目录创建 `moon.work`。路径相对于工作区：
-
-```toml
-members = ["quickgui/moonbit", "my-app"]
-```
-
-`quickgui` 目录中运行 `bun packages/cli/src/cli.ts dev --project ../my-app`，无需安装已发布的 CLI 包。
+`main/main.mbt` 定义 `main` 和应用组件。调用一次 `@native.run`，通过 `@ui.window(component)` 创建窗口。每个组件返回 `@ui.Element`；较大的应用可以拆分为普通 MoonBit 包。
 
 ## 配置
 
@@ -47,10 +41,20 @@ extensions = []
 
 `frontend` 选择 MoonBit，省略时默认 Go。`entry` 指定可执行包目录。将包含 `quickgui.extension.json` 的扩展目录放入 `native.extensions`。`quickgui build` 打包可执行文件、选中的原生库、字体和配置的资源。`.quickgui` 保存开发产物和缓存，不应提交。
 
-## 包
+## 软件包
 
 | 包 | 用途 |
 | --- | --- |
 | `egoist/quickgui/ui` | 组件、样式、信号、派生值、副作用、清理和路由。 |
 | `egoist/quickgui/native` | 窗口、事件、对话框、菜单、服务与扩展。 |
 | `egoist/quickgui/protocol` | 核心属性常量和变更值类型。 |
+
+## 本地开发
+
+SDK 发布前，在应用与 QuickGUI 源码仓库的共同父目录创建 `moon.work`。路径相对于工作区：
+
+```toml
+members = ["quickgui/moonbit", "my-app"]
+```
+
+`quickgui` 目录中运行 `bun packages/cli/src/cli.ts dev --project ../my-app`，无需安装已发布的 CLI 包。

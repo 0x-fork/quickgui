@@ -120,14 +120,13 @@ func Gallery() {
 			OnValueChange: func(value string, _ *native.Event) { setSelected(value) },
 			Orientation:   "vertical",
 			Activation:    "manual",
-			PartProps: ui.PartProps{Style: func() ui.Style {
-				return ui.Styles(
-					ui.Display("flex"),
-					ui.Width("100%"),
-					ui.Height("100%"),
-					ui.BackgroundColor(p().Window),
-					ui.TextColor(p().Ink),
-				)
+			PartProps: ui.PartProps{Style: func() ui.StyleBuilder {
+				return ui.Style().
+					Display("flex").
+					Width("100%").
+					Height("100%").
+					BackgroundColor(p().Window).
+					TextColor(p().Ink)
 			}},
 		},
 		func() {
@@ -135,55 +134,53 @@ func Gallery() {
 				func() {
 					ui.View(
 						func() {
-							ui.Text("Components", ui.FontSize(13), ui.FontWeight(700))
+							ui.Text(
+								"Components",
+							).FontSize(13).FontWeight(700)
 						},
-						ui.Display("flex"),
-						ui.Height(52),
-						ui.FlexShrink(0),
-						ui.AlignItems("center"),
-						ui.PaddingLeft(82),
-						ui.AppRegion("drag"),
-					)
+					).Display("flex").Height(52).FlexShrink(0).AlignItems("center").PaddingLeft(82).AppRegion("drag")
 					ui.View(
 						func() {
 							ui.Tabs.List(
-								ui.PartProps{Style: ui.Styles(
-									ui.Display("flex"),
-									ui.FlexDirection("column"),
-									ui.Gap(1),
-									ui.PaddingLeft(8),
-									ui.PaddingRight(8),
-									ui.PaddingBottom(12),
-								)},
+								ui.PartProps{Style: ui.Style().
+									Display("flex").
+									FlexDirection("column").
+									Gap(1).
+									PaddingLeft(8).
+									PaddingRight(8).
+									PaddingBottom(12)},
 								func() {
 									for index, entry := range demos {
 										ui.Tabs.Tab(
 											ui.TabsTabProps{
 												Value: entry.ID,
 												Index: ptr(index),
-												PartProps: ui.PartProps{Style: func() ui.Style {
+												PartProps: ui.PartProps{Style: func() ui.StyleBuilder {
 													background, ink, weight := "transparent", p().Ink, 400
 													if selected() == entry.ID {
 														background, ink, weight = p().Accent, p().OnAccent, 600
 													}
-													return ui.Styles(
-														ui.Display("flex"),
-														ui.AlignItems("center"),
-														ui.Height(28),
-														ui.FlexShrink(0),
-														ui.PaddingLeft(10),
-														ui.PaddingRight(10),
-														ui.BorderRadius(7),
-														ui.Cursor("default"),
-														ui.UserSelect("none"),
-														ui.BackgroundColor(background),
-														ui.TextColor(ink),
-														ui.FontSize(12),
-														ui.FontWeight(weight),
-														ui.Hover(ui.BackgroundColor(choose(selected() == entry.ID, p().Accent, p().ControlHover))),
-														ui.Focus(ui.Outline("2px solid "+p().Accent)),
-														ui.OutlineOffset(-2),
-													)
+													return ui.Style().
+														Display("flex").
+														AlignItems("center").
+														Height(28).
+														FlexShrink(0).
+														PaddingLeft(10).
+														PaddingRight(10).
+														BorderRadius(7).
+														Cursor("default").
+														UserSelect("none").
+														BackgroundColor(background).
+														TextColor(ink).
+														FontSize(12).
+														FontWeight(weight).
+														Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
+															return s.BackgroundColor(choose(selected() == entry.ID, p().Accent, p().ControlHover))
+														}).
+														FocusStyle(func(s ui.StyleBuilder) ui.StyleBuilder {
+															return s.Outline("2px solid " + p().Accent)
+														}).
+														OutlineOffset(-2)
 												}},
 											},
 											entry.Label,
@@ -192,22 +189,9 @@ func Gallery() {
 								},
 							)
 						},
-						ui.Display("flex"),
-						ui.FlexDirection("column"),
-						ui.Flex(1),
-						ui.MinHeight(0),
-						ui.OverflowY("scroll"),
-					)
+					).Display("flex").FlexDirection("column").Flex(1).MinHeight(0).OverflowY("scroll")
 				},
-				ui.Display("flex"),
-				ui.FlexDirection("column"),
-				ui.Width(214),
-				ui.FlexShrink(0),
-				ui.Height("100%"),
-				ui.BackgroundColor(color(func(p palette) string { return p.Sidebar })),
-				ui.BorderRightWidth(1),
-				ui.BorderColor(color(func(p palette) string { return p.Border })),
-			)
+			).Display("flex").FlexDirection("column").Width(214).FlexShrink(0).Height("100%").BackgroundColor(color(func(p palette) string { return p.Sidebar })).BorderRightWidth(1).BorderColor(color(func(p palette) string { return p.Border }))
 			ui.View(
 				func() {
 					ui.View(
@@ -215,9 +199,7 @@ func Gallery() {
 							row(func() {
 								ui.Text(
 									func() string { return current().Label },
-									ui.FontSize(15),
-									ui.FontWeight(700),
-								)
+								).FontSize(15).FontWeight(700)
 								ui.Text(
 									func() string {
 										switch current().Source {
@@ -229,9 +211,7 @@ func Gallery() {
 											return "Base UI part set"
 										}
 									},
-									ui.FontSize(11),
-									ui.TextColor(color(func(p palette) string { return p.Faint })),
-								)
+								).FontSize(11).TextColor(color(func(p palette) string { return p.Faint }))
 							})
 							ui.Text(
 								func() string {
@@ -239,54 +219,29 @@ func Gallery() {
 									size := theme.Size()
 									return strconv.Itoa(len(demos)) + " components · " + theme.Appearance() + " appearance · " + strconv.FormatFloat(size.X, 'f', 0, 64) + "×" + strconv.FormatFloat(size.Y, 'f', 0, 64)
 								},
-								ui.FontSize(11),
-								ui.TextColor(color(func(p palette) string { return p.Faint })),
-							)
+							).FontSize(11).TextColor(color(func(p palette) string { return p.Faint }))
 						},
-						ui.Display("flex"),
-						ui.AlignItems("center"),
-						ui.JustifyContent("space-between"),
-						ui.Height(52),
-						ui.FlexShrink(0),
-						ui.PaddingLeft(20),
-						ui.PaddingRight(20),
-						ui.BorderBottomWidth(1),
-						ui.BorderColor(color(func(p palette) string { return p.Border })),
-						ui.AppRegion("drag"),
-					)
+					).Display("flex").AlignItems("center").JustifyContent("space-between").Height(52).FlexShrink(0).PaddingLeft(20).PaddingRight(20).BorderBottomWidth(1).BorderColor(color(func(p palette) string { return p.Border })).AppRegion("drag")
 					ui.View(
 						func() {
 							for _, entry := range demos {
 								ui.Tabs.Panel(
 									ui.TabsPanelProps{
 										Value: entry.ID,
-										PartProps: ui.PartProps{Style: ui.Styles(
-											ui.Display("flex"),
-											ui.FlexDirection("column"),
-											ui.Gap(16),
-											ui.MaxWidth(720),
-											ui.FlexShrink(0),
-										)},
+										PartProps: ui.PartProps{Style: ui.Style().
+											Display("flex").
+											FlexDirection("column").
+											Gap(16).
+											MaxWidth(720).
+											FlexShrink(0)},
 									},
 									entry.Component,
 								)
 							}
 						},
-						ui.Display("flex"),
-						ui.FlexDirection("column"),
-						ui.Flex(1),
-						ui.MinHeight(0),
-						ui.Padding(20),
-						ui.Gap(16),
-						ui.OverflowY("scroll"),
-					)
+					).Display("flex").FlexDirection("column").Flex(1).MinHeight(0).Padding(20).Gap(16).OverflowY("scroll")
 				},
-				ui.Display("flex"),
-				ui.FlexDirection("column"),
-				ui.Flex(1),
-				ui.MinWidth(0),
-				ui.Height("100%"),
-			)
+			).Display("flex").FlexDirection("column").Flex(1).MinWidth(0).Height("100%")
 		},
 	)
 }

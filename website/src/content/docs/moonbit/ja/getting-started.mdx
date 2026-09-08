@@ -1,6 +1,6 @@
 QuickGUI の MoonBit フロントエンドでは、子要素のリスト、fluent プロパティ、細粒度のシグナルを使います。コンポーネントは保持されるネイティブノードを作り、変更されたバインディングだけを更新します。サイドバーから Go のドキュメントも選べます。
 
-## 必要な環境
+## 動作要件
 
 - [MoonBit ツールチェーン](https://www.moonbitlang.com/download/)（`moon 0.1.20260827` / `moonc v0.10.11` で検証）
 - Bun 1.3 以降
@@ -8,7 +8,7 @@ QuickGUI の MoonBit フロントエンドでは、子要素のリスト、fluen
 
 対象の OS とアーキテクチャ上でビルドしてください。macOS のネイティブ実行は検証済みです。Linux と Windows の実行・表示の検証はまだ必要です。
 
-## カウンターを実行
+## プロジェクトを作成
 
 CLI と MoonBit SDK はまだ公開されていません。[QuickGUI のチェックアウト](https://github.com/egoist/quickgui)を使ってください。`moon.work` がローカルの SDK を解決します。
 
@@ -60,7 +60,7 @@ fn main {
 }
 ```
 
-## ビルドとサンプル
+## 実行とビルド
 
 チェックアウトからサンプルを整形・パッケージ化します。
 
@@ -70,5 +70,7 @@ bun packages/cli/src/cli.ts build --project examples/moonbit-counter
 ```
 
 Apple Silicon macOS と x64 Linux/Windows の開発ビルドでは高速な native バックエンドを使い、`.quickgui/moonbit` 内のブリッジとランタイムのオブジェクトを再利用します。リリースビルドとその他のホストでは最適化された C バックエンドを使います。開発時に `MOONBIT_NEW_NATIVE=0` を設定すると C バックエンドを試せます。
+
+## 次のステップ
 
 大きなアプリの例は `bun --cwd examples/quick-git-moonbit dev` で実行できます。[Quick Git](https://github.com/egoist/quickgui/tree/main/examples/quick-git-moonbit) は複数ウィンドウ、メニュー、仮想化された差分、履歴グラフ、独立した I/O 拡張を実装しています。

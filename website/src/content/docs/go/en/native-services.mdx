@@ -1,0 +1,15 @@
+Call `native.Run` once from `main`. Its startup callback creates windows and registers application services. Native completion callbacks and UI state changes run on the Go UI goroutine.
+
+## Window lifetime
+
+`native.NewWindow(native.WindowOptions{Component: App})` creates a window with its own component owner and retained tree. Closing the window disposes its bindings, listeners, and component cleanup. Capture `native.CurrentWindow()` while constructing a component or handling an event when later work needs its window handle.
+
+## Commands and services
+
+Use the typed `native` APIs for dialogs, clipboard, shell, appearance, menus, and other platform services. Operations with results use completion callbacks; handle their errors without blocking the UI goroutine. Independent providers use `native.InvokeExtension` and `native.OpenExtension`.
+
+For application background work, use `ui.Async` with component cancellation or `native.Dispatch` to return results to the UI goroutine. Read and write signals only there. See [Authoring Extensions](/docs/go/extensions) for service and session ownership.
+
+## Events and file watching
+
+`native.WatchFiles(paths, changed, ready)` uses operating-system file notifications and returns a stop function. Register component resources with `ui.OnCleanup`, and retain cancellation functions for application-scoped listeners. Avoid polling when a native event or watcher is available. Extension session events stop when their session closes.

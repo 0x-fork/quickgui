@@ -6,7 +6,7 @@ import (
 	gui "github.com/egoist/quickgui/go/ui"
 )
 
-func resizablePanel(label string, width func() float64, setWidth func(float64), minimum, maximum float64, children func(), style gui.Style) {
+func resizablePanel(label string, width func() float64, setWidth func(float64), minimum, maximum float64, children func(), style gui.StyleBuilder) {
 	// Only the fixed panel is mounted. The second size supplies its remaining
 	// resize allowance; the enclosing flex layout owns the rest of the window.
 	// Rust updates the pane directly during a drag, then reports sizes to Go
@@ -24,12 +24,11 @@ func resizablePanel(label string, width func() float64, setWidth func(float64), 
 					setWidth(sizes[0])
 				}
 			},
-			PartProps: gui.PartProps{Style: gui.Styles(
-				gui.Display("flex"),
-				gui.FlexShrink(0),
-				gui.MinWidth(0),
-				gui.MinHeight(0),
-			)},
+			PartProps: gui.PartProps{Style: gui.Style().
+				Display("flex").
+				FlexShrink(0).
+				MinWidth(0).
+				MinHeight(0)},
 		},
 		func() {
 			gui.Splitter.Pane(
@@ -47,13 +46,12 @@ func resizablePanel(label string, width func() float64, setWidth func(float64), 
 						native.SetNumber(node, protocol.HitSlopLeft, 4)
 						native.SetNumber(node, protocol.HitSlopRight, 4)
 					},
-					Style: gui.Styles(
-						gui.Width(1),
-						gui.FlexShrink(0),
-						gui.Cursor("col-resize"),
-						gui.AppRegion("no-drag"),
-						gui.BackgroundColor(UseApp().Theme().Border),
-					),
+					Style: gui.Style().
+						Width(1).
+						FlexShrink(0).
+						Cursor("col-resize").
+						AppRegion("no-drag").
+						BackgroundColor(UseApp().Theme().Border),
 				},
 			})
 		},

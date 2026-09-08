@@ -10,23 +10,12 @@ func App() {
 	message, setMessage := ui.CreateSignal("Hello from a pure Go extension")
 	ui.View(
 		func() {
-			ui.Text("{{NAME}}", ui.FontSize(24), ui.FontWeight(700))
-			extension.Notice(message, ui.FontSize(16))
+			ui.Text("{{NAME}}").FontSize(24).FontWeight(700)
+			extension.Notice(message, ui.Style().FontSize(16))
 			ui.Button(
 				"Update message",
 				ui.OnClick(func() { setMessage("Only the message text changed") }),
-				ui.Padding(12),
-				ui.BorderRadius(8),
-				ui.BackgroundColor("#2563eb"),
-				ui.TextColor("white"),
-				ui.Hover(ui.BackgroundColor("#3b82f6")),
-			)
+			).Padding(12).BorderRadius(8).BackgroundColor("#2563eb").TextColor("white").Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor("#3b82f6") })
 		},
-		ui.Display("flex"),
-		ui.FlexDirection("column"),
-		ui.JustifyContent("center"),
-		ui.Height("100%"),
-		ui.Padding(24),
-		ui.Gap(16),
-	)
+	).Display("flex").FlexDirection("column").JustifyContent("center").Height("100%").Padding(24).Gap(16)
 }

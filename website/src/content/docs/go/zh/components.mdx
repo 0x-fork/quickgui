@@ -6,7 +6,7 @@ Go 组件是声明原生子节点的 `func()`。用普通参数配置组件，�
 
 ```go
 func CounterLabel(count func() int) {
-	ui.Text("Count: ", count, ui.FontSize(20))
+	ui.Text("Count: ", count).FontSize(20)
 }
 
 func ComponentExample() {
@@ -24,14 +24,10 @@ func ComponentExample() {
 func CardComponent(title string, children ui.Component) {
 	ui.View(
 		func() {
-			ui.Text(title, ui.FontWeight(600))
+			ui.Text(title).FontWeight(600)
 			children()
 		},
-		ui.Padding(20),
-		ui.Gap(12),
-		ui.Display("flex"),
-		ui.FlexDirection("column"),
-	)
+	).Padding(20).Gap(12).Display("flex").FlexDirection("column")
 }
 
 func CardComposition() {
@@ -50,13 +46,13 @@ func CardComposition() {
 func ButtonExample(save func()) {
 	ui.Button(
 		"Save changes",
-		ui.Height(40),
-		ui.PaddingLeft(16),
-		ui.PaddingRight(16),
-		ui.BackgroundColor("#2563eb"),
-		ui.TextColor("white"),
-		ui.BorderRadius(8),
-		ui.Hover(ui.BackgroundColor("#3b82f6")),
+		ui.Style().Height(40),
+		ui.Style().PaddingLeft(16),
+		ui.Style().PaddingRight(16),
+		ui.Style().BackgroundColor("#2563eb"),
+		ui.Style().TextColor("white"),
+		ui.Style().BorderRadius(8),
+		ui.Style().Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor("#3b82f6") }),
 		ui.OnClick(save),
 	)
 }
@@ -112,19 +108,18 @@ bun packages/cli/src/cli.ts dev --project examples/components
 
 ## 设置各部件的样式
 
-通过 `PartProps.Style` 设置每个部件的样式。可以传入单个样式选项，或用 `ui.Styles(...)` 组合多个选项。也支持可复用的样式、样式切片和返回这些值的访问器。选中状态和主题信号会更新保留的部件，不必重建子节点。
+通过 `PartProps.Style` 设置部件样式。使用 `ui.Style()` 和链式方法构建样式，通过 `.Merge(...)` 合并共享构建器。部件也接受构建器切片及返回这些值的访问器。选中状态和主题信号会更新保留的部件，不必重建子节点。
 
 ```go
 ui.PartProps{
-	Style: ui.Styles(
-		ui.Display("flex"),
-		ui.Height(32),
-		ui.PaddingLeft(12),
-		ui.PaddingRight(12),
-		ui.BackgroundColor("#2563eb"),
-		ui.TextColor("white"),
-		ui.BorderRadius(8),
-	),
+	Style: ui.Style().
+		Display("flex").
+		Height(32).
+		PaddingLeft(12).
+		PaddingRight(12).
+		BackgroundColor("#2563eb").
+		TextColor("white").
+		BorderRadius(8),
 }
 ```
 

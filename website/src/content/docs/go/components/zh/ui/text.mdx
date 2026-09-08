@@ -19,8 +19,7 @@ func TextExample() {
 		ui.Text(
 			"Count: ",
 			count,
-			ui.FontSize(20),
-		)
+		).FontSize(20)
 		ui.Button("Increment", ui.OnClick(func() { setCount(count() + 1) }))
 	})
 }
@@ -30,6 +29,6 @@ func TextExample() {
 
 | 属性 | 说明 |
 | --- | --- |
-| `ui.BackgroundColor(...)`, `ui.Padding(...)`, `ui.Hover(...)` | QuickGUI 的布局、绘制、排版和交互状态样式。 |
+| `ui.Style().BackgroundColor(...)`, `ui.Style().Padding(...)`, `ui.Style().Hover(...)` | QuickGUI 的布局、绘制、排版和交互状态样式。 |
 | `children` | 挂载在组件内部的内容。 |
 | `Ref` | 接收保留式原生节点。 |

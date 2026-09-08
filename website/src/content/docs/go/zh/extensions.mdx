@@ -34,7 +34,7 @@ Zig 模板要求 Zig 0.16.x，Rust 模板使用稳定版 Cargo/Rust。构建脚�
 
 选择 `moonbit` 后，在 `native/extension.mbt` 实现操作，使用 MoonBit 与原生 C 编译器构建。Bun 脚本通过 MoonBit C 后端编译并将私有运行时链接进共享库；Go 应用仍通过 purego 加载它。单独构建后端不需要修改核心或安装 Go。处理函数、内存所有权、工具链和跨前端使用见 [MoonBit 扩展编写指南](/zh/docs/moonbit/extensions)。
 
-## 共享 Go 组件
+## 共享组件
 
 在自己的仓库创建 Go 模块，依赖 Go SDK 并导出组件函数。这种扩展不需要原生清单或 npm 包：
 
@@ -43,19 +43,14 @@ package notice
 
 import "github.com/egoist/quickgui/go/ui"
 
-func Notice(message func() string, styles ...ui.StyleDeclaration) {
+func Notice(message func() string, styles ...ui.StyleBuilder) {
 	ui.Text(
 		message,
-		ui.Padding(12),
-		ui.BackgroundColor("#eff6ff"),
-		ui.TextColor("#1e40af"),
-		ui.BorderRadius(8),
-		ui.Styles(styles...),
-	)
+	).Padding(12).BackgroundColor("#eff6ff").TextColor("#1e40af").BorderRadius(8).Style(ui.Style().Merge(styles...))
 }
 ```
 
-在组件或 children 回调中调用 `notice.Notice(message, ui.Padding(16))`。访问器保持响应式，调用者的样式在默认样式之后合并。组件函数直接声明子节点，不返回节点。组件资源使用 `ui.OnCleanup` 清理，应用级服务放在组件所有权之外。
+在组件或 children 回调中调用 `notice.Notice(message, ui.Style().Padding(16))`。访问器保持响应式，调用者的样式在默认样式之后合并。组件函数直接声明子节点，不返回节点。组件资源使用 `ui.OnCleanup` 清理，应用级服务放在组件所有权之外。
 
 通过 Go 版本标签发布模块，并说明支持的 SDK 版本。使用者通过你的模块路径执行 `go get`。传递导入 `terminal` 或 `updater` 也会引入对应后端，因此请将可选集成放在独立包或带构建标签的文件中。
 
@@ -81,7 +76,7 @@ build-extension.ts
 
 本例后端的独立版本为 `1.0.0`，其描述符、清单、npm 包和 `RequireExtension` 版本必须一致。服务 ABI 版本和表布局决定核心兼容性，后端发布版本不必等于 QuickGUI 版本。请说明支持的 Go SDK 和服务 ABI 版本。内置 terminal 的类型化渲染接口仍要求匹配核心版本。
 
-## 声明 Go 依赖
+## 声明依赖
 
 清单必须放在实际导入的 Go 包源码旁边，而非仅放在模块根目录或应用配置中：
 

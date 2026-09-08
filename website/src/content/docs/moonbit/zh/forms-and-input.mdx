@@ -1,6 +1,6 @@
 将可编辑值保存在信号中，并通过事件处理写回用户修改。原生输入框保留选择、焦点与文本编辑行为。
 
-## 受控输入
+## 文本输入
 
 ```moonbit
 fn name_form() -> @ui.Element {
@@ -23,12 +23,24 @@ fn name_form() -> @ui.Element {
 
 `on_input` 接收更新后的字符串，`on_submit` 接收提交的字符串。程序化移动焦点时，在保留的输入框句柄上调用 `.focus()`。
 
-## 禁用与只读
+### 禁用与只读
 
 `.bind_disabled(() => disabled.get())` 修改真正的原生交互状态，仅降低透明度不会禁用控件。输入框只读使用 `.property(@protocol.READ_ONLY, @protocol.Boolean(true))`；占位提示使用 `.property(@protocol.PLACEHOLDER, @protocol.Text("Name"))`。这些常量需导入 `egoist/quickgui/protocol`。
 
 外观使用 `bind_style` 或原生状态样式，行为使用相应属性。
 
-## 其他控件
+## 字段
+
+使用 `@ui.field([])` 的 Label、Control、Description 和 Error 槽位关联字段标签与验证信息。原生核心负责这些语义关系。验证和表单集成详见 [Field](/docs/moonbit/components/field)。
+
+## 选项
 
 使用[复选框](/docs/moonbit/components/checkbox)、[开关](/docs/moonbit/components/switch)、[选择器](/docs/moonbit/components/select)和侧栏中的其他控件。辅助方法会连接原生角色、值和作用域。只读和禁用控件不会执行默认状态更新；`Event.prevent_default()` 可以取消事件的默认行为。
+
+## 选择器
+
+`@ui.select([]).items(items).active_value(value())` 通过原生项目模型构建选择器。通过变化回调更新选择信号。单选、多选和弹出部件详见 [Select](/docs/moonbit/components/select)。
+
+## 事件
+
+`.on_input(handler)` 和 `.on_submit(handler)` 接收字符串。语义控件通过各自的回调报告变化。需要控制传播或调用 `Event.prevent_default()` 时使用接收事件的处理函数。行为通过 `.disabled(...)` 和 `.read_only(...)` 设置，仅修改外观不会禁用编辑。

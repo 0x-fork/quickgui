@@ -249,7 +249,7 @@ func createPopoverMenuPopup(props PopoverMenuPopupProps, state *popoverMenuState
 	} else if rootProps.Appearance != nil && rootProps.Appearance.Width != nil {
 		width = *rootProps.Appearance.Width
 	}
-	applyStyle(node, Style{Width: width})
+	applyStyle(node, styleData{Width: width})
 	placement := rootProps.Placement
 	if placement == "" {
 		placement = "bottom-start"

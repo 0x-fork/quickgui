@@ -111,7 +111,7 @@ func TestFluentConditionsRestoreStylesAndReleaseHandlers(t *testing.T) {
 		base, active := reactive.NewSignal(10), reactive.NewSignal(30)
 		calls := 0
 		view := View(Text("kept")).Width(base.Read).
-			When(selected, Width(active.Read), OnClick(func() { calls++ })).PaddingLeft(20)
+			When(selected, styleWidth(active.Read), OnClick(func() { calls++ })).PaddingLeft(20)
 		child := view.Children[0]
 		setSelected(true)
 		view.Listeners[0].Listener(&native.Event{})
@@ -201,8 +201,8 @@ func TestRustLayoutPresetsPreserveValuesAndOverrideSpecificProperties(t *testing
 		if view.Pending.MutationCount() != before {
 			t.Fatal("zero grids or negative fractions do not match Rust")
 		}
-		shared := Styles(RoundedLg(), Hover(TextColor("white")))
-		reused := View().RoundedTl(3).Styles(shared).Hover(BackgroundColor("#112233"))
+		shared := composeStyles(Style().RoundedLg(), styleHover(styleTextColor("white")))
+		reused := View().RoundedTl(3).Style(StyleBuilder{style: shared}).Hover(func(s StyleBuilder) StyleBuilder { return s.Bg("#112233") })
 		before = reused.Pending.MutationCount()
 		native.ClearProperty(reused.Node, protocol.BorderTopLeftRadius)
 		if reused.Pending.MutationCount() != before || shared.Hover.BackgroundColor != nil {
@@ -240,7 +240,7 @@ func TestFluentModifiersDoNotReplayUnrelatedDeclarations(t *testing.T) {
 		for i := 0; i < 64; i++ {
 			view.PaddingLeft(i)
 		}
-		view.RoundedLg().TextLg().Styles(Height(40), BackgroundColor("#112233"))
+		view.RoundedLg().TextLg().Style(Style().Height(40).Bg("#112233"))
 		if reads != 1 || len(width.Observers) != 1 || view.Listeners[0] != listener {
 			t.Fatal("ordinary modifiers reread or replaced an unrelated binding or handler")
 		}

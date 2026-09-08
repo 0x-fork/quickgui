@@ -14,7 +14,7 @@ import (
 
 ```go
 func ImageExample(path string) {
-	ui.Image(ui.Value(path), ui.ObjectFit("cover"), ui.Width(160), ui.Height(120))
+	ui.Image(ui.Value(path)).ObjectFit("cover").Width(160).Height(120)
 }
 ```
 
@@ -24,4 +24,4 @@ func ImageExample(path string) {
 | --- | --- |
 | `Value` | 组件所需的文件系统路径、数据 URL、SVG 文档或着色器源码。 |
 | `ObjectFit` | 图像内容在声明区域中的适配方式。 |
-| `ui.BackgroundColor(...)`, `ui.Padding(...)`, `ui.Hover(...)` | QuickGUI 的布局、绘制、排版和交互状态样式。 |
+| `ui.Style().BackgroundColor(...)`, `ui.Style().Padding(...)`, `ui.Style().Hover(...)` | QuickGUI 的布局、绘制、排版和交互状态样式。 |

@@ -1,173 +1,114 @@
-Go views use fluent modifiers for properties, handlers, and styles. Rust layout conveniences include `.P4()`, `.MxAuto()`, `.GridCols(3)`, `.ColSpanFull()`, and `.RoundedLg()`. The same presets can be composed with `ui.Styles(...)`; legacy constructor options remain supported.
+Go elements and `ui.Style()` share fluent style modifiers, including `.P4()`, `.MxAuto()`, `.GridCols(3)`, and `.RoundedLg()`. Pass children to constructors and apply reusable styles with `.Style(shared)`.
 
 ```go
 ui.View(ui.Text("hello"), ui.Input().Value("xxx")).
-	FlexCol().
-	PaddingLeft(20).
-	RoundedLg().
-	TextAlign("center")
+	FlexCol().PaddingLeft(20).RoundedLg().TextAlign("center")
 ```
 
-Pass style props such as `ui.BackgroundColor(...)` and `ui.PaddingLeft(...)` directly to `ui.View`, `ui.Text`, or another primitive, alongside its children and event handlers.
+## Style modifiers
 
-## Style props
-
-Options apply in declaration order. Later values override the same property, including explicit zero; repeated `ui.Hover(...)`, `ui.Active(...)`, and other interaction options merge their properties. Numeric lengths are logical pixels; strings also accept percentages. Run `bun run fmt` to format long calls consistently.
+Declarations apply in order. Later values override the same property, including explicit zero. Numeric lengths are logical pixels; strings also accept percentages.
 
 ```go
 func Card() {
-	ui.View(
-		ui.Text(
-			"Hello",
-			ui.TextColor("#e2e8f0"),
-		),
-		ui.Padding(20),
-		ui.BorderRadius(12),
-		ui.BackgroundColor("#111827"),
-	)
+	ui.View(ui.Text("Hello").TextColor("#e2e8f0")).
+		Padding(20).BorderRadius(12).Bg("#111827")
 }
 ```
 
 ## Merging styles
 
-The padding remains 20, the radius becomes 12, and the active state changes only the background color. Nested states follow the same merge rules.
+`.Style(base).Style(overrides)` merges declarations in order. Use `.Merge(...)` to compose reusable builders. Repeated interaction states merge their properties too.
 
 ```go
 func MergedCard() {
-	selected, _ := ui.CreateSignal(false)
-	ui.View(
-		"Merged styles",
-		ui.Padding(20),
-		ui.BorderRadius(8),
-		ui.BackgroundColor("#111827"),
-		ui.BorderRadius(12),
-		ui.When(selected, ui.BackgroundColor("#2563eb")),
-	)
+	base := ui.Style().Padding(20).BorderRadius(8).Bg("#111827")
+	overrides := ui.Style().BorderRadius(12)
+	ui.View("Merged styles").Style(base).Style(overrides)
 }
 ```
 
 ## Reusable styles
 
-Compose shared styles with `ui.Styles(...)`. It returns a reusable `ui.Style` value and leaves its inputs unchanged. Pass the result directly to a primitive, or to a compound part’s `Style` field. Individual style options also work in `PartProps.Style`. Accessors stay reactive and bind independently when mounted.
+`ui.Style()` returns a `ui.StyleBuilder`. Modifiers return new values, leaving shared styles unchanged. Assign the result when deriving a style. Apply it with `.Style(...)` or a compound part’s `PartProps.Style` field; parts also accept slices of builders and accessors returning them. Scalar accessors stay reactive and bind independently on each mounted node.
 
 ```go
 func SharedCard() {
-	card := ui.Styles(ui.Padding(20), ui.BorderRadius(12))
-	ui.View("Hello", card, ui.BackgroundColor("#111827"))
-	ui.View("Another card", card, ui.PaddingLeft(28))
+	card := ui.Style().Padding(20).BorderRadius(12)
+	emphasized := card.PaddingLeft(28).Bg("#1e293b")
+	ui.View("Hello").Style(card).Bg("#111827")
+	ui.View("Another card").Style(emphasized)
 }
 ```
 
+`.When(condition, func(s ui.StyleBuilder) ui.StyleBuilder { ... })` conditionally derives a builder from a boolean value. For a reactive condition, use the element’s `.When(getter, style)` or evaluate the builder inside a part’s style accessor. Pass scalar signal getters to modifiers, such as `.Width(width)`; calling `width()` during setup captures its current value.
+
 ## Flexbox
 
-Set `ui.Display("flex")`, choose a direction, then declare sizing and alignment. A scrolling flex child usually needs `ui.MinHeight(0)` or `ui.MinWidth(0)` so it can shrink.
+Use `.Flex()`, `.FlexRow()`, or `.FlexCol()` to select a flex layout. Give scrolling flex children `.MinHeight(0)` or `.MinWidth(0)` so they can shrink.
 
 ```go
 func Row() {
 	ui.View(
-		func() {
-			ui.Text("Flexible content", ui.Flex(1), ui.MinWidth(0))
-			ui.Button("Action", ui.FlexShrink(0))
-		},
-		ui.Display("flex"),
-		ui.Gap(12),
-		ui.AlignItems("center"),
-	)
+		ui.Text("Flexible content").Flex1().MinWidth(0),
+		ui.Button("Action").FlexShrink(0),
+	).Flex().Gap(12).ItemsCenter()
 }
 ```
 
 ## Grid
 
-Grid uses familiar track strings. Place children explicitly when auto-placement is not enough.
+Grid accepts track strings and the same Rust layout helpers on elements and style builders.
 
 ```go
 func Grid() {
-	ui.View(
-		func() {
-			ui.Text("Sidebar")
-			ui.Text("Content")
-		},
-		ui.Display("grid"),
-		ui.GridTemplateColumns("220px 1fr"),
-		ui.Gap(16),
-	)
+	ui.View(ui.Text("Sidebar"), ui.Text("Content")).
+		Display("grid").GridTemplateColumns("220px 1fr").Gap(16)
 }
 ```
 
 ## Text and color
 
-Typography inherits through the node tree. Colors accept hex, `rgb()`/`rgba()`, or packed RGBA values. Pass color and numeric accessors for reactive paint or size changes.
-
-Set shared typography on a container, then override only the child properties that differ. Here both labels inherit the text color, while the heading overrides size and weight. Padding and borders do not inherit.
+Typography inherits through the node tree. Colors accept hex, `rgb()`/`rgba()`, or packed RGBA values. Override only the child properties that differ. Padding and borders do not inherit.
 
 ```go
 func TypographyExample() {
 	ui.View(
-		func() {
-			ui.Text("Inbox", ui.FontSize(24), ui.FontWeight(600))
-			ui.Text("All caught up.")
-		},
-		ui.TextColor("#334155"),
-		ui.FontSize(14),
-		ui.Padding(20),
-	)
+		ui.Text("Inbox").FontSize(24).FontWeight(600),
+		ui.Text("All caught up."),
+	).TextColor("#334155").FontSize(14).Padding(20)
 }
 ```
 
 ## Interaction states
 
-Add `Transition` to the base style to animate changes between paint states. See [Transitions & Animation](/docs/go/animations) for hover effects, signal-driven changes, timing, and reduced motion.
-
-Use `ui.Hover(...)`, `ui.Active(...)`, `ui.Focus(...)`, `ui.DisabledStyle(...)`, and `ui.SelectedStyle(...)` for interaction styles. `ui.When` merges its options while the condition is true and restores the earlier values when it turns false. Only affected bindings update; children remain mounted.
+Elements and style builders use callbacks for `.Hover(...)`, `.Active(...)`, `.FocusStyle(...)`, `.DisabledStyle(...)`, and `.SelectedStyle(...)`. These states run in the native core. Add `.Transition(...)` to the base style to animate paint changes; see [Transitions & Animation](/docs/go/animations).
 
 ```go
 func SelectableButton() {
 	selected, setSelected := ui.CreateSignal(false)
-	ui.Button(
-		"Toggle selection",
-		ui.BackgroundColor("#e5e7eb"),
-		ui.When(
-			selected,
-			ui.BackgroundColor("#2563eb"),
-			ui.TextColor("white"),
-		),
-		ui.Hover(ui.Opacity(0.85)),
-		ui.OnClick(func() { setSelected(!selected()) }),
-	)
+	button := ui.Style().Padding(12).Bg("#e5e7eb").
+		Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.Opacity(0.85) })
+	ui.Button("Toggle selection").Style(button).
+		When(selected, ui.Style().Bg("#2563eb").TextColor("white")).
+		OnClick(func() { setSelected(!selected()) })
 }
 ```
 
 ## Groups and named group hover
 
-`ui.Group(true)` marks an unnamed hover group; `ui.Group("card")` names it. A descendant’s `ui.GroupHover(...)` follows its nearest ancestor group, including named groups. `ui.GroupHoverNamed("card", ...)` follows the nearest ancestor with that name, skipping intervening groups with other names.
+`.Group(true)` marks an unnamed group; `.Group("card")` names it. `.GroupHover(...)` follows the nearest ancestor group, while `.GroupHoverNamed("card", ...)` follows the nearest ancestor with that name. Repeated rules accumulate in declaration order; a node’s own hover style wins for overlapping properties.
 
 ```go
 func GroupExample() {
 	ui.View(
-		func() {
-			ui.Text(
-				"Changes when the card is hovered",
-				ui.TextColor("#64748b"),
-				ui.GroupHover(ui.TextColor("#2563eb")),
-			)
-			ui.View(
-				func() {
-					ui.Text(
-						"Follows the card and the nested toolbar",
-						ui.GroupHoverNamed("card", ui.TextColor("#2563eb")),
-						ui.GroupHoverNamed("toolbar", ui.Opacity(0.8)),
-					)
-				},
-				ui.Group("toolbar"),
-			)
-		},
-		ui.Group("card"),
-		ui.Padding(20),
-	)
+		ui.Text("Changes when the card is hovered").
+			TextColor("#64748b").
+			GroupHoverNamed("card", func(s ui.StyleBuilder) ui.StyleBuilder {
+				return s.TextColor("#2563eb")
+			}),
+	).Group("card").Padding(20)
 }
 ```
 
-Hovering any part of the group, including its padding and descendants, activates its rules. A nested group becomes the target for unnamed rules; named rules can still follow an outer group. With no matching ancestor, the rule has no effect. Repeated group rules accumulate in declaration order; a node’s own `Hover` wins for overlapping properties. Use paint properties such as colors, opacity, outlines, and transforms. Hover updates are handled natively without rerunning components or changing layout.
-
-
-`ui.GroupActive(...)` and `ui.GroupActiveNamed("card", ui.Opacity(0.8))` follow pressed groups. `ui.FocusWithin(...)` follows focus in the node or a descendant. These states accept paint styles and cannot set the cursor.
+`.GroupActive(...)` and `.GroupActiveNamed(...)` follow pressed groups. `.FocusWithin(...)` follows focus in the node or a descendant. These states accept paint properties and cannot set the cursor. Hovering group padding or descendants activates the rules without rerunning components.

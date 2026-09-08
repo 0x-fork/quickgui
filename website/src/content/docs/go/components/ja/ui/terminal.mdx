@@ -21,7 +21,7 @@ func TerminalExample(directory string) {
 		Program:          "/bin/zsh",
 		Args:             []string{"-l"},
 		WorkingDirectory: directory,
-		Props:            ui.Props{Style: ui.Styles(ui.Width("100%"), ui.Height(320))},
+		Props:            ui.Props{Style: ui.Style().Width("100%").Height(320)},
 	})
 }
 ```

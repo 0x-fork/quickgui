@@ -1,6 +1,6 @@
 组件在挂载时创建保留树。响应式绑定更新受影响的节点，原生核心负责布局、绘制和无障碍行为。
 
-## 视图语法
+## 渲染模型
 
 构造函数只接收子节点或内容。空容器传入 `[]`；按钮也可接收字符串或单个元素。使用 `.padding(24)`、`.checked(checked())`、`.on_click(save)` 等链式方法设置样式、属性和事件，通过 `.style(shared)` 合并可复用样式。
 
@@ -17,7 +17,7 @@ fn settings_card() -> @ui.Element {
 
 在链式属性方法中直接读取访问器：`@ui.checkbox([]).checked(checked()).on_checked_change(set_checked)`。字面量初始化组件内部状态；包含信号读取的表达式会成为受控绑定。样式按声明顺序合并。子节点统一使用列表；有作用域的部件可通过 `.children([...])` 一次挂载完整列表。
 
-## 条件子节点
+## 条件内容
 
 ```moonbit
 fn disclosure() -> @ui.Element {
@@ -39,7 +39,7 @@ fn disclosure() -> @ui.Element {
 
 条件切换分支时才运行分支工厂。分支内会变化的值应放入绑定，从而保持节点挂载。
 
-## 按键保留子节点
+## 列表与节点身份
 
 ```moonbit
 fn names_list() -> @ui.Element {
@@ -51,6 +51,14 @@ fn names_list() -> @ui.Element {
 ```
 
 键必须唯一且稳定。渲染回调接收行信号，因此已有行可以更新，而不替换原生节点 ID 或局部状态。按键子节点本身不会虚拟化长列表；请使用[表格可见范围](/docs/moonbit/components)。
+
+## 窗口生命周期
+
+`@ui.window(component, options=...)` 为每个窗口创建独立的保留树和所有者。关闭窗口会释放节点、绑定和回调。通过 `@ui.on_cleanup` 清理组件资源，不要在窗口之间移动保留节点。
+
+## 当前窗口
+
+在构建组件或处理事件时获取 `@native.current_window()`，保留句柄以便稍后调用 `.close()` 或 `.focus()`。需要更长生命周期的任务通过 `window.with_owner(...)` 注册。异步创建和服务所有权详见[窗口与原生服务](/docs/moonbit/native-services)。
 
 ## 检查、测试与调试
 

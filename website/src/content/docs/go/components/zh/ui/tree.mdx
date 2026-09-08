@@ -20,7 +20,7 @@ func TreeExample() {
 			Nodes:           func() []ui.TreeNodeDeclaration { return nodes },
 			DefaultExpanded: []string{"src"},
 			RowHeight:       26,
-			PartProps:       ui.PartProps{Style: ui.Styles(ui.Height(200))},
+			PartProps:       ui.PartProps{Style: ui.Style().Height(200)},
 		},
 		func() {
 			ui.Tree.Row(ui.TreeRowProps{NodeID: "src"}, "src")

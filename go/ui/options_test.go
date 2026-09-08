@@ -11,22 +11,22 @@ import (
 )
 
 func TestStyleOptionsMergeInteractionStatesWithoutChangingSharedStyles(t *testing.T) {
-	for name, state := range map[string]func(...StyleDeclaration) StyleOption{
-		"Hover": Hover, "Active": Active, "Focus": Focus, "Disabled": DisabledStyle,
-		"Selected": SelectedStyle, "Invalid": InvalidStyle, "Dragging": Dragging,
-		"DragOver": DragOver, "FocusWithin": FocusWithin,
+	for name, state := range map[string]func(...styleDeclaration) styleOption{
+		"Hover": styleHover, "Active": styleActive, "Focus": styleFocus, "Disabled": styleDisabledStyle,
+		"Selected": styleSelectedStyle, "Invalid": styleInvalidStyle, "Dragging": styleDragging,
+		"DragOver": styleDragOver, "FocusWithin": styleFocusWithin,
 	} {
 		t.Run(name, func(t *testing.T) {
-			shared := Styles(state(TextColor("white"), BackgroundColor("#222222"), Opacity(.8)))
+			shared := composeStyles(state(styleTextColor("white"), styleBackgroundColor("#222222"), styleOpacity(.8)))
 			props := resolveProps([]any{
 				shared,
-				state(BackgroundColor("#333333")),
-				state(Opacity(0)),
+				state(styleBackgroundColor("#333333")),
+				state(styleOpacity(0)),
 			})
-			read := func(style Style) *Style {
-				return reflect.ValueOf(style).FieldByName(name).Interface().(*Style)
+			read := func(style styleData) *styleData {
+				return reflect.ValueOf(style).FieldByName(name).Interface().(*styleData)
 			}
-			merged := read(props.Style)
+			merged := read(props.Style.style)
 			if merged.TextColor != "white" || merged.BackgroundColor != "#333333" || merged.Opacity != 0 {
 				t.Fatalf("repeated state options lost an earlier property: %+v", merged)
 			}
@@ -41,17 +41,17 @@ func TestStyleOptionsMergeInteractionStatesWithoutChangingSharedStyles(t *testin
 func TestStyleOptionAliasesRespectDeclarationOrder(t *testing.T) {
 	for _, pair := range []struct {
 		name             string
-		canonical, alias StyleOption
+		canonical, alias styleOption
 		first, last      any
 	}{
-		{"OverflowWrap", OverflowWrap("normal"), WordWrap("anywhere"), "normal", "anywhere"},
-		{"TransitionEasing", TransitionEasing("linear"), TransitionTimingFunction("ease-out"), "linear", "ease-out"},
-		{"PaddingStart", PaddingStart(12), PaddingInlineStart(0), 12, 0},
-		{"PaddingEnd", PaddingEnd(12), PaddingInlineEnd(0), 12, 0},
-		{"MarginStart", MarginStart(12), MarginInlineStart(0), 12, 0},
-		{"MarginEnd", MarginEnd(12), MarginInlineEnd(0), 12, 0},
-		{"BorderStartWidth", BorderStartWidth(1), BorderInlineStartWidth(0), 1, 0},
-		{"BorderEndWidth", BorderEndWidth(1), BorderInlineEndWidth(0), 1, 0},
+		{"OverflowWrap", styleOverflowWrap("normal"), styleWordWrap("anywhere"), "normal", "anywhere"},
+		{"TransitionEasing", styleTransitionEasing("linear"), styleTransitionTimingFunction("ease-out"), "linear", "ease-out"},
+		{"PaddingStart", stylePaddingStart(12), stylePaddingInlineStart(0), 12, 0},
+		{"PaddingEnd", stylePaddingEnd(12), stylePaddingInlineEnd(0), 12, 0},
+		{"MarginStart", styleMarginStart(12), styleMarginInlineStart(0), 12, 0},
+		{"MarginEnd", styleMarginEnd(12), styleMarginInlineEnd(0), 12, 0},
+		{"BorderStartWidth", styleBorderStartWidth(1), styleBorderInlineStartWidth(0), 1, 0},
+		{"BorderEndWidth", styleBorderEndWidth(1), styleBorderInlineEndWidth(0), 1, 0},
 	} {
 		t.Run(pair.name, func(t *testing.T) {
 			for _, order := range []struct {
@@ -61,7 +61,7 @@ func TestStyleOptionAliasesRespectDeclarationOrder(t *testing.T) {
 				{[]any{pair.canonical, pair.alias}, pair.last},
 				{[]any{pair.alias, pair.canonical}, pair.first},
 			} {
-				style := normalizeStyleAliases(resolveProps(order.options).Style)
+				style := normalizeStyleAliases(resolveProps(order.options).Style.style)
 				if got := reflect.ValueOf(style).FieldByName(pair.name).Interface(); got != order.want {
 					t.Fatalf("declaration order: got %v, want %v", got, order.want)
 				}
@@ -75,13 +75,13 @@ func TestComposedStylesKeepPartBindingsIndependent(t *testing.T) {
 		defer dispose()
 		width := reactive.NewSignal(20)
 		color := reactive.NewSignal("#112233")
-		shared := Styles(Width(width.Read), BackgroundColor(color.Read))
+		shared := composeStyles(styleWidth(width.Read), styleBackgroundColor(color.Read))
 		if len(width.Observers) != 0 || len(color.Observers) != 0 {
 			t.Fatal("composing styles eagerly evaluated accessors")
 		}
 		parent := View()
 		node := View()
-		applyPart(node.Node, PartProps{Style: shared})
+		applyPart(node.Node, PartProps{Style: StyleBuilder{style: shared}})
 		native.InsertNode(parent.Node, node.Node, nil)
 		offset := len(parent.Pending.Body())
 		width.Write(30)
@@ -94,10 +94,10 @@ func TestComposedStylesKeepPartBindingsIndependent(t *testing.T) {
 		if len(width.Observers) != 0 || len(color.Observers) != 0 {
 			t.Fatal("a disposed composed style retained its bindings")
 		}
-		if resolveStyle(PaddingLeft(12)).PaddingLeft != 12 {
+		if resolveStyle(Style().PaddingLeft(12)).PaddingLeft != 12 {
 			t.Fatal("compound parts did not accept an individual style option")
 		}
-		if Styles(ObjectFit("contain")).ObjectFit != "contain" {
+		if composeStyles(styleObjectFit("contain")).ObjectFit != "contain" {
 			t.Fatal("ObjectFit could not be composed with other image styles")
 		}
 		return struct{}{}
@@ -110,8 +110,8 @@ func TestWhenRestoresBaseStyleWithoutRebuildingChildren(t *testing.T) {
 		selected, setSelected := CreateSignal(false)
 		mounts := 0
 		node := View(
-			BackgroundColor("#ccc"),
-			When(selected, BackgroundColor("#2563eb"), TextColor("white")),
+			styleBackgroundColor("#ccc"),
+			When(selected, styleBackgroundColor("#2563eb"), styleTextColor("white")),
 			func() { mounts++; Text("child") },
 		)
 		child := node.Children[0]
@@ -140,9 +140,9 @@ func TestStyleRecordsComposeAndConditionalStylesRestoreBindings(t *testing.T) {
 		mounts := 0
 		node := View(
 			func() { mounts++; Text("retained") },
-			Style{BackgroundColor: baseColor.Read, TextColor: "white", Padding: 12},
-			Style{Padding: 0},
-			When(selected, Style{BackgroundColor: selectedColor.Read, Opacity: .5}),
+			styleData{BackgroundColor: baseColor.Read, TextColor: "white", Padding: 12},
+			styleData{Padding: 0},
+			When(selected, styleData{BackgroundColor: selectedColor.Read, Opacity: .5}),
 		)
 		child := node.Children[0]
 		expected := protocol.NewBatch()
@@ -174,19 +174,19 @@ func TestStyleRecordsComposeAndConditionalStylesRestoreBindings(t *testing.T) {
 }
 
 func TestStyleRecordsMergeNestedStatesWithoutMutatingSharedStyles(t *testing.T) {
-	base := Style{
+	base := styleData{
 		BackgroundColor: "#111111",
-		Hover:           &Style{TextColor: "white", BackgroundColor: "#222222", Opacity: .8},
-		Focus:           &Style{OutlineWidth: 2, OutlineColor: "blue"},
+		Hover:           &styleData{TextColor: "white", BackgroundColor: "#222222", Opacity: .8},
+		Focus:           &styleData{OutlineWidth: 2, OutlineColor: "blue"},
 	}
 	props := resolveProps([]any{
 		base,
-		Style{Hover: &Style{BackgroundColor: "#333333", Opacity: 0}},
-		Style{Focus: &Style{OutlineColor: "red"}},
+		styleData{Hover: &styleData{BackgroundColor: "#333333", Opacity: 0}},
+		styleData{Focus: &styleData{OutlineColor: "red"}},
 	})
-	if props.Style.BackgroundColor != base.BackgroundColor || props.Style.Hover.TextColor != "white" ||
-		props.Style.Hover.BackgroundColor != "#333333" || props.Style.Hover.Opacity != 0 ||
-		props.Style.Focus.OutlineWidth != 2 || props.Style.Focus.OutlineColor != "red" {
+	if props.Style.style.BackgroundColor != base.BackgroundColor || props.Style.style.Hover.TextColor != "white" ||
+		props.Style.style.Hover.BackgroundColor != "#333333" || props.Style.style.Hover.Opacity != 0 ||
+		props.Style.style.Focus.OutlineWidth != 2 || props.Style.style.Focus.OutlineColor != "red" {
 		t.Fatal("style records replaced a nested state instead of merging its fields")
 	}
 	if base.Hover.BackgroundColor != "#222222" || base.Hover.Opacity != .8 || base.Focus.OutlineColor != "blue" {
@@ -196,10 +196,10 @@ func TestStyleRecordsMergeNestedStatesWithoutMutatingSharedStyles(t *testing.T) 
 
 func TestStyleAliasesMergeIntoTheSameProperty(t *testing.T) {
 	props := resolveProps([]any{
-		Style{PaddingStart: 12, OverflowWrap: "normal", TransitionEasing: "linear"},
-		Style{PaddingInlineStart: 0, WordWrap: "anywhere", TransitionTimingFunction: "ease-out"},
+		styleData{PaddingStart: 12, OverflowWrap: "normal", TransitionEasing: "linear"},
+		styleData{PaddingInlineStart: 0, WordWrap: "anywhere", TransitionTimingFunction: "ease-out"},
 	})
-	if props.Style.PaddingStart != 0 || props.Style.OverflowWrap != "anywhere" || props.Style.TransitionEasing != "ease-out" {
+	if props.Style.style.PaddingStart != 0 || props.Style.style.OverflowWrap != "anywhere" || props.Style.style.TransitionEasing != "ease-out" {
 		t.Fatal("an alias failed to override the previous declaration")
 	}
 }
@@ -241,7 +241,7 @@ func TestNestedWhenTracksOnlyTheActiveBranch(t *testing.T) {
 		outer, setOuter := CreateSignal(false)
 		inner := reactive.NewSignal(true)
 		parent := View()
-		node := View(When(outer, When(inner.Read, TextColor("white"))))
+		node := View(When(outer, When(inner.Read, styleTextColor("white"))))
 		native.InsertNode(parent.Node, node.Node, nil)
 		if len(inner.Observers) != 0 {
 			t.Fatal("inactive branch was evaluated")

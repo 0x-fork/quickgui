@@ -52,13 +52,12 @@ func FileDialogs() {
 	}
 	ui.View(
 		func() {
-			ui.Text("Open and save", ui.FontSize(26), ui.LineHeight(32), ui.FontWeight(700))
+			ui.Text(
+				"Open and save",
+			).FontSize(26).LineHeight(32).FontWeight(700)
 			ui.Text(
 				"Native file panels return selected paths and cancellation state. Choosing a save destination does not write a file.",
-				ui.TextColor("#9aa6b7"),
-				ui.FontSize(14),
-				ui.LineHeight(21),
-			)
+			).TextColor("#9aa6b7").FontSize(14).LineHeight(21)
 			ui.View(
 				func() {
 					button("Open files", pending, func() {
@@ -125,13 +124,9 @@ func FileDialogs() {
 						)
 					})
 				},
-				ui.Display("flex"),
-				ui.FlexWrap("wrap"),
-				ui.Gap(10),
-			)
+			).Display("flex").FlexWrap("wrap").Gap(10)
 			dialogStatus(status, pending)
 		},
 		panelStyle,
-		ui.MaxWidth(520),
-	)
+	).MaxWidth(520)
 }

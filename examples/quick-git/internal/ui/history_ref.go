@@ -17,23 +17,9 @@ func commitRefBadge(ref git.CommitRef) {
 		func() {
 			gui.Text(
 				ref.Name,
-				gui.FontSize(10.5),
-				gui.FontWeight(700),
-				gui.TextColor(color),
-				gui.LineClamp(1),
-				gui.TextOverflow("ellipsis"),
-			)
+			).FontSize(10.5).FontWeight(700).TextColor(color).LineClamp(1).TextOverflow("ellipsis")
 		},
-		gui.Display("flex"),
-		gui.Height(16),
-		gui.MinWidth(0),
-		gui.MaxWidth(140),
-		gui.AlignItems("center"),
-		gui.PaddingLeft(5),
-		gui.PaddingRight(5),
-		gui.BorderRadius(4),
-		gui.BackgroundColor(background),
-	)
+	).Display("flex").Height(16).MinWidth(0).MaxWidth(140).AlignItems("center").PaddingLeft(5).PaddingRight(5).BorderRadius(4).BackgroundColor(background)
 }
 
 // Reserve space for the subject even when a commit has several long ref names.
@@ -63,15 +49,7 @@ func commitRefs(read func() []git.CommitRef) {
 						nil,
 					)
 				},
-				gui.Display("flex"),
-				gui.FlexDirection("row"),
-				gui.AlignItems("center"),
-				gui.MinWidth(0),
-				gui.MaxWidth("48%"),
-				gui.FlexShrink(1),
-				gui.Overflow("hidden"),
-				gui.Gap(4),
-			)
+			).Display("flex").FlexDirection("row").AlignItems("center").MinWidth(0).MaxWidth("48%").FlexShrink(1).Overflow("hidden").Gap(4)
 		},
 	)
 }

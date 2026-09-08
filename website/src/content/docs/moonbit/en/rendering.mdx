@@ -1,6 +1,6 @@
 Components construct a retained tree once when mounted. Reactive bindings update the affected nodes; the native core handles layout, painting, and accessibility.
 
-## View syntax
+## Rendering model
 
 Constructors accept only children or content. Empty containers use `[]`; buttons also accept a string or one element. Apply styles, properties, and event handlers through fluent methods such as `.padding(24)`, `.checked(checked())`, and `.on_click(save)`. Use `.style(shared)` for reusable styles.
 
@@ -17,7 +17,7 @@ fn settings_card() -> @ui.Element {
 
 Read getters directly in fluent properties: `@ui.checkbox([]).checked(checked()).on_checked_change(set_checked)`. Literal properties initialize component-owned state; expressions containing signal reads become controlled bindings. Styles merge in declaration order. Use child lists throughout; scoped parts can attach a complete list with `.children([...])`.
 
-## Conditional children
+## Conditional content
 
 ```moonbit
 fn disclosure() -> @ui.Element {
@@ -39,7 +39,7 @@ fn disclosure() -> @ui.Element {
 
 The branch factory runs when the predicate switches branches. Put values that change within that branch in bindings so its nodes can stay mounted.
 
-## Keyed children
+## Lists and identity
 
 ```moonbit
 fn names_list() -> @ui.Element {
@@ -51,6 +51,14 @@ fn names_list() -> @ui.Element {
 ```
 
 Keys must be unique and stable. The render callback receives a row signal, so existing rows can update without replacing native node IDs or local state. Keyed children alone do not virtualize a long list; use [table visible ranges](/docs/moonbit/components#tables-and-visible-rows).
+
+## Window lifecycle
+
+`@ui.window(component, options=...)` gives each window its own retained tree and owner. Closing it disposes its nodes, bindings, and callbacks. Use `@ui.on_cleanup` for component resources; do not move retained nodes between windows.
+
+## Current window
+
+Capture `@native.current_window()` while constructing a component or handling its events. Keep the handle for later `.close()` or `.focus()` calls. Register longer-lived work through `window.with_owner(...)`. See [Windows & Native Services](/docs/moonbit/native-services) for asynchronous creation and service ownership.
 
 ## Checking, testing, and debugging
 

@@ -38,9 +38,9 @@ func newElement(tag uint8, arguments []any) *Element {
 		})
 	} else {
 		props = resolveProps(arguments)
-		props.Style = normalizeStyleAliases(props.Style)
+		props.Style.style = normalizeStyleAliases(props.Style.style)
 		element.props = &props
-		if overlappingStyle(props.Style) {
+		if overlappingStyle(props.Style.style) {
 			element.reconcile()
 		} else {
 			element.refreshFields(populatedElementBindings(props))
@@ -77,7 +77,7 @@ func (element *Element) configureFields(fields []elementBinding, options ...Opti
 	for _, option := range options {
 		option.apply(element.props)
 	}
-	if overlappingStyle(element.props.Style) {
+	if overlappingStyle(element.props.Style.style) {
 		element.reconcile()
 	} else {
 		element.refreshFields(fields)
@@ -85,18 +85,11 @@ func (element *Element) configureFields(fields []elementBinding, options ...Opti
 	return element
 }
 
-// Styles merges styles in declaration order, including reusable Styles values
-// and interaction styles. Scalar accessors retain independent native bindings.
-func (element *Element) Styles(options ...StyleDeclaration) *Element {
-	if len(options) == 0 {
-		return element
-	}
-	style := Styles(options...)
-	return element.configureFields(populatedStyleBindings(style), style)
+// Style merges a reusable style, matching MoonBit's style modifier. Scalar
+// accessors retain independent native bindings.
+func (element *Element) Style(style StyleBuilder) *Element {
+	return element.configureFields(populatedStyleBindings(style.style), style)
 }
-
-// Style applies a reusable style, matching MoonBit's style modifier.
-func (element *Element) Style(style Style) *Element { return element.Styles(style) }
 
 // Flex enables flex layout without arguments. With one argument it sets the
 // numeric flex shorthand (grow, shrink 1, zero basis).
@@ -105,7 +98,7 @@ func (element *Element) Flex(value ...any) *Element {
 	case 0:
 		return element.Display("flex")
 	case 1:
-		return element.configureStyles([]string{"FlexGrow", "FlexShrink", "FlexBasis"}, FlexGrow(value[0]), FlexShrink(1), FlexBasis(0))
+		return element.configureStyles([]string{"FlexGrow", "FlexShrink", "FlexBasis"}, styleFlexGrow(value[0]), styleFlexShrink(1), styleFlexBasis(0))
 	default:
 		panic("QuickGUI Flex accepts zero or one value")
 	}
@@ -114,30 +107,30 @@ func (element *Element) Flex(value ...any) *Element {
 // FlexWrap enables wrapping without arguments, or accepts an explicit mode.
 func (element *Element) FlexWrap(value ...string) *Element {
 	if len(value) == 0 {
-		return element.configureStyle("FlexWrap", FlexWrap("wrap"))
+		return element.configureStyle("FlexWrap", styleFlexWrap("wrap"))
 	}
 	if len(value) != 1 {
 		panic("QuickGUI FlexWrap accepts zero or one value")
 	}
-	return element.configureStyle("FlexWrap", FlexWrap(value[0]))
+	return element.configureStyle("FlexWrap", styleFlexWrap(value[0]))
 }
 
 func (element *Element) Bg(value any) *Element { return element.BackgroundColor(value) }
 
-func (element *Element) GroupHover(options ...StyleDeclaration) *Element {
-	return element.configureStyle("GroupHover", GroupHover(options...))
+func (element *Element) GroupHover(build func(StyleBuilder) StyleBuilder) *Element {
+	return element.configureStyle("GroupHover", styleGroupHover(build(Style())))
 }
 
-func (element *Element) GroupHoverNamed(name string, options ...StyleDeclaration) *Element {
-	return element.configureStyle("GroupHover", GroupHoverNamed(name, options...))
+func (element *Element) GroupHoverNamed(name string, build func(StyleBuilder) StyleBuilder) *Element {
+	return element.configureStyle("GroupHover", styleGroupHoverNamed(name, build(Style())))
 }
 
-func (element *Element) GroupActive(options ...StyleDeclaration) *Element {
-	return element.configureStyle("GroupActive", GroupActive(options...))
+func (element *Element) GroupActive(build func(StyleBuilder) StyleBuilder) *Element {
+	return element.configureStyle("GroupActive", styleGroupActive(build(Style())))
 }
 
-func (element *Element) GroupActiveNamed(name string, options ...StyleDeclaration) *Element {
-	return element.configureStyle("GroupActive", GroupActiveNamed(name, options...))
+func (element *Element) GroupActiveNamed(name string, build func(StyleBuilder) StyleBuilder) *Element {
+	return element.configureStyle("GroupActive", styleGroupActiveNamed(name, build(Style())))
 }
 
 // When applies options while condition is true. Turning it off restores earlier

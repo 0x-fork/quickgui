@@ -50,152 +50,126 @@ func textValue[T any](value *T) string {
 	return fmt.Sprint(*value)
 }
 
-func controlStyle() ui.Style {
-	return ui.Styles(
-		ui.Display("flex"),
-		ui.FlexDirection("row"),
-		ui.AlignItems("center"),
-		ui.JustifyContent("center"),
-		ui.Gap(6),
-		ui.Height(30),
-		ui.FlexShrink(0),
-		ui.PaddingLeft(12),
-		ui.PaddingRight(12),
-		ui.BorderRadius(8),
-		ui.BackgroundColor(color(func(p palette) string { return p.Control })),
-		ui.BorderColor(color(func(p palette) string { return p.Border })),
-		ui.BorderWidth(1),
-		ui.TextColor(color(func(p palette) string { return p.Ink })),
-		ui.FontSize(13),
-		ui.Cursor("default"),
-		ui.UserSelect("none"),
-		ui.AppRegion("no-drag"),
-		ui.Hover(ui.BackgroundColor(color(func(p palette) string { return p.ControlHover }))),
-		ui.Focus(
-			ui.OutlineWidth(2),
-			ui.OutlineColor(color(func(p palette) string { return p.Accent })),
-		),
-		ui.OutlineOffset(2),
-		ui.DisabledStyle(ui.Opacity(0.45)),
-	)
+func controlStyle() ui.StyleBuilder {
+	return ui.Style().
+		Display("flex").
+		FlexDirection("row").
+		AlignItems("center").
+		JustifyContent("center").
+		Gap(6).
+		Height(30).
+		FlexShrink(0).
+		PaddingLeft(12).
+		PaddingRight(12).
+		BorderRadius(8).
+		BackgroundColor(color(func(p palette) string { return p.Control })).
+		BorderColor(color(func(p palette) string { return p.Border })).
+		BorderWidth(1).
+		TextColor(color(func(p palette) string { return p.Ink })).
+		FontSize(13).
+		Cursor("default").
+		UserSelect("none").
+		AppRegion("no-drag").
+		Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
+			return s.BackgroundColor(color(func(p palette) string { return p.ControlHover }))
+		}).
+		FocusStyle(func(s ui.StyleBuilder) ui.StyleBuilder {
+			return s.OutlineWidth(2).OutlineColor(color(func(p palette) string { return p.Accent }))
+		}).
+		OutlineOffset(2).
+		DisabledStyle(func(s ui.StyleBuilder) ui.StyleBuilder { return s.Opacity(0.45) })
 }
-func inputStyle() ui.Style {
-	return ui.Styles(
-		ui.Height(30),
-		ui.PaddingLeft(10),
-		ui.PaddingRight(10),
-		ui.BorderRadius(8),
-		ui.BackgroundColor(color(func(p palette) string { return p.PanelAlt })),
-		ui.BorderColor(color(func(p palette) string { return p.Border })),
-		ui.BorderWidth(1),
-		ui.TextColor(color(func(p palette) string { return p.Ink })),
-		ui.FontSize(13),
-		ui.Focus(
-			ui.OutlineWidth(2),
-			ui.OutlineColor(color(func(p palette) string { return p.Accent })),
-		),
-		ui.OutlineOffset(2),
-	)
+func inputStyle() ui.StyleBuilder {
+	return ui.Style().
+		Height(30).
+		PaddingLeft(10).
+		PaddingRight(10).
+		BorderRadius(8).
+		BackgroundColor(color(func(p palette) string { return p.PanelAlt })).
+		BorderColor(color(func(p palette) string { return p.Border })).
+		BorderWidth(1).
+		TextColor(color(func(p palette) string { return p.Ink })).
+		FontSize(13).
+		FocusStyle(func(s ui.StyleBuilder) ui.StyleBuilder {
+			return s.OutlineWidth(2).OutlineColor(color(func(p palette) string { return p.Accent }))
+		}).
+		OutlineOffset(2)
 }
-func popupStyle() ui.Style {
-	return ui.Styles(
-		ui.Display("flex"),
-		ui.FlexDirection("column"),
-		ui.Gap(8),
-		ui.Padding(14),
-		ui.BorderRadius(12),
-		ui.BackgroundColor(color(func(p palette) string { return p.Popup })),
-		ui.BorderColor(color(func(p palette) string { return p.Border })),
-		ui.BorderWidth(1),
-		ui.TextColor(color(func(p palette) string { return p.Ink })),
-		ui.BoxShadow("0 18px 40px #00000033"),
-	)
+func popupStyle() ui.StyleBuilder {
+	return ui.Style().
+		Display("flex").
+		FlexDirection("column").
+		Gap(8).
+		Padding(14).
+		BorderRadius(12).
+		BackgroundColor(color(func(p palette) string { return p.Popup })).
+		BorderColor(color(func(p palette) string { return p.Border })).
+		BorderWidth(1).
+		TextColor(color(func(p palette) string { return p.Ink })).
+		BoxShadow("0 18px 40px #00000033")
 }
-func fillStyle() ui.Style {
-	return ui.Styles(ui.Position("absolute"), ui.Top(0), ui.Right(0), ui.Bottom(0), ui.Left(0))
+func fillStyle() ui.StyleBuilder {
+	return ui.Style().Position("absolute").Top(0).Right(0).Bottom(0).Left(0)
 }
 func control() ui.PartProps { return ui.PartProps{Style: controlStyle()} }
 func columnPart() ui.PartProps {
-	return ui.PartProps{Style: ui.Styles(ui.Display("flex"), ui.FlexDirection("column"), ui.Gap(8))}
+	return ui.PartProps{Style: ui.Style().Display("flex").FlexDirection("column").Gap(8)}
 }
 func rowPart() ui.PartProps {
-	return ui.PartProps{Style: ui.Styles(
-		ui.Display("flex"),
-		ui.FlexDirection("row"),
-		ui.AlignItems("center"),
-		ui.Gap(10),
-	)}
+	return ui.PartProps{Style: ui.Style().
+		Display("flex").
+		FlexDirection("row").
+		AlignItems("center").
+		Gap(10)}
 }
 func popup(width float64) ui.PartProps {
 	s := popupStyle()
-	s.Width = width
+	s = s.Width(width)
 	return ui.PartProps{Style: s}
 }
 func backdrop() ui.PartProps {
 	s := fillStyle()
-	s.BackgroundColor = color(func(p palette) string { return p.Backdrop })
+	s = s.BackgroundColor(color(func(p palette) string { return p.Backdrop }))
 	return ui.PartProps{Style: s}
 }
 func overlay() ui.PartProps {
 	s := fillStyle()
-	s.Display = "flex"
-	s.AlignItems = "center"
-	s.JustifyContent = "center"
+	s = s.Display("flex")
+	s = s.AlignItems("center")
+	s = s.JustifyContent("center")
 	return ui.PartProps{Style: s}
 }
 func panel(title, hint string, children func()) {
 	ui.View(
 		func() {
-			ui.Text(title, ui.FontSize(17), ui.FontWeight(700))
+			ui.Text(title).FontSize(17).FontWeight(700)
 			ui.Text(
 				hint,
-				ui.FontSize(12),
-				ui.LineHeight(18),
-				ui.TextColor(color(func(p palette) string { return p.Muted })),
-			)
+			).FontSize(12).LineHeight(18).TextColor(color(func(p palette) string { return p.Muted }))
 			children()
 		},
-		ui.Display("flex"),
-		ui.FlexDirection("column"),
-		ui.Gap(14),
-		ui.Padding(20),
-		ui.BorderRadius(12),
-		ui.BorderWidth(1),
-		ui.BorderColor(color(func(p palette) string { return p.Border })),
-		ui.BackgroundColor(color(func(p palette) string { return p.Panel })),
-		ui.FlexShrink(0),
-	)
+	).Display("flex").FlexDirection("column").Gap(14).Padding(20).BorderRadius(12).BorderWidth(1).BorderColor(color(func(p palette) string { return p.Border })).BackgroundColor(color(func(p palette) string { return p.Panel })).FlexShrink(0)
 }
 func row(children func()) {
 	ui.View(
 		children,
-		ui.Display("flex"),
-		ui.FlexDirection("row"),
-		ui.AlignItems("center"),
-		ui.FlexWrap("wrap"),
-		ui.Gap(10),
-	)
+	).Display("flex").FlexDirection("row").AlignItems("center").FlexWrap("wrap").Gap(10)
 }
 func col(children func()) {
-	ui.View(children, ui.Display("flex"), ui.FlexDirection("column"), ui.Gap(8))
+	ui.View(
+		children,
+	).Display("flex").FlexDirection("column").Gap(8)
 }
 func note(value any) {
 	ui.Text(
 		value,
-		ui.FontSize(12),
-		ui.LineHeight(18),
-		ui.FontFamily("monospace"),
-		ui.TextColor(color(func(p palette) string { return p.Muted })),
-	)
+	).FontSize(12).LineHeight(18).FontFamily("monospace").TextColor(color(func(p palette) string { return p.Muted }))
 }
-func label(value any) { ui.Text(value, ui.FontSize(12)) }
+func label(value any) { ui.Text(value).FontSize(12) }
 func muted(value any) {
 	ui.Text(
 		value,
-		ui.FontSize(12),
-		ui.LineHeight(17),
-		ui.TextColor(color(func(p palette) string { return p.Muted })),
-	)
+	).FontSize(12).LineHeight(17).TextColor(color(func(p palette) string { return p.Muted }))
 }
 func button(label any, click func(), options ...any) {
 	args := []any{controlStyle(), ui.OnClick(click)}
@@ -204,24 +178,25 @@ func button(label any, click func(), options ...any) {
 	ui.Button(args...)
 }
 func primary(label any, click func()) {
-	button(label, click, ui.Styles(
-		ui.BackgroundColor(color(func(p palette) string { return p.Accent })),
-		ui.TextColor(color(func(p palette) string { return p.OnAccent })),
-		ui.Hover(ui.BackgroundColor(color(func(p palette) string { return p.AccentHover }))),
-	))
+	button(label, click, ui.Style().
+		BackgroundColor(color(func(p palette) string { return p.Accent })).
+		TextColor(color(func(p palette) string { return p.OnAccent })).
+		Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
+			return s.BackgroundColor(color(func(p palette) string { return p.AccentHover }))
+		}))
 }
 func input(value any, set func(string), placeholder string, options ...any) {
 	args := []any{inputStyle(), ui.Value(value), ui.Placeholder(placeholder), ui.OnInput(func(e *native.Event) { set(e.Value) })}
 	args = append(args, options...)
 	ui.Input(args...)
 }
-func checkboxStyle() ui.Style {
+func checkboxStyle() ui.StyleBuilder {
 	s := controlStyle()
-	s.Height = 28
-	s.BorderWidth = 0
-	s.BackgroundColor = "transparent"
-	s.JustifyContent = "flex-start"
-	s.PaddingLeft = 8
+	s = s.Height(28)
+	s = s.BorderWidth(0)
+	s = s.BackgroundColor("transparent")
+	s = s.JustifyContent("flex-start")
+	s = s.PaddingLeft(8)
 	return s
 }
 func checkbox(props ui.CheckboxProps, caption any) {
@@ -247,23 +222,22 @@ func checkbox(props ui.CheckboxProps, caption any) {
 		props,
 		func() {
 			ui.Checkbox.Indicator(
-				ui.PartProps{Style: func() ui.Style {
+				ui.PartProps{Style: func() ui.StyleBuilder {
 					border, background := p().Border, p().Control
 					if props.Checked() != false {
 						border, background = p().Accent, p().Accent
 					}
-					return ui.Styles(
-						ui.Width(16),
-						ui.Height(16),
-						ui.BorderRadius(5),
-						ui.BorderWidth(1),
-						ui.BorderColor(border),
-						ui.BackgroundColor(background),
-						ui.TextColor(p().OnAccent),
-						ui.Display("flex"),
-						ui.AlignItems("center"),
-						ui.JustifyContent("center"),
-					)
+					return ui.Style().
+						Width(16).
+						Height(16).
+						BorderRadius(5).
+						BorderWidth(1).
+						BorderColor(border).
+						BackgroundColor(background).
+						TextColor(p().OnAccent).
+						Display("flex").
+						AlignItems("center").
+						JustifyContent("center")
 				}},
 				func() {
 					ui.Show(
@@ -277,10 +251,7 @@ func checkbox(props ui.CheckboxProps, caption any) {
 									}
 									return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12"><path d="` + path + `" fill="none" stroke="` + p().OnAccent + `" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`
 								}),
-								ui.Width(12),
-								ui.Height(12),
-								ui.FlexShrink(0),
-							)
+							).Width(12).Height(12).FlexShrink(0)
 						},
 					)
 				},

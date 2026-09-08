@@ -17,9 +17,7 @@ func ShaderExample(source string, parameters func() []float64) {
 	ui.Shader(
 		ui.Value(source),
 		ui.ShaderParameters(parameters),
-		ui.Width(320),
-		ui.Height(180),
-	)
+	).Width(320).Height(180)
 }
 ```
 
@@ -29,4 +27,4 @@ func ShaderExample(source string, parameters func() []float64) {
 | --- | --- |
 | `Value` | Filesystem path, data URL, SVG document, or shader source expected by the component. |
 | `ShaderParameters` | Up to sixteen numeric values packed into fixed shader parameter vectors. |
-| `ui.BackgroundColor(...)`, `ui.Padding(...)`, `ui.Hover(...)` | QuickGUI layout, paint, typography, and interaction-state styles. |
+| `ui.Style().BackgroundColor(...)`, `ui.Style().Padding(...)`, `ui.Style().Hover(...)` | QuickGUI layout, paint, typography, and interaction-state styles. |

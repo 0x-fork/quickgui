@@ -53,8 +53,7 @@ func openDetailsWindow() {
 
 					ui.Text(
 						"This window has its own retained tree and native lifecycle.",
-					).TextColor("#94a3b8").
-						LineHeight(21)
+					).TextColor("#94a3b8").LineHeight(21)
 
 					ui.Button(
 						"Close window",
@@ -122,7 +121,7 @@ func Counter() {
 							).TextColor("#bfdbfe").
 								When(
 									func() bool { return count() >= 5 },
-									ui.TextColor("#fbbf24"),
+									ui.Style().TextColor("#fbbf24"),
 								).
 								FontSize(20).
 								FontWeight(600)
@@ -150,7 +149,9 @@ func Counter() {
 								Cursor("default").
 								AppRegion("no-drag").
 								UserSelect("none").
-								Hover(ui.BackgroundColor("#3b82f6"))
+								Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
+									return s.BackgroundColor("#3b82f6")
+								})
 
 							ui.Button(
 								"Open window",

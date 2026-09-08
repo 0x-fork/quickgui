@@ -6,7 +6,7 @@ Go コンポーネントはネイティブの子を宣言する `func()` です�
 
 ```go
 func CounterLabel(count func() int) {
-	ui.Text("Count: ", count, ui.FontSize(20))
+	ui.Text("Count: ", count).FontSize(20)
 }
 
 func ComponentExample() {
@@ -24,14 +24,10 @@ func ComponentExample() {
 func CardComponent(title string, children ui.Component) {
 	ui.View(
 		func() {
-			ui.Text(title, ui.FontWeight(600))
+			ui.Text(title).FontWeight(600)
 			children()
 		},
-		ui.Padding(20),
-		ui.Gap(12),
-		ui.Display("flex"),
-		ui.FlexDirection("column"),
-	)
+	).Padding(20).Gap(12).Display("flex").FlexDirection("column")
 }
 
 func CardComposition() {
@@ -50,13 +46,13 @@ func CardComposition() {
 func ButtonExample(save func()) {
 	ui.Button(
 		"Save changes",
-		ui.Height(40),
-		ui.PaddingLeft(16),
-		ui.PaddingRight(16),
-		ui.BackgroundColor("#2563eb"),
-		ui.TextColor("white"),
-		ui.BorderRadius(8),
-		ui.Hover(ui.BackgroundColor("#3b82f6")),
+		ui.Style().Height(40),
+		ui.Style().PaddingLeft(16),
+		ui.Style().PaddingRight(16),
+		ui.Style().BackgroundColor("#2563eb"),
+		ui.Style().TextColor("white"),
+		ui.Style().BorderRadius(8),
+		ui.Style().Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor("#3b82f6") }),
 		ui.OnClick(save),
 	)
 }
@@ -112,19 +108,18 @@ bun packages/cli/src/cli.ts dev --project examples/components
 
 ## 各パーツのスタイル
 
-各パーツのスタイルには `PartProps.Style` を使います。単一のスタイルオプション、または `ui.Styles(...)` で組み合わせた複数のオプションを渡せます。再利用可能なスタイル、そのスライス、それらを返すアクセサーも使えます。選択状態やテーマのシグナルで、子を作り直さず保持されたパーツを更新できます。
+各パーツのスタイルには `PartProps.Style` を使います。`ui.Style()` と fluent メソッドでスタイルを作り、`.Merge(...)` で共有ビルダーを合成します。ビルダーのスライスや、それらを返すアクセサーも使えます。選択状態やテーマのシグナルは子要素を作り直さずにパーツを更新します。
 
 ```go
 ui.PartProps{
-	Style: ui.Styles(
-		ui.Display("flex"),
-		ui.Height(32),
-		ui.PaddingLeft(12),
-		ui.PaddingRight(12),
-		ui.BackgroundColor("#2563eb"),
-		ui.TextColor("white"),
-		ui.BorderRadius(8),
-	),
+	Style: ui.Style().
+		Display("flex").
+		Height(32).
+		PaddingLeft(12).
+		PaddingRight(12).
+		BackgroundColor("#2563eb").
+		TextColor("white").
+		BorderRadius(8),
 }
 ```
 

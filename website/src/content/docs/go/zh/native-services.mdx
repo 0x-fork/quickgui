@@ -1,0 +1,15 @@
+从 `main` 调用一次 `native.Run`。在启动回调中创建窗口并注册应用服务。原生完成回调和 UI 状态更新运行在 Go 的 UI goroutine 上。
+
+## 窗口生命周期
+
+`native.NewWindow(native.WindowOptions{Component: App})` 创建拥有独立组件所有者和保留树的窗口。关闭窗口会释放绑定、监听器并执行组件清理。后续操作需要窗口句柄时，应在构建组件或处理事件时获取 `native.CurrentWindow()`。
+
+## 命令与服务
+
+对话框、剪贴板、Shell、外观、菜单等平台服务使用具有类型的 `native` API。需要结果的操作通过完成回调返回，在不阻塞 UI goroutine 的前提下处理错误。独立提供程序使用 `native.InvokeExtension` 和 `native.OpenExtension`。
+
+应用后台任务可使用随组件取消的 `ui.Async`，或通过 `native.Dispatch` 将结果送回 UI goroutine。信号只能在 UI 侧读写。服务与会话所有权见[编写扩展](/docs/go/extensions)。
+
+## 事件与文件监听
+
+`native.WatchFiles(paths, changed, ready)` 使用操作系统文件通知并返回停止函数。组件资源通过 `ui.OnCleanup` 清理，应用级监听器应保留取消函数。存在原生事件或监听器时避免轮询。扩展会话关闭后，其事件也会停止。

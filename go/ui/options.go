@@ -13,32 +13,28 @@ type Option interface {
 	apply(*Props)
 }
 
-// A Style can be passed directly to a primitive or When. Styles merge in order;
-// omitted fields preserve earlier declarations, including explicit zero values.
-func (style Style) apply(props *Props) { mergeStyle(&props.Style, style) }
+// Internal declarations preserve omitted fields and explicit zero values.
+func (style styleData) apply(props *Props) { mergeStyle(&props.Style.style, style) }
 
-// StyleDeclaration is a style option or a reusable style built with Styles.
-// Interaction styles and named groups accept the same declarations.
-type StyleDeclaration interface {
-	applyStyle(*Style)
+// styleDeclaration is an internal option, style record, or fluent style.
+type styleDeclaration interface {
+	applyStyle(*styleData)
 }
 
-func (style Style) applyStyle(target *Style) { mergeStyle(target, style) }
+func (style styleData) applyStyle(target *styleData) { mergeStyle(target, style) }
 
-// StyleOption sets a style property. It can also be nested inside Styles, Hover,
-// Active, Focus, or another interaction style.
-type StyleOption func(*Style)
+// styleOption sets a style property. It can also be nested inside composeStyles, styleHover,
+// styleActive, styleFocus, or another interaction style.
+type styleOption func(*styleData)
 
-func (option StyleOption) apply(props *Props)      { option(&props.Style) }
-func (option StyleOption) applyStyle(style *Style) { option(style) }
+func (option styleOption) apply(props *Props)          { option(&props.Style.style) }
+func (option styleOption) applyStyle(style *styleData) { option(style) }
 
-// Styles composes reusable style options in declaration order. Later values
+// composeStyles composes reusable style options in declaration order. Later values
 // override the same property; interaction styles merge without mutating inputs.
 // Accessors remain unevaluated until the style is bound to a node.
-// Use Element.Styles for inline styles; use Styles for shared values and the
-// Style field of compound parts.
-func Styles(options ...StyleDeclaration) Style {
-	var style Style
+func composeStyles(options ...styleDeclaration) styleData {
+	var style styleData
 	for _, option := range options {
 		option.applyStyle(&style)
 	}
@@ -48,11 +44,6 @@ func Styles(options ...StyleDeclaration) Style {
 type propertyOption func(*Props)
 
 func (option propertyOption) apply(props *Props) { option(props) }
-
-// WithStyle reuses a style record among ordinary options.
-func WithStyle(style Style) StyleOption {
-	return func(target *Style) { mergeStyle(target, style) }
-}
 
 // OnClick handles a click without requiring an unused event parameter.
 func OnClick(handler func()) Option {

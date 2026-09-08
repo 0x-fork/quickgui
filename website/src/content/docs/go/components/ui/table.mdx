@@ -22,7 +22,7 @@ func TableExample(rows []string) {
 			RowCount:     func() float64 { return float64(len(rows)) },
 			RowHeight:    26,
 			HeaderHeight: 28,
-			PartProps:    ui.PartProps{Style: ui.Styles(ui.Height(260), ui.OverflowY("scroll"))},
+			PartProps:    ui.PartProps{Style: ui.Style().Height(260).OverflowY("scroll")},
 		},
 		func() {
 			ui.Table.Header(ui.TableHeaderProps{Column: "name"}, "Name")

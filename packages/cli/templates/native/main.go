@@ -38,7 +38,7 @@ func Counter() {
 			Padding(12).
 			RoundedLg().
 			Bg("#2563eb").
-			Hover(ui.BackgroundColor("#3b82f6")),
+			Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor("#3b82f6") }),
 	).FlexCol().
 		SizeFull().
 		ItemsCenter().

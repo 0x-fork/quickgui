@@ -5,153 +5,153 @@ package ui
 import "github.com/egoist/quickgui/go/native"
 
 // ObjectFit sets the corresponding style property.
-func ObjectFit(value string) StyleOption {
-	return func(style *Style) { style.ObjectFit = value }
+func styleObjectFit(value string) styleOption {
+	return func(style *styleData) { style.ObjectFit = value }
 }
 
 // WordWrap sets the corresponding style property.
-func WordWrap(value string) StyleOption {
-	return func(style *Style) { style.OverflowWrap = value }
+func styleWordWrap(value string) styleOption {
+	return func(style *styleData) { style.OverflowWrap = value }
 }
 
 // TransitionTimingFunction sets the corresponding style property.
-func TransitionTimingFunction(value any) StyleOption {
-	return func(style *Style) { style.TransitionEasing = value }
+func styleTransitionTimingFunction(value any) styleOption {
+	return func(style *styleData) { style.TransitionEasing = value }
 }
 
 // PaddingInlineStart sets the corresponding style property.
-func PaddingInlineStart(value any) StyleOption {
-	return func(style *Style) { style.PaddingStart = value }
+func stylePaddingInlineStart(value any) styleOption {
+	return func(style *styleData) { style.PaddingStart = value }
 }
 
 // PaddingInlineEnd sets the corresponding style property.
-func PaddingInlineEnd(value any) StyleOption {
-	return func(style *Style) { style.PaddingEnd = value }
+func stylePaddingInlineEnd(value any) styleOption {
+	return func(style *styleData) { style.PaddingEnd = value }
 }
 
 // MarginInlineStart sets the corresponding style property.
-func MarginInlineStart(value any) StyleOption {
-	return func(style *Style) { style.MarginStart = value }
+func styleMarginInlineStart(value any) styleOption {
+	return func(style *styleData) { style.MarginStart = value }
 }
 
 // MarginInlineEnd sets the corresponding style property.
-func MarginInlineEnd(value any) StyleOption {
-	return func(style *Style) { style.MarginEnd = value }
+func styleMarginInlineEnd(value any) styleOption {
+	return func(style *styleData) { style.MarginEnd = value }
 }
 
 // BorderInlineStartWidth sets the corresponding style property.
-func BorderInlineStartWidth(value any) StyleOption {
-	return func(style *Style) { style.BorderStartWidth = value }
+func styleBorderInlineStartWidth(value any) styleOption {
+	return func(style *styleData) { style.BorderStartWidth = value }
 }
 
 // BorderInlineEndWidth sets the corresponding style property.
-func BorderInlineEndWidth(value any) StyleOption {
-	return func(style *Style) { style.BorderEndWidth = value }
+func styleBorderInlineEndWidth(value any) styleOption {
+	return func(style *styleData) { style.BorderEndWidth = value }
 }
 
 // AspectRatio sets the corresponding style property.
-func AspectRatio(value any) StyleOption {
-	return func(style *Style) { style.AspectRatio = value }
+func styleAspectRatio(value any) styleOption {
+	return func(style *styleData) { style.AspectRatio = value }
 }
 
 // GridColumn sets the corresponding style property.
-func GridColumn(value any) StyleOption {
-	return func(style *Style) { style.GridColumn = value }
+func styleGridColumn(value any) styleOption {
+	return func(style *styleData) { style.GridColumn = value }
 }
 
 // GridRow sets the corresponding style property.
-func GridRow(value any) StyleOption {
-	return func(style *Style) { style.GridRow = value }
+func styleGridRow(value any) styleOption {
+	return func(style *styleData) { style.GridRow = value }
 }
 
 // BorderStartWidth sets the corresponding style property.
-func BorderStartWidth(value any) StyleOption {
-	return func(style *Style) { style.BorderStartWidth = value }
+func styleBorderStartWidth(value any) styleOption {
+	return func(style *styleData) { style.BorderStartWidth = value }
 }
 
 // BorderEndWidth sets the corresponding style property.
-func BorderEndWidth(value any) StyleOption {
-	return func(style *Style) { style.BorderEndWidth = value }
+func styleBorderEndWidth(value any) styleOption {
+	return func(style *styleData) { style.BorderEndWidth = value }
 }
 
 // Background sets the corresponding style property.
-func Background(value any) StyleOption {
-	return func(style *Style) { style.Background = value }
+func styleBackground(value any) styleOption {
+	return func(style *styleData) { style.Background = value }
 }
 
 // BackgroundGradient sets the corresponding style property.
-func BackgroundGradient(value any) StyleOption {
-	return func(style *Style) { style.BackgroundGradient = value }
+func styleBackgroundGradient(value any) styleOption {
+	return func(style *styleData) { style.BackgroundGradient = value }
 }
 
 // TransitionProperty sets the corresponding style property.
-func TransitionProperty(value any) StyleOption {
-	return func(style *Style) { style.TransitionProperty = value }
+func styleTransitionProperty(value any) styleOption {
+	return func(style *styleData) { style.TransitionProperty = value }
 }
 
 // TransitionDuration sets the corresponding style property.
-func TransitionDuration(value any) StyleOption {
-	return func(style *Style) { style.TransitionDuration = value }
+func styleTransitionDuration(value any) styleOption {
+	return func(style *styleData) { style.TransitionDuration = value }
 }
 
 // TransitionEasing sets the corresponding style property.
-func TransitionEasing(value any) StyleOption {
-	return func(style *Style) { style.TransitionEasing = value }
+func styleTransitionEasing(value any) styleOption {
+	return func(style *styleData) { style.TransitionEasing = value }
 }
 
 // TransitionMaxFps sets the corresponding style property.
-func TransitionMaxFps(value any) StyleOption {
-	return func(style *Style) { style.TransitionMaxFps = value }
+func styleTransitionMaxFps(value any) styleOption {
+	return func(style *styleData) { style.TransitionMaxFps = value }
 }
 
 // MarkdownCodeBackground sets the corresponding style property.
-func MarkdownCodeBackground(value any) StyleOption {
-	return func(style *Style) { style.MarkdownCodeBackground = value }
+func styleMarkdownCodeBackground(value any) styleOption {
+	return func(style *styleData) { style.MarkdownCodeBackground = value }
 }
 
 // MarkdownBorderColor sets the corresponding style property.
-func MarkdownBorderColor(value any) StyleOption {
-	return func(style *Style) { style.MarkdownBorderColor = value }
+func styleMarkdownBorderColor(value any) styleOption {
+	return func(style *styleData) { style.MarkdownBorderColor = value }
 }
 
 // MarkdownMutedColor sets the corresponding style property.
-func MarkdownMutedColor(value any) StyleOption {
-	return func(style *Style) { style.MarkdownMutedColor = value }
+func styleMarkdownMutedColor(value any) styleOption {
+	return func(style *styleData) { style.MarkdownMutedColor = value }
 }
 
 // MarkdownLinkColor sets the corresponding style property.
-func MarkdownLinkColor(value any) StyleOption {
-	return func(style *Style) { style.MarkdownLinkColor = value }
+func styleMarkdownLinkColor(value any) styleOption {
+	return func(style *styleData) { style.MarkdownLinkColor = value }
 }
 
 // MarkdownCodeTextColor sets the corresponding style property.
-func MarkdownCodeTextColor(value any) StyleOption {
-	return func(style *Style) { style.MarkdownCodeTextColor = value }
+func styleMarkdownCodeTextColor(value any) styleOption {
+	return func(style *styleData) { style.MarkdownCodeTextColor = value }
 }
 
 // MarkdownBlockGap sets the corresponding style property.
-func MarkdownBlockGap(value any) StyleOption {
-	return func(style *Style) { style.MarkdownBlockGap = value }
+func styleMarkdownBlockGap(value any) styleOption {
+	return func(style *styleData) { style.MarkdownBlockGap = value }
 }
 
 // MarkdownCodeFontSize sets the corresponding style property.
-func MarkdownCodeFontSize(value any) StyleOption {
-	return func(style *Style) { style.MarkdownCodeFontSize = value }
+func styleMarkdownCodeFontSize(value any) styleOption {
+	return func(style *styleData) { style.MarkdownCodeFontSize = value }
 }
 
 // ScrollToEndRevision sets the corresponding style property.
-func ScrollToEndRevision(value any) StyleOption {
-	return func(style *Style) { style.ScrollToEndRevision = value }
+func styleScrollToEndRevision(value any) styleOption {
+	return func(style *styleData) { style.ScrollToEndRevision = value }
 }
 
 // TextDecoration sets the corresponding style property.
-func TextDecoration(value string) StyleOption {
-	return func(style *Style) { style.TextDecoration = value }
+func styleTextDecoration(value string) styleOption {
+	return func(style *styleData) { style.TextDecoration = value }
 }
 
 // InvalidStyle merges options into the Invalid interaction style.
-func InvalidStyle(options ...StyleDeclaration) StyleOption {
-	return func(style *Style) {
+func styleInvalidStyle(options ...styleDeclaration) styleOption {
+	return func(style *styleData) {
 		nested := mergeStateStyles(style.Invalid, nil)
 		for _, option := range options {
 			option.applyStyle(nested)
@@ -161,8 +161,8 @@ func InvalidStyle(options ...StyleDeclaration) StyleOption {
 }
 
 // Dragging merges options into the Dragging interaction style.
-func Dragging(options ...StyleDeclaration) StyleOption {
-	return func(style *Style) {
+func styleDragging(options ...styleDeclaration) styleOption {
+	return func(style *styleData) {
 		nested := mergeStateStyles(style.Dragging, nil)
 		for _, option := range options {
 			option.applyStyle(nested)
@@ -172,8 +172,8 @@ func Dragging(options ...StyleDeclaration) StyleOption {
 }
 
 // DragOver merges options into the DragOver interaction style.
-func DragOver(options ...StyleDeclaration) StyleOption {
-	return func(style *Style) {
+func styleDragOver(options ...styleDeclaration) styleOption {
+	return func(style *styleData) {
 		nested := mergeStateStyles(style.DragOver, nil)
 		for _, option := range options {
 			option.applyStyle(nested)
@@ -183,8 +183,8 @@ func DragOver(options ...StyleDeclaration) StyleOption {
 }
 
 // FocusWithin merges options into the FocusWithin interaction style.
-func FocusWithin(options ...StyleDeclaration) StyleOption {
-	return func(style *Style) {
+func styleFocusWithin(options ...styleDeclaration) styleOption {
+	return func(style *styleData) {
 		nested := mergeStateStyles(style.FocusWithin, nil)
 		for _, option := range options {
 			option.applyStyle(nested)
@@ -194,568 +194,568 @@ func FocusWithin(options ...StyleDeclaration) StyleOption {
 }
 
 // GridTemplateColumns sets the corresponding style property.
-func GridTemplateColumns(value any) StyleOption {
-	return func(style *Style) { style.GridTemplateColumns = value }
+func styleGridTemplateColumns(value any) styleOption {
+	return func(style *styleData) { style.GridTemplateColumns = value }
 }
 
 // GridTemplateRows sets the corresponding style property.
-func GridTemplateRows(value any) StyleOption {
-	return func(style *Style) { style.GridTemplateRows = value }
+func styleGridTemplateRows(value any) styleOption {
+	return func(style *styleData) { style.GridTemplateRows = value }
 }
 
 // GridAutoFlow sets the corresponding style property.
-func GridAutoFlow(value string) StyleOption {
-	return func(style *Style) { style.GridAutoFlow = value }
+func styleGridAutoFlow(value string) styleOption {
+	return func(style *styleData) { style.GridAutoFlow = value }
 }
 
 // GridColumnStart sets the corresponding style property.
-func GridColumnStart(value any) StyleOption {
-	return func(style *Style) { style.GridColumnStart = value }
+func styleGridColumnStart(value any) styleOption {
+	return func(style *styleData) { style.GridColumnStart = value }
 }
 
 // GridColumnEnd sets the corresponding style property.
-func GridColumnEnd(value any) StyleOption {
-	return func(style *Style) { style.GridColumnEnd = value }
+func styleGridColumnEnd(value any) styleOption {
+	return func(style *styleData) { style.GridColumnEnd = value }
 }
 
 // GridColumnSpan sets the corresponding style property.
-func GridColumnSpan(value any) StyleOption {
-	return func(style *Style) { style.GridColumnSpan = value }
+func styleGridColumnSpan(value any) styleOption {
+	return func(style *styleData) { style.GridColumnSpan = value }
 }
 
 // GridRowStart sets the corresponding style property.
-func GridRowStart(value any) StyleOption {
-	return func(style *Style) { style.GridRowStart = value }
+func styleGridRowStart(value any) styleOption {
+	return func(style *styleData) { style.GridRowStart = value }
 }
 
 // GridRowEnd sets the corresponding style property.
-func GridRowEnd(value any) StyleOption {
-	return func(style *Style) { style.GridRowEnd = value }
+func styleGridRowEnd(value any) styleOption {
+	return func(style *styleData) { style.GridRowEnd = value }
 }
 
 // GridRowSpan sets the corresponding style property.
-func GridRowSpan(value any) StyleOption {
-	return func(style *Style) { style.GridRowSpan = value }
+func styleGridRowSpan(value any) styleOption {
+	return func(style *styleData) { style.GridRowSpan = value }
 }
 
 // PaddingStart sets the corresponding style property.
-func PaddingStart(value any) StyleOption {
-	return func(style *Style) { style.PaddingStart = value }
+func stylePaddingStart(value any) styleOption {
+	return func(style *styleData) { style.PaddingStart = value }
 }
 
 // PaddingEnd sets the corresponding style property.
-func PaddingEnd(value any) StyleOption {
-	return func(style *Style) { style.PaddingEnd = value }
+func stylePaddingEnd(value any) styleOption {
+	return func(style *styleData) { style.PaddingEnd = value }
 }
 
 // MarginStart sets the corresponding style property.
-func MarginStart(value any) StyleOption {
-	return func(style *Style) { style.MarginStart = value }
+func styleMarginStart(value any) styleOption {
+	return func(style *styleData) { style.MarginStart = value }
 }
 
 // MarginEnd sets the corresponding style property.
-func MarginEnd(value any) StyleOption {
-	return func(style *Style) { style.MarginEnd = value }
+func styleMarginEnd(value any) styleOption {
+	return func(style *styleData) { style.MarginEnd = value }
 }
 
 // BorderTopWidth sets the corresponding style property.
-func BorderTopWidth(value any) StyleOption {
-	return func(style *Style) { style.BorderTopWidth = value }
+func styleBorderTopWidth(value any) styleOption {
+	return func(style *styleData) { style.BorderTopWidth = value }
 }
 
 // BorderRightWidth sets the corresponding style property.
-func BorderRightWidth(value any) StyleOption {
-	return func(style *Style) { style.BorderRightWidth = value }
+func styleBorderRightWidth(value any) styleOption {
+	return func(style *styleData) { style.BorderRightWidth = value }
 }
 
 // BorderBottomWidth sets the corresponding style property.
-func BorderBottomWidth(value any) StyleOption {
-	return func(style *Style) { style.BorderBottomWidth = value }
+func styleBorderBottomWidth(value any) styleOption {
+	return func(style *styleData) { style.BorderBottomWidth = value }
 }
 
 // BorderLeftWidth sets the corresponding style property.
-func BorderLeftWidth(value any) StyleOption {
-	return func(style *Style) { style.BorderLeftWidth = value }
+func styleBorderLeftWidth(value any) styleOption {
+	return func(style *styleData) { style.BorderLeftWidth = value }
 }
 
 // BorderTopLeftRadius sets the corresponding style property.
-func BorderTopLeftRadius(value any) StyleOption {
-	return func(style *Style) { style.BorderTopLeftRadius = value }
+func styleBorderTopLeftRadius(value any) styleOption {
+	return func(style *styleData) { style.BorderTopLeftRadius = value }
 }
 
 // BorderTopRightRadius sets the corresponding style property.
-func BorderTopRightRadius(value any) StyleOption {
-	return func(style *Style) { style.BorderTopRightRadius = value }
+func styleBorderTopRightRadius(value any) styleOption {
+	return func(style *styleData) { style.BorderTopRightRadius = value }
 }
 
 // BorderBottomLeftRadius sets the corresponding style property.
-func BorderBottomLeftRadius(value any) StyleOption {
-	return func(style *Style) { style.BorderBottomLeftRadius = value }
+func styleBorderBottomLeftRadius(value any) styleOption {
+	return func(style *styleData) { style.BorderBottomLeftRadius = value }
 }
 
 // BorderBottomRightRadius sets the corresponding style property.
-func BorderBottomRightRadius(value any) StyleOption {
-	return func(style *Style) { style.BorderBottomRightRadius = value }
+func styleBorderBottomRightRadius(value any) styleOption {
+	return func(style *styleData) { style.BorderBottomRightRadius = value }
 }
 
 // BorderStyle sets the corresponding style property.
-func BorderStyle(value string) StyleOption {
-	return func(style *Style) { style.BorderStyle = value }
+func styleBorderStyle(value string) styleOption {
+	return func(style *styleData) { style.BorderStyle = value }
 }
 
 // BoxShadow sets the corresponding style property.
-func BoxShadow(value any) StyleOption {
-	return func(style *Style) { style.BoxShadow = value }
+func styleBoxShadow(value any) styleOption {
+	return func(style *styleData) { style.BoxShadow = value }
 }
 
 // TextShadow sets the corresponding style property.
-func TextShadow(value any) StyleOption {
-	return func(style *Style) { style.TextShadow = value }
+func styleTextShadow(value any) styleOption {
+	return func(style *styleData) { style.TextShadow = value }
 }
 
 // TextDecorationLine sets the corresponding style property.
-func TextDecorationLine(value string) StyleOption {
-	return func(style *Style) { style.TextDecorationLine = value }
+func styleTextDecorationLine(value string) styleOption {
+	return func(style *styleData) { style.TextDecorationLine = value }
 }
 
 // TextDecorationColor sets the corresponding style property.
-func TextDecorationColor(value any) StyleOption {
-	return func(style *Style) { style.TextDecorationColor = value }
+func styleTextDecorationColor(value any) styleOption {
+	return func(style *styleData) { style.TextDecorationColor = value }
 }
 
 // TextDecorationStyle sets the corresponding style property.
-func TextDecorationStyle(value string) StyleOption {
-	return func(style *Style) { style.TextDecorationStyle = value }
+func styleTextDecorationStyle(value string) styleOption {
+	return func(style *styleData) { style.TextDecorationStyle = value }
 }
 
 // TextDecorationThickness sets the corresponding style property.
-func TextDecorationThickness(value any) StyleOption {
-	return func(style *Style) { style.TextDecorationThickness = value }
+func styleTextDecorationThickness(value any) styleOption {
+	return func(style *styleData) { style.TextDecorationThickness = value }
 }
 
 // WordSpacing sets the corresponding style property.
-func WordSpacing(value any) StyleOption {
-	return func(style *Style) { style.WordSpacing = value }
+func styleWordSpacing(value any) styleOption {
+	return func(style *styleData) { style.WordSpacing = value }
 }
 
 // WordBreak sets the corresponding style property.
-func WordBreak(value string) StyleOption {
-	return func(style *Style) { style.WordBreak = value }
+func styleWordBreak(value string) styleOption {
+	return func(style *styleData) { style.WordBreak = value }
 }
 
 // OverflowWrap sets the corresponding style property.
-func OverflowWrap(value string) StyleOption {
-	return func(style *Style) { style.OverflowWrap = value }
+func styleOverflowWrap(value string) styleOption {
+	return func(style *styleData) { style.OverflowWrap = value }
 }
 
 // Hyphens sets the corresponding style property.
-func Hyphens(value string) StyleOption {
-	return func(style *Style) { style.Hyphens = value }
+func styleHyphens(value string) styleOption {
+	return func(style *styleData) { style.Hyphens = value }
 }
 
 // TextDirection sets the corresponding style property.
-func TextDirection(value string) StyleOption {
-	return func(style *Style) { style.TextDirection = value }
+func styleTextDirection(value string) styleOption {
+	return func(style *styleData) { style.TextDirection = value }
 }
 
 // Direction sets the corresponding style property.
-func Direction(value string) StyleOption {
-	return func(style *Style) { style.Direction = value }
+func styleDirection(value string) styleOption {
+	return func(style *styleData) { style.Direction = value }
 }
 
 // BackgroundImage sets the corresponding style property.
-func BackgroundImage(value string) StyleOption {
-	return func(style *Style) { style.BackgroundImage = value }
+func styleBackgroundImage(value string) styleOption {
+	return func(style *styleData) { style.BackgroundImage = value }
 }
 
 // BackgroundSize sets the corresponding style property.
-func BackgroundSize(value string) StyleOption {
-	return func(style *Style) { style.BackgroundSize = value }
+func styleBackgroundSize(value string) styleOption {
+	return func(style *styleData) { style.BackgroundSize = value }
 }
 
 // BackgroundRepeat sets the corresponding style property.
-func BackgroundRepeat(value string) StyleOption {
-	return func(style *Style) { style.BackgroundRepeat = value }
+func styleBackgroundRepeat(value string) styleOption {
+	return func(style *styleData) { style.BackgroundRepeat = value }
 }
 
 // BackgroundPosition sets the corresponding style property.
-func BackgroundPosition(value string) StyleOption {
-	return func(style *Style) { style.BackgroundPosition = value }
+func styleBackgroundPosition(value string) styleOption {
+	return func(style *styleData) { style.BackgroundPosition = value }
 }
 
 // Filter sets the corresponding style property.
-func Filter(value any) StyleOption {
-	return func(style *Style) { style.Filter = value }
+func styleFilter(value any) styleOption {
+	return func(style *styleData) { style.Filter = value }
 }
 
 // BackdropFilter sets the corresponding style property.
-func BackdropFilter(value any) StyleOption {
-	return func(style *Style) { style.BackdropFilter = value }
+func styleBackdropFilter(value any) styleOption {
+	return func(style *styleData) { style.BackdropFilter = value }
 }
 
 // MixBlendMode sets the corresponding style property.
-func MixBlendMode(value string) StyleOption {
-	return func(style *Style) { style.MixBlendMode = value }
+func styleMixBlendMode(value string) styleOption {
+	return func(style *styleData) { style.MixBlendMode = value }
 }
 
 // Transition sets the corresponding style property.
-func Transition(value any) StyleOption {
-	return func(style *Style) { style.Transition = value }
+func styleTransition(value any) styleOption {
+	return func(style *styleData) { style.Transition = value }
 }
 
 // ScrollSnapType sets the corresponding style property.
-func ScrollSnapType(value string) StyleOption {
-	return func(style *Style) { style.ScrollSnapType = value }
+func styleScrollSnapType(value string) styleOption {
+	return func(style *styleData) { style.ScrollSnapType = value }
 }
 
 // ScrollSnapX sets the corresponding style property.
-func ScrollSnapX(value string) StyleOption {
-	return func(style *Style) { style.ScrollSnapX = value }
+func styleScrollSnapX(value string) styleOption {
+	return func(style *styleData) { style.ScrollSnapX = value }
 }
 
 // ScrollSnapY sets the corresponding style property.
-func ScrollSnapY(value string) StyleOption {
-	return func(style *Style) { style.ScrollSnapY = value }
+func styleScrollSnapY(value string) styleOption {
+	return func(style *styleData) { style.ScrollSnapY = value }
 }
 
 // ScrollSnapAlign sets the corresponding style property.
-func ScrollSnapAlign(value string) StyleOption {
-	return func(style *Style) { style.ScrollSnapAlign = value }
+func styleScrollSnapAlign(value string) styleOption {
+	return func(style *styleData) { style.ScrollSnapAlign = value }
 }
 
 // ScrollSnapStop sets the corresponding style property.
-func ScrollSnapStop(value string) StyleOption {
-	return func(style *Style) { style.ScrollSnapStop = value }
+func styleScrollSnapStop(value string) styleOption {
+	return func(style *styleData) { style.ScrollSnapStop = value }
 }
 
 // Display sets the corresponding style property.
-func Display(value string) StyleOption {
-	return func(style *Style) { style.Display = value }
+func styleDisplay(value string) styleOption {
+	return func(style *styleData) { style.Display = value }
 }
 
 // Flex sets the corresponding style property.
-func Flex(value any) StyleOption {
-	return func(style *Style) { style.Flex = value }
+func styleFlex(value any) styleOption {
+	return func(style *styleData) { style.Flex = value }
 }
 
 // FlexDirection sets the corresponding style property.
-func FlexDirection(value string) StyleOption {
-	return func(style *Style) { style.FlexDirection = value }
+func styleFlexDirection(value string) styleOption {
+	return func(style *styleData) { style.FlexDirection = value }
 }
 
 // FlexWrap sets the corresponding style property.
-func FlexWrap(value string) StyleOption {
-	return func(style *Style) { style.FlexWrap = value }
+func styleFlexWrap(value string) styleOption {
+	return func(style *styleData) { style.FlexWrap = value }
 }
 
 // FlexGrow sets the corresponding style property.
-func FlexGrow(value any) StyleOption {
-	return func(style *Style) { style.FlexGrow = value }
+func styleFlexGrow(value any) styleOption {
+	return func(style *styleData) { style.FlexGrow = value }
 }
 
 // FlexShrink sets the corresponding style property.
-func FlexShrink(value any) StyleOption {
-	return func(style *Style) { style.FlexShrink = value }
+func styleFlexShrink(value any) styleOption {
+	return func(style *styleData) { style.FlexShrink = value }
 }
 
 // FlexBasis sets the corresponding style property.
-func FlexBasis(value any) StyleOption {
-	return func(style *Style) { style.FlexBasis = value }
+func styleFlexBasis(value any) styleOption {
+	return func(style *styleData) { style.FlexBasis = value }
 }
 
 // AlignItems sets the corresponding style property.
-func AlignItems(value string) StyleOption {
-	return func(style *Style) { style.AlignItems = value }
+func styleAlignItems(value string) styleOption {
+	return func(style *styleData) { style.AlignItems = value }
 }
 
 // AlignSelf sets the corresponding style property.
-func AlignSelf(value string) StyleOption {
-	return func(style *Style) { style.AlignSelf = value }
+func styleAlignSelf(value string) styleOption {
+	return func(style *styleData) { style.AlignSelf = value }
 }
 
 // JustifyContent sets the corresponding style property.
-func JustifyContent(value string) StyleOption {
-	return func(style *Style) { style.JustifyContent = value }
+func styleJustifyContent(value string) styleOption {
+	return func(style *styleData) { style.JustifyContent = value }
 }
 
 // AlignContent sets the corresponding style property.
-func AlignContent(value string) StyleOption {
-	return func(style *Style) { style.AlignContent = value }
+func styleAlignContent(value string) styleOption {
+	return func(style *styleData) { style.AlignContent = value }
 }
 
 // Gap sets the corresponding style property.
-func Gap(value any) StyleOption {
-	return func(style *Style) { style.Gap = value }
+func styleGap(value any) styleOption {
+	return func(style *styleData) { style.Gap = value }
 }
 
 // ColumnGap sets the corresponding style property.
-func ColumnGap(value any) StyleOption {
-	return func(style *Style) { style.ColumnGap = value }
+func styleColumnGap(value any) styleOption {
+	return func(style *styleData) { style.ColumnGap = value }
 }
 
 // RowGap sets the corresponding style property.
-func RowGap(value any) StyleOption {
-	return func(style *Style) { style.RowGap = value }
+func styleRowGap(value any) styleOption {
+	return func(style *styleData) { style.RowGap = value }
 }
 
 // Width sets the corresponding style property.
-func Width(value any) StyleOption {
-	return func(style *Style) { style.Width = value }
+func styleWidth(value any) styleOption {
+	return func(style *styleData) { style.Width = value }
 }
 
 // Height sets the corresponding style property.
-func Height(value any) StyleOption {
-	return func(style *Style) { style.Height = value }
+func styleHeight(value any) styleOption {
+	return func(style *styleData) { style.Height = value }
 }
 
 // MinWidth sets the corresponding style property.
-func MinWidth(value any) StyleOption {
-	return func(style *Style) { style.MinWidth = value }
+func styleMinWidth(value any) styleOption {
+	return func(style *styleData) { style.MinWidth = value }
 }
 
 // MinHeight sets the corresponding style property.
-func MinHeight(value any) StyleOption {
-	return func(style *Style) { style.MinHeight = value }
+func styleMinHeight(value any) styleOption {
+	return func(style *styleData) { style.MinHeight = value }
 }
 
 // MaxWidth sets the corresponding style property.
-func MaxWidth(value any) StyleOption {
-	return func(style *Style) { style.MaxWidth = value }
+func styleMaxWidth(value any) styleOption {
+	return func(style *styleData) { style.MaxWidth = value }
 }
 
 // MaxHeight sets the corresponding style property.
-func MaxHeight(value any) StyleOption {
-	return func(style *Style) { style.MaxHeight = value }
+func styleMaxHeight(value any) styleOption {
+	return func(style *styleData) { style.MaxHeight = value }
 }
 
 // Padding sets the corresponding style property.
-func Padding(value any) StyleOption {
-	return func(style *Style) { style.Padding = value }
+func stylePadding(value any) styleOption {
+	return func(style *styleData) { style.Padding = value }
 }
 
 // PaddingTop sets the corresponding style property.
-func PaddingTop(value any) StyleOption {
-	return func(style *Style) { style.PaddingTop = value }
+func stylePaddingTop(value any) styleOption {
+	return func(style *styleData) { style.PaddingTop = value }
 }
 
 // PaddingRight sets the corresponding style property.
-func PaddingRight(value any) StyleOption {
-	return func(style *Style) { style.PaddingRight = value }
+func stylePaddingRight(value any) styleOption {
+	return func(style *styleData) { style.PaddingRight = value }
 }
 
 // PaddingBottom sets the corresponding style property.
-func PaddingBottom(value any) StyleOption {
-	return func(style *Style) { style.PaddingBottom = value }
+func stylePaddingBottom(value any) styleOption {
+	return func(style *styleData) { style.PaddingBottom = value }
 }
 
 // PaddingLeft sets the corresponding style property.
-func PaddingLeft(value any) StyleOption {
-	return func(style *Style) { style.PaddingLeft = value }
+func stylePaddingLeft(value any) styleOption {
+	return func(style *styleData) { style.PaddingLeft = value }
 }
 
 // Margin sets the corresponding style property.
-func Margin(value any) StyleOption {
-	return func(style *Style) { style.Margin = value }
+func styleMargin(value any) styleOption {
+	return func(style *styleData) { style.Margin = value }
 }
 
 // MarginTop sets the corresponding style property.
-func MarginTop(value any) StyleOption {
-	return func(style *Style) { style.MarginTop = value }
+func styleMarginTop(value any) styleOption {
+	return func(style *styleData) { style.MarginTop = value }
 }
 
 // MarginRight sets the corresponding style property.
-func MarginRight(value any) StyleOption {
-	return func(style *Style) { style.MarginRight = value }
+func styleMarginRight(value any) styleOption {
+	return func(style *styleData) { style.MarginRight = value }
 }
 
 // MarginBottom sets the corresponding style property.
-func MarginBottom(value any) StyleOption {
-	return func(style *Style) { style.MarginBottom = value }
+func styleMarginBottom(value any) styleOption {
+	return func(style *styleData) { style.MarginBottom = value }
 }
 
 // MarginLeft sets the corresponding style property.
-func MarginLeft(value any) StyleOption {
-	return func(style *Style) { style.MarginLeft = value }
+func styleMarginLeft(value any) styleOption {
+	return func(style *styleData) { style.MarginLeft = value }
 }
 
 // BackgroundColor sets the corresponding style property.
-func BackgroundColor(value any) StyleOption {
-	return func(style *Style) { style.BackgroundColor = value }
+func styleBackgroundColor(value any) styleOption {
+	return func(style *styleData) { style.BackgroundColor = value }
 }
 
 // TextColor sets the corresponding style property.
-func TextColor(value any) StyleOption {
-	return func(style *Style) { style.TextColor = value }
+func styleTextColor(value any) styleOption {
+	return func(style *styleData) { style.TextColor = value }
 }
 
 // Opacity sets the corresponding style property.
-func Opacity(value any) StyleOption {
-	return func(style *Style) { style.Opacity = value }
+func styleOpacity(value any) styleOption {
+	return func(style *styleData) { style.Opacity = value }
 }
 
 // BorderWidth sets the corresponding style property.
-func BorderWidth(value any) StyleOption {
-	return func(style *Style) { style.BorderWidth = value }
+func styleBorderWidth(value any) styleOption {
+	return func(style *styleData) { style.BorderWidth = value }
 }
 
 // BorderColor sets the corresponding style property.
-func BorderColor(value any) StyleOption {
-	return func(style *Style) { style.BorderColor = value }
+func styleBorderColor(value any) styleOption {
+	return func(style *styleData) { style.BorderColor = value }
 }
 
 // BorderRadius sets the corresponding style property.
-func BorderRadius(value any) StyleOption {
-	return func(style *Style) { style.BorderRadius = value }
+func styleBorderRadius(value any) styleOption {
+	return func(style *styleData) { style.BorderRadius = value }
 }
 
 // FontSize sets the corresponding style property.
-func FontSize(value any) StyleOption {
-	return func(style *Style) { style.FontSize = value }
+func styleFontSize(value any) styleOption {
+	return func(style *styleData) { style.FontSize = value }
 }
 
 // FontFamily sets the corresponding style property.
-func FontFamily(value string) StyleOption {
-	return func(style *Style) { style.FontFamily = value }
+func styleFontFamily(value string) styleOption {
+	return func(style *styleData) { style.FontFamily = value }
 }
 
 // FontWeight sets the corresponding style property.
-func FontWeight(value any) StyleOption {
-	return func(style *Style) { style.FontWeight = value }
+func styleFontWeight(value any) styleOption {
+	return func(style *styleData) { style.FontWeight = value }
 }
 
 // LineHeight sets the corresponding style property.
-func LineHeight(value any) StyleOption {
-	return func(style *Style) { style.LineHeight = value }
+func styleLineHeight(value any) styleOption {
+	return func(style *styleData) { style.LineHeight = value }
 }
 
 // TextAlign sets the corresponding style property.
-func TextAlign(value string) StyleOption {
-	return func(style *Style) { style.TextAlign = value }
+func styleTextAlign(value string) styleOption {
+	return func(style *styleData) { style.TextAlign = value }
 }
 
 // Cursor sets the corresponding style property.
-func Cursor(value string) StyleOption {
-	return func(style *Style) { style.Cursor = value }
+func styleCursor(value string) styleOption {
+	return func(style *styleData) { style.Cursor = value }
 }
 
 // AppRegion sets the corresponding style property.
-func AppRegion(value string) StyleOption {
-	return func(style *Style) { style.AppRegion = value }
+func styleAppRegion(value string) styleOption {
+	return func(style *styleData) { style.AppRegion = value }
 }
 
 // UserSelect sets the corresponding style property.
-func UserSelect(value string) StyleOption {
-	return func(style *Style) { style.UserSelect = value }
+func styleUserSelect(value string) styleOption {
+	return func(style *styleData) { style.UserSelect = value }
 }
 
 // Position sets the corresponding style property.
-func Position(value string) StyleOption {
-	return func(style *Style) { style.Position = value }
+func stylePosition(value string) styleOption {
+	return func(style *styleData) { style.Position = value }
 }
 
 // Overflow sets the corresponding style property.
-func Overflow(value string) StyleOption {
-	return func(style *Style) { style.Overflow = value }
+func styleOverflow(value string) styleOption {
+	return func(style *styleData) { style.Overflow = value }
 }
 
 // OverflowX sets the corresponding style property.
-func OverflowX(value string) StyleOption {
-	return func(style *Style) { style.OverflowX = value }
+func styleOverflowX(value string) styleOption {
+	return func(style *styleData) { style.OverflowX = value }
 }
 
 // OverflowY sets the corresponding style property.
-func OverflowY(value string) StyleOption {
-	return func(style *Style) { style.OverflowY = value }
+func styleOverflowY(value string) styleOption {
+	return func(style *styleData) { style.OverflowY = value }
 }
 
 // Visibility sets the corresponding style property.
-func Visibility(value string) StyleOption {
-	return func(style *Style) { style.Visibility = value }
+func styleVisibility(value string) styleOption {
+	return func(style *styleData) { style.Visibility = value }
 }
 
 // LetterSpacing sets the corresponding style property.
-func LetterSpacing(value any) StyleOption {
-	return func(style *Style) { style.LetterSpacing = value }
+func styleLetterSpacing(value any) styleOption {
+	return func(style *styleData) { style.LetterSpacing = value }
 }
 
 // TextTransform sets the corresponding style property.
-func TextTransform(value string) StyleOption {
-	return func(style *Style) { style.TextTransform = value }
+func styleTextTransform(value string) styleOption {
+	return func(style *styleData) { style.TextTransform = value }
 }
 
 // LineClamp sets the corresponding style property.
-func LineClamp(value any) StyleOption {
-	return func(style *Style) { style.LineClamp = value }
+func styleLineClamp(value any) styleOption {
+	return func(style *styleData) { style.LineClamp = value }
 }
 
 // WhiteSpace sets the corresponding style property.
-func WhiteSpace(value string) StyleOption {
-	return func(style *Style) { style.WhiteSpace = value }
+func styleWhiteSpace(value string) styleOption {
+	return func(style *styleData) { style.WhiteSpace = value }
 }
 
 // TextOverflow sets the corresponding style property.
-func TextOverflow(value string) StyleOption {
-	return func(style *Style) { style.TextOverflow = value }
+func styleTextOverflow(value string) styleOption {
+	return func(style *styleData) { style.TextOverflow = value }
 }
 
 // Top sets the corresponding style property.
-func Top(value any) StyleOption {
-	return func(style *Style) { style.Top = value }
+func styleTop(value any) styleOption {
+	return func(style *styleData) { style.Top = value }
 }
 
 // Right sets the corresponding style property.
-func Right(value any) StyleOption {
-	return func(style *Style) { style.Right = value }
+func styleRight(value any) styleOption {
+	return func(style *styleData) { style.Right = value }
 }
 
 // Bottom sets the corresponding style property.
-func Bottom(value any) StyleOption {
-	return func(style *Style) { style.Bottom = value }
+func styleBottom(value any) styleOption {
+	return func(style *styleData) { style.Bottom = value }
 }
 
 // Left sets the corresponding style property.
-func Left(value any) StyleOption {
-	return func(style *Style) { style.Left = value }
+func styleLeft(value any) styleOption {
+	return func(style *styleData) { style.Left = value }
 }
 
 // Outline sets the corresponding style property.
-func Outline(value any) StyleOption {
-	return func(style *Style) { style.Outline = value }
+func styleOutline(value any) styleOption {
+	return func(style *styleData) { style.Outline = value }
 }
 
 // OutlineWidth sets the corresponding style property.
-func OutlineWidth(value any) StyleOption {
-	return func(style *Style) { style.OutlineWidth = value }
+func styleOutlineWidth(value any) styleOption {
+	return func(style *styleData) { style.OutlineWidth = value }
 }
 
 // OutlineColor sets the corresponding style property.
-func OutlineColor(value any) StyleOption {
-	return func(style *Style) { style.OutlineColor = value }
+func styleOutlineColor(value any) styleOption {
+	return func(style *styleData) { style.OutlineColor = value }
 }
 
 // OutlineOffset sets the corresponding style property.
-func OutlineOffset(value any) StyleOption {
-	return func(style *Style) { style.OutlineOffset = value }
+func styleOutlineOffset(value any) styleOption {
+	return func(style *styleData) { style.OutlineOffset = value }
 }
 
 // OutlineStyle sets the corresponding style property.
-func OutlineStyle(value string) StyleOption {
-	return func(style *Style) { style.OutlineStyle = value }
+func styleOutlineStyle(value string) styleOption {
+	return func(style *styleData) { style.OutlineStyle = value }
 }
 
 // Transform sets the corresponding style property.
-func Transform(value any) StyleOption {
-	return func(style *Style) { style.Transform = value }
+func styleTransform(value any) styleOption {
+	return func(style *styleData) { style.Transform = value }
 }
 
 // TransformOrigin sets the corresponding style property.
-func TransformOrigin(value string) StyleOption {
-	return func(style *Style) { style.TransformOrigin = value }
+func styleTransformOrigin(value string) styleOption {
+	return func(style *styleData) { style.TransformOrigin = value }
 }
 
 // Hover merges options into the Hover interaction style.
-func Hover(options ...StyleDeclaration) StyleOption {
-	return func(style *Style) {
+func styleHover(options ...styleDeclaration) styleOption {
+	return func(style *styleData) {
 		nested := mergeStateStyles(style.Hover, nil)
 		for _, option := range options {
 			option.applyStyle(nested)
@@ -765,8 +765,8 @@ func Hover(options ...StyleDeclaration) StyleOption {
 }
 
 // Active merges options into the Active interaction style.
-func Active(options ...StyleDeclaration) StyleOption {
-	return func(style *Style) {
+func styleActive(options ...styleDeclaration) styleOption {
+	return func(style *styleData) {
 		nested := mergeStateStyles(style.Active, nil)
 		for _, option := range options {
 			option.applyStyle(nested)
@@ -776,8 +776,8 @@ func Active(options ...StyleDeclaration) StyleOption {
 }
 
 // Focus merges options into the Focus interaction style.
-func Focus(options ...StyleDeclaration) StyleOption {
-	return func(style *Style) {
+func styleFocus(options ...styleDeclaration) styleOption {
+	return func(style *styleData) {
 		nested := mergeStateStyles(style.Focus, nil)
 		for _, option := range options {
 			option.applyStyle(nested)
@@ -787,8 +787,8 @@ func Focus(options ...StyleDeclaration) StyleOption {
 }
 
 // DisabledStyle merges options into the Disabled interaction style.
-func DisabledStyle(options ...StyleDeclaration) StyleOption {
-	return func(style *Style) {
+func styleDisabledStyle(options ...styleDeclaration) styleOption {
+	return func(style *styleData) {
 		nested := mergeStateStyles(style.Disabled, nil)
 		for _, option := range options {
 			option.applyStyle(nested)
@@ -798,8 +798,8 @@ func DisabledStyle(options ...StyleDeclaration) StyleOption {
 }
 
 // SelectedStyle merges options into the Selected interaction style.
-func SelectedStyle(options ...StyleDeclaration) StyleOption {
-	return func(style *Style) {
+func styleSelectedStyle(options ...styleDeclaration) styleOption {
+	return func(style *styleData) {
 		nested := mergeStateStyles(style.Selected, nil)
 		for _, option := range options {
 			option.applyStyle(nested)

@@ -150,16 +150,14 @@ func DeleteProject() {
 			ui.AlertDialog.Portal(
 				ui.PartProps{},
 				func() {
-					ui.AlertDialog.Backdrop(ui.PartProps{Style: ui.Styles(
-						ui.BackgroundColor("#0f172a80"),
-					)})
+					ui.AlertDialog.Backdrop(ui.PartProps{Style: ui.Style().
+						BackgroundColor("#0f172a80")})
 					ui.AlertDialog.Popup(
 						ui.DialogPopupProps{PartProps: ui.PartProps{
-							Style: ui.Styles(
-								ui.Width(360),
-								ui.Padding(24),
-								ui.BackgroundColor("white"),
-							),
+							Style: ui.Style().
+								Width(360).
+								Padding(24).
+								BackgroundColor("white"),
 						}},
 						func() {
 							ui.AlertDialog.Title(ui.PartProps{}, "Delete project?")

@@ -23,15 +23,9 @@ import {
 pkgtype(kind: "executable")
 ```
 
-## Local development
+## Application entry
 
-Until the SDK is published, create `moon.work` in a parent directory containing both your app and the QuickGUI checkout. Paths are relative to that workspace:
-
-```toml
-members = ["quickgui/moonbit", "my-app"]
-```
-
-From `quickgui`, run `bun packages/cli/src/cli.ts dev --project ../my-app`. This uses the local CLI without installing a published package.
+`main/main.mbt` defines `main` and the application’s components. Call `@native.run` once and create windows with `@ui.window(component)`. Each component returns an `@ui.Element`; split larger applications into ordinary MoonBit packages.
 
 ## Configuration
 
@@ -54,3 +48,13 @@ extensions = []
 | `egoist/quickgui/ui` | Components, styles, signals, memos, effects, cleanup, and routing. |
 | `egoist/quickgui/native` | Windows, events, dialogs, menus, services, and extensions. |
 | `egoist/quickgui/protocol` | Core property constants and mutation value types. |
+
+## Local development
+
+Until the SDK is published, create `moon.work` in a parent directory containing both your app and the QuickGUI checkout. Paths are relative to that workspace:
+
+```toml
+members = ["quickgui/moonbit", "my-app"]
+```
+
+From `quickgui`, run `bun packages/cli/src/cli.ts dev --project ../my-app`. This uses the local CLI without installing a published package.

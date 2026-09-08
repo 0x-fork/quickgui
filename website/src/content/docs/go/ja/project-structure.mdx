@@ -25,9 +25,7 @@ func ViewExample() {
 			ui.Text("Hello from Go")
 			ui.Button("Continue", ui.OnClick(func() {}))
 		},
-		ui.Padding(20),
-		ui.Gap(12),
-	)
+	).Padding(20).Gap(12)
 }
 ```
 
@@ -63,3 +61,7 @@ CLI は `quickgui.toml`、`quickgui.config.ts` の順に探します。`quickgui
 ウィンドウとプラットフォームサービスには `github.com/egoist/quickgui/go/native`、UI には `github.com/egoist/quickgui/go/ui`、所有者とコンテキストには `github.com/egoist/quickgui/go/reactive` を使います。`@quickgui/cli` は開発依存です。Go SDK と CLI は互換性のあるリリースに固定してください。
 
 コンポーネントの共有やオプションのネイティブバックエンドの作成については、[拡張の作成](/docs/go/extensions)を参照してください。
+
+## ローカル開発
+
+SDK をローカルで開発する場合は、`go.mod` の `replace` で `github.com/egoist/quickgui/go` をチェックアウトの `go` ディレクトリーへ向けます。`bun packages/cli/src/cli.ts dev --project path/to/app` でローカル CLI を実行します。通常の Go 編集ではネイティブ共有ライブラリーを再利用します。

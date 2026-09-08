@@ -218,41 +218,40 @@ func resolveString(value any) *string {
 	}
 }
 
-func resolveStyle(value any) *Style {
+func resolveStyle(value any) *styleData {
 	if value == nil {
 		return nil
 	}
 	switch typed := value.(type) {
-	case Style:
-		return &typed
-	case *Style:
-		return typed
-	case StyleDeclaration:
-		style := Styles(typed)
-		return &style
-	case []Style:
-		merged := Style{}
+	case StyleBuilder:
+		return &typed.style
+	case *StyleBuilder:
+		if typed == nil {
+			return nil
+		}
+		return &typed.style
+	case []StyleBuilder:
+		merged := styleData{}
 		for _, style := range typed {
-			mergeStyle(&merged, style)
+			style.applyStyle(&merged)
 		}
 		return &merged
-	case func() Style:
-		style := typed()
-		return &style
-	case func() *Style:
-		return typed()
-	case func() []Style:
+	case func() StyleBuilder:
+		return resolveStyle(typed())
+	case func() *StyleBuilder:
+		return resolveStyle(typed())
+	case func() []StyleBuilder:
 		return resolveStyle(typed())
 	case func() any:
 		return resolveStyle(typed())
 	default:
-		panic(fmt.Sprintf("QuickGUI style %T is not a style option, composed style, or list", value))
+		panic(fmt.Sprintf("QuickGUI style %T is not a StyleBuilder or style list", value))
 	}
 }
 
 func bindPartStyle(node *native.Node, style any) {
 	switch style.(type) {
-	case func() Style, func() *Style, func() []Style, func() any:
+	case func() StyleBuilder, func() *StyleBuilder, func() []StyleBuilder, func() any:
 		node.BindProperties(func() {
 			if next := resolveStyle(style); next != nil {
 				applyStyle(node, *next)

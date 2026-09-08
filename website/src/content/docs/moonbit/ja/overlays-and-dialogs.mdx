@@ -1,6 +1,78 @@
 コンポーネントの構築時に現在のウィンドウを取得します。ウィンドウのメソッドで OS のダイアログやポップアップメニューを表示し、非同期で結果を受け取ります。
 
-## ディレクトリを選択
+## Popover
+
+`@ui.popover([])` からトリガー、ポジショナー、ポップアップを作成します。配置、衝突、フォーカス、終了処理はネイティブコアが担当します。
+
+```moonbit
+fn component_example() -> @ui.Element {
+  let popover = @ui.popover([]).side("bottom").side_offset(6)
+  popover.children([
+    popover.slot(@ui.Trigger).label("Details"),
+    popover
+    .slot(@ui.Positioner)
+    .children([
+      popover
+      .slot(@ui.Popup)
+      .children([@ui.text("Popover content")])
+      .padding(16),
+    ]),
+  ])
+}
+```
+
+## Dialog
+
+`@ui.dialog([])` の Portal、Backdrop、Popup、Title、Description、Close スロットでモーダルを作成します。フォーカスの保持と終了はコアが管理します。
+
+```moonbit
+fn component_example() -> @ui.Element {
+  let dialog = @ui.dialog([])
+  dialog.children([
+    dialog.slot(@ui.Trigger).label("Open dialog"),
+    dialog
+    .slot(@ui.Portal)
+    .children([
+      dialog.slot(@ui.Backdrop),
+      dialog
+      .slot(@ui.Popup)
+      .padding(24)
+      .flex_col()
+      .gap(12)
+      .children([
+        dialog.slot(@ui.Title).label("Confirm action"),
+        dialog.slot(@ui.Description).label("Review before continuing."),
+        dialog.slot(@ui.Close).label("Close"),
+      ]),
+    ]),
+  ])
+}
+```
+
+## システムポップオーバー
+
+`@ui.system_popover([]).system_content(...)` は別のネイティブ子ウィンドウに内容を作成します。サイズと配置を指定し、内容のコールバック内で QuickGUI ノードを作成します。
+
+```moonbit
+fn component_example() -> @ui.Element {
+  @ui.system_popover([])
+  .label("Open details")
+  .system_content(
+    () => @ui.div([@ui.text("Native child window")]).padding(16),
+    options={
+      "width": 260,
+      "height": 120,
+      "popoverPlacement": "bottom-start",
+      "popoverDismissOnEscape": true,
+      "popoverDismissOnPointerOutside": true,
+    },
+  )
+}
+```
+
+## ネイティブダイアログ
+
+### ディレクトリを選択
 
 ```moonbit
 fn folder_picker() -> @ui.Element {
@@ -29,7 +101,7 @@ fn folder_picker() -> @ui.Element {
 
 ダイアログの種類は `0` がアラート、`1` がパスを開く操作、`2` が保存です。開く・保存の結果はパス配列で、空の選択はキャンセルです。アラートは選択したボタンの識別子を返します。UI スレッドをブロックせず `Result` を処理してください。
 
-## ポップアップとコンテキストメニュー
+### ポップアップとコンテキストメニュー
 
 ```moonbit
 fn menu_button() -> @ui.Element {
@@ -53,7 +125,7 @@ fn menu_button() -> @ui.Element {
 
 `popup_menu` はメニューが閉じるまでアクションのコールバックを保持します。入れ子の項目には `submenu`、標準プラットフォーム操作には `menu_role` を使います。イベントハンドラーとメニュー項目は登録時の所有者を保持します。
 
-## アプリケーションメニューとオーバーレイ
+### アプリケーションメニューとオーバーレイ
 
 アプリ起動コールバック内で `@native.set_application_menu(items)` を呼ぶと、アプリ全体のメニューを設定できます。ウィンドウの閉じる・隠す・最小化などにはプラットフォームのロールを使います。
 

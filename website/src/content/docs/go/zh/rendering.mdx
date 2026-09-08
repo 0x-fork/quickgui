@@ -11,9 +11,7 @@ func ViewExample() {
 			ui.Text("Hello from Go")
 			ui.Button("Continue", ui.OnClick(func() {}))
 		},
-		ui.Padding(20),
-		ui.Gap(12),
-	)
+	).Padding(20).Gap(12)
 }
 ```
 
@@ -104,3 +102,7 @@ func CloseButton() {
 	ui.Button("Close window", ui.OnClick(func() { window.Close() }))
 }
 ```
+
+## 检查、测试与调试
+
+在应用模块中设置 `CGO_ENABLED=0` 并运行 `go test ./...`，通过 `quickgui fmt --check` 检查格式。应用是原生 Go 可执行文件，普通 Go 诊断和调试工具直接使用原始源码。
