@@ -310,10 +310,10 @@ html[data-docs-theme='dark'] {
 .docs-frontend-select select {
   appearance: none;
   width: 100%;
-  height: 40px;
+  height: 33px;
   padding: 0 36px 0 12px;
   border: 1px solid var(--docs-border);
-  border-radius: 6px;
+  border-radius: 0px;
   background: var(--docs-bg);
   color: var(--docs-text);
   font: inherit;
@@ -333,7 +333,7 @@ html[data-docs-theme='dark'] {
 
 .docs-frontend-select > span {
   position: absolute;
-  top: 12px;
+  top: 8px;
   right: 12px;
   width: 16px;
   height: 16px;
