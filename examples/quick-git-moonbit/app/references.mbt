@@ -1,7 +1,7 @@
 ///|
 fn branches_view(s : Store) -> @ui.Element {
   let search = @reactive.signal("")
-  let (viewport, set_viewport) = @reactive.create_signal(@ui.VisibleRange::{
+  let (viewport, set_viewport) = @ui.create_signal(@ui.VisibleRange::{
     start: 0,
     end: 40,
   })
@@ -290,10 +290,10 @@ fn dialogs(s : Store) -> @ui.Element {
     },
   )
   let path = @reactive.signal("")
-  let (checkout, set_checkout) = @reactive.create_signal(true)
-  let (untracked, set_untracked) = @reactive.create_signal(true)
-  let (keep_index, set_keep_index) = @reactive.create_signal(false)
-  let (new_branch, set_new_branch) = @reactive.create_signal(true)
+  let (checkout, set_checkout) = @ui.create_signal(true)
+  let (untracked, set_untracked) = @ui.create_signal(true)
+  let (keep_index, set_keep_index) = @ui.create_signal(false)
+  let (new_branch, set_new_branch) = @ui.create_signal(true)
   let title = match kind {
     "branch" => "New Branch"
     "rename" => "Rename Branch"
@@ -319,7 +319,7 @@ fn dialogs(s : Store) -> @ui.Element {
     }
     let value = name.peek().trim().to_owned()
     if kind == "branch" {
-      let args = if @reactive.untrack(checkout) {
+      let args = if @ui.untrack(checkout) {
         ["switch", "-c", value]
       } else {
         ["branch", value]
@@ -347,7 +347,7 @@ fn dialogs(s : Store) -> @ui.Element {
         value.replace_all(old="/", new="-")
       }
       let args = ["worktree", "add"]
-      if @reactive.untrack(new_branch) {
+      if @ui.untrack(new_branch) {
         args.append(["-b", value])
       }
       args.append(["--", location])
@@ -360,10 +360,10 @@ fn dialogs(s : Store) -> @ui.Element {
       if value != "" {
         args.append(["-m", value])
       }
-      if @reactive.untrack(untracked) {
+      if @ui.untrack(untracked) {
         args.push("--include-untracked")
       }
-      if @reactive.untrack(keep_index) {
+      if @ui.untrack(keep_index) {
         args.push("--keep-index")
       }
       s.mutate("Stash", args)

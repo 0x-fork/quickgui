@@ -225,7 +225,7 @@ fn create_window(initial : String, show? : Bool = true) -> @native.Window {
       let w = @native.current_window()
       let s = store(w)
       sessions[w.id] = s
-      @reactive.on_cleanup(() => {
+      @ui.on_cleanup(() => {
         s.persist()
         (s.watcher)()
         sessions.remove(w.id)
@@ -477,7 +477,7 @@ pub fn run() -> Unit {
                   available.get(0).unwrap_or("codex")
                 },
               )
-              @reactive.create_effect(install_menu)
+              @ui.create_effect(install_menu)
               let initial = @io.string(@io.field(env, "open"))
               open_window(
                 if initial != "" {

@@ -58,7 +58,7 @@ func TestStateStylesKeepGradientsShadowsAndNamedActiveGroups(t *testing.T) {
 	}
 	node := View(
 		Style{Invalid: &style, Dragging: &style, DragOver: &style, FocusWithin: &style},
-		GroupActiveNamed("card", Style{Color: "white"}),
+		GroupActiveNamed("card", Style{TextColor: "white"}),
 		GroupActiveNamed("toolbar", Style{Opacity: .2}),
 	)
 	if !bytes.Contains(node.Pending.Body(), []byte(`"group":"card"`)) || !bytes.Contains(node.Pending.Body(), []byte(`"group":"toolbar"`)) {
@@ -83,7 +83,7 @@ func TestOptionalReactiveStateFieldsClearWithoutLosingMergedSiblings(t *testing.
 		defer dispose()
 		color := reactive.NewSignal[any]("#ff0000")
 		width := reactive.NewSignal[any](2)
-		node := View(Style{Hover: &Style{Color: color.Read, BorderWidth: width.Read}}, Style{Hover: &Style{Opacity: .7}})
+		node := View(Style{Hover: &Style{TextColor: color.Read, BorderWidth: width.Read}}, Style{Hover: &Style{Opacity: .7}})
 		offset := len(node.Pending.Body())
 		reactive.Batch(func() { color.Write(nil); width.Write(nil) })
 		expected := protocol.NewBatch()

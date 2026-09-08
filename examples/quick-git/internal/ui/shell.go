@@ -107,7 +107,7 @@ func shell() {
 		gui.MinWidth(0),
 		gui.MinHeight(0),
 		gui.BackgroundColor("transparent"),
-		gui.Color(app.Theme().Text),
+		gui.TextColor(app.Theme().Text),
 		gui.FontSize(UIFontSize),
 	)
 }
@@ -244,7 +244,7 @@ func notices() {
 																title,
 																gui.FontSize(12.5),
 																gui.FontWeight(700),
-																gui.Color(app.Theme().Text),
+																gui.TextColor(app.Theme().Text),
 																gui.LineClamp(2),
 															)
 														},
@@ -269,7 +269,7 @@ func notices() {
 																		description,
 																		gui.FontSize(12),
 																		gui.LineHeight(16),
-																		gui.Color(app.Theme().TextSecondary),
+																		gui.TextColor(app.Theme().TextSecondary),
 																		gui.LineClamp(4),
 																	)
 																},
@@ -332,18 +332,18 @@ func Welcome() {
 						gui.JustifyContent("center"),
 						gui.BorderRadius(18),
 						gui.BackgroundColor(app.Theme().Accent),
-						gui.Color(app.Theme().TextOnAccent),
+						gui.TextColor(app.Theme().TextOnAccent),
 					)
 					gui.Text(
 						"Quick Git",
 						gui.FontSize(22),
 						gui.FontWeight(800),
-						gui.Color(app.Theme().Text),
+						gui.TextColor(app.Theme().Text),
 					)
 					gui.Text(
 						"Open a repository to review changes, history, and worktrees.",
 						gui.FontSize(13),
-						gui.Color(app.Theme().TextSecondary),
+						gui.TextColor(app.Theme().TextSecondary),
 						gui.TextAlign("center"),
 						gui.LineHeight(19),
 					)
@@ -363,7 +363,7 @@ func Welcome() {
 										gui.FontWeight(700),
 										gui.LetterSpacing(0.4),
 										gui.TextTransform("uppercase"),
-										gui.Color(app.Theme().TextTertiary),
+										gui.TextColor(app.Theme().TextTertiary),
 										gui.PaddingLeft(10),
 										gui.MarginBottom(4),
 									)
@@ -383,13 +383,13 @@ func Welcome() {
 															gui.Text(
 																gui.FontSize(13),
 																gui.FontWeight(600),
-																gui.Color(app.Theme().Text),
+																gui.TextColor(app.Theme().Text),
 																gui.LineClamp(1),
 																filepath.Base(path),
 															)
 															gui.Text(
 																gui.FontSize(11),
-																gui.Color(app.Theme().TextTertiary),
+																gui.TextColor(app.Theme().TextTertiary),
 																gui.LineClamp(1),
 																shorten(filepath.Dir(path)),
 															)
@@ -407,7 +407,7 @@ func Welcome() {
 															gui.Text(
 																"Opening…",
 																gui.FontSize(11),
-																gui.Color(app.Theme().TextTertiary),
+																gui.TextColor(app.Theme().TextTertiary),
 															)
 														},
 													)
@@ -497,7 +497,7 @@ func Sidebar() {
 						gui.JustifyContent("center"),
 						gui.BorderRadius(7),
 						gui.BackgroundColor(app.Theme().Accent),
-						gui.Color(app.Theme().TextOnAccent),
+						gui.TextColor(app.Theme().TextOnAccent),
 					)
 					gui.View(
 						func() {
@@ -505,7 +505,7 @@ func Sidebar() {
 								func() string { return store.RepositoryName() },
 								gui.FontSize(13),
 								gui.FontWeight(700),
-								gui.Color(app.Theme().Text),
+								gui.TextColor(app.Theme().Text),
 								gui.LineClamp(1),
 							)
 							gui.Text(
@@ -521,7 +521,7 @@ func Sidebar() {
 									return ""
 								},
 								gui.FontSize(11),
-								gui.Color(app.Theme().TextTertiary),
+								gui.TextColor(app.Theme().TextTertiary),
 								gui.LineClamp(1),
 							)
 						},
@@ -657,7 +657,7 @@ func navRow(label string, selected func() bool, trailing any, onClick func()) {
 				gui.Show(
 					func() bool { return text() != "" },
 					func() {
-						gui.Text(text, gui.FontSize(11), gui.Color(app.Theme().TextTertiary))
+						gui.Text(text, gui.FontSize(11), gui.TextColor(app.Theme().TextTertiary))
 					},
 				)
 			} else {
@@ -694,7 +694,7 @@ func sectionRow(label string, count func() int, selected func() bool, onClick, a
 						gui.MinWidth(0),
 						gui.FontSize(11),
 						gui.FontWeight(600),
-						gui.Color(color),
+						gui.TextColor(color),
 					)
 					gui.Show(
 						func() bool { return count() > 0 },
@@ -703,7 +703,7 @@ func sectionRow(label string, count func() int, selected func() bool, onClick, a
 								count,
 								gui.FontSize(11),
 								gui.FontWeight(600),
-								gui.Color(app.Theme().TextTertiary),
+								gui.TextColor(app.Theme().TextTertiary),
 							)
 						},
 					)

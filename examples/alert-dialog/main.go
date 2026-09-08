@@ -47,7 +47,7 @@ func Alerts() {
 			ui.Text("System-owned UI", ui.FontSize(26), ui.LineHeight(32), ui.FontWeight(700))
 			ui.Text(
 				"Present a native alert from an event handler and receive the selected button in its completion callback.",
-				ui.Color("#9aa6b7"),
+				ui.TextColor("#9aa6b7"),
 				ui.FontSize(14),
 				ui.LineHeight(21),
 			)

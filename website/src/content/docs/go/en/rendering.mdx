@@ -26,7 +26,10 @@ func DisclosureExample() {
 	open, setOpen := ui.CreateSignal(false)
 	ui.View(func() {
 		ui.Button("Toggle details", ui.OnClick(func() { setOpen(!open()) }))
-		ui.Show(open, func() { ui.Text("Details") })
+		ui.Show(
+			open,
+			func() { ui.Text("Details") },
+		)
 	})
 }
 ```
@@ -38,23 +41,33 @@ Use `ui.For` for a reactive list and provide stable, unique keys. Use `ui.KeyedF
 Use a database ID or another stable identity as the key, not an item’s position. In this example reordering moves the existing rows, and renaming item 1 updates its label through the row accessor. The parent does not recreate the list. Pass a new slice when editing data so the signal receives the update; mutating a previously stored slice in place does not notify subscribers.
 
 ```go
-type ListPerson struct { ID int; Name string }
+type ListPerson struct {
+	ID   int
+	Name string
+}
 
 func KeyedListExample() {
-  people, setPeople := ui.CreateSignal([]ListPerson{{1, "Ada"}, {2, "Grace"}})
-  ui.View(func() {
-    ui.Button("Reorder and rename", ui.OnClick(func() {
-      setPeople([]ListPerson{{2, "Grace"}, {1, "Ada Lovelace"}})
-    }))
-    ui.KeyedFor(
-      people,
-      func(person ListPerson) any { return person.ID },
-      func(person func() ListPerson, index func() int) {
-        ui.Text(index, ": ", func() string { return person().Name })
-      },
-      func() { ui.Text("No people") },
-    )
-  })
+	people, setPeople := ui.CreateSignal([]ListPerson{{1, "Ada"}, {2, "Grace"}})
+	ui.View(func() {
+		ui.Button(
+			"Reorder and rename",
+			ui.OnClick(func() {
+				setPeople([]ListPerson{{2, "Grace"}, {1, "Ada Lovelace"}})
+			}),
+		)
+		ui.KeyedFor(
+			people,
+			func(person ListPerson) any { return person.ID },
+			func(person func() ListPerson, index func() int) {
+				ui.Text(
+					index,
+					": ",
+					func() string { return person().Name },
+				)
+			},
+			func() { ui.Text("No people") },
+		)
+	})
 }
 ```
 
@@ -66,12 +79,18 @@ Start background work while its component is mounting. The `load` function runs 
 
 ```go
 func LoadingPanel(load func(context.Context) (string, error)) {
-  result, setResult := ui.CreateSignal("Loading…")
-  ui.Async(load, func(value string, err error) {
-    if err != nil { setResult(err.Error()); return }
-    setResult(value)
-  })
-  ui.Text(result)
+	result, setResult := ui.CreateSignal("Loading…")
+	ui.Async(
+		load,
+		func(value string, err error) {
+			if err != nil {
+				setResult(err.Error())
+				return
+			}
+			setResult(value)
+		},
+	)
+	ui.Text(result)
 }
 ```
 

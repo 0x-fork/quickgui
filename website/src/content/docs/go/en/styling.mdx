@@ -9,7 +9,7 @@ func Card() {
 	ui.View(
 		ui.Text(
 			"Hello",
-			ui.Color("#e2e8f0"),
+			ui.TextColor("#e2e8f0"),
 		),
 		ui.Padding(20),
 		ui.BorderRadius(12),
@@ -88,6 +88,22 @@ func Grid() {
 
 Typography inherits through the node tree. Colors accept hex, `rgb()`/`rgba()`, or packed RGBA values. Pass color and numeric accessors for reactive paint or size changes.
 
+Set shared typography on a container, then override only the child properties that differ. Here both labels inherit the text color, while the heading overrides size and weight. Padding and borders do not inherit.
+
+```go
+func TypographyExample() {
+	ui.View(
+		func() {
+			ui.Text("Inbox", ui.FontSize(24), ui.FontWeight(600))
+			ui.Text("All caught up.")
+		},
+		ui.TextColor("#334155"),
+		ui.FontSize(14),
+		ui.Padding(20),
+	)
+}
+```
+
 ## Interaction states
 
 Add `Transition` to the base style to animate changes between paint states. See [Transitions & Animation](/docs/go/animations) for hover effects, signal-driven changes, timing, and reduced motion.
@@ -103,7 +119,7 @@ func SelectableButton() {
 		ui.When(
 			selected,
 			ui.BackgroundColor("#2563eb"),
-			ui.Color("white"),
+			ui.TextColor("white"),
 		),
 		ui.Hover(ui.Opacity(0.85)),
 		ui.OnClick(func() { setSelected(!selected()) }),
@@ -121,14 +137,14 @@ func GroupExample() {
 		func() {
 			ui.Text(
 				"Changes when the card is hovered",
-				ui.Color("#64748b"),
-				ui.GroupHover(ui.Color("#2563eb")),
+				ui.TextColor("#64748b"),
+				ui.GroupHover(ui.TextColor("#2563eb")),
 			)
 			ui.View(
 				func() {
 					ui.Text(
 						"Follows the card and the nested toolbar",
-						ui.GroupHoverNamed("card", ui.Color("#2563eb")),
+						ui.GroupHoverNamed("card", ui.TextColor("#2563eb")),
 						ui.GroupHoverNamed("toolbar", ui.Opacity(0.8)),
 					)
 				},

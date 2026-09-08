@@ -51,7 +51,7 @@ func row() ui.Style {
 		ui.MinWidth(0),
 	)
 }
-func caption(value any) { ui.Text(value, ui.FontSize(12), ui.LineHeight(18), ui.Color(muted)) }
+func caption(value any) { ui.Text(value, ui.FontSize(12), ui.LineHeight(18), ui.TextColor(muted)) }
 func control(label any, click func(), disabled func() bool) {
 	ui.Button(
 		label,
@@ -146,7 +146,7 @@ func issueTracker() {
 					ui.Text(
 						"Product workspace",
 						ui.FontSize(12),
-						ui.Color(muted),
+						ui.TextColor(muted),
 						ui.PaddingLeft(12),
 						ui.MarginBottom(24),
 					)
@@ -172,7 +172,7 @@ func issueTracker() {
 								}
 								return "transparent"
 							}),
-							ui.Color(func() string {
+							ui.TextColor(func() string {
 								if filter() == name {
 									return accent
 								}
@@ -186,7 +186,7 @@ func issueTracker() {
 						"September cycle\n4 projects · 5 teammates",
 						ui.FontSize(12),
 						ui.LineHeight(18),
-						ui.Color(muted),
+						ui.TextColor(muted),
 						ui.Padding(12),
 					)
 				},
@@ -288,7 +288,7 @@ func issueTracker() {
 																			return item.ID + "  ·  " + item.Project + "  ·  " + item.status() + "  ·  " + item.Owner
 																		},
 																		ui.FontSize(11),
-																		ui.Color(muted),
+																		ui.TextColor(muted),
 																		ui.WhiteSpace("nowrap"),
 																	)
 																},
@@ -423,13 +423,13 @@ func issueTracker() {
 												ui.BorderRadius(7),
 												ui.MarginTop(16),
 												ui.BackgroundColor(accent),
-												ui.Color("white"),
+												ui.TextColor("white"),
 												ui.FontWeight(500),
 											)
 											ui.Text(
 												"Changes are kept for this session.",
 												ui.FontSize(11),
-												ui.Color(muted),
+												ui.TextColor(muted),
 												ui.MarginTop(10),
 											)
 										},
@@ -460,7 +460,7 @@ func issueTracker() {
 		ui.Width("100%"),
 		ui.Height("100%"),
 		ui.AlignItems("stretch"),
-		ui.Color(ink),
+		ui.TextColor(ink),
 		ui.FontSize(14),
 		ui.BackgroundColor("white"),
 	)

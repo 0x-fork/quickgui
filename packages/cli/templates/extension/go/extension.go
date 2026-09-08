@@ -10,7 +10,7 @@ func Notice(message func() string, styles ...ui.StyleDeclaration) {
 		ui.Padding(16),
 		ui.BorderRadius(8),
 		ui.BackgroundColor("#eff6ff"),
-		ui.Color("#1e40af"),
+		ui.TextColor("#1e40af"),
 		ui.Styles(styles...),
 	)
 }

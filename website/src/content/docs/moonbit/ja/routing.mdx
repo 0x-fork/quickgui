@@ -29,6 +29,22 @@ fn routing_example() -> @ui.Element {
 
 `router.link(path, label)` でリンクを作成します。`router.navigate(path)` は履歴に追加し、`replace=true` を渡すと現在の履歴を置き換えます。`router.go(-1)` は戻る、`router.go(1)` は進む操作です。
 
+共通のナビゲーションにはレイアウトのコールバックから router を渡せます。以下のリンクの太さはルート変更を追跡し、Back と Forward は router のメモリー上の履歴を移動します。操作は現在のウィンドウ内で完結します。
+
+```moonbit
+fn navigation_controls(router : @ui.Router) -> @ui.Element {
+  @ui.div([
+    @ui.button("Back").on_click(() => router.go(-1)),
+    @ui.button("Forward").on_click(() => router.go(1)),
+    router
+    .link("/settings", "Settings")
+    .font_weight(if router.is_active("/settings") { 600 } else { 400 }),
+  ])
+  .flex_row()
+  .gap(8)
+}
+```
+
 ## 保持されるアウトレット
 
 アウトレットは該当するルートの同一性でノードを保持します。兄弟ルート間の移動でも共通レイアウトと状態は残ります。現在位置とパラメーターはバインディング内で `router.state()` を読み、移動先の判定には `router.is_active(path)` を使います。

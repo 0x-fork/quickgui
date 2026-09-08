@@ -1,6 +1,6 @@
 ///|
 fn accordion_demo(t : Theme) -> @ui.Element {
-  let (open, set_open) = @reactive.create_signal(["declared"])
+  let (open, set_open) = @ui.create_signal(["declared"])
   let root = @ui.accordion([])
     .multiple(true)
     .heading_level(3)
@@ -76,8 +76,8 @@ fn accordion_demo(t : Theme) -> @ui.Element {
 
 ///|
 fn button_demo(t : Theme) -> @ui.Element {
-  let (clicks, set_clicks) = @reactive.create_signal(0)
-  let (last, set_last) = @reactive.create_signal("nothing yet")
+  let (clicks, set_clicks) = @ui.create_signal(0)
+  let (last, set_last) = @ui.create_signal("nothing yet")
   panel(
     t, "Button", "Native press, focus, disabled state, and double-click handling.",
   ).children([
@@ -86,13 +86,13 @@ fn button_demo(t : Theme) -> @ui.Element {
         t,
         "Primary",
         () => {
-          set_clicks(@reactive.untrack(clicks) + 1)
+          set_clicks(@ui.untrack(clicks) + 1)
           set_last("primary")
         },
         primary=true,
       ),
       button(t, "Secondary", () => {
-        set_clicks(@reactive.untrack(clicks) + 1)
+        set_clicks(@ui.untrack(clicks) + 1)
         set_last("secondary")
       }),
       button(t, "Disabled", () => set_last("never")).disabled(true),
@@ -107,15 +107,15 @@ fn button_demo(t : Theme) -> @ui.Element {
 
 ///|
 fn checkbox_demo(t : Theme) -> @ui.Element {
-  let (notify, set_notify) = @reactive.create_signal(false)
-  let (mixed, set_mixed) = @reactive.create_signal(true)
-  let (kids, set_kids) = @reactive.create_signal([true, false])
+  let (notify, set_notify) = @ui.create_signal(false)
+  let (mixed, set_mixed) = @ui.create_signal(true)
+  let (kids, set_kids) = @ui.create_signal([true, false])
   let children = row()
   for i, name in ["Analytics", "Crash reports"] {
     ignore(
       children.children([
         checkbox(t, name, () => kids()[i], value => {
-          let next = @reactive.untrack(kids).copy()
+          let next = @ui.untrack(kids).copy()
           next[i] = value
           set_kids(next)
         }),
@@ -130,7 +130,7 @@ fn checkbox_demo(t : Theme) -> @ui.Element {
       "Email me about releases",
       () => notify(),
       value => {
-        @reactive.batch(() => {
+        @ui.batch(() => {
           set_notify(value)
           set_mixed(false)
         })
@@ -160,7 +160,7 @@ fn checkbox_demo(t : Theme) -> @ui.Element {
 
 ///|
 fn checkbox_group_demo(t : Theme) -> @ui.Element {
-  let (selected, set_selected) = @reactive.create_signal(["green"])
+  let (selected, set_selected) = @ui.create_signal(["green"])
   let all = ["red", "green", "blue", "violet"]
   let root = @ui.checkbox_group([])
     .items(all.to_json())
@@ -215,8 +215,8 @@ fn checkbox_group_demo(t : Theme) -> @ui.Element {
 
 ///|
 fn collapsible_demo(t : Theme) -> @ui.Element {
-  let (open, set_open) = @reactive.create_signal(false)
-  let (kept, set_kept) = @reactive.create_signal(true)
+  let (open, set_open) = @ui.create_signal(false)
+  let (kept, set_kept) = @ui.create_signal(true)
   let root = @ui.collapsible([])
     .bind_open(() => open())
     .on_open_change(v => set_open(v))

@@ -9,7 +9,7 @@ func Card() {
 	ui.View(
 		ui.Text(
 			"Hello",
-			ui.Color("#e2e8f0"),
+			ui.TextColor("#e2e8f0"),
 		),
 		ui.Padding(20),
 		ui.BorderRadius(12),
@@ -88,6 +88,22 @@ func Grid() {
 
 文字スタイルはノードツリー内で継承されます。色は16進数、`rgb()`/`rgba()`、またはパックした RGBA 値を使えます。色や数値のアクセサーを渡すと描画やサイズがリアクティブに変わります。
 
+共通の文字スタイルはコンテナーに設定し、子で異なるプロパティだけ上書きします。この例では両方のラベルが文字色を継承し、見出しだけサイズと太さを変更します。パディングやボーダーは継承されません。
+
+```go
+func TypographyExample() {
+	ui.View(
+		func() {
+			ui.Text("Inbox", ui.FontSize(24), ui.FontWeight(600))
+			ui.Text("All caught up.")
+		},
+		ui.TextColor("#334155"),
+		ui.FontSize(14),
+		ui.Padding(20),
+	)
+}
+```
+
 ## インタラクション状態
 
 基本スタイルに `Transition` を指定すると、描画状態の変化をアニメーション化できます。ホバー効果、シグナルによる変更、時間設定、視差効果の抑制については[トランジションとアニメーション](/ja/docs/go/animations)を参照してください。
@@ -103,7 +119,7 @@ func SelectableButton() {
 		ui.When(
 			selected,
 			ui.BackgroundColor("#2563eb"),
-			ui.Color("white"),
+			ui.TextColor("white"),
 		),
 		ui.Hover(ui.Opacity(0.85)),
 		ui.OnClick(func() { setSelected(!selected()) }),
@@ -121,14 +137,14 @@ func GroupExample() {
 		func() {
 			ui.Text(
 				"Changes when the card is hovered",
-				ui.Color("#64748b"),
-				ui.GroupHover(ui.Color("#2563eb")),
+				ui.TextColor("#64748b"),
+				ui.GroupHover(ui.TextColor("#2563eb")),
 			)
 			ui.View(
 				func() {
 					ui.Text(
 						"Follows the card and the nested toolbar",
-						ui.GroupHoverNamed("card", ui.Color("#2563eb")),
+						ui.GroupHoverNamed("card", ui.TextColor("#2563eb")),
 						ui.GroupHoverNamed("toolbar", ui.Opacity(0.8)),
 					)
 				},

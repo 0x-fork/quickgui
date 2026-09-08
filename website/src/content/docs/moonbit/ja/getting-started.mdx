@@ -21,12 +21,11 @@ bun packages/cli/src/cli.ts dev --project examples/moonbit-counter
 
 ## 最初のウィンドウ
 
-`main/main.mbt` に記述し、`main/moon.pkg` で `egoist/quickgui/ui`、`egoist/quickgui/native`、`egoist/quickgui/reactive` をインポートします。コンポーネントはすべて `@ui.Element` を返します。
+`main/main.mbt` に記述し、`main/moon.pkg` で `egoist/quickgui/ui` と `egoist/quickgui/native` をインポートします。コンポーネントはすべて `@ui.Element` を返します。
 
 ```moonbit
-///|
 fn counter() -> @ui.Element {
-  let (count, set_count) = @reactive.create_signal(0)
+  let (count, set_count) = @ui.create_signal(0)
   @ui.div([
     @ui.text("Count: \{count()}").font_size(24),
     @ui.button("Increment")
@@ -44,7 +43,6 @@ fn counter() -> @ui.Element {
   .gap(12)
 }
 
-///|
 fn main {
   match
     @native.run(() => {

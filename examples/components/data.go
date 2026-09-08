@@ -65,7 +65,7 @@ func ScrollAreaDemo() {
 										ui.Height(22),
 										ui.FlexShrink(0),
 										ui.LineHeight(22),
-										ui.Color(color(func(p palette) string { return p.Muted })),
+										ui.TextColor(color(func(p palette) string { return p.Muted })),
 									)
 								}
 							},
@@ -194,7 +194,7 @@ func TableDemo() {
 								ui.PaddingRight(10),
 								ui.FontSize(11),
 								ui.FontWeight(700),
-								ui.Color(color(func(p palette) string { return p.Faint })),
+								ui.TextColor(color(func(p palette) string { return p.Faint })),
 							)},
 						},
 						func() {

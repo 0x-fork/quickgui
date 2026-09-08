@@ -2,7 +2,7 @@
 test "compiled expressions update their own retained nodes" {
   let baseline = @reactive.active_scope_count()
   @native.test_tree(fn(root) raise {
-    let (count, set_count) = @reactive.create_signal(0)
+    let (count, set_count) = @ui.create_signal(0)
     let name = @reactive.signal("Ada")
     let checked = @reactive.signal(false)
     let builds = @ref.Ref(0)
@@ -54,6 +54,44 @@ test "compiled expressions update their own retained nodes" {
     assert_eq(root.pending_mutations(), 0)
   })
   assert_eq(@reactive.active_scope_count(), baseline)
+}
+
+///|
+test "ui memo getters update only their dependent text and release effects" {
+  let baseline = @reactive.active_effect_count()
+  let cleaned = @ref.Ref(0)
+  @native.test_tree(fn(root) raise {
+    let (quantity, set_quantity) = @ui.create_signal(1)
+    let (unrelated, set_unrelated) = @ui.create_signal(0)
+    let total = @ui.create_memo(() => quantity() * 25)
+    let observed : Array[Int] = []
+    @ui.create_effect(() => {
+      observed.push(total())
+      ignore(@ui.untrack(unrelated))
+      @ui.on_cleanup(() => cleaned.val += 1)
+    })
+    let node = @ui.div([@ui.text("Total: \{total()}"), @ui.text("Unchanged")]).native_node()
+    root.append(node)
+    let label = node.children()[0].children()[0]
+    let sibling = node.children()[1]
+    ignore(root.take_batch())
+    set_unrelated(1)
+    assert_eq(observed, [25])
+    assert_eq(root.pending_mutations(), 0)
+    @ui.batch(() => {
+      set_quantity(2)
+      set_quantity(3)
+    })
+    assert_eq(total(), 75)
+    assert_eq(observed, [25, 75])
+    assert_eq(cleaned.val, 1)
+    assert_eq(label.text_content(), "Total: 75")
+    assert_true(node.children()[0].children()[0] == label)
+    assert_true(node.children()[1] == sibling)
+    assert_eq(root.pending_mutations(), 1)
+  })
+  assert_eq(cleaned.val, 2)
+  assert_eq(@reactive.active_effect_count(), baseline)
 }
 
 ///|
@@ -272,21 +310,33 @@ test "fluent JSON props keep their type and slot styles stay on their own nodes"
   @native.test_tree(fn(root) raise {
     let (count, set_count) = @reactive.create_signal(1)
     let tabs = @ui.tabs([])
-    let panel = tabs.width(count()).slot(@ui.Panel, value="one").height(count() + 10)
+    let panel = tabs
+      .width(count())
+      .slot(@ui.Panel, value="one")
+      .height(count() + 10)
     root.append(tabs.children([panel]).native_node())
     let table = @ui.table([])
-      .columns([{"id": "name", "track": "\{count()}px", "rowHeader": true}])
+      .columns([{ "id": "name", "track": "\{count()}px", "rowHeader": true }])
       .row_count(count())
       .native_node()
     root.append(table)
     ignore(root.take_batch())
     set_count(2)
-    assert_true(tabs.native_node().property(@protocol.WIDTH) == @protocol.Number(2))
-    assert_true(panel.native_node().property(@protocol.WIDTH) == @protocol.Clear)
-    assert_true(panel.native_node().property(@protocol.HEIGHT) == @protocol.Number(12))
+    assert_true(
+      tabs.native_node().property(@protocol.WIDTH) == @protocol.Number(2),
+    )
+    assert_true(
+      panel.native_node().property(@protocol.WIDTH) == @protocol.Clear,
+    )
+    assert_true(
+      panel.native_node().property(@protocol.HEIGHT) == @protocol.Number(12),
+    )
     assert_true(table.property(@protocol.ROW_COUNT) == @protocol.Number(2))
     match table.property(@protocol.COLUMNS) {
-      Text(value) => assert_eq(@json.parse(value), [{"id": "name", "track": "2px", "rowHeader": true}])
+      Text(value) =>
+        assert_eq(@json.parse(value), [
+          { "id": "name", "track": "2px", "rowHeader": true },
+        ])
       _ => fail("Missing columns")
     }
   })

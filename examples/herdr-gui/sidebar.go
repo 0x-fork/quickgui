@@ -73,7 +73,7 @@ func sidebar(m *model) {
 								func() {
 									ui.Text(
 										"Agents appear here when detected in a pane.",
-										ui.Color(m.color(func(t theme) string { return t.TextGhost })),
+										ui.TextColor(m.color(func(t theme) string { return t.TextGhost })),
 										ui.FontSize(12),
 										ui.LineHeight(16),
 									)
@@ -144,7 +144,7 @@ func sectionHeader(m *model, label, trailing string, action func()) {
 		func() {
 			ui.Text(
 				label,
-				ui.Color(m.color(func(t theme) string { return t.TextTertiary })),
+				ui.TextColor(m.color(func(t theme) string { return t.TextTertiary })),
 				ui.FontSize(12),
 				ui.FontWeight(650),
 			)
@@ -152,7 +152,7 @@ func sectionHeader(m *model, label, trailing string, action func()) {
 			if trailing != "" {
 				ui.Text(
 					trailing,
-					ui.Color(m.color(func(t theme) string { return t.TextGhost })),
+					ui.TextColor(m.color(func(t theme) string { return t.TextGhost })),
 					ui.FontSize(10.5),
 				)
 			}
@@ -185,7 +185,7 @@ func rowLine(children ui.Component) {
 func rowTitle(m *model, text any) {
 	ui.Text(
 		text,
-		ui.Color(m.color(func(t theme) string { return t.Text })),
+		ui.TextColor(m.color(func(t theme) string { return t.Text })),
 		ui.FontSize(13.5),
 		ui.LineHeight(16),
 		ui.FontWeight(560),
@@ -196,7 +196,7 @@ func rowTitle(m *model, text any) {
 func rowMeta(m *model, text any) {
 	ui.Text(
 		text,
-		ui.Color(m.color(func(t theme) string { return t.TextTertiary })),
+		ui.TextColor(m.color(func(t theme) string { return t.TextTertiary })),
 		ui.FontSize(11.5),
 		ui.LineHeight(15),
 		ui.LineClamp(1),
@@ -228,7 +228,7 @@ func spaceRow(m *model, s space) {
 								func() {
 									ui.Text(
 										func() string { return fmt.Sprint(len(agents())) },
-										ui.Color(m.color(func(t theme) string { return t.TextGhost })),
+										ui.TextColor(m.color(func(t theme) string { return t.TextGhost })),
 										ui.FontSize(11.5),
 										ui.LineHeight(16),
 									)
@@ -289,7 +289,7 @@ func agentRow(m *model, p *pane) {
 					ui.View(ui.Flex(1))
 					ui.Text(
 						func() string { return statusLabel(p.Status.Read().AgentStatus) },
-						ui.Color(func() string {
+						ui.TextColor(func() string {
 							return choose(p.Status.Read().AgentStatus == "blocked", m.theme().Danger, m.theme().TextGhost)
 						}),
 						ui.FontSize(11.5),

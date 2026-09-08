@@ -29,6 +29,22 @@ fn routing_example() -> @ui.Element {
 
 使用 `router.link(path, label)` 声明导航链接。`router.navigate(path)` 添加历史记录，传入 `replace=true` 则替换当前记录。`router.go(-1)` 后退，`router.go(1)` 前进。
 
+共享导航组件可以接收布局回调传入的 router。下面链接的字重跟随路由变化，Back 和 Forward 则遍历该 router 的内存历史。这些操作只在当前窗口内导航。
+
+```moonbit
+fn navigation_controls(router : @ui.Router) -> @ui.Element {
+  @ui.div([
+    @ui.button("Back").on_click(() => router.go(-1)),
+    @ui.button("Forward").on_click(() => router.go(1)),
+    router
+    .link("/settings", "Settings")
+    .font_weight(if router.is_active("/settings") { 600 } else { 400 }),
+  ])
+  .flex_row()
+  .gap(8)
+}
+```
+
 ## 保留的路由出口
 
 路由出口按匹配的路由身份保留节点。在同级路由之间导航时，公共布局及其状态保持挂载。在绑定中读取 `router.state()` 获取当前位置和匹配参数；用 `router.is_active(path)` 检查导航目标。

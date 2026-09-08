@@ -53,7 +53,7 @@ func openDetailsWindow() {
 					)
 					ui.Text(
 						"This window has its own retained tree and native lifecycle.",
-						ui.Color("#94a3b8"),
+						ui.TextColor("#94a3b8"),
 						ui.LineHeight(21),
 					)
 					ui.Button(
@@ -76,7 +76,7 @@ func openDetailsWindow() {
 				ui.Gap(16),
 				ui.Padding(28),
 				ui.BackgroundColor("#111827"),
-				ui.Color("#e2e8f0"),
+				ui.TextColor("#e2e8f0"),
 			)
 		},
 	})
@@ -112,17 +112,17 @@ func Counter() {
 							ui.Text(
 								"Signals update only the changed text node. The application is ordinary Go, "+
 									"and QuickGUI retains layout, sleeps while clean, and redraws once per mutation batch.",
-								ui.Color("#94a3b8"),
+								ui.TextColor("#94a3b8"),
 								ui.FontSize(14),
 								ui.LineHeight(21),
 							)
 							ui.Text(
 								"Count: ",
 								count,
-								ui.Color("#bfdbfe"),
+								ui.TextColor("#bfdbfe"),
 								ui.When(
 									func() bool { return count() >= 5 },
-									ui.Color("#fbbf24"),
+									ui.TextColor("#fbbf24"),
 								),
 								ui.FontSize(20),
 								ui.FontWeight(600),
@@ -132,7 +132,7 @@ func Counter() {
 								func() {
 									ui.Text(
 										"Five or more clicks: the row above was created on demand.",
-										ui.Color("#fbbf24"),
+										ui.TextColor("#fbbf24"),
 										ui.FontSize(14),
 									)
 								},
@@ -145,7 +145,7 @@ func Counter() {
 								ui.AlignItems("center"),
 								ui.JustifyContent("center"),
 								ui.BackgroundColor("#2563eb"),
-								ui.Color("white"),
+								ui.TextColor("white"),
 								ui.BorderRadius(9),
 								ui.Cursor("default"),
 								ui.AppRegion("no-drag"),
@@ -160,7 +160,7 @@ func Counter() {
 								ui.AlignItems("center"),
 								ui.JustifyContent("center"),
 								ui.BackgroundColor("#334155"),
-								ui.Color("white"),
+								ui.TextColor("white"),
 								ui.BorderRadius(9),
 								ui.Cursor("default"),
 								ui.AppRegion("no-drag"),
@@ -191,6 +191,6 @@ func Counter() {
 		ui.Width("100%"),
 		ui.Height("100%"),
 		ui.BackgroundColor("#090d16"),
-		ui.Color("#e2e8f0"),
+		ui.TextColor("#e2e8f0"),
 	)
 }

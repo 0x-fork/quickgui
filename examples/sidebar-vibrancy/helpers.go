@@ -34,15 +34,15 @@ func checkmark() {
 		ui.Width(14),
 		ui.Height(14),
 		ui.FlexShrink(0),
-		ui.Color("#2563eb"),
+		ui.TextColor("#2563eb"),
 	)
 }
 
 func readout(label string, value any) {
 	ui.View(
 		func() {
-			ui.Text(label, ui.Color("#8a94a6"), ui.FontSize(11))
-			ui.Text(value, ui.Color("#354056"), ui.FontSize(11), ui.FontWeight(700))
+			ui.Text(label, ui.TextColor("#8a94a6"), ui.FontSize(11))
+			ui.Text(value, ui.TextColor("#354056"), ui.FontSize(11), ui.FontWeight(700))
 		},
 		ui.Display("flex"),
 		ui.FlexDirection("column"),

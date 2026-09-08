@@ -5,7 +5,6 @@
 将原生控件放在 `swift_ui_host([])` 中。普通 QuickGUI 布局应位于宿主外，或通过明确的反向托管接口添加。
 
 ```moonbit
-///|
 fn embedded_content() -> @ui.Element {
   @ui.swift_ui_host([
     @ui.swift_ui_quickgui_host_view(() => {

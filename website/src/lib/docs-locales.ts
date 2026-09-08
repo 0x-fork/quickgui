@@ -1,10 +1,6 @@
 import type { Locale } from '../i18n'
 import type { ComponentDoc } from './component-docs'
-import type {
-  DocsOutlineItem,
-  DocsPageMeta,
-  GoDocsSlug,
-} from './docs'
+import type { DocsOutlineItem, DocsPageMeta, GoDocsSlug } from './docs'
 
 type TranslatedLocale = Exclude<Locale, 'en'>
 
@@ -15,10 +11,7 @@ interface GuideTranslation {
   searchTerms: readonly string[]
 }
 
-const GUIDE_TRANSLATIONS: Record<
-  TranslatedLocale,
-  Record<GoDocsSlug, GuideTranslation>
-> = {
+const GUIDE_TRANSLATIONS: Record<TranslatedLocale, Record<GoDocsSlug, GuideTranslation>> = {
   zh: {
     extensions: {
       title: '编写扩展',
@@ -34,15 +27,35 @@ const GUIDE_TRANSLATIONS: Record<
         { id: '构建与打包产物', title: '构建与打包产物' },
         { id: '测试与分发', title: '测试与分发' },
       ],
-      searchTerms: ['扩展', '插件', '编写', 'init-extension', 'zig', 'rust', '原生后端', 'purego', 'manifest', 'ABI', 'ServiceApi', 'RequireExtension', 'OpenExtension', 'npm'],
+      searchTerms: [
+        '扩展',
+        '插件',
+        '编写',
+        'init-extension',
+        'zig',
+        'rust',
+        '原生后端',
+        'purego',
+        'manifest',
+        'ABI',
+        'ServiceApi',
+        'RequireExtension',
+        'OpenExtension',
+        'npm',
+      ],
     },
     updater: {
-      title: '自动更新', description: '通过可选扩展为 Go 应用添加兼容 Sparkle 的更新功能。',
+      title: '自动更新',
+      description: '通过可选扩展为 Go 应用添加兼容 Sparkle 的更新功能。',
       outline: [
-        { id: '配置', title: '配置' }, { id: '应用用法', title: '应用用法' },
-        { id: '生命周期', title: '生命周期' }, { id: '平台支持', title: '平台支持' },
-        { id: '发布更新', title: '发布更新' }, { id: '原生产物', title: '原生产物' },
-      ], searchTerms: ['更新', 'Sparkle', 'appcast', '扩展', '签名'],
+        { id: '配置', title: '配置' },
+        { id: '应用用法', title: '应用用法' },
+        { id: '生命周期', title: '生命周期' },
+        { id: '平台支持', title: '平台支持' },
+        { id: '发布更新', title: '发布更新' },
+        { id: '原生产物', title: '原生产物' },
+      ],
+      searchTerms: ['更新', 'Sparkle', 'appcast', '扩展', '签名'],
     },
     'getting-started': {
       title: '入门',
@@ -68,99 +81,80 @@ const GUIDE_TRANSLATIONS: Record<
       searchTerms: ['文件', '配置', '入口', '软件包', 'quickgui.config'],
     },
     reactivity: {
-      "title": "响应式",
-      "description": "信号将状态连接到读取它的文本和属性。更新只改变保留的节点，不会重新执行整个组件。",
-      "outline": [
+      title: '响应式',
+      description:
+        '信号将状态连接到读取它的文本和属性。更新只改变保留的节点，不会重新执行整个组件。',
+      outline: [
         {
-          "id": "响应式状态",
-          "title": "响应式状态"
+          id: '响应式状态',
+          title: '响应式状态',
         },
         {
-          "id": "派生状态",
-          "title": "派生状态"
+          id: '派生状态',
+          title: '派生状态',
         },
         {
-          "id": "副作用与清理",
-          "title": "副作用与清理"
+          id: '副作用与清理',
+          title: '副作用与清理',
         },
         {
-          "id": "批量更新",
-          "title": "批量更新"
-        }
+          id: '批量更新',
+          title: '批量更新',
+        },
       ],
-      "searchTerms": [
-        "signal",
-        "reactivity",
-        "memo",
-        "effect",
-        "batch",
-        "cleanup"
-      ]
+      searchTerms: ['signal', 'reactivity', 'memo', 'effect', 'batch', 'cleanup'],
     },
     rendering: {
-      "title": "渲染",
-      "description": "组件在挂载时创建保留树。响应式绑定更新受影响的节点，原生核心负责布局、绘制和无障碍行为。",
-      "outline": [
+      title: '渲染',
+      description:
+        '组件在挂载时创建保留树。响应式绑定更新受影响的节点，原生核心负责布局、绘制和无障碍行为。',
+      outline: [
         {
-          "id": "渲染模型",
-          "title": "渲染模型"
+          id: '渲染模型',
+          title: '渲染模型',
         },
         {
-          "id": "条件内容",
-          "title": "条件内容"
+          id: '条件内容',
+          title: '条件内容',
         },
         {
-          "id": "列表与节点身份",
-          "title": "列表与节点身份"
+          id: '列表与节点身份',
+          title: '列表与节点身份',
         },
         {
-          "id": "窗口生命周期",
-          "title": "窗口生命周期"
+          id: '窗口生命周期',
+          title: '窗口生命周期',
         },
         {
-          "id": "当前窗口",
-          "title": "当前窗口"
-        }
+          id: '当前窗口',
+          title: '当前窗口',
+        },
       ],
-      "searchTerms": [
-        "rendering",
-        "retained",
-        "children",
-        "mount",
-        "lifecycle",
-        "keyed"
-      ]
+      searchTerms: ['rendering', 'retained', 'children', 'mount', 'lifecycle', 'keyed'],
     },
     routing: {
-      "title": "路由",
-      "description": "路由根据应用当前路径选择组件并维护导航历史。路由内容在当前窗口中以原生 QuickGUI 节点渲染。",
-      "outline": [
+      title: '路由',
+      description:
+        '路由根据应用当前路径选择组件并维护导航历史。路由内容在当前窗口中以原生 QuickGUI 节点渲染。',
+      outline: [
         {
-          "id": "路由声明",
-          "title": "路由声明"
+          id: '路由声明',
+          title: '路由声明',
         },
         {
-          "id": "嵌套布局",
-          "title": "嵌套布局"
+          id: '嵌套布局',
+          title: '嵌套布局',
         },
         {
-          "id": "导航",
-          "title": "导航"
+          id: '导航',
+          title: '导航',
         },
         {
-          "id": "路由参数",
-          "title": "路由参数"
-        }
+          id: '路由参数',
+          title: '路由参数',
+        },
       ],
-      "searchTerms": [
-        "router",
-        "route",
-        "layout",
-        "outlet",
-        "navigation",
-        "history",
-        "parameters"
-      ]
+      searchTerms: ['router', 'route', 'layout', 'outlet', 'navigation', 'history', 'parameters'],
     },
     styling: {
       title: '样式与布局',
@@ -188,7 +182,17 @@ const GUIDE_TRANSLATIONS: Record<
         { id: '挂载与减少动态效果', title: '挂载与减少动态效果' },
         { id: '动态图像', title: '动态图像' },
       ],
-      searchTerms: ['过渡', '动画', '缓动', '时长', '悬停', '不透明度', '减少动态效果', 'GIF', 'WebP'],
+      searchTerms: [
+        '过渡',
+        '动画',
+        '缓动',
+        '时长',
+        '悬停',
+        '不透明度',
+        '减少动态效果',
+        'GIF',
+        'WebP',
+      ],
     },
     components: {
       title: '组件',
@@ -253,27 +257,51 @@ const GUIDE_TRANSLATIONS: Record<
   ja: {
     extensions: {
       title: '拡張の作成',
-      description: 'Go コンポーネントを共有し、QuickGUI のオプションのネイティブバックエンドを作成します。',
+      description:
+        'Go コンポーネントを共有し、QuickGUI のオプションのネイティブバックエンドを作成します。',
       outline: [
         { id: '拡張の種類を選ぶ', title: '拡張の種類を選ぶ' },
         { id: '拡張プロジェクトを作成する', title: '拡張プロジェクトを作成する' },
         { id: 'go-コンポーネントを共有する', title: 'Go コンポーネントを共有する' },
         { id: 'ネイティブ拡張の構成', title: 'ネイティブ拡張の構成' },
         { id: 'go-依存関係を宣言する', title: 'Go 依存関係を宣言する' },
-        { id: 'ネイティブインターフェースを実装する', title: 'ネイティブインターフェースを実装する' },
+        {
+          id: 'ネイティブインターフェースを実装する',
+          title: 'ネイティブインターフェースを実装する',
+        },
         { id: '自動登録', title: '自動登録' },
         { id: '成果物のビルドとパッケージ化', title: '成果物のビルドとパッケージ化' },
         { id: 'テストと配布', title: 'テストと配布' },
       ],
-      searchTerms: ['拡張', 'プラグイン', '作成', 'init-extension', 'zig', 'rust', 'ネイティブバックエンド', 'purego', 'manifest', 'ABI', 'ServiceApi', 'RequireExtension', 'OpenExtension', 'npm'],
+      searchTerms: [
+        '拡張',
+        'プラグイン',
+        '作成',
+        'init-extension',
+        'zig',
+        'rust',
+        'ネイティブバックエンド',
+        'purego',
+        'manifest',
+        'ABI',
+        'ServiceApi',
+        'RequireExtension',
+        'OpenExtension',
+        'npm',
+      ],
     },
     updater: {
-      title: '自動更新', description: 'Go アプリに Sparkle 互換の更新機能を追加します。',
+      title: '自動更新',
+      description: 'Go アプリに Sparkle 互換の更新機能を追加します。',
       outline: [
-        { id: '設定', title: '設定' }, { id: 'アプリでの使用', title: 'アプリでの使用' },
-        { id: 'ライフサイクル', title: 'ライフサイクル' }, { id: '対応プラットフォーム', title: '対応プラットフォーム' },
-        { id: '更新の公開', title: '更新の公開' }, { id: 'ネイティブ成果物', title: 'ネイティブ成果物' },
-      ], searchTerms: ['更新', 'Sparkle', 'appcast', '拡張', '署名'],
+        { id: '設定', title: '設定' },
+        { id: 'アプリでの使用', title: 'アプリでの使用' },
+        { id: 'ライフサイクル', title: 'ライフサイクル' },
+        { id: '対応プラットフォーム', title: '対応プラットフォーム' },
+        { id: '更新の公開', title: '更新の公開' },
+        { id: 'ネイティブ成果物', title: 'ネイティブ成果物' },
+      ],
+      searchTerms: ['更新', 'Sparkle', 'appcast', '拡張', '署名'],
     },
     'getting-started': {
       title: 'はじめに',
@@ -299,99 +327,80 @@ const GUIDE_TRANSLATIONS: Record<
       searchTerms: ['ファイル', '設定', 'エントリ', 'パッケージ', 'quickgui.config'],
     },
     reactivity: {
-      "title": "リアクティビティ",
-      "description": "シグナルは状態を、それを読むテキストやプロパティに結び付けます。更新時は保持されたノードだけを変更し、コンポーネント全体を再実行しません。",
-      "outline": [
+      title: 'リアクティビティ',
+      description:
+        'シグナルは状態を、それを読むテキストやプロパティに結び付けます。更新時は保持されたノードだけを変更し、コンポーネント全体を再実行しません。',
+      outline: [
         {
-          "id": "リアクティブな状態",
-          "title": "リアクティブな状態"
+          id: 'リアクティブな状態',
+          title: 'リアクティブな状態',
         },
         {
-          "id": "派生状態",
-          "title": "派生状態"
+          id: '派生状態',
+          title: '派生状態',
         },
         {
-          "id": "副作用とクリーンアップ",
-          "title": "副作用とクリーンアップ"
+          id: '副作用とクリーンアップ',
+          title: '副作用とクリーンアップ',
         },
         {
-          "id": "更新のバッチ処理",
-          "title": "更新のバッチ処理"
-        }
+          id: '更新のバッチ処理',
+          title: '更新のバッチ処理',
+        },
       ],
-      "searchTerms": [
-        "signal",
-        "reactivity",
-        "memo",
-        "effect",
-        "batch",
-        "cleanup"
-      ]
+      searchTerms: ['signal', 'reactivity', 'memo', 'effect', 'batch', 'cleanup'],
     },
     rendering: {
-      "title": "レンダリング",
-      "description": "コンポーネントはマウント時に保持ツリーを作成します。リアクティブなバインディングが対象ノードを更新し、レイアウト、描画、アクセシビリティはネイティブコアが担当します。",
-      "outline": [
+      title: 'レンダリング',
+      description:
+        'コンポーネントはマウント時に保持ツリーを作成します。リアクティブなバインディングが対象ノードを更新し、レイアウト、描画、アクセシビリティはネイティブコアが担当します。',
+      outline: [
         {
-          "id": "レンダリングモデル",
-          "title": "レンダリングモデル"
+          id: 'レンダリングモデル',
+          title: 'レンダリングモデル',
         },
         {
-          "id": "条件付きコンテンツ",
-          "title": "条件付きコンテンツ"
+          id: '条件付きコンテンツ',
+          title: '条件付きコンテンツ',
         },
         {
-          "id": "リストとノードの同一性",
-          "title": "リストとノードの同一性"
+          id: 'リストとノードの同一性',
+          title: 'リストとノードの同一性',
         },
         {
-          "id": "ウィンドウのライフサイクル",
-          "title": "ウィンドウのライフサイクル"
+          id: 'ウィンドウのライフサイクル',
+          title: 'ウィンドウのライフサイクル',
         },
         {
-          "id": "現在のウィンドウ",
-          "title": "現在のウィンドウ"
-        }
+          id: '現在のウィンドウ',
+          title: '現在のウィンドウ',
+        },
       ],
-      "searchTerms": [
-        "rendering",
-        "retained",
-        "children",
-        "mount",
-        "lifecycle",
-        "keyed"
-      ]
+      searchTerms: ['rendering', 'retained', 'children', 'mount', 'lifecycle', 'keyed'],
     },
     routing: {
-      "title": "ルーティング",
-      "description": "ルーターは現在のアプリ内パスからコンポーネントを選び、ナビゲーション履歴を管理します。ルートは現在のウィンドウにネイティブ QuickGUI コンテンツを描画します。",
-      "outline": [
+      title: 'ルーティング',
+      description:
+        'ルーターは現在のアプリ内パスからコンポーネントを選び、ナビゲーション履歴を管理します。ルートは現在のウィンドウにネイティブ QuickGUI コンテンツを描画します。',
+      outline: [
         {
-          "id": "ルートの宣言",
-          "title": "ルートの宣言"
+          id: 'ルートの宣言',
+          title: 'ルートの宣言',
         },
         {
-          "id": "入れ子のレイアウト",
-          "title": "入れ子のレイアウト"
+          id: '入れ子のレイアウト',
+          title: '入れ子のレイアウト',
         },
         {
-          "id": "ナビゲーション",
-          "title": "ナビゲーション"
+          id: 'ナビゲーション',
+          title: 'ナビゲーション',
         },
         {
-          "id": "ルートパラメーター",
-          "title": "ルートパラメーター"
-        }
+          id: 'ルートパラメーター',
+          title: 'ルートパラメーター',
+        },
       ],
-      "searchTerms": [
-        "router",
-        "route",
-        "layout",
-        "outlet",
-        "navigation",
-        "history",
-        "parameters"
-      ]
+      searchTerms: ['router', 'route', 'layout', 'outlet', 'navigation', 'history', 'parameters'],
     },
     styling: {
       title: 'スタイルとレイアウト',
@@ -410,7 +419,8 @@ const GUIDE_TRANSLATIONS: Record<
     },
     animations: {
       title: 'トランジションとアニメーション',
-      description: '保持型の Go コンポーネントでネイティブのスタイル変更や画像をアニメーション化します。',
+      description:
+        '保持型の Go コンポーネントでネイティブのスタイル変更や画像をアニメーション化します。',
       outline: [
         { id: 'ホバーのトランジション', title: 'ホバーのトランジション' },
         { id: '状態によるアニメーション', title: '状態によるアニメーション' },
@@ -419,7 +429,17 @@ const GUIDE_TRANSLATIONS: Record<
         { id: 'マウントと視差効果の抑制', title: 'マウントと視差効果の抑制' },
         { id: 'アニメーション画像', title: 'アニメーション画像' },
       ],
-      searchTerms: ['トランジション', 'アニメーション', 'イージング', '時間', 'ホバー', '不透明度', '視差効果', 'GIF', 'WebP'],
+      searchTerms: [
+        'トランジション',
+        'アニメーション',
+        'イージング',
+        '時間',
+        'ホバー',
+        '不透明度',
+        '視差効果',
+        'GIF',
+        'WebP',
+      ],
     },
     components: {
       title: 'コンポーネント',
@@ -432,7 +452,14 @@ const GUIDE_TRANSLATIONS: Record<
         { id: 'コンポーネントの種類', title: 'コンポーネントの種類' },
         { id: '各パーツのスタイル', title: '各パーツのスタイル' },
       ],
-      searchTerms: ['プリミティブ', '複合コンポーネント', 'ボタン', 'タブ', 'チェックボックス', 'スタイルなし'],
+      searchTerms: [
+        'プリミティブ',
+        '複合コンポーネント',
+        'ボタン',
+        'タブ',
+        'チェックボックス',
+        'スタイルなし',
+      ],
     },
     'forms-and-input': {
       title: 'フォームと入力',
@@ -471,22 +498,26 @@ const GUIDE_TRANSLATIONS: Record<
     },
     'swift-ui-hosting': {
       title: 'モディファイアとホスティング',
-      description: 'SwiftUI コントロールをスタイルし、その中に QuickGUI の内容をリバースホストします。',
+      description:
+        'SwiftUI コントロールをスタイルし、その中に QuickGUI の内容をリバースホストします。',
       outline: [
         { id: 'モディファイア', title: 'モディファイア' },
         { id: 'liquid-glass', title: 'Liquid Glass' },
         { id: 'リバースホスティング', title: 'リバースホスティング' },
         { id: 'swiftui-ポップオーバー', title: 'SwiftUI ポップオーバー' },
       ],
-      searchTerms: ['モディファイア', 'ガラス', 'QuickGUIHostView', 'ポップオーバー', 'リバースホスト'],
+      searchTerms: [
+        'モディファイア',
+        'ガラス',
+        'QuickGUIHostView',
+        'ポップオーバー',
+        'リバースホスト',
+      ],
     },
   },
 }
 
-const COMPONENT_DESCRIPTION_TRANSLATIONS: Record<
-  TranslatedLocale,
-  Record<string, string>
-> = {
+const COMPONENT_DESCRIPTION_TRANSLATIONS: Record<TranslatedLocale, Record<string, string>> = {
   zh: {
     'ui/view': '用于布局、绘制、指针输入和无障碍支持的通用保留式容器。',
     'ui/text': '使用继承的排版、文本选择和无障碍属性来排版并绘制 Unicode 文本。',
@@ -559,19 +590,27 @@ const COMPONENT_DESCRIPTION_TRANSLATIONS: Record<
     'swift-ui/popover': '从组合式 SwiftUI 触发器显示原生 SwiftUI 浮窗。',
   },
   ja: {
-    'ui/view': 'レイアウト、描画、ポインター入力、アクセシビリティに使える汎用の保持型コンテナです。',
-    'ui/text': '継承されたタイポグラフィ、選択、アクセシビリティを使って Unicode テキストを組版・描画します。',
-    'ui/button': 'テキストなどの内容を自由に組み合わせてスタイルできる、アクセシブルな押下ターゲットです。',
-    'ui/input': 'ネイティブのキーボードとテキストサービスに対応した、コアが管理する制御テキストエディターです。',
+    'ui/view':
+      'レイアウト、描画、ポインター入力、アクセシビリティに使える汎用の保持型コンテナです。',
+    'ui/text':
+      '継承されたタイポグラフィ、選択、アクセシビリティを使って Unicode テキストを組版・描画します。',
+    'ui/button':
+      'テキストなどの内容を自由に組み合わせてスタイルできる、アクセシブルな押下ターゲットです。',
+    'ui/input':
+      'ネイティブのキーボードとテキストサービスに対応した、コアが管理する制御テキストエディターです。',
     'ui/text-area': 'Input と同じ制御値の規約を持つ、複数行テキスト編集プリミティブです。',
     'ui/markdown': '保持型の Markdown を描画し、ストリーミング内容向けの差分更新にも対応します。',
-    'ui/image': 'ファイルパス、ファイル URL、base64 データ URL を保持型の画像リソースとして表示します。',
+    'ui/image':
+      'ファイルパス、ファイル URL、base64 データ URL を保持型の画像リソースとして表示します。',
     'ui/svg': '外部リソースを読み込まずに、完全なインライン SVG ドキュメントを描画します。',
     'ui/shader': '検証済みの WGSL を、数を制限した数値シェーダーパラメーターで描画します。',
     'ui/virtual-list': '長いリストや高さが可変のコレクションの表示範囲をレイアウトして描画します。',
-    'ui/terminal': '保持型の Ghostty ターミナルサーフェスを埋め込み、プロセスのライフサイクルイベントを通知します。',
-    'ui/checkbox': '独立してスタイルできるインジケーターを持つ、二値または不定状態の選択コントロールです。',
-    'ui/checkbox-group': '有限個のチェックボックス値をまとめ、必要に応じて親チェックボックスの状態も導出します。',
+    'ui/terminal':
+      '保持型の Ghostty ターミナルサーフェスを埋め込み、プロセスのライフサイクルイベントを通知します。',
+    'ui/checkbox':
+      '独立してスタイルできるインジケーターを持つ、二値または不定状態の選択コントロールです。',
+    'ui/checkbox-group':
+      '有限個のチェックボックス値をまとめ、必要に応じて親チェックボックスの状態も導出します。',
     'ui/radio': '選択可能な 1 項目です。通常は RadioGroup 内で宣言します。',
     'ui/radio-group': 'Radio 項目間の単一選択とキーボード移動を管理します。',
     'ui/switch': 'ルートのトラックと個別にスタイルできるつまみを持つ、オン／オフコントロールです。',
@@ -580,54 +619,81 @@ const COMPONENT_DESCRIPTION_TRANSLATIONS: Record<
     'ui/slider': 'ポインターとキーボード操作をコアが管理する、単一または複数つまみの範囲入力です。',
     'ui/number-field': '増加、減少、ドラッグ調整用のパーツを備えた数値エディターです。',
     'ui/select': 'ネイティブのポップオーバーに選択肢を表示する、単一または複数選択のピッカーです。',
-    'ui/combobox': '編集可能なテキスト、絞り込み、任意のチップ、ネイティブの候補表示を組み合わせます。',
+    'ui/combobox':
+      '編集可能なテキスト、絞り込み、任意のチップ、ネイティブの候補表示を組み合わせます。',
     'ui/autocomplete': '選択値を必須にせず、自由入力テキストの候補を絞り込みます。',
     'ui/field': '1 つのコントロールをラベル、説明、検証状態、エラーメッセージに関連付けます。',
     'ui/fieldset': '関連するフィールドを 1 つの凡例と共有セマンティック状態の下にまとめます。',
-    'ui/date-field': 'ロケールに応じた日付パーツを持つ、キーボード編集可能な分割日付フィールドです。',
-    'ui/time-field': '時、分、秒、午前／午後の各パーツを持つ、キーボード編集可能な分割時刻フィールドです。',
+    'ui/date-field':
+      'ロケールに応じた日付パーツを持つ、キーボード編集可能な分割日付フィールドです。',
+    'ui/time-field':
+      '時、分、秒、午前／午後の各パーツを持つ、キーボード編集可能な分割時刻フィールドです。',
     'ui/calendar': '1 つの日付を選ぶための、キーボードで操作できる月間カレンダーグリッドです。',
-    'ui/otp-field': '個別にスタイルできる入力セルで構成された、長さ制限付きのワンタイムコードエディターです。',
-    'ui/tabs': 'ラベル付きパネルを切り替え、キーボードによる自動または手動のアクティブ化に対応します。',
+    'ui/otp-field':
+      '個別にスタイルできる入力セルで構成された、長さ制限付きのワンタイムコードエディターです。',
+    'ui/tabs':
+      'ラベル付きパネルを切り替え、キーボードによる自動または手動のアクティブ化に対応します。',
     'ui/accordion': '1 つ以上の展開セクションと、そのキーボードフォーカスを管理します。',
-    'ui/collapsible': 'アクセシブルな状態を保ちながら、トリガーで 1 つのパネルを表示／非表示にします。',
-    'ui/splitter': 'ポインターとキーボードで操作できるハンドルを備えた、サイズ変更可能なペインを作ります。',
-    'ui/scroll-area': 'スクロール可能なビューポートと、呼び出し側でスタイルできるスクロールバー、つまみ、コーナーを組み合わせます。',
+    'ui/collapsible':
+      'アクセシブルな状態を保ちながら、トリガーで 1 つのパネルを表示／非表示にします。',
+    'ui/splitter':
+      'ポインターとキーボードで操作できるハンドルを備えた、サイズ変更可能なペインを作ります。',
+    'ui/scroll-area':
+      'スクロール可能なビューポートと、呼び出し側でスタイルできるスクロールバー、つまみ、コーナーを組み合わせます。',
     'ui/table': 'ヘッダー、行、セルのパーツを持つ仮想化テーブルコレクションです。',
     'ui/tree': '展開、選択、キーボードナビゲーションに対応した仮想化階層コレクションです。',
     'ui/separator': '組み込みの見た目を持たない、セマンティックな水平または垂直区切り線です。',
     'ui/avatar': '画像を表示し、読み込めない場合はフォールバックを表示します。',
     'ui/progress': '確定または不確定のタスク進捗を、組み合わせ可能なラベルとトラックで表します。',
-    'ui/meter': '既知の範囲内のスカラー測定値を、低・高・最適のセマンティックな帯域とともに表示します。',
+    'ui/meter':
+      '既知の範囲内のスカラー測定値を、低・高・最適のセマンティックな帯域とともに表示します。',
     'ui/toolbar': '1 つのロービングフォーカスモデルの下に操作と入力をまとめます。',
     'ui/popover': '呼び出し側がスタイルした内容を、現在のウィンドウ内でアンカーの横に配置します。',
-    'ui/system-popover': 'QuickGUI の内容を独立したネイティブ子ウィンドウに表示し、親ウィンドウの外側にも広げられます。',
-    'ui/dialog': 'フォーカスの閉じ込め、閉じる操作、正確なトランジション完了を備えたウィンドウ内モーダルです。',
-    'ui/alert-dialog': '確認操作に特化し、背景クリックで閉じる既定動作をより厳格にしたダイアログです。',
-    'ui/tooltip': 'コアが正確に管理する遅延後に補助情報を表示し、Provider 単位のウォームアップにも対応します。',
-    'ui/preview-card': '現在の画面を変えず、トリガーの横により詳しいホバー／フォーカスプレビューを表示します。',
+    'ui/system-popover':
+      'QuickGUI の内容を独立したネイティブ子ウィンドウに表示し、親ウィンドウの外側にも広げられます。',
+    'ui/dialog':
+      'フォーカスの閉じ込め、閉じる操作、正確なトランジション完了を備えたウィンドウ内モーダルです。',
+    'ui/alert-dialog':
+      '確認操作に特化し、背景クリックで閉じる既定動作をより厳格にしたダイアログです。',
+    'ui/tooltip':
+      'コアが正確に管理する遅延後に補助情報を表示し、Provider 単位のウォームアップにも対応します。',
+    'ui/preview-card':
+      '現在の画面を変えず、トリガーの横により詳しいホバー／フォーカスプレビューを表示します。',
     'ui/toast': '操作、閉じる、スワイプに対応した、時間制御される積み重ね通知を表示します。',
-    'ui/menu': 'サブメニュー、グループ、リンク、チェック項目、ラジオ項目を組み合わせられるメニューです。',
-    'ui/popover-menu': 'ネイティブのポップオーバー内に描画される、コンパクトなモデル駆動メニューです。',
+    'ui/menu':
+      'サブメニュー、グループ、リンク、チェック項目、ラジオ項目を組み合わせられるメニューです。',
+    'ui/popover-menu':
+      'ネイティブのポップオーバー内に描画される、コンパクトなモデル駆動メニューです。',
     'ui/context-menu': 'トリガーを副ボタンで押すと、モデル駆動のネイティブメニューを開きます。',
     'ui/menubar': 'ウィンドウ内の水平メニューバーとその項目を管理します。',
-    'ui/navigation-menu': '方向付きアニメーション、ビューポート、ポップアップの各パーツを備えた開閉式ナビゲーションです。',
-    'ui/router': 'QuickGUI コアのルーティングを QuickGUI UI に投影し、ネストされたレイアウトと上限付きメモリ履歴を提供します。',
-    'swift-ui/host': 'NSHostingView を基盤とし、QuickGUI 内に 1 つの SwiftUI コンポーネントツリーをマウントするリーフです。',
-    'swift-ui/button': 'テキスト、SF Symbol、セマンティックロール、押下処理に対応したネイティブ SwiftUI Button です。',
+    'ui/navigation-menu':
+      '方向付きアニメーション、ビューポート、ポップアップの各パーツを備えた開閉式ナビゲーションです。',
+    'ui/router':
+      'QuickGUI コアのルーティングを QuickGUI UI に投影し、ネストされたレイアウトと上限付きメモリ履歴を提供します。',
+    'swift-ui/host':
+      'NSHostingView を基盤とし、QuickGUI 内に 1 つの SwiftUI コンポーネントツリーをマウントするリーフです。',
+    'swift-ui/button':
+      'テキスト、SF Symbol、セマンティックロール、押下処理に対応したネイティブ SwiftUI Button です。',
     'swift-ui/slider': '連続値または段階値に対応した、制御されたネイティブ Slider です。',
     'swift-ui/toggle': '制御されたネイティブ SwiftUI オン／オフスイッチです。',
     'swift-ui/progress-view': '確定または不確定のネイティブ SwiftUI 進捗インジケーターです。',
     'swift-ui/stepper': '値の範囲を制限できる、制御されたネイティブ数値 Stepper です。',
-    'swift-ui/text-field': '編集と送信のコールバックを持つ、制御されたネイティブ SwiftUI TextField です。',
-    'swift-ui/secure-field': 'TextField と同じ制御規約を持つ、入力内容を隠すネイティブエディターです。',
-    'swift-ui/picker': 'メニュー、セグメント、ラジオグループ、インラインの各スタイルに対応した、制御された SwiftUI Picker です。',
-    'swift-ui/segmented-control': '値選択とニュートラルな Xcode 風タブロールを持つ、ネイティブのセグメントピッカーです。',
+    'swift-ui/text-field':
+      '編集と送信のコールバックを持つ、制御されたネイティブ SwiftUI TextField です。',
+    'swift-ui/secure-field':
+      'TextField と同じ制御規約を持つ、入力内容を隠すネイティブエディターです。',
+    'swift-ui/picker':
+      'メニュー、セグメント、ラジオグループ、インラインの各スタイルに対応した、制御された SwiftUI Picker です。',
+    'swift-ui/segmented-control':
+      '値選択とニュートラルな Xcode 風タブロールを持つ、ネイティブのセグメントピッカーです。',
     'swift-ui/date-picker': '制御されたネイティブの日付または日時ピッカーです。',
-    'swift-ui/color-picker': 'CSS 形式の RGBA 文字列を返す、ネイティブ SwiftUI カラーピッカーです。',
+    'swift-ui/color-picker':
+      'CSS 形式の RGBA 文字列を返す、ネイティブ SwiftUI カラーピッカーです。',
     'swift-ui/gauge': '線形と円形のアクセサリースタイルに対応した、ネイティブ SwiftUI Gauge です。',
-    'swift-ui/quickgui-host-view': 'SwiftUI 階層の中へ通常の QuickGUI サブツリーをリバースホストします。',
-    'swift-ui/popover': '組み合わせた SwiftUI トリガーから、ネイティブ SwiftUI Popover を表示します。',
+    'swift-ui/quickgui-host-view':
+      'SwiftUI 階層の中へ通常の QuickGUI サブツリーをリバースホストします。',
+    'swift-ui/popover':
+      '組み合わせた SwiftUI トリガーから、ネイティブ SwiftUI Popover を表示します。',
   },
 }
 
@@ -658,26 +724,20 @@ export const COMPONENT_DOC_LABELS = {
   },
 } as const satisfies Record<Locale, Record<string, string>>
 
-export function localizedDocsPage(
-  page: DocsPageMeta,
-  locale: Locale,
-): DocsPageMeta {
+export function localizedDocsPage(page: DocsPageMeta, locale: Locale): DocsPageMeta {
   if (locale === 'en') return page
-  const translation = page.frontend === 'moonbit'
-    ? page.translations?.[locale]
-    : GUIDE_TRANSLATIONS[locale][page.slug as GoDocsSlug]
+  const translation =
+    page.frontend === 'moonbit'
+      ? page.translations?.[locale]
+      : GUIDE_TRANSLATIONS[locale][page.slug as GoDocsSlug]
   return { ...page, ...translation }
 }
 
-export function localizedComponentDescription(
-  component: ComponentDoc,
-  locale: Locale,
-): string {
+export function localizedComponentDescription(component: ComponentDoc, locale: Locale): string {
   if (locale === 'en') return component.description
   return (
-    COMPONENT_DESCRIPTION_TRANSLATIONS[locale][
-      `${component.kind}/${component.slug}`
-    ] ?? component.description
+    COMPONENT_DESCRIPTION_TRANSLATIONS[locale][`${component.kind}/${component.slug}`] ??
+    component.description
   )
 }
 

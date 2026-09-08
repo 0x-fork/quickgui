@@ -117,7 +117,7 @@ func SystemAPIs() {
 					)
 					ui.Text(
 						"Typed Go APIs for application state, desktop services, notifications, and native resources.",
-						ui.Color("#9aa6b7"),
+						ui.TextColor("#9aa6b7"),
 						ui.FontSize(14),
 						ui.LineHeight(21),
 					)
@@ -144,7 +144,7 @@ func SystemAPIs() {
 								ui.LineHeight(19),
 								ui.UserSelect("text"),
 								ui.FontFamily("monospace"),
-								ui.Color(func() string {
+								ui.TextColor(func() string {
 									if busy() {
 										return "#c7d2fe"
 									}
@@ -174,6 +174,6 @@ func SystemAPIs() {
 		ui.Width("100%"),
 		ui.Height("100%"),
 		ui.BackgroundColor("#0b0e14"),
-		ui.Color("#f4f7fb"),
+		ui.TextColor("#f4f7fb"),
 	)
 }

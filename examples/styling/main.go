@@ -48,7 +48,7 @@ func Styling() {
 							ui.PaddingRight(12),
 							ui.BorderRadius(7),
 							ui.BackgroundColor("#1b2434"),
-							ui.Color(ink),
+							ui.TextColor(ink),
 							ui.FontSize(12),
 							ui.AppRegion("no-drag"),
 							ui.UserSelect("none"),
@@ -92,7 +92,7 @@ func Styling() {
 			ui.Width("100%"),
 			ui.Height("100%"),
 			ui.BackgroundColor("#0b0f17"),
-			ui.Color(ink),
+			ui.TextColor(ink),
 			ui.When(warm, ui.BackgroundColor("#251b13")),
 		)
 	})

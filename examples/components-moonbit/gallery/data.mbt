@@ -95,15 +95,15 @@ fn asset_rows(count : Int) -> Array[Asset] {
 ///|
 fn table_demo(t : Theme) -> @ui.Element {
   let assets = asset_rows(5000)
-  let (sort, set_sort) = @reactive.create_signal(Json::null())
-  let (range, set_range) = @reactive.create_signal(@ui.VisibleRange::{
+  let (sort, set_sort) = @ui.create_signal(Json::null())
+  let (range, set_range) = @ui.create_signal(@ui.VisibleRange::{
     start: 0,
     end: 20,
   })
-  let (selection, set_selection) = @reactive.create_signal(([] : Json))
+  let (selection, set_selection) = @ui.create_signal(([] : Json))
   let state : @reactive.Signal[Json] = @reactive.signal({})
-  let (activated, set_activated) = @reactive.create_signal("nothing yet")
-  let ordered = @reactive.memo(() => {
+  let (activated, set_activated) = @ui.create_signal("nothing yet")
+  let ordered = @ui.create_memo(() => {
     let order = sort()
     if order == Json::null() {
       return assets
@@ -206,7 +206,7 @@ fn table_demo(t : Theme) -> @ui.Element {
   ignore(
     root.children_keyed(
       () => {
-        let list = ordered.get()
+        let list = ordered()
         let window = range()
         let start = window.start.clamp(min=0, max=list.length())
         let end = window.end.clamp(min=start, max=list.length())
@@ -318,15 +318,15 @@ fn tree_demo(t : Theme) -> @ui.Element {
       ],
     },
   ]
-  let (expanded, set_expanded) = @reactive.create_signal(["src"])
-  let (selected, set_selected) = @reactive.create_signal("")
-  let (activated, set_activated) = @reactive.create_signal("nothing yet")
-  let (range, set_range) = @reactive.create_signal(@ui.VisibleRange::{
+  let (expanded, set_expanded) = @ui.create_signal(["src"])
+  let (selected, set_selected) = @ui.create_signal("")
+  let (activated, set_activated) = @ui.create_signal("nothing yet")
+  let (range, set_range) = @ui.create_signal(@ui.VisibleRange::{
     start: 0,
     end: 30,
   })
-  let (loaded, set_loaded) = @reactive.create_signal([])
-  let (asked, set_asked) = @reactive.create_signal(0)
+  let (loaded, set_loaded) = @ui.create_signal([])
+  let (asked, set_asked) = @ui.create_signal(0)
   let root = framed(
       t,
       @ui.tree([])
@@ -354,11 +354,11 @@ fn tree_demo(t : Theme) -> @ui.Element {
           set_range(@ui.visible_range(get(data, "visibleRange"), 100))
         }
         if get(data, "loadChildren") is String(id) &&
-          @reactive.untrack(loaded).is_empty() {
+          @ui.untrack(loaded).is_empty() {
           set_asked(asked() + 1)
           // Completion of an expansion request must preserve that expansion,
           // including when the load request precedes the native state report.
-          if !@reactive.untrack(expanded).contains(id) {
+          if !@ui.untrack(expanded).contains(id) {
             set_expanded([..expanded(), id])
           }
           set_loaded([

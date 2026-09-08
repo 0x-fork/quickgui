@@ -317,10 +317,12 @@ pub fn[T : Eq] Signal::update(self : Signal[T], update : (T) -> T) -> Unit {
 }
 
 ///|
-pub fn[T : Eq] memo(read : () -> T) -> Signal[T] {
+/// A cached, read-only getter. Reuses the same equality, batching, and ownership
+/// as signals without exposing a setter for derived state.
+pub fn[T : Eq] create_memo(read : () -> T) -> () -> T {
   let value = signal(untrack(read))
   ignore(new_effect(() => value.set(read()), true))
-  value
+  () => value.get()
 }
 
 // Useful for ownership regressions without requiring a window or native library.

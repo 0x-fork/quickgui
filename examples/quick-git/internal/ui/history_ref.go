@@ -19,7 +19,7 @@ func commitRefBadge(ref git.CommitRef) {
 				ref.Name,
 				gui.FontSize(10.5),
 				gui.FontWeight(700),
-				gui.Color(color),
+				gui.TextColor(color),
 				gui.LineClamp(1),
 				gui.TextOverflow("ellipsis"),
 			)

@@ -73,7 +73,7 @@ fn autocomplete_demo(t : Theme) -> @ui.Element {
 fn combobox_demo(t : Theme) -> @ui.Element {
   let fruit : @reactive.Signal[Json] = @reactive.signal({ "value": "apple" })
   let state : @reactive.Signal[Json] = @reactive.signal({})
-  let (tags, set_tags) = @reactive.create_signal(["go"])
+  let (tags, set_tags) = @ui.create_signal(["go"])
   let fruits : Json = [
     { "value": "apple", "label": "Apple", "group": "Common" },
     { "value": "banana", "label": "Banana", "group": "Common" },
@@ -158,8 +158,8 @@ fn combobox_demo(t : Theme) -> @ui.Element {
 
 ///|
 fn select_demo(t : Theme) -> @ui.Element {
-  let (theme, set_theme) = @reactive.create_signal("system")
-  let (sizes, set_sizes) = @reactive.create_signal(["m"])
+  let (theme, set_theme) = @ui.create_signal("system")
+  let (sizes, set_sizes) = @ui.create_signal(["m"])
   let state : @reactive.Signal[Json] = @reactive.signal({})
   let single = picker(
       t,

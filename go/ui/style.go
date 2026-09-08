@@ -127,7 +127,7 @@ type Style struct {
 	MarginBottom    any
 	MarginLeft      any
 	BackgroundColor any
-	Color           any
+	TextColor       any
 	Opacity         any
 	BorderWidth     any
 	BorderColor     any
@@ -596,8 +596,8 @@ func mergeStyle(target *Style, source Style) {
 	if source.BackgroundColor != nil {
 		target.BackgroundColor = source.BackgroundColor
 	}
-	if source.Color != nil {
-		target.Color = source.Color
+	if source.TextColor != nil {
+		target.TextColor = source.TextColor
 	}
 	if source.Opacity != nil {
 		target.Opacity = source.Opacity
@@ -1044,8 +1044,8 @@ func applyStyle(node *native.Node, style Style) {
 	if style.BackgroundColor != nil {
 		setColor(node, protocol.BackgroundColor, style.BackgroundColor)
 	}
-	if style.Color != nil {
-		setColor(node, protocol.Color, style.Color)
+	if style.TextColor != nil {
+		setColor(node, protocol.Color, style.TextColor)
 	}
 	if style.Opacity != nil {
 		setNumber(node, protocol.Opacity, style.Opacity)
@@ -1221,7 +1221,7 @@ func encodeStateStyle(state string, style *Style) (encodedStateStyle, bool) {
 		encoded.BackgroundColor = &color
 		anyField = true
 	}
-	if value := resolveDeclaration(style.Color); value != nil {
+	if value := resolveDeclaration(style.TextColor); value != nil {
 		color := native.ParseColor(value)
 		encoded.Color = &color
 		anyField = true

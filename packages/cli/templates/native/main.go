@@ -53,6 +53,6 @@ func Counter() {
 		ui.JustifyContent("center"),
 		ui.Gap(20),
 		ui.BackgroundColor("#090d16"),
-		ui.Color("#e2e8f0"),
+		ui.TextColor("#e2e8f0"),
 	)
 }

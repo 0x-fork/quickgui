@@ -3,9 +3,8 @@ Signals connect state to the text and properties that read it. Updates change re
 ## Live bindings
 
 ```moonbit
-///|
 fn greeting() -> @ui.Element {
-  let (name, set_name) = @reactive.create_signal("World")
+  let (name, set_name) = @ui.create_signal("World")
   @ui.div([
     @ui.input().value(name()).on_input(set_name),
     @ui.text("Hello, \{name()}!"),
@@ -15,12 +14,74 @@ fn greeting() -> @ui.Element {
 }
 ```
 
-`@reactive.create_signal(initial)` returns `(read, write)`. A call such as `@ui.text("Count: \{count()}")` is reactive when built with QuickGUI. The compiler also tracks expressions in button content, native properties, fluent styles, interaction styles, and child lists. Each binding updates its own retained nodes; the component does not rerun. Binding expressions must be pure.
+`@ui.create_signal(initial)` returns `(read, write)`. A call such as `@ui.text("Count: \{count()}")` is reactive when built with QuickGUI. The compiler also tracks expressions in button content, native properties, fluent styles, interaction styles, and child lists. Each binding updates its own retained nodes; the component does not rerun. Binding expressions must be pure.
 
-Ordinary setup remains ordinary MoonBit: `let initial = count()` captures a snapshot. Event handlers run only on events. Use `@reactive.untrack(count)` for an untracked read. Custom components keep normal parameter types: pass a getter when their input should stay live. Explicit `bind_*` methods and the lower-level `Signal` handle remain available for manual composition and keyed rows.
+Ordinary setup remains ordinary MoonBit: `let initial = count()` captures a snapshot. Event handlers run only on events. Use `@ui.untrack(count)` for an untracked read. Custom components keep normal parameter types: pass a getter when their input should stay live. Explicit `bind_*` methods and the lower-level `Signal` handle remain available for manual composition and keyed rows.
 
-## Derived state and cleanup
+## Derived state
 
-`@reactive.memo(() => expression)` returns a signal for a derived value. `@reactive.create_effect` tracks its actual reads, including conditional dependencies. `@reactive.batch` coalesces related writes. Avoid effects that rebuild an entire view to update one label.
+`@ui.create_memo` caches a value calculated from signals and updates its dependents when the result changes. It returns a read-only getter, called as `total()`. Keep the calculation pure: use a memo for derived values and an effect for external work. The total below recalculates when quantity changes.
 
-Components and dynamic branches own their subscriptions. Register teardown with `@reactive.on_cleanup`. Removing the owner retires its effects and callbacks; new windows have independent owners.
+```moonbit
+fn derived_total() -> @ui.Element {
+  let (quantity, set_quantity) = @ui.create_signal(1)
+  let total = @ui.create_memo(() => quantity() * 25)
+  @ui.div([
+    @ui.text("Total: \{total()}"),
+    @ui.button("Add one").on_click(() => set_quantity(quantity() + 1)),
+  ])
+  .flex_col()
+  .gap(8)
+}
+```
+
+## Effects and cleanup
+
+`@ui.create_effect` runs initially and again when a signal it read changes. Reads in conditional branches become dependencies only when that branch executes. Use effects for external work, such as synchronizing a subscription; view expressions already bind text and properties.
+
+This example logs subscription startup and teardown. Cleanup registered inside the effect runs before its next execution and when its owner is disposed. Capturing `current` ensures that teardown uses the old topic. Cleanup registered outside an effect belongs to the surrounding owner and runs when it is disposed, rather than on each signal update. Removing a dynamic branch or closing a window disposes its owned effects and callbacks.
+
+```moonbit
+fn effect_lifecycle() -> @ui.Element {
+  let (topic, set_topic) = @ui.create_signal("Inbox")
+  @ui.create_effect(() => {
+    let current = topic()
+    println("Subscribe: \{current}")
+    @ui.on_cleanup(() => println("Unsubscribe: \{current}"))
+  })
+  @ui.div([
+    @ui.text("Watching: \{topic()}"),
+    @ui.button("Switch topic").on_click(() => {
+      set_topic(if topic() == "Inbox" { "Archive" } else { "Inbox" })
+    }),
+  ])
+  .flex_col()
+  .gap(8)
+}
+```
+
+## Batched updates
+
+`@ui.batch` groups synchronous writes so dependent effects flush after the outermost batch. Both fields below change together: the effect logs “Grace Hopper” without logging an intermediate “Grace Lovelace”. Native event handlers already batch writes, and the explicit batch preserves that behavior when `apply_profile` is called from other UI code.
+
+Signal reads and writes belong on the UI thread. A batch does not make background access thread-safe. Use `@ui.untrack(read)` when an effect needs a snapshot that should not become a dependency. Avoid using an effect to copy one signal into another when a memo can express the derived value.
+
+```moonbit
+fn batched_profile() -> @ui.Element {
+  let (first, set_first) = @ui.create_signal("Ada")
+  let (last, set_last) = @ui.create_signal("Lovelace")
+  @ui.create_effect(() => println("\{first()} \{last()}"))
+  let apply_profile = () => {
+    @ui.batch(() => {
+      set_first("Grace")
+      set_last("Hopper")
+    })
+  }
+  @ui.div([
+    @ui.text("\{first()} \{last()}"),
+    @ui.button("Apply profile").on_click(apply_profile),
+  ])
+  .flex_col()
+  .gap(8)
+}
+```

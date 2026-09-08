@@ -16,7 +16,7 @@ pub fn smoke() -> Unit {
     let saw_toasts = @ref.Ref(false)
     let window = @ui.window(
       () => {
-        @reactive.on_cleanup(() => cleaned.val += 1)
+        @ui.on_cleanup(() => cleaned.val += 1)
         let view = gallery(
           { appearance: @reactive.signal(appearance), },
           @reactive.signal(demo.id),

@@ -126,7 +126,7 @@ func Gallery() {
 					ui.Width("100%"),
 					ui.Height("100%"),
 					ui.BackgroundColor(p().Window),
-					ui.Color(p().Ink),
+					ui.TextColor(p().Ink),
 				)
 			}},
 		},
@@ -177,7 +177,7 @@ func Gallery() {
 														ui.Cursor("default"),
 														ui.UserSelect("none"),
 														ui.BackgroundColor(background),
-														ui.Color(ink),
+														ui.TextColor(ink),
 														ui.FontSize(12),
 														ui.FontWeight(weight),
 														ui.Hover(ui.BackgroundColor(choose(selected() == entry.ID, p().Accent, p().ControlHover))),
@@ -230,7 +230,7 @@ func Gallery() {
 										}
 									},
 									ui.FontSize(11),
-									ui.Color(color(func(p palette) string { return p.Faint })),
+									ui.TextColor(color(func(p palette) string { return p.Faint })),
 								)
 							})
 							ui.Text(
@@ -240,7 +240,7 @@ func Gallery() {
 									return strconv.Itoa(len(demos)) + " components · " + theme.Appearance() + " appearance · " + strconv.FormatFloat(size.X, 'f', 0, 64) + "×" + strconv.FormatFloat(size.Y, 'f', 0, 64)
 								},
 								ui.FontSize(11),
-								ui.Color(color(func(p palette) string { return p.Faint })),
+								ui.TextColor(color(func(p palette) string { return p.Faint })),
 							)
 						},
 						ui.Display("flex"),

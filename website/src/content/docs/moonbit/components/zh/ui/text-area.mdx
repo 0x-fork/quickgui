@@ -7,7 +7,6 @@
 ```moonbit
 import {
   "egoist/quickgui/ui",
-  "egoist/quickgui/reactive",
 }
 ```
 
@@ -15,7 +14,7 @@ import {
 
 ```moonbit
 fn component_example() -> @ui.Element {
-  let (value, set_value) = @reactive.create_signal("")
+  let (value, set_value) = @ui.create_signal("")
   @ui.text_area().on_input(next => set_value(next)).value(value()).height(120)
 }
 ```

@@ -18,6 +18,30 @@ func ComponentExample() {
 }
 ```
 
+操作はコールバックで渡し、再利用するコンテナーには children コールバックを渡します。コンテナーの内側で呼び出すと、子ノードが正しい親に接続されます。通常の Go 関数呼び出しは現在のマウント所有者を共有します。条件分岐、キー付き行、ウィンドウのルートなど、その所有者が破棄されるとクリーンアップが実行されます。
+
+```go
+func CardComponent(title string, children ui.Component) {
+	ui.View(
+		func() {
+			ui.Text(title, ui.FontWeight(600))
+			children()
+		},
+		ui.Padding(20),
+		ui.Gap(12),
+		ui.Display("flex"),
+		ui.FlexDirection("column"),
+	)
+}
+
+func CardComposition() {
+	CardComponent("Account", func() {
+		ui.Text("Manage your account settings.")
+		ui.Button("Save", ui.OnClick(func() { log.Print("Saved") }))
+	})
+}
+```
+
 ## プリミティブ
 
 `ui.View`、`ui.Text`、`ui.Button`、`ui.Input` から始めます。オプションとテキストを直接渡せます。`func() { ... }` 引数は複数の子を現在の親の下にまとめます。
@@ -30,7 +54,7 @@ func ButtonExample(save func()) {
 		ui.PaddingLeft(16),
 		ui.PaddingRight(16),
 		ui.BackgroundColor("#2563eb"),
-		ui.Color("white"),
+		ui.TextColor("white"),
 		ui.BorderRadius(8),
 		ui.Hover(ui.BackgroundColor("#3b82f6")),
 		ui.OnClick(save),
@@ -98,7 +122,7 @@ ui.PartProps{
 		ui.PaddingLeft(12),
 		ui.PaddingRight(12),
 		ui.BackgroundColor("#2563eb"),
-		ui.Color("white"),
+		ui.TextColor("white"),
 		ui.BorderRadius(8),
 	),
 }

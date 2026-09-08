@@ -5,7 +5,6 @@
 コンストラクターは子要素やコンテンツだけを受け取ります。空のコンテナには `[]`、ボタンには文字列や単一の要素も渡せます。スタイル、プロパティ、イベントは `.padding(24)`、`.checked(checked())`、`.on_click(save)` などの fluent メソッドで設定し、共通スタイルは `.style(shared)` でマージします。
 
 ```moonbit
-///|
 fn settings_card() -> @ui.Element {
   @ui.div([
     @ui.text("Settings").style(@ui.style().font_size(20)),
@@ -21,9 +20,8 @@ fluent プロパティで getter を直接読みます：`@ui.checkbox([]).check
 ## 条件付きの子ノード
 
 ```moonbit
-///|
 fn disclosure() -> @ui.Element {
-  let (expanded, set_expanded) = @reactive.create_signal(false)
+  let (expanded, set_expanded) = @ui.create_signal(false)
   @ui.div(
     [
       @ui.button("Toggle details").on_click(() => set_expanded(!expanded())),
@@ -45,7 +43,7 @@ fn disclosure() -> @ui.Element {
 
 ```moonbit
 fn names_list() -> @ui.Element {
-  let (names, _) = @reactive.create_signal(["Ada", "Grace", "Linus"])
+  let (names, _) = @ui.create_signal(["Ada", "Grace", "Linus"])
   @ui.div([])
   .flex_col()
   .children_keyed(() => names(), name => name, row => @ui.text(row.get()))

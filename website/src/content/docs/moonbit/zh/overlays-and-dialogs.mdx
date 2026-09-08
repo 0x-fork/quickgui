@@ -3,10 +3,9 @@
 ## 选择目录
 
 ```moonbit
-///|
 fn folder_picker() -> @ui.Element {
   let window = @native.current_window()
-  let (selected, set_selected) = @reactive.create_signal("No folder selected")
+  let (selected, set_selected) = @ui.create_signal("No folder selected")
   @ui.div([
     @ui.button("Open folder").on_click(() => {
       window.dialog(
@@ -33,10 +32,9 @@ fn folder_picker() -> @ui.Element {
 ## 弹出与上下文菜单
 
 ```moonbit
-///|
 fn menu_button() -> @ui.Element {
   let window = @native.current_window()
-  let (status, set_status) = @reactive.create_signal("Ready")
+  let (status, set_status) = @ui.create_signal("Ready")
   let open = () => {
     window.popup_menu([
       @native.menu_action("Refresh", () => set_status("Refreshed")),

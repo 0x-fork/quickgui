@@ -65,7 +65,7 @@ func controlStyle() ui.Style {
 		ui.BackgroundColor(color(func(p palette) string { return p.Control })),
 		ui.BorderColor(color(func(p palette) string { return p.Border })),
 		ui.BorderWidth(1),
-		ui.Color(color(func(p palette) string { return p.Ink })),
+		ui.TextColor(color(func(p palette) string { return p.Ink })),
 		ui.FontSize(13),
 		ui.Cursor("default"),
 		ui.UserSelect("none"),
@@ -88,7 +88,7 @@ func inputStyle() ui.Style {
 		ui.BackgroundColor(color(func(p palette) string { return p.PanelAlt })),
 		ui.BorderColor(color(func(p palette) string { return p.Border })),
 		ui.BorderWidth(1),
-		ui.Color(color(func(p palette) string { return p.Ink })),
+		ui.TextColor(color(func(p palette) string { return p.Ink })),
 		ui.FontSize(13),
 		ui.Focus(
 			ui.OutlineWidth(2),
@@ -107,7 +107,7 @@ func popupStyle() ui.Style {
 		ui.BackgroundColor(color(func(p palette) string { return p.Popup })),
 		ui.BorderColor(color(func(p palette) string { return p.Border })),
 		ui.BorderWidth(1),
-		ui.Color(color(func(p palette) string { return p.Ink })),
+		ui.TextColor(color(func(p palette) string { return p.Ink })),
 		ui.BoxShadow("0 18px 40px #00000033"),
 	)
 }
@@ -151,7 +151,7 @@ func panel(title, hint string, children func()) {
 				hint,
 				ui.FontSize(12),
 				ui.LineHeight(18),
-				ui.Color(color(func(p palette) string { return p.Muted })),
+				ui.TextColor(color(func(p palette) string { return p.Muted })),
 			)
 			children()
 		},
@@ -185,7 +185,7 @@ func note(value any) {
 		ui.FontSize(12),
 		ui.LineHeight(18),
 		ui.FontFamily("monospace"),
-		ui.Color(color(func(p palette) string { return p.Muted })),
+		ui.TextColor(color(func(p palette) string { return p.Muted })),
 	)
 }
 func label(value any) { ui.Text(value, ui.FontSize(12)) }
@@ -194,7 +194,7 @@ func muted(value any) {
 		value,
 		ui.FontSize(12),
 		ui.LineHeight(17),
-		ui.Color(color(func(p palette) string { return p.Muted })),
+		ui.TextColor(color(func(p palette) string { return p.Muted })),
 	)
 }
 func button(label any, click func(), options ...any) {
@@ -206,7 +206,7 @@ func button(label any, click func(), options ...any) {
 func primary(label any, click func()) {
 	button(label, click, ui.Styles(
 		ui.BackgroundColor(color(func(p palette) string { return p.Accent })),
-		ui.Color(color(func(p palette) string { return p.OnAccent })),
+		ui.TextColor(color(func(p palette) string { return p.OnAccent })),
 		ui.Hover(ui.BackgroundColor(color(func(p palette) string { return p.AccentHover }))),
 	))
 }
@@ -259,7 +259,7 @@ func checkbox(props ui.CheckboxProps, caption any) {
 						ui.BorderWidth(1),
 						ui.BorderColor(border),
 						ui.BackgroundColor(background),
-						ui.Color(p().OnAccent),
+						ui.TextColor(p().OnAccent),
 						ui.Display("flex"),
 						ui.AlignItems("center"),
 						ui.JustifyContent("center"),

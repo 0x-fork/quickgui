@@ -18,6 +18,30 @@ func ComponentExample() {
 }
 ```
 
+Pass callbacks for actions and a children callback for reusable containers. Call the children callback inside the container so its nodes attach to the right parent. Ordinary Go function calls share the current mount owner; cleanup is released when that owner, such as a conditional branch, keyed row, or window root, is disposed.
+
+```go
+func CardComponent(title string, children ui.Component) {
+	ui.View(
+		func() {
+			ui.Text(title, ui.FontWeight(600))
+			children()
+		},
+		ui.Padding(20),
+		ui.Gap(12),
+		ui.Display("flex"),
+		ui.FlexDirection("column"),
+	)
+}
+
+func CardComposition() {
+	CardComponent("Account", func() {
+		ui.Text("Manage your account settings.")
+		ui.Button("Save", ui.OnClick(func() { log.Print("Saved") }))
+	})
+}
+```
+
 ## Primitives
 
 Start with `ui.View`, `ui.Text`, `ui.Button`, and `ui.Input`. Options and text can be passed directly. A `func() { ... }` argument groups multiple children under the current parent.
@@ -30,7 +54,7 @@ func ButtonExample(save func()) {
 		ui.PaddingLeft(16),
 		ui.PaddingRight(16),
 		ui.BackgroundColor("#2563eb"),
-		ui.Color("white"),
+		ui.TextColor("white"),
 		ui.BorderRadius(8),
 		ui.Hover(ui.BackgroundColor("#3b82f6")),
 		ui.OnClick(save),
@@ -98,7 +122,7 @@ ui.PartProps{
 		ui.PaddingLeft(12),
 		ui.PaddingRight(12),
 		ui.BackgroundColor("#2563eb"),
-		ui.Color("white"),
+		ui.TextColor("white"),
 		ui.BorderRadius(8),
 	),
 }

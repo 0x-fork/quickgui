@@ -26,7 +26,10 @@ func DisclosureExample() {
 	open, setOpen := ui.CreateSignal(false)
 	ui.View(func() {
 		ui.Button("Toggle details", ui.OnClick(func() { setOpen(!open()) }))
-		ui.Show(open, func() { ui.Text("Details") })
+		ui.Show(
+			open,
+			func() { ui.Text("Details") },
+		)
 	})
 }
 ```
@@ -38,23 +41,33 @@ func DisclosureExample() {
 使用数据库 ID 等稳定标识作为键，不要使用位置。这个例子重排已有行，并通过行访问器更新 ID 为 1 的名称；父组件不会重建列表。修改数据时传入新切片，让信号收到更新。原地修改已存储的切片不会通知订阅者。
 
 ```go
-type ListPerson struct { ID int; Name string }
+type ListPerson struct {
+	ID   int
+	Name string
+}
 
 func KeyedListExample() {
-  people, setPeople := ui.CreateSignal([]ListPerson{{1, "Ada"}, {2, "Grace"}})
-  ui.View(func() {
-    ui.Button("Reorder and rename", ui.OnClick(func() {
-      setPeople([]ListPerson{{2, "Grace"}, {1, "Ada Lovelace"}})
-    }))
-    ui.KeyedFor(
-      people,
-      func(person ListPerson) any { return person.ID },
-      func(person func() ListPerson, index func() int) {
-        ui.Text(index, ": ", func() string { return person().Name })
-      },
-      func() { ui.Text("No people") },
-    )
-  })
+	people, setPeople := ui.CreateSignal([]ListPerson{{1, "Ada"}, {2, "Grace"}})
+	ui.View(func() {
+		ui.Button(
+			"Reorder and rename",
+			ui.OnClick(func() {
+				setPeople([]ListPerson{{2, "Grace"}, {1, "Ada Lovelace"}})
+			}),
+		)
+		ui.KeyedFor(
+			people,
+			func(person ListPerson) any { return person.ID },
+			func(person func() ListPerson, index func() int) {
+				ui.Text(
+					index,
+					": ",
+					func() string { return person().Name },
+				)
+			},
+			func() { ui.Text("No people") },
+		)
+	})
 }
 ```
 
@@ -66,12 +79,18 @@ func KeyedListExample() {
 
 ```go
 func LoadingPanel(load func(context.Context) (string, error)) {
-  result, setResult := ui.CreateSignal("Loading…")
-  ui.Async(load, func(value string, err error) {
-    if err != nil { setResult(err.Error()); return }
-    setResult(value)
-  })
-  ui.Text(result)
+	result, setResult := ui.CreateSignal("Loading…")
+	ui.Async(
+		load,
+		func(value string, err error) {
+			if err != nil {
+				setResult(err.Error())
+				return
+			}
+			setResult(value)
+		},
+	)
+	ui.Text(result)
 }
 ```
 

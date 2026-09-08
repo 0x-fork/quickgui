@@ -21,7 +21,7 @@ func appView(m *model) {
 		ui.MinWidth(0),
 		ui.MinHeight(0),
 		ui.BackgroundColor(m.color(func(t theme) string { return t.App })),
-		ui.Color(m.color(func(t theme) string { return t.Text })),
+		ui.TextColor(m.color(func(t theme) string { return t.Text })),
 		ui.FontWeight(500),
 	)
 }
@@ -52,7 +52,7 @@ func workspace(m *model) {
 									icon("terminal", 24, m.color(func(t theme) string { return t.TextGhost }))
 									ui.Text(
 										"Open a tab to start working",
-										ui.Color(m.color(func(t theme) string { return t.TextTertiary })),
+										ui.TextColor(m.color(func(t theme) string { return t.TextTertiary })),
 										ui.FontSize(13.5),
 									)
 									ui.Button(
@@ -96,7 +96,7 @@ func workspace(m *model) {
 						func() {
 							ui.Text(
 								errorMessage,
-								ui.Color(m.color(func(t theme) string { return t.Danger })),
+								ui.TextColor(m.color(func(t theme) string { return t.Danger })),
 								ui.FontSize(11.5),
 							)
 							ui.View(ui.Flex(1))
@@ -175,7 +175,7 @@ func tabBar(m *model) {
 										ui.PaddingLeft(10),
 										ui.PaddingRight(func() int { return choose(active(), 30, 10) }),
 										ui.BackgroundColor("transparent"),
-										ui.Color(func() string {
+										ui.TextColor(func() string {
 											return choose(active(), m.theme().Text, m.theme().TextTertiary)
 										}),
 										ui.Hover(ui.BackgroundColor(func() string {
@@ -239,7 +239,7 @@ func tabBar(m *model) {
 				ui.Gap(5),
 				ui.PaddingLeft(9),
 				ui.PaddingRight(9),
-				ui.Color(m.color(func(t theme) string { return t.TextSecondary })),
+				ui.TextColor(m.color(func(t theme) string { return t.TextSecondary })),
 				ui.BackgroundColor("transparent"),
 				ui.Hover(ui.BackgroundColor(m.color(func(t theme) string { return t.Hover }))),
 				ui.Active(ui.BackgroundColor(m.color(func(t theme) string { return t.Active }))),
@@ -343,7 +343,7 @@ func terminalPane(m *model, p *pane) {
 								ui.BorderWidth(1),
 								ui.BorderColor(m.color(func(t theme) string { return t.Terminal })),
 								ui.BackgroundColor(m.color(func(t theme) string { return t.Terminal })),
-								ui.Color(m.color(func(t theme) string { return t.TerminalText })),
+								ui.TextColor(m.color(func(t theme) string { return t.TerminalText })),
 								ui.FontFamily("JetBrainsMono Nerd Font Mono"),
 								ui.FontSize(14),
 								ui.FontWeight(400),

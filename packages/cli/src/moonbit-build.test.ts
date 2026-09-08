@@ -137,7 +137,7 @@ test("MoonBit scaffold has a fluent component, TOML config, and no Go files", as
     const source = readFileSync(join(project, "main/main.mbt"), "utf8");
     expect(source).toContain(".size_full()");
     expect(source).toContain("..if count() >= 5");
-    expect(source).toContain("@reactive.create_signal(0)");
+    expect(source).toContain("@ui.create_signal(0)");
     expect(source).not.toContain(".child(");
     expect(source).not.toContain("{{");
     expect(() => readFileSync(join(project, "go.mod"))).toThrow();

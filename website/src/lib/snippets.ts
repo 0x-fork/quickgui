@@ -11,7 +11,7 @@ export const snippets = {
 				ui.Padding(12),
 				ui.BorderRadius(8),
 				ui.BackgroundColor("#18181b"),
-				ui.Color("white"),
+				ui.TextColor("white"),
 				ui.OnClick(func() { setCount(count() + 1) }),
 			)
 		},
@@ -28,7 +28,7 @@ export const snippets = {
   moonbitCounter: {
     lang: "moonbit",
     code: `fn counter() -> @ui.Element {
-  let (count, set_count) = @reactive.create_signal(0)
+  let (count, set_count) = @ui.create_signal(0)
   @ui.div([
     @ui.text("Count: \\{count()}"),
     @ui.button("Increment")

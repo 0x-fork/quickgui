@@ -573,9 +573,9 @@ func BackgroundColor(value any) StyleOption {
 	return func(style *Style) { style.BackgroundColor = value }
 }
 
-// Color sets the corresponding style property.
-func Color(value any) StyleOption {
-	return func(style *Style) { style.Color = value }
+// TextColor sets the corresponding style property.
+func TextColor(value any) StyleOption {
+	return func(style *Style) { style.TextColor = value }
 }
 
 // Opacity sets the corresponding style property.

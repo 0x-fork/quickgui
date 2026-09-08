@@ -37,7 +37,7 @@ func menuLabel(caption string) {
 	state := ui.UseMenuItemState()
 	ui.Text(
 		caption,
-		ui.Color(func() string { return choose(state().Highlighted, p().Accent, p().Ink) }),
+		ui.TextColor(func() string { return choose(state().Highlighted, p().Accent, p().Ink) }),
 		ui.Flex(1),
 	)
 }
@@ -152,7 +152,7 @@ func SystemContextMenuDemo() {
 			ui.BorderStyle("dashed"),
 			ui.BorderColor(color(func(p palette) string { return p.Border })),
 			ui.BackgroundColor(color(func(p palette) string { return p.PanelAlt })),
-			ui.Color(color(func(p palette) string { return p.Muted })),
+			ui.TextColor(color(func(p palette) string { return p.Muted })),
 			ui.AppRegion("no-drag"),
 			ui.UserSelect("none"),
 			ui.OnContextMenu(func(event *native.Event) {
@@ -522,7 +522,7 @@ func PreviewCardDemo() {
 							CloseDelay: 200,
 							PartProps: ui.PartProps{Style: ui.Styles(
 								ui.Padding(2),
-								ui.Color(color(func(p palette) string { return p.Accent })),
+								ui.TextColor(color(func(p palette) string { return p.Accent })),
 								ui.TextDecorationLine("underline"),
 							)},
 						},
@@ -695,7 +695,7 @@ func TooltipDemo() {
 									func() {
 										s := popupStyle()
 										s.BackgroundColor = color(func(p palette) string { return p.Ink })
-										s.Color = color(func(p palette) string { return p.Panel })
+										s.TextColor = color(func(p palette) string { return p.Panel })
 										s.Padding = 8
 										s.FontSize = 11
 										ui.Tooltip.Popup(

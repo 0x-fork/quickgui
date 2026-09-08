@@ -23,9 +23,8 @@ fn card() -> @ui.Element {
 `.style(base).style(overrides)` 按顺序合并声明，后面的同名属性优先。样式构建器的 `.merge(other)` 也如此。应用样式时会保存快照，之后修改构建器不会更新已挂载的元素。
 
 ```moonbit
-///|
 fn selectable() -> @ui.Element {
-  let (selected, set_selected) = @reactive.create_signal(false)
+  let (selected, set_selected) = @ui.create_signal(false)
   @ui.button("Select")
   .on_click(() => set_selected(!selected()))
   .style(
@@ -45,6 +44,21 @@ fn selectable() -> @ui.Element {
 原生指针与焦点状态使用 `.hover(s => ...)`、`.active(s => ...)` 和 `.focus_style(s => ...)`。`.selected_style` 用于复合部件的选中状态，状态由原生核心解析。放置目标的拖入外观可通过 `bind_json` 和 `@protocol.DRAG_OVER_STYLE` 返回样式的 `.json()`。同时需要将节点配置为放置目标，样式本身不会启用放置行为。使用协议常量时导入 `egoist/quickgui/protocol`。
 
 在基础样式上添加[过渡](/docs/moonbit/animations)即可为状态变化添加动画。
+
+在元素上声明默认外观，在每种状态中仅声明变化的绘制属性。悬停暂时覆盖背景，按下时降低透明度。这些状态不需要信号，也不会重新执行组件。
+
+```moonbit
+fn interaction_button() -> @ui.Element {
+  @ui.button("Save")
+  .padding(12)
+  .border_radius(8)
+  .bg(@ui.rgb8(37, 99, 235))
+  .text_color(@ui.rgb8(255, 255, 255))
+  .hover(s => s.bg(@ui.rgb8(59, 130, 246)))
+  .active(s => s.opacity(0.8))
+  .on_click(() => println("Saved"))
+}
+```
 
 ## 颜色与 SVG
 

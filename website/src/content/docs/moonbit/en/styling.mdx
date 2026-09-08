@@ -23,9 +23,8 @@ Use `.flex_row()`, `.flex_col()`, `.items_center()`, and `.justify_center()` for
 `.style(base).style(overrides)` merges declarations in order; later properties win. `.merge(other)` does the same for style builders. Applying a style takes a snapshot. Changing the builder later does not update the mounted element.
 
 ```moonbit
-///|
 fn selectable() -> @ui.Element {
-  let (selected, set_selected) = @reactive.create_signal(false)
+  let (selected, set_selected) = @ui.create_signal(false)
   @ui.button("Select")
   .on_click(() => set_selected(!selected()))
   .style(
@@ -45,6 +44,21 @@ The compiler binds getter reads inside `.style(...)` and fluent modifiers. Later
 Use `.hover(s => ...)`, `.active(s => ...)`, and `.focus_style(s => ...)` for native pointer and focus states. `.selected_style` styles selected compound parts. These states are resolved by the native core. For a drop target’s drag-over appearance, use `bind_json` with `@protocol.DRAG_OVER_STYLE` and return a style’s `.json()`. Configure the node as a drop target as well; a style does not enable drop behavior. Import `egoist/quickgui/protocol` when using protocol constants.
 
 Add [transitions](/docs/moonbit/animations) to the base style to animate state changes.
+
+Declare the resting appearance on the element and only the changed paint properties in each state. Hover temporarily overrides the background; pressing lowers opacity. Neither state needs a signal or a component rerender.
+
+```moonbit
+fn interaction_button() -> @ui.Element {
+  @ui.button("Save")
+  .padding(12)
+  .border_radius(8)
+  .bg(@ui.rgb8(37, 99, 235))
+  .text_color(@ui.rgb8(255, 255, 255))
+  .hover(s => s.bg(@ui.rgb8(59, 130, 246)))
+  .active(s => s.opacity(0.8))
+  .on_click(() => println("Saved"))
+}
+```
 
 ## Colors and SVG
 

@@ -53,7 +53,7 @@ func TestNamedGroupRulesAccumulateAndTrackColorsWithoutRemounting(t *testing.T) 
 		color := reactive.NewSignal("#112233")
 		enabled := reactive.NewSignal(true)
 		parent := View()
-		node := View(GroupHover(Opacity(.5)), When(enabled.Read, GroupHoverNamed("card", Color(color.Read))), "kept")
+		node := View(GroupHover(Opacity(.5)), When(enabled.Read, GroupHoverNamed("card", TextColor(color.Read))), "kept")
 		native.InsertNode(parent, node, nil)
 		child := node.Children[0]
 		offset := len(parent.Pending.Body())

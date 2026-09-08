@@ -62,7 +62,7 @@ func Counter() {
 		ui.JustifyContent("center"),
 		ui.Gap(20),
 		ui.BackgroundColor("#090d16"),
-		ui.Color("#e2e8f0"),
+		ui.TextColor("#e2e8f0"),
 	)
 }
 ```
@@ -87,7 +87,7 @@ ui.Button(
 	ui.When(
 		selected,
 		ui.BackgroundColor("#2563eb"),
-		ui.Color("white"),
+		ui.TextColor("white"),
 	),
 	ui.OnClick(func() { setSelected(!selected()) }),
 )
@@ -109,14 +109,14 @@ func GroupExample() {
 		func() {
 			ui.Text(
 				"Changes when the card is hovered",
-				ui.Color("#64748b"),
-				ui.GroupHover(ui.Color("#2563eb")),
+				ui.TextColor("#64748b"),
+				ui.GroupHover(ui.TextColor("#2563eb")),
 			)
 			ui.View(
 				func() {
 					ui.Text(
 						"Follows the card and the nested toolbar",
-						ui.GroupHoverNamed("card", ui.Color("#2563eb")),
+						ui.GroupHoverNamed("card", ui.TextColor("#2563eb")),
 						ui.GroupHoverNamed("toolbar", ui.Opacity(0.8)),
 					)
 				},

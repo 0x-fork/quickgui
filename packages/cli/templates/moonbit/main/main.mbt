@@ -1,6 +1,6 @@
 ///|
 fn counter() -> @ui.Element {
-  let (count, set_count) = @reactive.create_signal(0)
+  let (count, set_count) = @ui.create_signal(0)
   @ui.div(
     [
       @ui.text("QuickGUI · MoonBit").font_size(28).font_weight(700),
@@ -63,7 +63,7 @@ fn main {
     @native.run(() => {
       ignore(
         @ui.window(counter, options={
-          "title": {{APP_NAME}},
+            "title": {{APP_NAME}},
           "width": 620,
           "height": 480,
         }),

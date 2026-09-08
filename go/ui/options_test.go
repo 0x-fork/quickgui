@@ -17,7 +17,7 @@ func TestStyleOptionsMergeInteractionStatesWithoutChangingSharedStyles(t *testin
 		"DragOver": DragOver, "FocusWithin": FocusWithin,
 	} {
 		t.Run(name, func(t *testing.T) {
-			shared := Styles(state(Color("white"), BackgroundColor("#222222"), Opacity(.8)))
+			shared := Styles(state(TextColor("white"), BackgroundColor("#222222"), Opacity(.8)))
 			props := resolveProps([]any{
 				shared,
 				state(BackgroundColor("#333333")),
@@ -27,7 +27,7 @@ func TestStyleOptionsMergeInteractionStatesWithoutChangingSharedStyles(t *testin
 				return reflect.ValueOf(style).FieldByName(name).Interface().(*Style)
 			}
 			merged := read(props.Style)
-			if merged.Color != "white" || merged.BackgroundColor != "#333333" || merged.Opacity != 0 {
+			if merged.TextColor != "white" || merged.BackgroundColor != "#333333" || merged.Opacity != 0 {
 				t.Fatalf("repeated state options lost an earlier property: %+v", merged)
 			}
 			original := read(shared)
@@ -111,7 +111,7 @@ func TestWhenRestoresBaseStyleWithoutRebuildingChildren(t *testing.T) {
 		mounts := 0
 		node := View(
 			BackgroundColor("#ccc"),
-			When(selected, BackgroundColor("#2563eb"), Color("white")),
+			When(selected, BackgroundColor("#2563eb"), TextColor("white")),
 			func() { mounts++; Text("child") },
 		)
 		child := node.Children[0]
@@ -140,7 +140,7 @@ func TestStyleRecordsComposeAndConditionalStylesRestoreBindings(t *testing.T) {
 		mounts := 0
 		node := View(
 			func() { mounts++; Text("retained") },
-			Style{BackgroundColor: baseColor.Read, Color: "white", Padding: 12},
+			Style{BackgroundColor: baseColor.Read, TextColor: "white", Padding: 12},
 			Style{Padding: 0},
 			When(selected, Style{BackgroundColor: selectedColor.Read, Opacity: .5}),
 		)
@@ -176,7 +176,7 @@ func TestStyleRecordsComposeAndConditionalStylesRestoreBindings(t *testing.T) {
 func TestStyleRecordsMergeNestedStatesWithoutMutatingSharedStyles(t *testing.T) {
 	base := Style{
 		BackgroundColor: "#111111",
-		Hover:           &Style{Color: "white", BackgroundColor: "#222222", Opacity: .8},
+		Hover:           &Style{TextColor: "white", BackgroundColor: "#222222", Opacity: .8},
 		Focus:           &Style{OutlineWidth: 2, OutlineColor: "blue"},
 	}
 	props := resolveProps([]any{
@@ -184,7 +184,7 @@ func TestStyleRecordsMergeNestedStatesWithoutMutatingSharedStyles(t *testing.T) 
 		Style{Hover: &Style{BackgroundColor: "#333333", Opacity: 0}},
 		Style{Focus: &Style{OutlineColor: "red"}},
 	})
-	if props.Style.BackgroundColor != base.BackgroundColor || props.Style.Hover.Color != "white" ||
+	if props.Style.BackgroundColor != base.BackgroundColor || props.Style.Hover.TextColor != "white" ||
 		props.Style.Hover.BackgroundColor != "#333333" || props.Style.Hover.Opacity != 0 ||
 		props.Style.Focus.OutlineWidth != 2 || props.Style.Focus.OutlineColor != "red" {
 		t.Fatal("style records replaced a nested state instead of merging its fields")
@@ -241,7 +241,7 @@ func TestNestedWhenTracksOnlyTheActiveBranch(t *testing.T) {
 		outer, setOuter := CreateSignal(false)
 		inner := reactive.NewSignal(true)
 		parent := View()
-		node := View(When(outer, When(inner.Read, Color("white"))))
+		node := View(When(outer, When(inner.Read, TextColor("white"))))
 		native.InsertNode(parent, node, nil)
 		if len(inner.Observers) != 0 {
 			t.Fatal("inactive branch was evaluated")

@@ -5,7 +5,6 @@
 ネイティブコントロールを `swift_ui_host([])` に配置します。通常の QuickGUI レイアウトはホストの外側に置くか、逆方向ホストを使います。
 
 ```moonbit
-///|
 fn embedded_content() -> @ui.Element {
   @ui.swift_ui_host([
     @ui.swift_ui_quickgui_host_view(() => {

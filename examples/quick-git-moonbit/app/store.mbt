@@ -207,7 +207,7 @@ fn Store::close(self : Store) -> Unit {
   self.cancel_diff = () => ()
   self.refresh_busy = false
   self.refresh_again = false
-  @reactive.batch(() => {
+  @ui.batch(() => {
     self.root.set("")
     self.opening.set(false)
     self.status.set(@git.empty_status())

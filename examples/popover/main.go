@@ -91,7 +91,7 @@ func Popovers() {
 									)
 									ui.Text(
 										"Both use the same controlled Go API. SystemPopover opens a native child window; Popover stays in this window's retained overlay plane.",
-										ui.Color("#9ba8bc"),
+										ui.TextColor("#9ba8bc"),
 										ui.FontSize(14),
 										ui.LineHeight(21),
 									)
@@ -162,7 +162,7 @@ func Popovers() {
 							)
 							ui.View(
 								func() {
-									ui.Text(status, ui.Color("#b8c4d6"), ui.FontSize(13))
+									ui.Text(status, ui.TextColor("#b8c4d6"), ui.FontSize(13))
 								},
 								ui.Display("flex"),
 								ui.MinHeight(50),
@@ -196,6 +196,6 @@ func Popovers() {
 		ui.Width("100%"),
 		ui.Height("100%"),
 		ui.BackgroundColor("#0b0f17"),
-		ui.Color("#f5f7fb"),
+		ui.TextColor("#f5f7fb"),
 	)
 }

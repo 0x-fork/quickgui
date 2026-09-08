@@ -40,9 +40,9 @@ pub fn[T : Eq] Element::children_switch(
   let anchor = @native.sentinel()
   self.native_node().append(anchor)
   anchor.effect(() => {
-    let selected = @reactive.memo(select)
+    let selected = @reactive.create_memo(select)
     @reactive.create_effect(() => {
-      let value = selected.get()
+      let value = selected()
       @reactive.untrack(() => {
         for child in render(value) {
           self.native_node().append(child.native_node(), before=anchor.id)

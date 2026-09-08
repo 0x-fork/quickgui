@@ -3,9 +3,8 @@
 ## 实时绑定
 
 ```moonbit
-///|
 fn greeting() -> @ui.Element {
-  let (name, set_name) = @reactive.create_signal("World")
+  let (name, set_name) = @ui.create_signal("World")
   @ui.div([
     @ui.input().value(name()).on_input(set_name),
     @ui.text("Hello, \{name()}!"),
@@ -15,12 +14,74 @@ fn greeting() -> @ui.Element {
 }
 ```
 
-`@reactive.create_signal(initial)` 返回 `(read, write)`。通过 QuickGUI 构建时，`@ui.text("Count: \{count()}")` 会自动响应变化。编译器也处理按钮内容、原生属性、链式样式、交互样式和子节点列表。每个绑定只更新自己的保留节点，不重新执行整个组件。绑定表达式必须是纯函数式计算。
+`@ui.create_signal(initial)` 返回 `(read, write)`。通过 QuickGUI 构建时，`@ui.text("Count: \{count()}")` 会自动响应变化。编译器也处理按钮内容、原生属性、链式样式、交互样式和子节点列表。每个绑定只更新自己的保留节点，不重新执行整个组件。绑定表达式必须是纯函数式计算。
 
-普通初始化代码仍遵循 MoonBit 语义：`let initial = count()` 只保存快照。事件处理函数只在事件发生时执行。不需要订阅时使用 `@reactive.untrack(count)`。自定义组件保持普通参数类型，需要持续更新时传入访问器。底层组合和按键保留的行仍可使用显式 `bind_*` 方法及 `Signal` 句柄。
+普通初始化代码仍遵循 MoonBit 语义：`let initial = count()` 只保存快照。事件处理函数只在事件发生时执行。不需要订阅时使用 `@ui.untrack(count)`。自定义组件保持普通参数类型，需要持续更新时传入访问器。底层组合和按键保留的行仍可使用显式 `bind_*` 方法及 `Signal` 句柄。
 
-## 派生状态与清理
+## 派生状态
 
-`@reactive.memo(() => expression)` 返回派生值信号。`@reactive.create_effect` 跟踪实际读取，包括条件依赖。`@reactive.batch` 合并关联写入。不要为了更新一个标签而在副作用中重建整个视图。
+`@ui.create_memo` 缓存由信号计算的值，并在结果变化时更新依赖它的绑定。它返回只读访问器，使用 `total()` 读取。计算应保持纯粹：派生值使用 memo，外部工作使用副作用。下面的总价会随数量变化而重新计算。
 
-组件和动态分支拥有各自的订阅。使用 `@reactive.on_cleanup` 注册清理。所有者移除时，其副作用和回调随之释放；新窗口拥有独立生命周期。
+```moonbit
+fn derived_total() -> @ui.Element {
+  let (quantity, set_quantity) = @ui.create_signal(1)
+  let total = @ui.create_memo(() => quantity() * 25)
+  @ui.div([
+    @ui.text("Total: \{total()}"),
+    @ui.button("Add one").on_click(() => set_quantity(quantity() + 1)),
+  ])
+  .flex_col()
+  .gap(8)
+}
+```
+
+## 副作用与清理
+
+`@ui.create_effect` 会在初次创建时运行，并在读取过的信号变化后再次运行。条件分支中的读取仅在该分支执行时成为依赖。副作用适合同步订阅等外部工作；视图表达式已经负责绑定文本和属性。
+
+下面用日志展示订阅的启动和清理。在副作用内部注册的清理会在下次执行前以及所属作用域销毁时运行。保存 `current` 可确保清理使用旧主题。在副作用外部注册的清理属于外围作用域，只在该作用域销毁时执行，不会在每次信号更新时执行。移除动态分支或关闭窗口会释放它们拥有的副作用和回调。
+
+```moonbit
+fn effect_lifecycle() -> @ui.Element {
+  let (topic, set_topic) = @ui.create_signal("Inbox")
+  @ui.create_effect(() => {
+    let current = topic()
+    println("Subscribe: \{current}")
+    @ui.on_cleanup(() => println("Unsubscribe: \{current}"))
+  })
+  @ui.div([
+    @ui.text("Watching: \{topic()}"),
+    @ui.button("Switch topic").on_click(() => {
+      set_topic(if topic() == "Inbox" { "Archive" } else { "Inbox" })
+    }),
+  ])
+  .flex_col()
+  .gap(8)
+}
+```
+
+## 批量更新
+
+`@ui.batch` 将同步写入合并，依赖它们的副作用会在最外层批处理结束后刷新。下面两个字段一起变化：日志输出 “Grace Hopper”，不会出现中间的 “Grace Lovelace”。原生事件处理器已经自动批处理；显式批处理让其他 UI 代码调用 `apply_profile` 时也保持相同语义。
+
+信号应在 UI 线程读取和写入；批处理不会让后台访问变得线程安全。副作用需要读取快照但不希望建立依赖时，使用 `@ui.untrack(read)`。如果 memo 已能表达派生值，就不要用副作用把一个信号复制到另一个信号中。
+
+```moonbit
+fn batched_profile() -> @ui.Element {
+  let (first, set_first) = @ui.create_signal("Ada")
+  let (last, set_last) = @ui.create_signal("Lovelace")
+  @ui.create_effect(() => println("\{first()} \{last()}"))
+  let apply_profile = () => {
+    @ui.batch(() => {
+      set_first("Grace")
+      set_last("Hopper")
+    })
+  }
+  @ui.div([
+    @ui.text("\{first()} \{last()}"),
+    @ui.button("Apply profile").on_click(apply_profile),
+  ])
+  .flex_col()
+  .gap(8)
+}
+```

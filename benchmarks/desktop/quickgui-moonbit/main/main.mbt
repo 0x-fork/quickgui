@@ -123,15 +123,15 @@ fn property(label : String, read : () -> String) -> @ui.Element {
 ///|
 fn issue_tracker() -> @ui.Element {
   let issues = load_issues()
-  let (query, set_query) = @reactive.create_signal("")
-  let (filter, set_filter) = @reactive.create_signal("All issues")
-  let (page, set_page) = @reactive.create_signal(0)
-  let (selected, set_selected) = @reactive.create_signal(0)
+  let (query, set_query) = @ui.create_signal("")
+  let (filter, set_filter) = @ui.create_signal("All issues")
+  let (page, set_page) = @ui.create_signal(0)
+  let (selected, set_selected) = @ui.create_signal(0)
   let current = () => issues[selected()]
-  let completed = @reactive.memo(() => {
+  let completed = @ui.create_memo(() => {
     issues.filter(item => item.status.get() == "Done").length()
   })
-  let matching = @reactive.memo(() => {
+  let matching = @ui.create_memo(() => {
     let needle = query().trim().to_owned().to_lower()
     let mode = filter()
     let result : Array[Int] = []
@@ -151,10 +151,10 @@ fn issue_tracker() -> @ui.Element {
     }
     result
   })
-  let pages = () => ((matching.get().length() + 99) / 100).max(1)
+  let pages = () => ((matching().length() + 99) / 100).max(1)
   let current_page = () => page().min(pages() - 1)
   let visible = () => {
-    let matches = matching.get()
+    let matches = matching()
     let start = current_page() * 100
     matches[start:(start + 100).min(matches.length())].to_owned()
   }
@@ -181,7 +181,7 @@ fn issue_tracker() -> @ui.Element {
       sidebar.children([
         @ui.button(name)
         .on_click(() => {
-          @reactive.batch(() => {
+          @ui.batch(() => {
             set_filter(name)
             set_page(0)
           })
@@ -220,13 +220,13 @@ fn issue_tracker() -> @ui.Element {
       .children([
         @ui.text("Issue inbox").font_size(24).font_weight(700),
         caption(() => {
-          "\{issues.length() - completed.get()} open · \{completed.get()} completed"
+          "\{issues.length() - completed()} open · \{completed()} completed"
         }),
       ])
       .gap(6),
       @ui.input()
       .on_input(value => {
-        @reactive.batch(() => {
+        @ui.batch(() => {
           set_query(value)
           set_page(0)
         })
@@ -252,7 +252,7 @@ fn issue_tracker() -> @ui.Element {
     .children([
       row()
       .children([
-        caption(() => "\{matching.get().length()} issues"),
+        caption(() => "\{matching().length()} issues"),
         caption(() => "Updated this week"),
       ])
       .height(48)
@@ -315,7 +315,7 @@ fn issue_tracker() -> @ui.Element {
         })
         .children(
           [
-            ..if matching.get().is_empty() {
+            ..if matching().is_empty() {
               [caption(() => "No matching issues")]
             } else {
               []
@@ -381,13 +381,13 @@ fn issue_tracker() -> @ui.Element {
       .border_width(1)
       .border_color(@ui.rgb8(220, 224, 231))
       .border_radius(7),
-      @ui.button({
+      @ui.button(
         if current().status.get() == "Done" {
           "Reopen issue"
         } else {
           "Mark complete"
-        }
-})
+        },
+      )
       .on_click(() => {
         let issue = current()
         issue.status.set(

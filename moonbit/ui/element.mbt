@@ -121,9 +121,9 @@ pub fn Element::child_if(
   self.native_node().append(anchor)
   // The outer effect owns the predicate memo and the current branch.
   anchor.effect(() => {
-    let visible = @reactive.memo(condition)
+    let visible = @reactive.create_memo(condition)
     @reactive.create_effect(() => {
-      let value = visible.get()
+      let value = visible()
       @reactive.untrack(() => {
         if value {
           self.native_node().append(render().native_node(), before=anchor.id)

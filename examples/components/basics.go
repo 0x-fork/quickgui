@@ -122,7 +122,7 @@ func AlertDialogDemo() {
 									ui.AlertDialog.Close(control(), "Cancel")
 									button("Delete", func() { setOutcome("deleted"); setOpen(false) }, ui.Styles(
 										ui.BackgroundColor(color(func(p palette) string { return p.Danger })),
-										ui.Color("white"),
+										ui.TextColor("white"),
 									))
 								})
 							},

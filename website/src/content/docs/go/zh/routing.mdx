@@ -36,21 +36,32 @@ func RouterExample() {
 
 ```go
 func NestedRouterExample() {
-  ui.Router(ui.RouterProps{
-    Routes: []*ui.RouteDeclaration{
-      ui.Layout(
-        func() {
-          ui.View(func() {
-            ui.Link(ui.LinkProps{Href: "/"}, "Home")
-            ui.Link(ui.LinkProps{Href: "/settings"}, "Settings")
-            ui.Outlet()
-          }, ui.Display("flex"), ui.FlexDirection("column"), ui.Gap(12))
-        },
-        ui.Route("/", func() { ui.Text("Home") }),
-        ui.Route("/settings", func() { ui.Text("Settings") }),
-      ),
-    },
-  })
+	ui.Router(ui.RouterProps{
+		Routes: []*ui.RouteDeclaration{
+			ui.Layout(
+				func() {
+					ui.View(
+						func() {
+							ui.Link(ui.LinkProps{Href: "/"}, "Home")
+							ui.Link(ui.LinkProps{Href: "/settings"}, "Settings")
+							ui.Outlet()
+						},
+						ui.Display("flex"),
+						ui.FlexDirection("column"),
+						ui.Gap(12),
+					)
+				},
+				ui.Route(
+					"/",
+					func() { ui.Text("Home") },
+				),
+				ui.Route(
+					"/settings",
+					func() { ui.Text("Settings") },
+				),
+			),
+		},
+	})
 }
 ```
 
@@ -68,3 +79,32 @@ func BackButton() {
 ## 路由参数
 
 使用 `ui.UseParams` 读取路径参数、`ui.UseSearchParams` 读取查询值、`ui.UseLocation` 读取当前位置。它们返回访问器；需要更新显示值时，在绑定中读取。仅参数发生变化时，匹配的路由组件会保持挂载。
+
+`:name` 路径段捕获一个参数。将读取保留在文本访问器内：如果在初始化时保存 `params()["name"]`，标签就会停留在初始值。查询参数与路径参数分别读取。这个路由初次显示 `quickgui` 和 `history`。
+
+```go
+func ParameterRouterExample() {
+	ui.Router(ui.RouterProps{
+		InitialPath: "/projects/quickgui?tab=history",
+		Routes: []*ui.RouteDeclaration{
+			ui.Route(
+				"/projects/:name",
+				func() {
+					params := ui.UseParams()
+					search := ui.UseSearchParams()
+					ui.View(func() {
+						ui.Text(
+							"Project: ",
+							func() string { return params()["name"] },
+						)
+						ui.Text(
+							"Tab: ",
+							func() string { return search()["tab"] },
+						)
+					})
+				},
+			),
+		},
+	})
+}
+```

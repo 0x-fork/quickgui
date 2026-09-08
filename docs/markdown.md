@@ -67,7 +67,7 @@ func Answer() {
 	ui.Markdown(
 		ui.Value(answer),
 		ui.Streaming(streaming),
-		ui.Color("#e4e4e7"),
+		ui.TextColor("#e4e4e7"),
 		ui.FontSize(15),
 		ui.LineHeight(23),
 		ui.MarkdownLinkColor("#60a5fa"),

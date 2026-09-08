@@ -32,6 +32,39 @@ func RouterExample() {
 
 関連するルートを `ui.Layout` で包みます。レイアウトのコンポーネントは、該当する子の位置で `ui.Outlet()` を呼びます。兄弟ルート間の移動では共通レイアウトと状態を保持し、変更された分岐だけを置き換えます。
 
+共通ナビゲーションは outlet の外に置きます。Home と Settings は同じレイアウトを共有するため、切り替えてもレイアウトのローカル状態は残ります。outlet は選択中の子ページだけを供給します。
+
+```go
+func NestedRouterExample() {
+	ui.Router(ui.RouterProps{
+		Routes: []*ui.RouteDeclaration{
+			ui.Layout(
+				func() {
+					ui.View(
+						func() {
+							ui.Link(ui.LinkProps{Href: "/"}, "Home")
+							ui.Link(ui.LinkProps{Href: "/settings"}, "Settings")
+							ui.Outlet()
+						},
+						ui.Display("flex"),
+						ui.FlexDirection("column"),
+						ui.Gap(12),
+					)
+				},
+				ui.Route(
+					"/",
+					func() { ui.Text("Home") },
+				),
+				ui.Route(
+					"/settings",
+					func() { ui.Text("Settings") },
+				),
+			),
+		},
+	})
+}
+```
+
 ## ナビゲーション
 
 ルート内の `ui.UseRouter()` は `Navigate`、`Replace`、`Back`、`Forward` を提供します。`ui.Link` で移動先を宣言できます。通常の移動は履歴に追加し、置換は現在の履歴を変更します。
@@ -46,3 +79,32 @@ func BackButton() {
 ## ルートパラメーター
 
 `ui.UseParams` でパスパラメーター、`ui.UseSearchParams` でクエリ値、`ui.UseLocation` で現在位置を読みます。いずれもアクセサーなので、表示を更新する値はバインディング内で読み取ります。パラメーターだけが変わる場合、該当するルートのコンポーネントは保持されます。
+
+`:name` はパスの1区間をパラメーターとして取得します。読み取りはテキストのアクセサー内に置いてください。初期化時に `params()["name"]` を保存すると表示が初期値のままになります。クエリとパスのパラメーターは別々に読み取ります。このルートの初期表示は `quickgui` と `history` です。
+
+```go
+func ParameterRouterExample() {
+	ui.Router(ui.RouterProps{
+		InitialPath: "/projects/quickgui?tab=history",
+		Routes: []*ui.RouteDeclaration{
+			ui.Route(
+				"/projects/:name",
+				func() {
+					params := ui.UseParams()
+					search := ui.UseSearchParams()
+					ui.View(func() {
+						ui.Text(
+							"Project: ",
+							func() string { return params()["name"] },
+						)
+						ui.Text(
+							"Tab: ",
+							func() string { return search()["tab"] },
+						)
+					})
+				},
+			),
+		},
+	})
+}
+```

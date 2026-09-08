@@ -3,10 +3,9 @@
 ## 制御された入力
 
 ```moonbit
-///|
 fn name_form() -> @ui.Element {
-  let (name, set_name) = @reactive.create_signal("")
-  let (saved, set_saved) = @reactive.create_signal("")
+  let (name, set_name) = @ui.create_signal("")
+  let (saved, set_saved) = @ui.create_signal("")
   let submit = () => set_saved(name())
   @ui.div([
     @ui.text("Name"),

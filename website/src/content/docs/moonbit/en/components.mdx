@@ -10,12 +10,30 @@ fn counter_label(count : () -> Int) -> @ui.Element {
 }
 
 fn component_composition() -> @ui.Element {
-  let (count, set_count) = @reactive.create_signal(0)
+  let (count, set_count) = @ui.create_signal(0)
   @ui.div([
     counter_label(count),
     @ui.button("Increment").on_click(() => set_count(count() + 1)),
-  ])
+  ]).flex_col()
+}
+```
+
+Reusable containers can accept an array of children and spread them after their own heading. The nested native expressions still create independent bindings. The title parameter here is intentionally static; pass a getter if your custom title must change.
+
+```moonbit
+fn card_section(title : String, children : Array[@ui.Element]) -> @ui.Element {
+  @ui.div([@ui.text(title).font_weight(600), ..children])
   .flex_col()
+  .gap(12)
+  .padding(20)
+}
+
+fn card_composition() -> @ui.Element {
+  let (count, set_count) = @ui.create_signal(0)
+  card_section("Counter", [
+    @ui.text("Count: \{count()}"),
+    @ui.button("Increment").on_click(() => set_count(count() + 1)),
+  ])
 }
 ```
 
@@ -47,7 +65,6 @@ Run `bun --cwd examples/components-moonbit check` for the SDK and gallery tests,
 `table([]).columns(columns).row_count(rows).row_height(height)` binds column definitions and the full row count. Add `table_row([]).row_index(index)` and `table_cell([]).column(column_id)` parts. The core handles layout, scrolling, keyboard selection, and accessibility. This small table mounts all three rows:
 
 ```moonbit
-///|
 fn small_table() -> @ui.Element {
   let names = ["Ada", "Grace", "Linus"]
   @ui.table([])
@@ -72,9 +89,8 @@ For large data, listen to `.on_change(...)` and retain its `visibleRange` field 
 ## Resizable panels
 
 ```moonbit
-///|
 fn split_view() -> @ui.Element {
-  let (width, set_width) = @reactive.create_signal(260.0)
+  let (width, set_width) = @ui.create_signal(260.0)
   @ui.div([
     @ui.text("Sidebar").resizable_panel(
       () => width(),
@@ -97,7 +113,7 @@ Create a root such as `checkbox([])`, `tabs([])` or `dialog([])`, then create re
 
 ```moonbit
 fn notifications() -> @ui.Element {
-  let (checked, set_checked) = @reactive.create_signal(false)
+  let (checked, set_checked) = @ui.create_signal(false)
   let box = @ui.checkbox([])
     .checked(checked())
     .on_checked_change(value => set_checked(value))

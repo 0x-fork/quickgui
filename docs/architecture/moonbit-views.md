@@ -8,7 +8,10 @@ MoonBit code and the existing QuickGUI runtime. Changes to the SDK surface requi
 `bun scripts/build-moonbit-parser.ts` and must run the compiler regression suite.
 
 The application source remains valid MoonBit. View constructors accept only children or content. Styles, properties, and event handlers use fluent methods; `.style(shared)` merges reusable styles. `create_signal` returns a getter
-and setter backed by the existing signal implementation. At native view sites,
+and setter backed by the existing signal implementation. Applications use
+`@ui.create_signal` and `@ui.create_memo`; memos expose read-only getters using
+the same caching, equality, batching, and ownership as the reactive core.
+At native view sites,
 expressions containing calls are lifted into callbacks. Tracking discovers their
 actual signal dependencies, including reads through helper functions. Literals and
 setup snapshots stay static. Event callbacks and explicit bindings retain their

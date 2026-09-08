@@ -1,8 +1,8 @@
 ///|
 fn dialog_content(t : Theme, alert : Bool) -> @ui.Element {
-  let (open, set_open) = @reactive.create_signal(false)
+  let (open, set_open) = @ui.create_signal(false)
   let state : @reactive.Signal[Json] = @reactive.signal({})
-  let (outcome, set_outcome) = @reactive.create_signal("nothing yet")
+  let (outcome, set_outcome) = @ui.create_signal("nothing yet")
   let notes = @reactive.signal("")
   let root = (if alert { @ui.alert_dialog([]) } else { @ui.dialog([]) })
     .bind_open(() => open())
@@ -176,8 +176,8 @@ fn menu_row(t : Theme, node : @ui.Element) -> @ui.Element {
 
 ///|
 fn context_menu_demo(t : Theme) -> @ui.Element {
-  let (command, set_command) = @reactive.create_signal("nothing yet")
-  let (parts, set_parts) = @reactive.create_signal("nothing yet")
+  let (command, set_command) = @ui.create_signal("nothing yet")
+  let (parts, set_parts) = @ui.create_signal("nothing yet")
   let declared = @ui.context_menu([]).bind_menu(() => {
     menu_model(t, [
       { "id": "cut", "label": "Cut" },
@@ -232,10 +232,10 @@ fn context_menu_demo(t : Theme) -> @ui.Element {
 ///|
 fn system_context_menu_demo(t : Theme) -> @ui.Element {
   let window = @native.current_window()
-  let (action, set_action) = @reactive.create_signal("nothing yet")
-  let (status, set_status) = @reactive.create_signal("closed")
-  let (hidden, set_hidden) = @reactive.create_signal(false)
-  let (sort, set_sort) = @reactive.create_signal("Name")
+  let (action, set_action) = @ui.create_signal("nothing yet")
+  let (status, set_status) = @ui.create_signal("closed")
+  let (hidden, set_hidden) = @ui.create_signal(false)
+  let (sort, set_sort) = @ui.create_signal("Name")
   let open = () => {
     let items = ["Name", "Date modified", "Size"].map(name => {
       @native.menu_action(
@@ -244,7 +244,7 @@ fn system_context_menu_demo(t : Theme) -> @ui.Element {
           set_sort(name)
           set_action("Sort by \{name}")
         },
-        checked=@reactive.untrack(sort) == name,
+        checked=@ui.untrack(sort) == name,
       )
     })
     set_status("open")
@@ -256,10 +256,10 @@ fn system_context_menu_demo(t : Theme) -> @ui.Element {
         @native.menu_action(
           "Show hidden files",
           () => {
-            set_hidden(!@reactive.untrack(hidden))
-            set_action("Show hidden files \{@reactive.untrack(hidden)}")
+            set_hidden(!@ui.untrack(hidden))
+            set_action("Show hidden files \{@ui.untrack(hidden)}")
           },
-          checked=@reactive.untrack(hidden),
+          checked=@ui.untrack(hidden),
         ),
         @native.submenu("Sort by", items),
         @native.Separator,
@@ -299,10 +299,10 @@ fn system_context_menu_demo(t : Theme) -> @ui.Element {
 
 ///|
 fn menu_demo(t : Theme) -> @ui.Element {
-  let (open, set_open) = @reactive.create_signal(false)
-  let (wrap, set_wrap) = @reactive.create_signal(false)
-  let (density, set_density) = @reactive.create_signal("cozy")
-  let (activated, set_activated) = @reactive.create_signal("nothing yet")
+  let (open, set_open) = @ui.create_signal(false)
+  let (wrap, set_wrap) = @ui.create_signal(false)
+  let (density, set_density) = @ui.create_signal("cozy")
+  let (activated, set_activated) = @ui.create_signal("nothing yet")
   let menu = @ui.menu([])
     .bind_open(() => open())
     .on_open_change(v => set_open(v))
@@ -430,9 +430,9 @@ fn menu_demo(t : Theme) -> @ui.Element {
 
 ///|
 fn menubar_demo(t : Theme) -> @ui.Element {
-  let (opened, set_opened) = @reactive.create_signal(-1)
-  let (active, set_active) = @reactive.create_signal(0)
-  let (command, set_command) = @reactive.create_signal("nothing yet")
+  let (opened, set_opened) = @ui.create_signal(-1)
+  let (active, set_active) = @ui.create_signal(0)
+  let (command, set_command) = @ui.create_signal("nothing yet")
   let menus : Array[(String, Array[Json])] = [
     (
       "File",
@@ -521,8 +521,8 @@ fn menubar_demo(t : Theme) -> @ui.Element {
 ///|
 fn navigation_menu_demo(t : Theme) -> @ui.Element {
   let state : @reactive.Signal[Json] = @reactive.signal({})
-  let (value, set_value) = @reactive.create_signal("")
-  let (navigate, set_navigate) = @reactive.create_signal("")
+  let (value, set_value) = @ui.create_signal("")
+  let (navigate, set_navigate) = @ui.create_signal("")
   let nav = @ui.navigation_menu([])
     .bind_active_value(() => value())
     .delay(80)
@@ -742,7 +742,7 @@ struct Notification {
 ///|
 fn toast_demo(t : Theme) -> @ui.Element {
   let counter = @ref.Ref(0)
-  let (items, set_items) = @reactive.create_signal(([] : Array[Notification]))
+  let (items, set_items) = @ui.create_signal(([] : Array[Notification]))
   let state : @reactive.Signal[Json] = @reactive.signal({})
   let viewport = @ui.toast_viewport([])
     .timeout(5000)
@@ -854,7 +854,7 @@ fn toast_demo(t : Theme) -> @ui.Element {
             title: "Build \{counter.val} · \{kind}",
             kind,
           }
-          set_items([..@reactive.untrack(items), n])
+          set_items([..@ui.untrack(items), n])
         }),
       ]),
     )

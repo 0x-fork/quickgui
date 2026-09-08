@@ -90,7 +90,7 @@ func Navigation() {
 						func() string { return location().Href },
 						ui.FontFamily("monospace"),
 						ui.FontSize(12),
-						ui.Color(muted),
+						ui.TextColor(muted),
 					)
 				},
 				ui.Display("flex"),
@@ -114,7 +114,7 @@ func Navigation() {
 		ui.Width("100%"),
 		ui.Height("100%"),
 		ui.BackgroundColor(background),
-		ui.Color(textColor),
+		ui.TextColor(textColor),
 	)
 }
 
@@ -152,9 +152,9 @@ func Project() {
 	page([]any{"Project: ", projectID}, "The page stays mounted when only the query changes; its reactive core snapshot updates in place.", func() {
 		ui.View(
 			func() {
-				ui.Text("Decoded :projectId", ui.Color(muted))
-				ui.Text(projectID, ui.FontFamily("monospace"), ui.Color(blue))
-				ui.Text("Decoded ?tab", ui.MarginTop(8), ui.Color(muted))
+				ui.Text("Decoded :projectId", ui.TextColor(muted))
+				ui.Text(projectID, ui.FontFamily("monospace"), ui.TextColor(blue))
+				ui.Text("Decoded ?tab", ui.MarginTop(8), ui.TextColor(muted))
 				ui.Text(
 					func() string {
 						if value, ok := search()["tab"]; ok {
@@ -163,7 +163,7 @@ func Project() {
 						return "overview"
 					},
 					ui.FontFamily("monospace"),
-					ui.Color(blue),
+					ui.TextColor(blue),
 				)
 				ui.View(
 					func() {

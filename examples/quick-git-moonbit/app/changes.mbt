@@ -63,7 +63,7 @@ fn changes_view(s : Store) -> @ui.Element {
 
 ///|
 fn change_list(s : Store, staged : Bool) -> @ui.Element {
-  let (viewport, set_viewport) = @reactive.create_signal(@ui.VisibleRange::{
+  let (viewport, set_viewport) = @ui.create_signal(@ui.VisibleRange::{
     start: 0,
     end: 30,
   })
@@ -412,7 +412,7 @@ fn diff_pane(s : Store) -> @ui.Element {
 
 ///|
 fn diff_table(s : Store) -> @ui.Element {
-  let (viewport, set_viewport) = @reactive.create_signal(@ui.VisibleRange::{
+  let (viewport, set_viewport) = @ui.create_signal(@ui.VisibleRange::{
     start: 0,
     end: 50,
   })

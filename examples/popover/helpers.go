@@ -11,7 +11,7 @@ var buttonStyle = ui.Styles(
 	ui.PaddingLeft(16),
 	ui.PaddingRight(16),
 	ui.BackgroundColor("#2563eb"),
-	ui.Color("#ffffff"),
+	ui.TextColor("#ffffff"),
 	ui.BorderRadius(9),
 	ui.Cursor("default"),
 	ui.AppRegion("no-drag"),
@@ -23,7 +23,7 @@ func card(title, description string, children func()) {
 	ui.View(
 		func() {
 			ui.Text(title, ui.FontSize(17), ui.FontWeight(700))
-			ui.Text(description, ui.Color("#9ba8bc"), ui.FontSize(13), ui.LineHeight(19))
+			ui.Text(description, ui.TextColor("#9ba8bc"), ui.FontSize(13), ui.LineHeight(19))
 			children()
 		},
 		ui.Display("flex"),
@@ -53,14 +53,19 @@ func content(kind, description string, close func()) {
 		func() {
 			ui.View(
 				func() {
-					ui.Text(kind, ui.Color("#93c5fd"), ui.FontSize(12), ui.FontWeight(700))
+					ui.Text(kind, ui.TextColor("#93c5fd"), ui.FontSize(12), ui.FontWeight(700))
 					ui.Text(
 						"Interactive popover content",
 						ui.FontSize(19),
 						ui.LineHeight(24),
 						ui.FontWeight(700),
 					)
-					ui.Text(description, ui.Color("#aeb8c9"), ui.FontSize(13), ui.LineHeight(19))
+					ui.Text(
+						description,
+						ui.TextColor("#aeb8c9"),
+						ui.FontSize(13),
+						ui.LineHeight(19),
+					)
 				},
 				ui.Display("flex"),
 				ui.FlexDirection("column"),
@@ -87,7 +92,7 @@ func content(kind, description string, close func()) {
 		ui.Gap(14),
 		ui.Padding(20),
 		ui.BackgroundColor("#151a23"),
-		ui.Color("#f5f7fb"),
+		ui.TextColor("#f5f7fb"),
 		ui.BorderColor("#3b4558"),
 		ui.BorderWidth(1),
 		ui.BorderRadius(12),

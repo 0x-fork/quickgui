@@ -9,7 +9,7 @@ func Card() {
 	ui.View(
 		ui.Text(
 			"Hello",
-			ui.Color("#e2e8f0"),
+			ui.TextColor("#e2e8f0"),
 		),
 		ui.Padding(20),
 		ui.BorderRadius(12),
@@ -88,6 +88,22 @@ func Grid() {
 
 字体样式会沿节点树继承。颜色接受十六进制、`rgb()`/`rgba()` 或打包的 RGBA 值。传入颜色或数值访问器即可响应式更新绘制与尺寸。
 
+在容器上设置共享排版，仅覆盖子节点不同的属性。这里两个标签都继承文本颜色，标题另外覆盖字号和字重。内边距和边框不会继承。
+
+```go
+func TypographyExample() {
+	ui.View(
+		func() {
+			ui.Text("Inbox", ui.FontSize(24), ui.FontWeight(600))
+			ui.Text("All caught up.")
+		},
+		ui.TextColor("#334155"),
+		ui.FontSize(14),
+		ui.Padding(20),
+	)
+}
+```
+
 ## 交互状态
 
 在基础样式中添加 `Transition`，即可为绘制状态之间的变化添加动画。悬停效果、信号驱动的变化、时长和减少动态效果的用法见[过渡与动画](/zh/docs/go/animations)。
@@ -103,7 +119,7 @@ func SelectableButton() {
 		ui.When(
 			selected,
 			ui.BackgroundColor("#2563eb"),
-			ui.Color("white"),
+			ui.TextColor("white"),
 		),
 		ui.Hover(ui.Opacity(0.85)),
 		ui.OnClick(func() { setSelected(!selected()) }),
@@ -121,14 +137,14 @@ func GroupExample() {
 		func() {
 			ui.Text(
 				"Changes when the card is hovered",
-				ui.Color("#64748b"),
-				ui.GroupHover(ui.Color("#2563eb")),
+				ui.TextColor("#64748b"),
+				ui.GroupHover(ui.TextColor("#2563eb")),
 			)
 			ui.View(
 				func() {
 					ui.Text(
 						"Follows the card and the nested toolbar",
-						ui.GroupHoverNamed("card", ui.Color("#2563eb")),
+						ui.GroupHoverNamed("card", ui.TextColor("#2563eb")),
 						ui.GroupHoverNamed("toolbar", ui.Opacity(0.8)),
 					)
 				},

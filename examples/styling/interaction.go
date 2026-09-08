@@ -48,26 +48,26 @@ func InteractionStates() {
 				for index, title := range []string{"Quarterly report", "Roadmap draft"} {
 					ui.View(
 						func() {
-							ui.Text(title, ui.Flex(1), ui.FontSize(13), ui.Color(ink))
+							ui.Text(title, ui.Flex(1), ui.FontSize(13), ui.TextColor(ink))
 							ui.Text(
 								"Cmd ",
 								index+1,
 								ui.FontSize(11),
-								ui.Color(muted),
+								ui.TextColor(muted),
 								ui.Opacity(0),
 								ui.Transition("opacity 120ms"),
 								ui.GroupHoverNamed("list", ui.Opacity(1)),
 							)
 							ui.Button(
 								func() {
-									ui.Text("Rename", ui.FontSize(12), ui.Color(ink))
+									ui.Text("Rename", ui.FontSize(12), ui.TextColor(ink))
 								},
 								actionStyle,
 								ui.AriaLabel(title+" Rename"),
 							)
 							ui.Button(
 								func() {
-									ui.Text("Share", ui.FontSize(12), ui.Color(ink))
+									ui.Text("Share", ui.FontSize(12), ui.TextColor(ink))
 								},
 								actionStyle,
 								ui.Disabled(true),
@@ -90,7 +90,7 @@ func InteractionStates() {
 			ui.Height(30),
 			ui.BorderRadius(8),
 			ui.BackgroundColor("#1d4ed8"),
-			ui.Color(ink),
+			ui.TextColor(ink),
 			ui.FontSize(12),
 			ui.UserSelect("none"),
 			ui.Dragging(ui.Opacity(0.45)),
@@ -101,7 +101,7 @@ func InteractionStates() {
 				ui.Text(
 					dropStatus,
 					ui.FontSize(12),
-					ui.Color(muted),
+					ui.TextColor(muted),
 				)
 			},
 			centered,
@@ -151,7 +151,7 @@ func StickyHeaders() {
 										section,
 										ui.FontSize(12),
 										ui.FontWeight(700),
-										ui.Color(ink),
+										ui.TextColor(ink),
 									)
 								},
 								ui.Display("flex"),
@@ -171,7 +171,7 @@ func StickyHeaders() {
 											" row ",
 											row,
 											ui.FontSize(12),
-											ui.Color(muted),
+											ui.TextColor(muted),
 										)
 									},
 									ui.Display("flex"),
@@ -212,7 +212,7 @@ func ScrollSnap() {
 								index,
 								ui.FontSize(14),
 								ui.FontWeight(700),
-								ui.Color("#f8fafc"),
+								ui.TextColor("#f8fafc"),
 							)
 						},
 						centered,
@@ -239,7 +239,7 @@ func ScrollSnap() {
 		ui.Text(
 			"The core resolves the snap target at the momentum end phase and animates to it on exact deadlines, leaving the window settled.",
 			ui.FontSize(12),
-			ui.Color(muted),
+			ui.TextColor(muted),
 		)
 	})
 }

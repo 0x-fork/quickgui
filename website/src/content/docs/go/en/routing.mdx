@@ -36,21 +36,32 @@ Keep shared navigation outside the outlet. Its local state survives switching be
 
 ```go
 func NestedRouterExample() {
-  ui.Router(ui.RouterProps{
-    Routes: []*ui.RouteDeclaration{
-      ui.Layout(
-        func() {
-          ui.View(func() {
-            ui.Link(ui.LinkProps{Href: "/"}, "Home")
-            ui.Link(ui.LinkProps{Href: "/settings"}, "Settings")
-            ui.Outlet()
-          }, ui.Display("flex"), ui.FlexDirection("column"), ui.Gap(12))
-        },
-        ui.Route("/", func() { ui.Text("Home") }),
-        ui.Route("/settings", func() { ui.Text("Settings") }),
-      ),
-    },
-  })
+	ui.Router(ui.RouterProps{
+		Routes: []*ui.RouteDeclaration{
+			ui.Layout(
+				func() {
+					ui.View(
+						func() {
+							ui.Link(ui.LinkProps{Href: "/"}, "Home")
+							ui.Link(ui.LinkProps{Href: "/settings"}, "Settings")
+							ui.Outlet()
+						},
+						ui.Display("flex"),
+						ui.FlexDirection("column"),
+						ui.Gap(12),
+					)
+				},
+				ui.Route(
+					"/",
+					func() { ui.Text("Home") },
+				),
+				ui.Route(
+					"/settings",
+					func() { ui.Text("Settings") },
+				),
+			),
+		},
+	})
 }
 ```
 
@@ -68,3 +79,32 @@ func BackButton() {
 ## Route parameters
 
 Read matched path parameters with `ui.UseParams`, query values with `ui.UseSearchParams`, and the current location with `ui.UseLocation`. These return accessors; read them inside a binding when the displayed value should update. A parameter-only change keeps the matched route component mounted.
+
+A `:name` segment captures one path parameter. Keep reads inside text accessors: capturing `params()["name"]` during setup would leave the label at its initial value. Query parameters are separate from path parameters. This route initially displays `quickgui` and `history`.
+
+```go
+func ParameterRouterExample() {
+	ui.Router(ui.RouterProps{
+		InitialPath: "/projects/quickgui?tab=history",
+		Routes: []*ui.RouteDeclaration{
+			ui.Route(
+				"/projects/:name",
+				func() {
+					params := ui.UseParams()
+					search := ui.UseSearchParams()
+					ui.View(func() {
+						ui.Text(
+							"Project: ",
+							func() string { return params()["name"] },
+						)
+						ui.Text(
+							"Tab: ",
+							func() string { return search()["tab"] },
+						)
+					})
+				},
+			),
+		},
+	})
+}
+```

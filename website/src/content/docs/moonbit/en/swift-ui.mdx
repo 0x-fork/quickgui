@@ -6,7 +6,7 @@ Create SwiftUI controls under `@ui.swift_ui_host([])`. They require macOS. The s
 
 ```moonbit
 fn native_toggle() -> @ui.Element {
-  let (enabled, set_enabled) = @reactive.create_signal(false)
+  let (enabled, set_enabled) = @ui.create_signal(false)
   @ui.swift_ui_host([
     @ui.swift_ui_toggle()
     .checked(enabled())

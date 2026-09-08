@@ -77,7 +77,7 @@ func buttonStyle() ui.Style {
 		ui.PaddingRight(12),
 		ui.BorderRadius(7),
 		ui.BackgroundColor("#253855"),
-		ui.Color("#e2e8f0"),
+		ui.TextColor("#e2e8f0"),
 		ui.UserSelect("none"),
 		ui.AppRegion("no-drag"),
 		ui.Cursor("default"),
@@ -94,7 +94,7 @@ func inputStyle() ui.Style {
 		ui.PaddingLeft(12),
 		ui.PaddingRight(12),
 		ui.BackgroundColor("#0b1020"),
-		ui.Color("#e2e8f0"),
+		ui.TextColor("#e2e8f0"),
 		ui.BorderRadius(7),
 		ui.BorderWidth(1),
 		ui.BorderColor("#334155"),
@@ -144,7 +144,7 @@ func (controller *chatController) view() {
 		ui.Display("flex"),
 		ui.Width("100%"),
 		ui.Height("100%"),
-		ui.Color("#e2e8f0"),
+		ui.TextColor("#e2e8f0"),
 		ui.FontSize(14),
 	)
 }
@@ -180,7 +180,7 @@ func (controller *chatController) sidebar() {
 											return time.UnixMilli(conversation().UpdatedAt).Format("Jan 2, 15:04")
 										},
 										ui.FontSize(11),
-										ui.Color("#94a3b8"),
+										ui.TextColor("#94a3b8"),
 									)
 								},
 								ui.Display("flex"),
@@ -217,7 +217,7 @@ func (controller *chatController) sidebar() {
 			ui.Text(
 				"Conversations and drafts are saved locally.",
 				ui.FontSize(11),
-				ui.Color("#94a3b8"),
+				ui.TextColor("#94a3b8"),
 				ui.LineHeight(16),
 			)
 		},
@@ -249,7 +249,7 @@ func (controller *chatController) toolbar() {
 					ui.Text(
 						"DeepSeek · native streaming Markdown",
 						ui.FontSize(12),
-						ui.Color("#94a3b8"),
+						ui.TextColor("#94a3b8"),
 					)
 				},
 				ui.Display("flex"),
@@ -314,13 +314,13 @@ func messageCard(message func() ChatMessage) {
 				},
 				ui.FontSize(12),
 				ui.FontWeight(700),
-				ui.Color("#93c5fd"),
+				ui.TextColor("#93c5fd"),
 			)
 			ui.Markdown(
 				ui.Width("100%"),
 				ui.FontSize(14),
 				ui.LineHeight(22),
-				ui.Color("#e2e8f0"),
+				ui.TextColor("#e2e8f0"),
 				ui.MarkdownLinkColor("#93c5fd"),
 				ui.MarkdownCodeTextColor("#c4b5fd"),
 				ui.MarkdownCodeBackground("#0b1020"),
@@ -340,7 +340,7 @@ func messageCard(message func() ChatMessage) {
 					ui.Text(
 						"Response interrupted. You can send another message to continue.",
 						ui.FontSize(12),
-						ui.Color("#fca5a5"),
+						ui.TextColor("#fca5a5"),
 					)
 				},
 			)
@@ -365,7 +365,7 @@ func (controller *chatController) composer() {
 					ui.Text(
 						controller.status.Read,
 						ui.FontSize(12),
-						ui.Color("#94a3b8"),
+						ui.TextColor("#94a3b8"),
 					)
 				},
 			)
@@ -419,7 +419,7 @@ func (controller *chatController) composer() {
 					return "Enter to send · responses stream into individual message cards"
 				},
 				ui.FontSize(11),
-				ui.Color("#94a3b8"),
+				ui.TextColor("#94a3b8"),
 			)
 		},
 		ui.Display("flex"),
@@ -445,7 +445,7 @@ func (controller *chatController) providerSettings() {
 				"Stored in your operating system’s credential store. Your key is never written to conversation history.",
 				ui.FontSize(12),
 				ui.LineHeight(18),
-				ui.Color("#94a3b8"),
+				ui.TextColor("#94a3b8"),
 			)
 			ui.View(
 				func() {
@@ -473,14 +473,14 @@ func (controller *chatController) providerSettings() {
 				ui.Gap(8),
 				ui.AlignItems("center"),
 			)
-			ui.Text(errorText, ui.FontSize(12), ui.Color("#fca5a5"), ui.MinHeight(18))
+			ui.Text(errorText, ui.FontSize(12), ui.TextColor("#fca5a5"), ui.MinHeight(18))
 			ui.View(ui.Flex(1))
 			ui.View(
 				func() {
 					ui.Button(
 						"Remove key",
 						buttonStyle(),
-						ui.Color("#fca5a5"),
+						ui.TextColor("#fca5a5"),
 						ui.Disabled(controller.credentialBusy.Read),
 						ui.OnClick(func() {
 							controller.credentialBusy.Write(true)
@@ -558,7 +558,7 @@ func (controller *chatController) providerSettings() {
 		ui.Padding(20),
 		ui.Gap(12),
 		ui.BackgroundColor("#182338"),
-		ui.Color("#e2e8f0"),
+		ui.TextColor("#e2e8f0"),
 	)
 }
 

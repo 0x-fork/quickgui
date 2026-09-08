@@ -64,13 +64,13 @@ export function signalPairs(parser: Parser, source: string, filename: string): s
         const type = annotation?.text.match(/^:\s*@reactive\.Signal\[([\s\S]+)\]$/)?.[1];
         let initializer = normal(value, env, replacements).replace(
           /^@reactive\.signal/,
-          "@reactive.create_signal",
+          "@ui.create_signal",
         );
         if (type) {
           const argument = children(
             children(value).find((field) => field.type === "arguments")!,
           )[0]!;
-          initializer = `@reactive.create_signal((${render(argument, env, replacements)} : ${type}))`;
+          initializer = `@ui.create_signal((${render(argument, env, replacements)} : ${type}))`;
         }
         return `let (${name}, ${written ? `set_${name}` : "_"}) = ${initializer}`;
       }
@@ -82,7 +82,7 @@ export function signalPairs(parser: Parser, source: string, filename: string): s
     if (call && env.has(call.receiver.text)) {
       const name = call.receiver.text;
       if (call.name === "get") return `${name}()`;
-      if (call.name === "peek") return `@reactive.untrack(${name})`;
+      if (call.name === "peek") return `@ui.untrack(${name})`;
       if (call.name === "set")
         return `set_${name}(${call.args.map((arg) => render(arg, env, replacements)).join(", ")})`;
       if (call.name === "update") {
@@ -98,7 +98,7 @@ export function signalPairs(parser: Parser, source: string, filename: string): s
           }
           parent = parent.parent;
         }
-        const getter = event ? `${name}()` : `@reactive.untrack(${name})`;
+        const getter = event ? `${name}()` : `@ui.untrack(${name})`;
         const callback = unwrap(call.args[0]!);
         if (
           callback.type === "arrow_function_expression" &&

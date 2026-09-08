@@ -67,7 +67,7 @@ func Toolbar() {
 						gui.AlignItems("center"),
 						gui.Gap(3),
 						gui.FontSize(11),
-						gui.Color(app.Theme().TextSecondary),
+						gui.TextColor(app.Theme().TextSecondary),
 						gui.AppRegion("no-drag"),
 					)
 				},
@@ -79,7 +79,7 @@ func Toolbar() {
 						func() string { return strconv.Itoa(store.Conflicts()) + " conflicted" },
 						gui.FontSize(11),
 						gui.FontWeight(600),
-						gui.Color(app.Theme().Warning),
+						gui.TextColor(app.Theme().Warning),
 						gui.AppRegion("no-drag"),
 					)
 				},
@@ -151,7 +151,7 @@ func toolbarBusy() {
 					return ""
 				},
 				gui.FontSize(12),
-				gui.Color(app.Theme().TextSecondary),
+				gui.TextColor(app.Theme().TextSecondary),
 			)
 			gui.Show(
 				func() bool {

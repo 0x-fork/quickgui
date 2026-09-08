@@ -18,7 +18,7 @@ func App() {
 				ui.Padding(12),
 				ui.BorderRadius(8),
 				ui.BackgroundColor("#2563eb"),
-				ui.Color("white"),
+				ui.TextColor("white"),
 				ui.Hover(ui.BackgroundColor("#3b82f6")),
 			)
 		},

@@ -61,7 +61,7 @@ func agentSheet(m *model) {
 										func() {
 											ui.Dialog.Title(
 												ui.PartProps{Style: ui.Styles(
-													ui.Color(m.color(func(t theme) string { return t.Text })),
+													ui.TextColor(m.color(func(t theme) string { return t.Text })),
 													ui.FontSize(17),
 													ui.FontWeight(720),
 												)},
@@ -69,7 +69,7 @@ func agentSheet(m *model) {
 											)
 											ui.Dialog.Description(
 												ui.PartProps{Style: ui.Styles(
-													ui.Color(m.color(func(t theme) string { return t.TextTertiary })),
+													ui.TextColor(m.color(func(t theme) string { return t.TextTertiary })),
 													ui.FontSize(12),
 												)},
 												func() {
@@ -128,7 +128,7 @@ func agentSheet(m *model) {
 																	func() string {
 																		return choose(read().installed(), "Available", "Not found")
 																	},
-																	ui.Color(m.color(func(t theme) string { return t.TextGhost })),
+																	ui.TextColor(m.color(func(t theme) string { return t.TextGhost })),
 																	ui.FontSize(10),
 																)
 															},
@@ -153,7 +153,7 @@ func agentSheet(m *model) {
 													ui.BackgroundColor(func() string {
 														return choose(selected(), m.theme().Selected, "transparent")
 													}),
-													ui.Color(func() string {
+													ui.TextColor(func() string {
 														return choose(read().installed(), m.theme().Text, m.theme().TextGhost)
 													}),
 													ui.BorderColor(func() string {
@@ -183,7 +183,7 @@ func agentSheet(m *model) {
 										}
 										return m.selectedLauncher().Description
 									},
-									ui.Color(m.color(func(t theme) string { return t.TextGhost })),
+									ui.TextColor(m.color(func(t theme) string { return t.TextGhost })),
 									ui.FontSize(11),
 								)
 							})
@@ -209,7 +209,7 @@ func agentSheet(m *model) {
 									ui.PaddingTop(9),
 									ui.PaddingBottom(9),
 									ui.BackgroundColor(m.color(func(t theme) string { return t.Terminal })),
-									ui.Color(m.color(func(t theme) string { return t.Text })),
+									ui.TextColor(m.color(func(t theme) string { return t.Text })),
 									ui.BorderColor(m.color(func(t theme) string { return t.BorderStrong })),
 									ui.BorderWidth(1),
 									ui.BorderRadius(6),
@@ -237,7 +237,7 @@ func agentSheet(m *model) {
 										func() {
 											ui.Text(
 												"No supported agent CLI was found. You can still open a terminal and run any installed agent; the sidebar detects it automatically.",
-												ui.Color(m.color(func(t theme) string { return t.Warning })),
+												ui.TextColor(m.color(func(t theme) string { return t.Warning })),
 												ui.FontSize(11.5),
 												ui.LineHeight(16),
 											)
@@ -289,7 +289,7 @@ func formGroup(children ui.Component) {
 func formLabel(m *model, label string) {
 	ui.Text(
 		label,
-		ui.Color(m.color(func(t theme) string { return t.TextSecondary })),
+		ui.TextColor(m.color(func(t theme) string { return t.TextSecondary })),
 		ui.FontSize(11.5),
 		ui.FontWeight(620),
 	)

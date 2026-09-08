@@ -41,7 +41,7 @@ func run(options native.WindowOptions, component func()) {
 			ui.Width("100%"),
 			ui.Height("100%"),
 			ui.BackgroundColor("#0b0e14"),
-			ui.Color("#f4f7fb"),
+			ui.TextColor("#f4f7fb"),
 		)
 	}
 	if err := native.Run(func() {
@@ -79,7 +79,7 @@ var buttonStyle = ui.Styles(
 	ui.PaddingLeft(16),
 	ui.PaddingRight(16),
 	ui.BackgroundColor("#262c38"),
-	ui.Color("#f4f7fb"),
+	ui.TextColor("#f4f7fb"),
 	ui.BorderColor("#3a4353"),
 	ui.BorderWidth(1),
 	ui.BorderRadius(9),
@@ -102,7 +102,7 @@ func dialogStatus(status func() string, pending func() bool) {
 				ui.LineHeight(19),
 				ui.TextAlign("center"),
 				ui.UserSelect("text"),
-				ui.Color(func() string {
+				ui.TextColor(func() string {
 					if pending() {
 						return "#c7d2fe"
 					}

@@ -18,6 +18,30 @@ func ComponentExample() {
 }
 ```
 
+用回调传递操作，用 children 回调编写可复用容器。在容器内部调用 children，让节点挂到正确的父节点下。普通 Go 函数调用共享当前挂载作用域；当条件分支、带键行或窗口根等所属作用域销毁时，相应清理会执行。
+
+```go
+func CardComponent(title string, children ui.Component) {
+	ui.View(
+		func() {
+			ui.Text(title, ui.FontWeight(600))
+			children()
+		},
+		ui.Padding(20),
+		ui.Gap(12),
+		ui.Display("flex"),
+		ui.FlexDirection("column"),
+	)
+}
+
+func CardComposition() {
+	CardComponent("Account", func() {
+		ui.Text("Manage your account settings.")
+		ui.Button("Save", ui.OnClick(func() { log.Print("Saved") }))
+	})
+}
+```
+
 ## 基础组件
 
 从 `ui.View`、`ui.Text`、`ui.Button` 和 `ui.Input` 开始。可以直接传入选项与文本。`func() { ... }` 参数将多个子节点分组到当前父节点下。
@@ -30,7 +54,7 @@ func ButtonExample(save func()) {
 		ui.PaddingLeft(16),
 		ui.PaddingRight(16),
 		ui.BackgroundColor("#2563eb"),
-		ui.Color("white"),
+		ui.TextColor("white"),
 		ui.BorderRadius(8),
 		ui.Hover(ui.BackgroundColor("#3b82f6")),
 		ui.OnClick(save),
@@ -98,7 +122,7 @@ ui.PartProps{
 		ui.PaddingLeft(12),
 		ui.PaddingRight(12),
 		ui.BackgroundColor("#2563eb"),
-		ui.Color("white"),
+		ui.TextColor("white"),
 		ui.BorderRadius(8),
 	),
 }

@@ -320,7 +320,7 @@ fn open_window() -> Unit {
             { "method": "get-window-state", "window": window.id },
             result => {
               if result is Ok(value) {
-                @reactive.batch(() => {
+                @ui.batch(() => {
                   t.appearance.set(
                     string(get(value, "appearance"), fallback="light"),
                   )

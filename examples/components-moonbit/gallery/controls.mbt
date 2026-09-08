@@ -77,7 +77,7 @@ fn slider_demo(t : Theme) -> @ui.Element {
 
 ///|
 fn meter_demo(t : Theme) -> @ui.Element {
-  let (value, set_value) = @reactive.create_signal(62.0)
+  let (value, set_value) = @ui.create_signal(62.0)
   let state : @reactive.Signal[Json] = @reactive.signal({})
   let meter = observe(
       @ui.meter([])
@@ -138,8 +138,8 @@ fn meter_demo(t : Theme) -> @ui.Element {
 
 ///|
 fn progress_demo(t : Theme) -> @ui.Element {
-  let (done, set_done) = @reactive.create_signal(3)
-  let (indeterminate, set_indeterminate) = @reactive.create_signal(false)
+  let (done, set_done) = @ui.create_signal(3)
+  let (indeterminate, set_indeterminate) = @ui.create_signal(false)
   let state : @reactive.Signal[Json] = @reactive.signal({})
   let progress = observe(
       @ui.progress([])
@@ -172,8 +172,8 @@ fn progress_demo(t : Theme) -> @ui.Element {
       progress.slot(@ui.Value).bind_label(() => "\{done()} / 12"),
     ]),
     row().children([
-      button(t, "-1", () => set_done((@reactive.untrack(done) - 1).max(0))),
-      button(t, "+1", () => set_done((@reactive.untrack(done) + 1).min(12))),
+      button(t, "-1", () => set_done((@ui.untrack(done) - 1).max(0))),
+      button(t, "+1", () => set_done((@ui.untrack(done) + 1).min(12))),
       button(t, "Complete", () => set_done(12)),
       control(
         t,
@@ -346,7 +346,7 @@ fn switch_demo(t : Theme) -> @ui.Element {
 
 ///|
 fn tabs_demo(t : Theme) -> @ui.Element {
-  let (active, set_active) = @reactive.create_signal("overview")
+  let (active, set_active) = @ui.create_signal("overview")
   let state : @reactive.Signal[Json] = @reactive.signal({})
   let tabs = @ui.tabs([])
     .bind_active_value(() => active())
@@ -497,8 +497,8 @@ fn toggle_group_demo(t : Theme) -> @ui.Element {
 
 ///|
 fn toolbar_demo(t : Theme) -> @ui.Element {
-  let (active, set_active) = @reactive.create_signal("select")
-  let (query, set_query) = @reactive.create_signal("")
+  let (active, set_active) = @ui.create_signal("select")
+  let (query, set_query) = @ui.create_signal("")
   let state : @reactive.Signal[Json] = @reactive.signal({})
   let bar = @ui.toolbar([])
     .orientation("horizontal")

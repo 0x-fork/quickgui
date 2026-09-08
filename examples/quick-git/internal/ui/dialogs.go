@@ -89,7 +89,7 @@ func dialogFrame(title, description string, body *native.Node, actions *native.N
 										title,
 										gui.FontSize(15),
 										gui.FontWeight(700),
-										gui.Color(app.Theme().Text),
+										gui.TextColor(app.Theme().Text),
 									)
 								},
 							)
@@ -103,7 +103,7 @@ func dialogFrame(title, description string, body *native.Node, actions *native.N
 												description,
 												gui.FontSize(12.5),
 												gui.LineHeight(18),
-												gui.Color(app.Theme().TextSecondary),
+												gui.TextColor(app.Theme().TextSecondary),
 											)
 										},
 									)
@@ -179,7 +179,7 @@ func CheckRow(label string, checked func() bool, onChange func(bool)) {
 					)
 				},
 			)
-			gui.Text(label, gui.FontSize(12.5), gui.Color(app.Theme().Text))
+			gui.Text(label, gui.FontSize(12.5), gui.TextColor(app.Theme().Text))
 		},
 	)
 }
@@ -268,7 +268,7 @@ func newBranchDialog() {
 				"Name",
 				gui.FontSize(12),
 				gui.FontWeight(600),
-				gui.Color(app.Theme().TextSecondary),
+				gui.TextColor(app.Theme().TextSecondary),
 			)
 			gui.Input(
 				gui.Placeholder("feature/great-idea"),
@@ -284,14 +284,14 @@ func newBranchDialog() {
 					if text == "" {
 						text = "A branch with this name already exists."
 					}
-					gui.Text(text, gui.FontSize(11.5), gui.Color(app.Theme().Danger))
+					gui.Text(text, gui.FontSize(11.5), gui.TextColor(app.Theme().Danger))
 				},
 			)
 			gui.Text(
 				"Based on",
 				gui.FontSize(12),
 				gui.FontWeight(600),
-				gui.Color(app.Theme().TextSecondary),
+				gui.TextColor(app.Theme().TextSecondary),
 			)
 			gui.Select.Root(
 				gui.SelectRootProps{
@@ -322,7 +322,7 @@ func newBranchDialog() {
 					gui.Text(
 						func() string { return base() },
 						gui.FontSize(13),
-						gui.Color(app.Theme().Text),
+						gui.TextColor(app.Theme().Text),
 					)
 				},
 			)
@@ -375,7 +375,7 @@ func newWorktreeDialog() {
 				"Branch",
 				gui.FontSize(12),
 				gui.FontWeight(600),
-				gui.Color(app.Theme().TextSecondary),
+				gui.TextColor(app.Theme().TextSecondary),
 			)
 			gui.Input(
 				gui.Value(func() string { return branch() }),
@@ -388,14 +388,14 @@ func newWorktreeDialog() {
 			gui.Show(
 				func() bool { return problem() != "" },
 				func() {
-					gui.Text(gui.FontSize(11.5), gui.Color(app.Theme().Danger), problem())
+					gui.Text(gui.FontSize(11.5), gui.TextColor(app.Theme().Danger), problem())
 				},
 			)
 			gui.Text(
 				"Path",
 				gui.FontSize(12),
 				gui.FontWeight(600),
-				gui.Color(app.Theme().TextSecondary),
+				gui.TextColor(app.Theme().TextSecondary),
 			)
 			gui.Input(
 				gui.Value(func() string { return path() }),

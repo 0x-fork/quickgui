@@ -223,7 +223,7 @@ for (const component of ALL_COMPONENT_DOCS) {
   if (formatted.exitCode) throw new Error(`${component.slug}: ${formatted.stderr}`);
   const code = formatted.stdout
     .toString()
-    .replace(/^\/\/\/\|\n/, "")
+    .replace(/^\/\/\/\|[^\n]*\n/gm, "")
     .trim();
   const spec =
     component.kind === "ui"
@@ -241,7 +241,7 @@ for (const component of ALL_COMPONENT_DOCS) {
         ? ["egoist/quickgui/ui", "egoist/quickgui/terminal"]
         : [
             "egoist/quickgui/ui",
-            "egoist/quickgui/reactive",
+            ...(code.includes("@reactive.") ? ["egoist/quickgui/reactive"] : []),
             ...(body.includes("@protocol") ? ["egoist/quickgui/protocol"] : []),
           ];
     let page = `${localizedComponentDescription(component, locale)}\n\n## ${headings[0]}\n\n${text.import}\n\n\`\`\`moonbit\nimport {\n${imports.map((name) => `  "${name}",`).join("\n")}\n}\n\`\`\`\n\n## ${headings[1]}\n\n\`\`\`moonbit\n${code}\n\`\`\`\n\n${component.kind === "swift-ui" ? text.native : text.note}\n\n`;

@@ -49,7 +49,7 @@ test("signal-pair examples retain the type of ambiguous initial values", () => {
   }`,
     "view.mbt",
   );
-  expect(result).toContain("@reactive.create_signal(([] : Json))");
+  expect(result).toContain("@ui.create_signal(([] : Json))");
   expect(result).toContain("set_selected(Json::null())");
   parseMoonbit(parser, result, "generated.mbt").delete();
 });
@@ -66,8 +66,8 @@ test("signal update blocks keep their return scope and read the previous value o
   }`,
     "view.mbt",
   );
-  expect(result).toContain("set_items((() => { let previous = @reactive.untrack(items)");
-  expect(result.match(/@reactive\.untrack\(items\)/g)).toHaveLength(1);
+  expect(result).toContain("set_items((() => { let previous = @ui.untrack(items)");
+  expect(result.match(/@ui\.untrack\(items\)/g)).toHaveLength(1);
   expect(result).toContain("return previous");
   parseMoonbit(parser, result, "generated.mbt").delete();
 });

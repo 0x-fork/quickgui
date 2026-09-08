@@ -85,12 +85,12 @@ func fileList(list model.ListID) {
 						label,
 						gui.FontSize(11),
 						gui.FontWeight(600),
-						gui.Color(app.Theme().TextTertiary),
+						gui.TextColor(app.Theme().TextTertiary),
 					)
 					gui.Text(
 						func() int { return len(store.ListItems(list)) },
 						gui.FontSize(11),
-						gui.Color(app.Theme().TextTertiary),
+						gui.TextColor(app.Theme().TextTertiary),
 					)
 					gui.View(gui.Flex(1))
 					gui.Show(
@@ -139,7 +139,7 @@ func fileList(list model.ListID) {
 						gui.PaddingLeft(12),
 						gui.PaddingBottom(10),
 						gui.FontSize(12),
-						gui.Color(app.Theme().TextTertiary),
+						gui.TextColor(app.Theme().TextTertiary),
 					)
 				},
 			)
@@ -228,7 +228,7 @@ func changeTable(list model.ListID) {
 										func() string { return string(row().Item.Code) },
 										gui.Width(16),
 										gui.FontWeight(700),
-										gui.Color(StatusColor(app.Theme(), string(row().Item.Code))),
+										gui.TextColor(StatusColor(app.Theme(), string(row().Item.Code))),
 									)
 								},
 							)
@@ -348,7 +348,7 @@ func changeName(list model.ListID, item func() git.ChangeItem) {
 						counts,
 						gui.FontSize(11),
 						gui.FontFamily("monospace"),
-						gui.Color(app.Theme().TextTertiary),
+						gui.TextColor(app.Theme().TextTertiary),
 					)
 				},
 			)
@@ -463,7 +463,7 @@ func commitComposer() {
 				gui.PaddingTop(4),
 				gui.PaddingBottom(4),
 				gui.BackgroundColor(app.Theme().Input),
-				gui.Color(app.Theme().Text),
+				gui.TextColor(app.Theme().Text),
 				gui.BorderWidth(1),
 				gui.BorderColor(app.Theme().InputBorder),
 				gui.BorderRadius(6),
@@ -543,7 +543,7 @@ func DiffPane() {
 										"+"+strconv.Itoa(store.DiffStats().Added),
 										gui.FontSize(11),
 										gui.FontWeight(700),
-										gui.Color(app.Theme().Success),
+										gui.TextColor(app.Theme().Success),
 										gui.FontFamily("monospace"),
 									)
 								},
@@ -555,7 +555,7 @@ func DiffPane() {
 										"-"+strconv.Itoa(store.DiffStats().Removed),
 										gui.FontSize(11),
 										gui.FontWeight(700),
-										gui.Color(app.Theme().Danger),
+										gui.TextColor(app.Theme().Danger),
 										gui.FontFamily("monospace"),
 									)
 								},
@@ -568,7 +568,7 @@ func DiffPane() {
 									gui.Text(
 										"Loading…",
 										gui.FontSize(11),
-										gui.Color(app.Theme().TextTertiary),
+										gui.TextColor(app.Theme().TextTertiary),
 									)
 								},
 							)
@@ -591,7 +591,7 @@ func DiffPane() {
 							gui.Text(
 								store.Diff().Error,
 								gui.Padding(12),
-								gui.Color(app.Theme().Danger),
+								gui.TextColor(app.Theme().Danger),
 								gui.FontSize(12),
 							)
 						},
@@ -792,7 +792,7 @@ func diffTableRow(row func() git.DiffRow, index func() int) {
 	numberStyle := gui.Styles(
 		gui.FontFamily("monospace"),
 		gui.FontSize(MonoFontSize-1),
-		gui.Color(theme.DiffLineNumber),
+		gui.TextColor(theme.DiffLineNumber),
 		gui.TextAlign("right"),
 		gui.PaddingRight(6),
 		gui.UserSelect("none"),
@@ -881,7 +881,7 @@ func diffTableRow(row func() git.DiffRow, index func() int) {
 								gui.MinWidth(0),
 								gui.FontFamily("monospace"),
 								gui.FontSize(MonoFontSize),
-								gui.Color(textColor),
+								gui.TextColor(textColor),
 								gui.WhiteSpace("nowrap"),
 							)
 							gui.Show(
@@ -1075,7 +1075,7 @@ func historyTableRow(row func() visibleItem[git.Commit], graphWidth func() float
 					gui.Text(
 						func() string { return row().Item.AuthorName },
 						gui.FontSize(11),
-						gui.Color(app.Theme().TextTertiary),
+						gui.TextColor(app.Theme().TextTertiary),
 						gui.LineClamp(1),
 					)
 				},
@@ -1091,7 +1091,7 @@ func historyTableRow(row func() visibleItem[git.Commit], graphWidth func() float
 							return git.RelativeTime(row().Item.AuthorTime, time.Now())
 						},
 						gui.FontSize(11),
-						gui.Color(app.Theme().TextTertiary),
+						gui.TextColor(app.Theme().TextTertiary),
 						gui.TextAlign("right"),
 					)
 				},
@@ -1122,7 +1122,7 @@ func HistoryView() {
 								gui.FontSize(11),
 								gui.FontWeight(700),
 								gui.TextTransform("uppercase"),
-								gui.Color(app.Theme().TextTertiary),
+								gui.TextColor(app.Theme().TextTertiary),
 							)
 							gui.Text(
 								func() string {
@@ -1133,7 +1133,7 @@ func HistoryView() {
 									return strconv.Itoa(len(store.History().Commits)) + suffix + " commits"
 								},
 								gui.FontSize(11),
-								gui.Color(app.Theme().TextTertiary),
+								gui.TextColor(app.Theme().TextTertiary),
 							)
 							gui.View(gui.Flex(1))
 							CheckRow("All branches", func() bool { return store.History().AllBranches }, store.SetHistoryAllBranches)
@@ -1268,7 +1268,7 @@ func commitFileTable() {
 										func() string { return row().Item.Status },
 										gui.Width(16),
 										gui.FontWeight(700),
-										gui.Color(StatusColor(app.Theme(), row().Item.Status)),
+										gui.TextColor(StatusColor(app.Theme(), row().Item.Status)),
 									)
 								},
 							)
@@ -1332,7 +1332,7 @@ func commitDetail() {
 										gui.FontSize(12.5),
 										gui.LineHeight(18),
 										gui.UserSelect("text"),
-										gui.Color(app.Theme().TextSecondary),
+										gui.TextColor(app.Theme().TextSecondary),
 									)
 								},
 							)
@@ -1344,7 +1344,7 @@ func commitDetail() {
 									return ""
 								},
 								gui.FontSize(12),
-								gui.Color(app.Theme().TextSecondary),
+								gui.TextColor(app.Theme().TextSecondary),
 							)
 						},
 						gui.Padding(12),
@@ -1389,7 +1389,7 @@ func BranchesView() {
 						gui.FontSize(11),
 						gui.FontWeight(700),
 						gui.TextTransform("uppercase"),
-						gui.Color(app.Theme().TextTertiary),
+						gui.TextColor(app.Theme().TextTertiary),
 						gui.Flex(1),
 					)
 					gui.Button(
@@ -1421,14 +1421,14 @@ func BranchesView() {
 									gui.Text(
 										"current",
 										gui.FontSize(11),
-										gui.Color(app.Theme().Accent),
+										gui.TextColor(app.Theme().Accent),
 									)
 								},
 							)
 							gui.Text(
 								branch.ShortSha,
 								gui.FontSize(11),
-								gui.Color(app.Theme().TextTertiary),
+								gui.TextColor(app.Theme().TextTertiary),
 							)
 						},
 						gui.OnClick(func() {}),
@@ -1466,7 +1466,7 @@ func BranchesView() {
 						gui.FontSize(11),
 						gui.FontWeight(700),
 						gui.TextTransform("uppercase"),
-						gui.Color(app.Theme().TextTertiary),
+						gui.TextColor(app.Theme().TextTertiary),
 						gui.MarginTop(16),
 					)
 				},
@@ -1480,12 +1480,12 @@ func BranchesView() {
 								branch.Name,
 								gui.Flex(1),
 								gui.LineClamp(1),
-								gui.Color(app.Theme().TextSecondary),
+								gui.TextColor(app.Theme().TextSecondary),
 							)
 							gui.Text(
 								branch.ShortSha,
 								gui.FontSize(11),
-								gui.Color(app.Theme().TextTertiary),
+								gui.TextColor(app.Theme().TextTertiary),
 							)
 						},
 						rowStyle(app.Theme(), false),
@@ -1517,7 +1517,7 @@ func WorktreesView() {
 						gui.FontSize(11),
 						gui.FontWeight(700),
 						gui.TextTransform("uppercase"),
-						gui.Color(app.Theme().TextTertiary),
+						gui.TextColor(app.Theme().TextTertiary),
 						gui.Flex(1),
 					)
 					gui.Button(
@@ -1544,7 +1544,7 @@ func WorktreesView() {
 							gui.Text(label, gui.Flex(1), gui.LineClamp(1))
 							gui.Text(
 								gui.FontSize(11),
-								gui.Color(app.Theme().TextTertiary),
+								gui.TextColor(app.Theme().TextTertiary),
 								filepath.Base(worktree.Path),
 							)
 						},
@@ -1602,7 +1602,7 @@ func StashesView() {
 						gui.FontSize(11),
 						gui.FontWeight(700),
 						gui.TextTransform("uppercase"),
-						gui.Color(app.Theme().TextTertiary),
+						gui.TextColor(app.Theme().TextTertiary),
 						gui.Flex(1),
 					)
 					gui.Button(
@@ -1631,7 +1631,7 @@ func StashesView() {
 											gui.Text(
 												stash.Ref+" · "+git.RelativeTime(stash.Time, time.Now()),
 												gui.FontSize(11),
-												gui.Color(app.Theme().TextTertiary),
+												gui.TextColor(app.Theme().TextTertiary),
 											)
 										},
 										gui.Display("flex"),
@@ -1693,14 +1693,14 @@ func emptyState(title, description string) {
 				title,
 				gui.FontSize(15),
 				gui.FontWeight(500),
-				gui.Color(app.Theme().TextTertiary),
+				gui.TextColor(app.Theme().TextTertiary),
 				gui.TextAlign("center"),
 			)
 			gui.Text(
 				description,
 				gui.FontSize(12),
 				gui.LineHeight(17),
-				gui.Color(app.Theme().TextTertiary),
+				gui.TextColor(app.Theme().TextTertiary),
 				gui.TextAlign("center"),
 				gui.MaxWidth(360),
 			)

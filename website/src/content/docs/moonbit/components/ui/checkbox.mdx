@@ -7,7 +7,6 @@ Add these package imports to `moon.pkg`:
 ```moonbit
 import {
   "egoist/quickgui/ui",
-  "egoist/quickgui/reactive",
 }
 ```
 
@@ -15,7 +14,7 @@ import {
 
 ```moonbit
 fn component_example() -> @ui.Element {
-  let (checked, set_checked) = @reactive.create_signal(false)
+  let (checked, set_checked) = @ui.create_signal(false)
   let box = @ui.checkbox([])
     .checked(checked())
     .on_checked_change(next => set_checked(next))

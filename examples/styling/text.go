@@ -13,7 +13,7 @@ func TextAlignment() {
 						ui.Width("100%"),
 						ui.TextAlign(align),
 						ui.FontSize(13),
-						ui.Color(ink),
+						ui.TextColor(ink),
 					)
 				},
 				ui.Width("100%"),
@@ -32,31 +32,31 @@ func TextStyling() {
 			ui.FontSize(20),
 			ui.FontWeight(700),
 			ui.LetterSpacing(2),
-			ui.Color(ink),
+			ui.TextColor(ink),
 		)
 		ui.Text(
 			"wordSpacing 8 pushes every space apart",
 			ui.FontSize(14),
 			ui.WordSpacing(8),
-			ui.Color(ink),
+			ui.TextColor(ink),
 		)
 		ui.Text(
 			"textTransform capitalize keeps selection on the original text",
 			ui.FontSize(14),
 			ui.TextTransform("capitalize"),
-			ui.Color(ink),
+			ui.TextColor(ink),
 		)
 		ui.Text(
 			"textShadow",
 			ui.FontSize(24),
 			ui.FontWeight(700),
-			ui.Color("#f8fafc"),
+			ui.TextColor("#f8fafc"),
 			ui.TextShadow("0 3px 10px #38bdf8aa"),
 		)
 		ui.Text(
 			"wavy underline in its own color",
 			ui.FontSize(14),
-			ui.Color(ink),
+			ui.TextColor(ink),
 			ui.TextDecoration("underline"),
 			ui.TextDecorationColor("#f97316"),
 			ui.TextDecorationStyle("wavy"),
@@ -65,7 +65,7 @@ func TextStyling() {
 		ui.Text(
 			"line-through and overline together",
 			ui.FontSize(14),
-			ui.Color(ink),
+			ui.TextColor(ink),
 			ui.TextDecoration("line-through overline"),
 			ui.TextDecorationColor("#f43f5e"),
 		)
@@ -75,7 +75,7 @@ func TextStyling() {
 					"wordBreak break-all with overflowWrap anywhere: supercalifragilisticexpialidocious",
 					ui.Width("100%"),
 					ui.FontSize(13),
-					ui.Color(muted),
+					ui.TextColor(muted),
 					ui.WordBreak("break-all"),
 					ui.OverflowWrap("anywhere"),
 					ui.Hyphens("manual"),
@@ -108,7 +108,7 @@ func Direction() {
 				ui.Text(
 					"مرحبا بالعالم — hello",
 					ui.FontSize(13),
-					ui.Color(ink),
+					ui.TextColor(ink),
 					ui.TextAlign("start"),
 					ui.TextDirection("rtl"),
 				)
@@ -127,7 +127,7 @@ func Direction() {
 		ui.Text(
 			"paddingStart and borderStartWidth resolve to the right edge inside this subtree.",
 			ui.FontSize(12),
-			ui.Color(muted),
+			ui.TextColor(muted),
 		)
 	})
 }

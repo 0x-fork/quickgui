@@ -26,7 +26,7 @@ var panelStyle = ui.Styles(
 	ui.BorderRadius(14),
 )
 var captionStyle = ui.Styles(
-	ui.Color(muted),
+	ui.TextColor(muted),
 	ui.FontSize(11),
 	ui.LetterSpacing(0.8),
 	ui.TextTransform("uppercase"),
@@ -51,7 +51,7 @@ func Panel(title string, children func()) {
 }
 
 func swatch(label string, options ...any) {
-	args := []any{func() { ui.Text(label, ui.FontSize(12), ui.Color(ink)) }, centered}
+	args := []any{func() { ui.Text(label, ui.FontSize(12), ui.TextColor(ink)) }, centered}
 	ui.View(append(args, options...)...)
 }
 

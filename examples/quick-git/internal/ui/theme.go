@@ -89,7 +89,7 @@ func (t Theme) Button(kind string) ui.Style {
 		return ui.Styles(
 			style,
 			ui.BackgroundColor(t.Accent),
-			ui.Color(t.TextOnAccent),
+			ui.TextColor(t.TextOnAccent),
 			ui.Hover(ui.BackgroundColor(t.AccentHover)),
 		)
 	}
@@ -100,7 +100,7 @@ func (t Theme) Button(kind string) ui.Style {
 	return ui.Styles(
 		style,
 		ui.BackgroundColor(t.Raised),
-		ui.Color(color),
+		ui.TextColor(color),
 		ui.BorderWidth(1),
 		ui.BorderColor(t.BorderStrong),
 		ui.Hover(ui.BackgroundColor(t.Hover)),
@@ -115,14 +115,14 @@ func (t Theme) IconButton() ui.Style {
 		ui.FlexShrink(0),
 		ui.AlignItems("center"),
 		ui.JustifyContent("center"),
-		ui.Color(t.TextSecondary),
+		ui.TextColor(t.TextSecondary),
 		ui.BackgroundColor("transparent"),
 		ui.BorderRadius(5),
 		ui.Cursor("default"),
 		ui.AppRegion("no-drag"),
 		ui.Hover(
 			ui.BackgroundColor(t.Hover),
-			ui.Color(t.Text),
+			ui.TextColor(t.Text),
 		),
 		ui.Active(ui.BackgroundColor(t.Active)),
 		ui.DisabledStyle(ui.Opacity(0.4)),
@@ -136,7 +136,7 @@ func (t Theme) InputStyle() ui.Style {
 		ui.PaddingLeft(7),
 		ui.PaddingRight(7),
 		ui.BackgroundColor(t.Input),
-		ui.Color(t.Text),
+		ui.TextColor(t.Text),
 		ui.BorderWidth(1),
 		ui.BorderColor(t.InputBorder),
 		ui.BorderRadius(6),

@@ -33,21 +33,57 @@ test "conditional dependencies unsubscribe and memo diamonds settle before effec
   let choose = @reactive.signal(true)
   let seen : Array[Int] = []
   @reactive.with_owner(root, () => {
-    let value = @reactive.memo(() => {
+    let value = @reactive.create_memo(() => {
       if choose.get() {
         a.get()
       } else {
         b.get()
       }
     })
-    let doubled = @reactive.memo(() => value.get() * 2)
-    @reactive.create_effect(() => seen.push(value.get() + doubled.get()))
+    let doubled = @reactive.create_memo(() => value() * 2)
+    @reactive.create_effect(() => seen.push(value() + doubled()))
   })
   choose.set(false)
   a.set(9)
   b.set(4)
   assert_eq(seen, [3, 6, 12])
   @reactive.dispose(root)
+}
+
+///|
+test "memo getters cache values, skip equal results, batch, and dispose" {
+  let baseline = @reactive.active_effect_count()
+  let root = @reactive.create_scope()
+  let (count, set_count) = @reactive.create_signal(1)
+  let runs = @ref.Ref(0)
+  let seen : Array[Int] = []
+  let parity = @reactive.with_owner(root, () => {
+    let parity = @reactive.create_memo(() => {
+      runs.val += 1
+      count() % 2
+    })
+    @reactive.create_effect(() => seen.push(parity()))
+    parity
+  })
+  let initial_runs = runs.val
+  assert_eq(parity(), 1)
+  assert_eq(parity(), 1)
+  assert_eq(runs.val, initial_runs)
+  set_count(3)
+  assert_eq(seen, [1])
+  assert_eq(runs.val, initial_runs + 1)
+  @reactive.batch(() => {
+    set_count(4)
+    set_count(6)
+  })
+  assert_eq(parity(), 0)
+  assert_eq(seen, [1, 0])
+  assert_eq(runs.val, initial_runs + 2)
+  @reactive.dispose(root)
+  set_count(7)
+  assert_eq(seen, [1, 0])
+  assert_eq(runs.val, initial_runs + 2)
+  assert_eq(@reactive.active_effect_count(), baseline)
 }
 
 ///|

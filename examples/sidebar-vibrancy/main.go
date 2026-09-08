@@ -81,7 +81,7 @@ func Vibrancy() {
 									ui.BorderColor("transparent"),
 									ui.BorderWidth(1),
 									ui.BorderRadius(7),
-									ui.Color("#263247"),
+									ui.TextColor("#263247"),
 									ui.Cursor("default"),
 									ui.AppRegion("no-drag"),
 									ui.UserSelect("none"),
@@ -112,7 +112,7 @@ func Vibrancy() {
 						func() {
 							ui.Text(
 								"EFFECT STATE",
-								ui.Color("#59667b"),
+								ui.TextColor("#59667b"),
 								ui.FontSize(11),
 								ui.FontWeight(700),
 							)
@@ -132,7 +132,7 @@ func Vibrancy() {
 											ui.BorderColor("#ffffff3d"),
 											ui.BorderWidth(1),
 											ui.BorderRadius(6),
-											ui.Color("#445168"),
+											ui.TextColor("#445168"),
 											ui.FontSize(10),
 											ui.FontWeight(600),
 											ui.Cursor("default"),
@@ -194,7 +194,7 @@ func Vibrancy() {
 								func() {
 									ui.Text(
 										"GO + QUICKGUI",
-										ui.Color("#2563eb"),
+										ui.TextColor("#2563eb"),
 										ui.FontSize(12),
 										ui.FontWeight(700),
 									)
@@ -208,7 +208,7 @@ func Vibrancy() {
 										"Select any Electron-compatible semantic material. QuickGUI updates one native "+
 											"NSVisualEffectView while the retained QuickGUI tree and Metal surface stay mounted. "+
 											"This pane is opaque, so the selected material remains visually confined to the translucent sidebar.",
-										ui.Color("#667085"),
+										ui.TextColor("#667085"),
 										ui.FontSize(14),
 										ui.LineHeight(21),
 									)
@@ -256,6 +256,6 @@ func Vibrancy() {
 		ui.Width("100%"),
 		ui.Height("100%"),
 		ui.BackgroundColor("transparent"),
-		ui.Color("#172033"),
+		ui.TextColor("#172033"),
 	)
 }

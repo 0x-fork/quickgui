@@ -111,7 +111,7 @@ var buttonStyle = ui.Styles(
 	ui.PaddingLeft(14),
 	ui.PaddingRight(14),
 	ui.BackgroundColor("#252b37"),
-	ui.Color("#f4f7fb"),
+	ui.TextColor("#f4f7fb"),
 	ui.BorderColor("#394253"),
 	ui.BorderWidth(1),
 	ui.BorderRadius(8),

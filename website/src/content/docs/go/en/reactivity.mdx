@@ -43,18 +43,25 @@ Use an effect for work outside the view tree, such as synchronizing a subscripti
 
 ```go
 func EffectExample() {
-  topic, setTopic := ui.CreateSignal("Inbox")
-  ui.CreateEffect(func() {
-    current := topic()
-    log.Print("Subscribe: ", current)
-    ui.OnCleanup(func() { log.Print("Unsubscribe: ", current) })
-  })
-  ui.View(func() {
-    ui.Text("Watching: ", topic)
-    ui.Button("Switch topic", ui.OnClick(func() {
-      if topic() == "Inbox" { setTopic("Archive") } else { setTopic("Inbox") }
-    }))
-  })
+	topic, setTopic := ui.CreateSignal("Inbox")
+	ui.CreateEffect(func() {
+		current := topic()
+		log.Print("Subscribe: ", current)
+		ui.OnCleanup(func() { log.Print("Unsubscribe: ", current) })
+	})
+	ui.View(func() {
+		ui.Text("Watching: ", topic)
+		ui.Button(
+			"Switch topic",
+			ui.OnClick(func() {
+				if topic() == "Inbox" {
+					setTopic("Archive")
+				} else {
+					setTopic("Inbox")
+				}
+			}),
+		)
+	})
 }
 ```
 
@@ -66,18 +73,18 @@ Here both fields change as one update. Observers see “Grace Hopper” after th
 
 ```go
 func BatchedExample() {
-  first, setFirst := ui.CreateSignal("Ada")
-  last, setLast := ui.CreateSignal("Lovelace")
-  ui.CreateEffect(func() { log.Print(first() + " " + last()) })
-  applyProfile := func() {
-    ui.Batch(func() {
-      setFirst("Grace")
-      setLast("Hopper")
-    })
-  }
-  ui.View(func() {
-    ui.Text(first, " ", last)
-    ui.Button("Apply profile", ui.OnClick(applyProfile))
-  })
+	first, setFirst := ui.CreateSignal("Ada")
+	last, setLast := ui.CreateSignal("Lovelace")
+	ui.CreateEffect(func() { log.Print(first() + " " + last()) })
+	applyProfile := func() {
+		ui.Batch(func() {
+			setFirst("Grace")
+			setLast("Hopper")
+		})
+	}
+	ui.View(func() {
+		ui.Text(first, " ", last)
+		ui.Button("Apply profile", ui.OnClick(applyProfile))
+	})
 }
 ```

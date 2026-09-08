@@ -7,7 +7,6 @@ TextField と同じ制御規約を持つ、入力内容を隠すネイティブ�
 ```moonbit
 import {
   "egoist/quickgui/ui",
-  "egoist/quickgui/reactive",
 }
 ```
 
@@ -15,7 +14,7 @@ import {
 
 ```moonbit
 fn component_example() -> @ui.Element {
-  let (value, set_value) = @reactive.create_signal("")
+  let (value, set_value) = @ui.create_signal("")
   @ui.swift_ui_host([
     @ui.swift_ui_secure_field()
     .value(value())

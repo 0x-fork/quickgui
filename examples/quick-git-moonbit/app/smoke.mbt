@@ -16,7 +16,7 @@ pub fn smoke() -> Unit {
           }
           let window = create_window(path, show=false)
           let s = sessions.get(window.id).unwrap()
-          @reactive.create_effect(install_menu)
+          @ui.create_effect(install_menu)
           window.with_owner(() => {
             let steps : Array[() -> Unit] = [
               () => {

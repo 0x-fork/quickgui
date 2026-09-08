@@ -23,9 +23,8 @@ fn card() -> @ui.Element {
 `.style(base).style(overrides)` は順番に宣言をマージし、後のプロパティが優先されます。スタイルビルダーの `.merge(other)` も同様です。適用時にスナップショットを取るため、その後ビルダーを変更してもマウント済みの要素は更新されません。
 
 ```moonbit
-///|
 fn selectable() -> @ui.Element {
-  let (selected, set_selected) = @reactive.create_signal(false)
+  let (selected, set_selected) = @ui.create_signal(false)
   @ui.button("Select")
   .on_click(() => set_selected(!selected()))
   .style(
@@ -45,6 +44,21 @@ fn selectable() -> @ui.Element {
 ポインターとフォーカスの状態には `.hover(s => ...)`、`.active(s => ...)`、`.focus_style(s => ...)` を使います。`.selected_style` は複合パーツの選択状態を指定します。これらの状態はネイティブコアが解決します。ドロップ先のドラッグ中の外観には、`bind_json` と `@protocol.DRAG_OVER_STYLE` でスタイルの `.json()` を返します。ノードをドロップ先として設定する必要もあり、スタイルだけでドロップ動作は有効になりません。プロトコル定数を使う場合は `egoist/quickgui/protocol` をインポートします。
 
 基本スタイルに[トランジション](/docs/moonbit/animations)を設定すると状態の変化をアニメーションにできます。
+
+通常の見た目は要素に設定し、各状態には変化する描画プロパティだけを書きます。ホバーは背景を一時的に上書きし、押下中は不透明度が下がります。どちらもシグナルやコンポーネントの再実行は不要です。
+
+```moonbit
+fn interaction_button() -> @ui.Element {
+  @ui.button("Save")
+  .padding(12)
+  .border_radius(8)
+  .bg(@ui.rgb8(37, 99, 235))
+  .text_color(@ui.rgb8(255, 255, 255))
+  .hover(s => s.bg(@ui.rgb8(59, 130, 246)))
+  .active(s => s.opacity(0.8))
+  .on_click(() => println("Saved"))
+}
+```
 
 ## 色と SVG
 

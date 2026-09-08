@@ -20,12 +20,12 @@ var linkStyle = ui.Styles(
 	ui.PaddingLeft(12),
 	ui.PaddingRight(12),
 	ui.BorderRadius(8),
-	ui.Color(muted),
+	ui.TextColor(muted),
 	ui.Cursor("default"),
 	ui.UserSelect("none"),
 	ui.Hover(ui.BackgroundColor(panelRaised)),
 )
-var activeLinkStyle = ui.Styles(ui.BackgroundColor(blueSurface), ui.Color("#dceaff"))
+var activeLinkStyle = ui.Styles(ui.BackgroundColor(blueSurface), ui.TextColor("#dceaff"))
 var buttonStyle = ui.Styles(
 	ui.Display("flex"),
 	ui.Height(34),
@@ -34,7 +34,7 @@ var buttonStyle = ui.Styles(
 	ui.PaddingLeft(12),
 	ui.PaddingRight(12),
 	ui.BackgroundColor(panelRaised),
-	ui.Color(textColor),
+	ui.TextColor(textColor),
 	ui.BorderRadius(8),
 	ui.Cursor("default"),
 	ui.UserSelect("none"),
@@ -85,7 +85,7 @@ func page(title, description any, children ...any) {
 	ui.View(
 		func() {
 			ui.Text(title, ui.FontSize(28), ui.LineHeight(36), ui.FontWeight(750))
-			ui.Text(description, ui.MaxWidth(620), ui.Color(muted), ui.LineHeight(21))
+			ui.Text(description, ui.MaxWidth(620), ui.TextColor(muted), ui.LineHeight(21))
 			ui.Child(children)
 		},
 		ui.Display("flex"),
@@ -115,14 +115,14 @@ func card(title, detail, href string) {
 				ui.BorderWidth(1),
 				ui.BorderColor(border),
 				ui.BorderRadius(12),
-				ui.Color(textColor),
+				ui.TextColor(textColor),
 				ui.Cursor("default"),
 				ui.Hover(ui.BackgroundColor(panelRaised)),
 			)},
 		},
 		func() {
 			ui.Text(title, ui.FontWeight(700))
-			ui.Text(detail, ui.Color(muted), ui.LineHeight(19))
+			ui.Text(detail, ui.TextColor(muted), ui.LineHeight(19))
 		},
 	)
 }

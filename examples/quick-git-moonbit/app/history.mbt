@@ -73,11 +73,11 @@ fn history_view(s : Store) -> @ui.Element {
 
 ///|
 fn history_table(s : Store) -> @ui.Element {
-  let (viewport, set_viewport) = @reactive.create_signal(@ui.VisibleRange::{
+  let (viewport, set_viewport) = @ui.create_signal(@ui.VisibleRange::{
     start: 0,
     end: 35,
   })
-  let width = @reactive.memo(() => {
+  let width = @ui.create_memo(() => {
     let mut lanes = 1
     for row in s.graph.get() {
       lanes = lanes.max(row.width)
@@ -86,7 +86,7 @@ fn history_table(s : Store) -> @ui.Element {
   })
   @ui.table([])
   .columns([
-    { "id": "graph", "track": "\{width.get()}px" },
+    { "id": "graph", "track": "\{width()}px" },
     { "id": "subject", "track": "1fr", "rowHeader": true },
     { "id": "author", "track": "120px" },
     { "id": "time", "track": "70px", "align": "end" },
@@ -145,13 +145,13 @@ fn history_table(s : Store) -> @ui.Element {
           .overflow("hidden")
           .height(26)
           .bind(@protocol.WIDTH, () => {
-            @protocol.Number(Float::from_int(width.get()))
+            @protocol.Number(Float::from_int(width()))
           })
           .children_keyed(
             () => {
               let index = commit.get().index
               if s.graph.get().get(index) is Some(row) {
-                @git.graph_layers(row, width.get())
+                @git.graph_layers(row, width())
               } else {
                 []
               }
@@ -253,22 +253,22 @@ fn history_table(s : Store) -> @ui.Element {
 
 ///|
 fn commit_detail(s : Store) -> @ui.Element {
-  let commit = @reactive.memo(() => {
+  let commit = @ui.create_memo(() => {
     s.commits.get().filter(c => c.sha == s.commit_sha.get()).get(0)
   })
-  let (viewport, set_viewport) = @reactive.create_signal(@ui.VisibleRange::{
+  let (viewport, set_viewport) = @ui.create_signal(@ui.VisibleRange::{
     start: 0,
     end: 8,
   })
   col()
   .children(
     [
-      ..if commit.get() is Some(_) {
+      ..if commit() is Some(_) {
         [
           col()
           .children([
             label(s, () => {
-              match commit.get() {
+              match commit() {
                 Some(c) => c.subject
                 None => ""
               }
@@ -278,7 +278,7 @@ fn commit_detail(s : Store) -> @ui.Element {
             label(
               s,
               () => {
-                match commit.get() {
+                match commit() {
                   Some(c) => c.body
                   None => ""
                 }
@@ -291,7 +291,7 @@ fn commit_detail(s : Store) -> @ui.Element {
             label(
               s,
               () => {
-                match commit.get() {
+                match commit() {
                   Some(c) => c.author + " · " + c.email + " · " + c.short
                   None => ""
                 }

@@ -163,7 +163,7 @@ func sidebar(state *galleryState) {
 		func() {
 			ui.View(
 				func() {
-					ui.Text("SwiftUI", ui.Color("#252a33"), ui.FontSize(13), ui.FontWeight(700))
+					ui.Text("SwiftUI", ui.TextColor("#252a33"), ui.FontSize(13), ui.FontWeight(700))
 				},
 				ui.Display("flex"),
 				ui.FlexDirection("row"),
@@ -178,7 +178,7 @@ func sidebar(state *galleryState) {
 				ui.FlexShrink(0),
 				ui.PaddingLeft(18),
 				ui.PaddingBottom(7),
-				ui.Color("#747b87"),
+				ui.TextColor("#747b87"),
 				ui.FontSize(10),
 				ui.FontWeight(700),
 				ui.LetterSpacing(0.7),
@@ -227,7 +227,7 @@ func sidebar(state *galleryState) {
 														ui.Cursor("default"),
 														ui.UserSelect("none"),
 														ui.BackgroundColor(background),
-														ui.Color(color),
+														ui.TextColor(color),
 														ui.FontWeight(weight),
 														ui.Hover(hover),
 													)
@@ -255,7 +255,7 @@ func sidebar(state *galleryState) {
 				func() {
 					ui.Text(
 						strconv.Itoa(len(demos))+" native components",
-						ui.Color("#747b87"),
+						ui.TextColor("#747b87"),
 						ui.FontSize(11),
 					)
 				},
@@ -283,13 +283,13 @@ func pane(state *galleryState, body func()) {
 				func() {
 					ui.Text(
 						func() string { return state.current().Label },
-						ui.Color("#20242c"),
+						ui.TextColor("#20242c"),
 						ui.FontSize(15),
 						ui.FontWeight(700),
 					)
 					ui.Text(
 						"Native SwiftUI · QuickGUI state",
-						ui.Color("#858b96"),
+						ui.TextColor("#858b96"),
 						ui.FontSize(11),
 					)
 				},
@@ -341,12 +341,12 @@ func renderDemo(state *galleryState) {
 func demoPage(description string, status func() string, control ui.Component) {
 	ui.View(
 		func() {
-			ui.Text(description, ui.Color("#5f6672"), ui.FontSize(14), ui.LineHeight(21))
+			ui.Text(description, ui.TextColor("#5f6672"), ui.FontSize(14), ui.LineHeight(21))
 			ui.View(
 				func() {
 					ui.Text(
 						"LIVE SWIFTUI DEMO",
-						ui.Color("#858b96"),
+						ui.TextColor("#858b96"),
 						ui.FontSize(11),
 						ui.FontWeight(700),
 						ui.LetterSpacing(0.8),
@@ -376,11 +376,11 @@ func demoPage(description string, status func() string, control ui.Component) {
 				func() {
 					ui.Text(
 						"NATIVE STATE",
-						ui.Color("#727985"),
+						ui.TextColor("#727985"),
 						ui.FontSize(11),
 						ui.FontWeight(700),
 					)
-					ui.Text(status, ui.Color("#252a33"), ui.FontSize(12))
+					ui.Text(status, ui.TextColor("#252a33"), ui.FontSize(12))
 				},
 				ui.Display("flex"),
 				ui.FlexDirection("row"),
@@ -579,7 +579,7 @@ func demoControl(state *galleryState) {
 					ui.FlexShrink(0),
 					ui.PaddingLeft(8),
 					ui.PaddingRight(8),
-					ui.Color("#111827"),
+					ui.TextColor("#111827"),
 					ui.BackgroundColor("#ffffff"),
 					ui.BorderWidth(1),
 					ui.BorderColor("#d1d5db"),
@@ -636,7 +636,7 @@ func demoControl(state *galleryState) {
 									func() {
 										ui.Text(
 											"QuickGUI inside SwiftUI",
-											ui.Color("#111827"),
+											ui.TextColor("#111827"),
 											ui.FontSize(15),
 											ui.FlexShrink(0),
 										)
@@ -651,7 +651,7 @@ func demoControl(state *galleryState) {
 											ui.Height(36),
 											ui.FlexShrink(0),
 											ui.Padding(8),
-											ui.Color("#111827"),
+											ui.TextColor("#111827"),
 											ui.BackgroundColor("#ffffff"),
 											ui.BorderWidth(1),
 											ui.BorderColor("#d1d5db"),
@@ -664,7 +664,7 @@ func demoControl(state *galleryState) {
 											ui.Height(34),
 											ui.FlexShrink(0),
 											ui.Padding(8),
-											ui.Color("#ffffff"),
+											ui.TextColor("#ffffff"),
 											ui.BackgroundColor("#2563eb"),
 											ui.BorderRadius(8),
 											ui.JustifyContent("center"),

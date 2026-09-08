@@ -67,7 +67,7 @@ func rowStyle(theme Theme, selected bool) gui.Style {
 		gui.PaddingRight(8),
 		gui.BorderRadius(6),
 		gui.BackgroundColor(background),
-		gui.Color(theme.Text),
+		gui.TextColor(theme.Text),
 		gui.Cursor("default"),
 		gui.UserSelect("none"),
 		gui.Hover(gui.BackgroundColor(theme.Hover)),

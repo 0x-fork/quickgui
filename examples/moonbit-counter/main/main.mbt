@@ -45,7 +45,7 @@ fn open_details_window() -> Unit {
 
 ///|
 fn counter() -> @ui.Element {
-  let (count, set_count) = @reactive.create_signal(0)
+  let (count, set_count) = @ui.create_signal(0)
   @ui.div([
     @ui.div([@ui.text("QuickGUI · MoonBit").font_weight(600)])
     .flex_row()

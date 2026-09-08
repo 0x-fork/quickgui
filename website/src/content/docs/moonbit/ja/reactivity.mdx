@@ -3,9 +3,8 @@
 ## 動的バインディング
 
 ```moonbit
-///|
 fn greeting() -> @ui.Element {
-  let (name, set_name) = @reactive.create_signal("World")
+  let (name, set_name) = @ui.create_signal("World")
   @ui.div([
     @ui.input().value(name()).on_input(set_name),
     @ui.text("Hello, \{name()}!"),
@@ -15,12 +14,74 @@ fn greeting() -> @ui.Element {
 }
 ```
 
-`@reactive.create_signal(initial)` は `(read, write)` を返します。QuickGUI でビルドすると `@ui.text("Count: \{count()}")` が自動的に更新されます。ボタンの内容、ネイティブプロパティ、fluent スタイル、操作状態のスタイル、子要素リストも対象です。各バインディングは自分のノードだけを更新し、コンポーネント全体は再実行しません。バインディングの式は純粋な計算にしてください。
+`@ui.create_signal(initial)` は `(read, write)` を返します。QuickGUI でビルドすると `@ui.text("Count: \{count()}")` が自動的に更新されます。ボタンの内容、ネイティブプロパティ、fluent スタイル、操作状態のスタイル、子要素リストも対象です。各バインディングは自分のノードだけを更新し、コンポーネント全体は再実行しません。バインディングの式は純粋な計算にしてください。
 
-通常の初期化は MoonBit のままです。`let initial = count()` はスナップショットを保存し、イベントハンドラーはイベント時だけ実行されます。購読しない読み取りには `@reactive.untrack(count)` を使います。独自コンポーネントの引数は通常の型なので、更新が必要なら getter を渡します。明示的な `bind_*` メソッドと低レベルの `Signal` は、手動の組み立てやキー付きの行にも使えます。
+通常の初期化は MoonBit のままです。`let initial = count()` はスナップショットを保存し、イベントハンドラーはイベント時だけ実行されます。購読しない読み取りには `@ui.untrack(count)` を使います。独自コンポーネントの引数は通常の型なので、更新が必要なら getter を渡します。明示的な `bind_*` メソッドと低レベルの `Signal` は、手動の組み立てやキー付きの行にも使えます。
 
-## 派生状態とクリーンアップ
+## 派生状態
 
-`@reactive.memo(() => expression)` は派生値のシグナルを返します。`@reactive.create_effect` は条件分岐を含む実際の読み取りを追跡します。関連する書き込みは `@reactive.batch` でまとめます。ラベル一つの更新のために副作用でビュー全体を再構築しないでください。
+`@ui.create_memo` はシグナルから計算した値をキャッシュし、結果が変わると依存する処理を更新します。返り値は読み取り専用の getter で、`total()` のように呼び出します。計算は純粋に保ち、派生値には memo、外部との連携にはエフェクトを使います。以下の合計は数量が変わると再計算されます。
 
-コンポーネントと動的分岐は購読を所有します。後始末は `@reactive.on_cleanup` に登録します。所有者を削除すると副作用とコールバックも破棄されます。新しいウィンドウは独立した所有者を持ちます。
+```moonbit
+fn derived_total() -> @ui.Element {
+  let (quantity, set_quantity) = @ui.create_signal(1)
+  let total = @ui.create_memo(() => quantity() * 25)
+  @ui.div([
+    @ui.text("Total: \{total()}"),
+    @ui.button("Add one").on_click(() => set_quantity(quantity() + 1)),
+  ])
+  .flex_col()
+  .gap(8)
+}
+```
+
+## 副作用とクリーンアップ
+
+`@ui.create_effect` は初回と、読み取ったシグナルの変更時に実行されます。条件分岐内の読み取りは、その分岐が実行されたときだけ依存関係になります。購読の同期など外部と連携する処理に使ってください。文字やプロパティはビューの式ですでにバインドされます。
+
+以下では購読の開始と終了をログに記録します。エフェクト内のクリーンアップは、次の実行前と所有スコープの破棄時に実行されます。`current` を保存することで古いトピックを解除できます。エフェクト外で登録したクリーンアップは周囲の所有者に属し、各シグナル更新時ではなく所有者の破棄時に実行されます。動的な分岐の削除やウィンドウ終了で、その配下のエフェクトとコールバックが破棄されます。
+
+```moonbit
+fn effect_lifecycle() -> @ui.Element {
+  let (topic, set_topic) = @ui.create_signal("Inbox")
+  @ui.create_effect(() => {
+    let current = topic()
+    println("Subscribe: \{current}")
+    @ui.on_cleanup(() => println("Unsubscribe: \{current}"))
+  })
+  @ui.div([
+    @ui.text("Watching: \{topic()}"),
+    @ui.button("Switch topic").on_click(() => {
+      set_topic(if topic() == "Inbox" { "Archive" } else { "Inbox" })
+    }),
+  ])
+  .flex_col()
+  .gap(8)
+}
+```
+
+## 更新のバッチ処理
+
+`@ui.batch` は同期的な書き込みをまとめ、最も外側のバッチ終了時に依存するエフェクトを処理します。以下の2つのフィールドは一緒に変わるため、ログは “Grace Hopper” となり、途中の “Grace Lovelace” は出ません。ネイティブイベントは自動でバッチ化されます。明示的なバッチを使うと他の UI コードから `apply_profile` を呼んでも同じ動作になります。
+
+シグナルの読み書きは UI スレッドで行います。バッチはバックグラウンドからのアクセスをスレッドセーフにはしません。依存関係を追加せずスナップショットを読むには `@ui.untrack(read)` を使います。memo で表せる派生値を、エフェクトで別のシグナルへコピーすることは避けてください。
+
+```moonbit
+fn batched_profile() -> @ui.Element {
+  let (first, set_first) = @ui.create_signal("Ada")
+  let (last, set_last) = @ui.create_signal("Lovelace")
+  @ui.create_effect(() => println("\{first()} \{last()}"))
+  let apply_profile = () => {
+    @ui.batch(() => {
+      set_first("Grace")
+      set_last("Hopper")
+    })
+  }
+  @ui.div([
+    @ui.text("\{first()} \{last()}"),
+    @ui.button("Apply profile").on_click(apply_profile),
+  ])
+  .flex_col()
+  .gap(8)
+}
+```

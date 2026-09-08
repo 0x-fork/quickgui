@@ -45,7 +45,7 @@ func FieldDemo() {
 				ui.Field.Error(
 					ui.PartProps{Style: ui.Styles(
 						ui.FontSize(12),
-						ui.Color(color(func(p palette) string { return p.Danger })),
+						ui.TextColor(color(func(p palette) string { return p.Danger })),
 					)},
 					"Enter an address containing @",
 				)
@@ -133,7 +133,7 @@ func FormDemo() {
 						ui.Field.Error(
 							ui.PartProps{Style: ui.Styles(
 								ui.FontSize(12),
-								ui.Color(color(func(p palette) string { return p.Danger })),
+								ui.TextColor(color(func(p palette) string { return p.Danger })),
 							)},
 							"An address containing @ is required",
 						)
@@ -169,7 +169,7 @@ func FormDemo() {
 						ui.Text(
 							"The terms must be accepted",
 							ui.FontSize(12),
-							ui.Color(color(func(p palette) string { return p.Danger })),
+							ui.TextColor(color(func(p palette) string { return p.Danger })),
 						)
 					},
 				)
@@ -470,7 +470,7 @@ func CalendarDemo() {
 													ui.Height(28),
 													ui.BorderRadius(7),
 													ui.BackgroundColor(choose(selected(), p().Accent, p().PanelAlt)),
-													ui.Color(choose(selected(), p().OnAccent, choose(strings.HasPrefix(date, month()), p().Ink, p().Faint))),
+													ui.TextColor(choose(selected(), p().OnAccent, choose(strings.HasPrefix(date, month()), p().Ink, p().Faint))),
 													ui.FontSize(11),
 													ui.Hover(ui.BackgroundColor(choose(selected(), p().Accent, p().ControlHover))),
 													ui.Focus(ui.Outline("2px solid "+p().Accent)),

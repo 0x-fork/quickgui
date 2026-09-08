@@ -45,7 +45,7 @@ func main() {
 						ui.Text(status, ui.LineHeight(22))
 						ui.Text(
 							"macOS uses Sparkle. Windows and Linux share its signed appcast format.",
-							ui.Color("#64748b"),
+							ui.TextColor("#64748b"),
 							ui.LineHeight(22),
 						)
 						ui.Button(
@@ -53,7 +53,7 @@ func main() {
 							ui.OnClick(func() { updates.Check(report) }),
 							ui.Padding(10),
 							ui.BackgroundColor("#2563eb"),
-							ui.Color("white"),
+							ui.TextColor("white"),
 							ui.BorderRadius(8),
 						)
 						ui.Show(
@@ -64,7 +64,7 @@ func main() {
 									ui.OnClick(func() { updates.Install(report) }),
 									ui.Padding(10),
 									ui.BackgroundColor("#16a34a"),
-									ui.Color("white"),
+									ui.TextColor("white"),
 									ui.BorderRadius(8),
 								)
 							},

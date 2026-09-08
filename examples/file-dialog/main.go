@@ -55,7 +55,7 @@ func FileDialogs() {
 			ui.Text("Open and save", ui.FontSize(26), ui.LineHeight(32), ui.FontWeight(700))
 			ui.Text(
 				"Native file panels return selected paths and cancellation state. Choosing a save destination does not write a file.",
-				ui.Color("#9aa6b7"),
+				ui.TextColor("#9aa6b7"),
 				ui.FontSize(14),
 				ui.LineHeight(21),
 			)

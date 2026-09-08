@@ -3,9 +3,8 @@
 A native MoonBit frontend alongside Go. Views use child lists inspired by [Rabbita](https://github.com/moonbit-community/rabbita), with fluent styles, properties, and event handlers. Constructors create retained nodes once; signals update the affected properties or children. The same QuickGUI core handles layout, rendering, accessibility, input, state styles, and transitions.
 
 ```moonbit
-///|
 fn counter() -> @ui.Element {
-  let (count, set_count) = @reactive.create_signal(0)
+  let (count, set_count) = @ui.create_signal(0)
   @ui.div([
     @ui.text("Count: \{count()}").font_size(24),
     @ui.button("Increment")
@@ -26,7 +25,9 @@ fn counter() -> @ui.Element {
 
 Pass an array to containers, including `div([])` for an empty view. Buttons accept a string, a single element, or an element array. Constructors accept only children or content. Set properties and handlers through fluent methods: `button("Save").on_click(save)`, `input().placeholder("Name").on_input(update_name)`, and `checkbox([]).checked(true)`. Use `.style(shared)` for reusable styles; fluent modifiers and styles merge in declaration order.
 
-The QuickGUI CLI compiles expressions in text, button content, fluent properties and styles, and child lists into fine-grained bindings. Use `let (count, set_count) = @reactive.create_signal(0)` and read `count()` directly in the view. Components construct once; each binding tracks only the signals it reads. Child arrays attach directly, without wrapper nodes or a virtual DOM.
+The QuickGUI CLI compiles expressions in text, button content, fluent properties and styles, and child lists into fine-grained bindings. Use `let (count, set_count) = @ui.create_signal(0)` and read `count()` directly in the view. Components construct once; each binding tracks only the signals it reads. Child arrays attach directly, without wrapper nodes or a virtual DOM.
+
+Use `@ui.create_memo(() => count() * 2)` for cached derived state and read it with `doubled()`. Effects, cleanup, batching, and untracked reads are available as `@ui.create_effect`, `@ui.on_cleanup`, `@ui.batch`, and `@ui.untrack`.
 
 ## Run
 
@@ -64,8 +65,8 @@ The compiler keeps original sources unchanged and caches generated files in `.qu
 
 ## Packages and ownership
 
-- `egoist/quickgui/ui`: fluent `Element` and `Style`, primitives, scoped compound controls, collections, overlays, routing, SwiftUI hosts, and conditional/keyed children.
-- `egoist/quickgui/reactive`: signals, memos, effects, batching, owners, and cleanup.
+- `egoist/quickgui/ui`: components, styles, signals, memos, effects, batching, cleanup, routing, and SwiftUI hosts.
+- `egoist/quickgui/reactive`: low-level signal handles and ownership internals.
 - `egoist/quickgui/native`: windows, native events, asynchronous commands/dialogs/services, extension loading, CPU-only calls, and retained-node primitives.
 - `egoist/quickgui/protocol`: generated core constants and the bounded binary mutation encoder.
 - `egoist/quickgui/terminal`: the optional terminal surface; package its separate native extension when used.
@@ -109,7 +110,7 @@ Create scoped parts from their component root. All component builders return `El
 
 ```moonbit
 fn notifications() -> @ui.Element {
-  let (checked, set_checked) = @reactive.create_signal(false)
+  let (checked, set_checked) = @ui.create_signal(false)
   let box = @ui.checkbox([])
     .bind_checked(() => checked())
     .on_checked_change(value => set_checked(value))

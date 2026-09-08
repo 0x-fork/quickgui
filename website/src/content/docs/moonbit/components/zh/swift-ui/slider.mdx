@@ -7,7 +7,6 @@
 ```moonbit
 import {
   "egoist/quickgui/ui",
-  "egoist/quickgui/reactive",
 }
 ```
 
@@ -15,7 +14,7 @@ import {
 
 ```moonbit
 fn component_example() -> @ui.Element {
-  let (value, set_value) = @reactive.create_signal(40.0)
+  let (value, set_value) = @ui.create_signal(40.0)
   @ui.swift_ui_host([
     @ui.swift_ui_slider()
     .value(Float::from_double(value()))

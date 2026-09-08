@@ -1,6 +1,6 @@
 ///|
 fn field_demo(t : Theme) -> @ui.Element {
-  let (email, set_email) = @reactive.create_signal("")
+  let (email, set_email) = @ui.create_signal("")
   let state : @reactive.Signal[Json] = @reactive.signal({})
   let field = observe(
       @ui.field([])
@@ -90,22 +90,21 @@ fn fieldset_demo(t : Theme) -> @ui.Element {
 
 ///|
 fn form_demo(t : Theme) -> @ui.Element {
-  let (email, set_email) = @reactive.create_signal("")
+  let (email, set_email) = @ui.create_signal("")
   let plan = @reactive.signal("pro")
-  let (terms, set_terms) = @reactive.create_signal(false)
-  let (errors, set_errors) = @reactive.create_signal(false)
-  let (attempts, set_attempts) = @reactive.create_signal(0)
-  let (result, set_result) = @reactive.create_signal("nothing submitted yet")
+  let (terms, set_terms) = @ui.create_signal(false)
+  let (errors, set_errors) = @ui.create_signal(false)
+  let (attempts, set_attempts) = @ui.create_signal(0)
+  let (result, set_result) = @ui.create_signal("nothing submitted yet")
   let submit = () => {
-    set_attempts(@reactive.untrack(attempts) + 1)
-    let invalid = !@reactive.untrack(email).contains("@") ||
-      !@reactive.untrack(terms)
+    set_attempts(@ui.untrack(attempts) + 1)
+    let invalid = !@ui.untrack(email).contains("@") || !@ui.untrack(terms)
     set_errors(invalid)
     set_result(
       if invalid {
         "rejected: fix the fields below"
       } else {
-        "accepted: \{@reactive.untrack(email)} on the \{plan.peek()} plan"
+        "accepted: \{@ui.untrack(email)} on the \{plan.peek()} plan"
       },
     )
   }
@@ -154,7 +153,7 @@ fn form_demo(t : Theme) -> @ui.Element {
         row().children([
           button(t, "Submit", submit, primary=true),
           button(t, "Reset", () => {
-            @reactive.batch(() => {
+            @ui.batch(() => {
               set_email("")
               plan.set("pro")
               set_terms(false)
@@ -175,7 +174,7 @@ fn input_demo(t : Theme) -> @ui.Element {
   let text = @reactive.signal("")
   let secret = @reactive.signal("")
   let notes = @reactive.signal("Two\nlines")
-  let (submits, set_submits) = @reactive.create_signal(0)
+  let (submits, set_submits) = @ui.create_signal(0)
   panel(
     t, "Input", "Controlled native editors: single-line, password, and multiline. Return in the first field reports submission.",
   ).children([
@@ -261,8 +260,8 @@ fn number_field_demo(t : Theme) -> @ui.Element {
 
 ///|
 fn otp_field_demo(t : Theme) -> @ui.Element {
-  let (code, set_code) = @reactive.create_signal("")
-  let (completed, set_completed) = @reactive.create_signal("not yet")
+  let (code, set_code) = @ui.create_signal("")
+  let (completed, set_completed) = @ui.create_signal("not yet")
   let root = @ui.otp_field([])
     .length(6)
     .variant("numeric")
@@ -457,9 +456,9 @@ fn month_grid(value : String) -> Array[Array[String]] {
 
 ///|
 fn calendar_demo(t : Theme) -> @ui.Element {
-  let (day, set_day) = @reactive.create_signal("2026-09-03")
-  let (month, set_month) = @reactive.create_signal("2026-09")
-  let (focused, set_focused) = @reactive.create_signal("2026-09-03")
+  let (day, set_day) = @ui.create_signal("2026-09-03")
+  let (month, set_month) = @ui.create_signal("2026-09")
+  let (focused, set_focused) = @ui.create_signal("2026-09-03")
   let root = @ui.calendar([])
     .bind_civil_value(() => day())
     .civil_minimum("2026-01-01")
@@ -492,9 +491,7 @@ fn calendar_demo(t : Theme) -> @ui.Element {
       let line = root
         .slot(
           @ui.Week,
-          index=month_grid(@reactive.untrack(month))
-            .search(week.peek())
-            .unwrap_or(0),
+          index=month_grid(@ui.untrack(month)).search(week.peek()).unwrap_or(0),
         )
         .flex_row()
         .gap(3)
@@ -543,11 +540,11 @@ fn calendar_demo(t : Theme) -> @ui.Element {
   ).children([
     row().children([
       button(t, "Previous month", () => {
-        set_month(month_shift(@reactive.untrack(month), -1))
+        set_month(month_shift(@ui.untrack(month), -1))
       }),
       note(t, () => month()),
       button(t, "Next month", () => {
-        set_month(month_shift(@reactive.untrack(month), 1))
+        set_month(month_shift(@ui.untrack(month), 1))
       }),
     ]),
     root,

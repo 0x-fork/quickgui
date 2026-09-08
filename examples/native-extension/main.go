@@ -39,7 +39,7 @@ func App() {
 				}),
 				ui.Padding(12),
 				ui.BackgroundColor("#2563eb"),
-				ui.Color("white"),
+				ui.TextColor("white"),
 				ui.BorderRadius(8),
 			)
 		},

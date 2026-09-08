@@ -105,7 +105,7 @@ func historyGraph(row func() *git.GraphRow, width func() float64) {
 						gui.Top(0),
 						gui.Width(width),
 						gui.Height(historyRowHeight),
-						gui.Color(func() string {
+						gui.TextColor(func() string {
 							palette := app.Theme().Graph
 							return palette[layer().Color%len(palette)]
 						}),
