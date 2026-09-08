@@ -2,7 +2,7 @@ Signals connect state to the text and properties that read it. Updates change re
 
 ## Reactive state
 
-Pass an accessor for changing text or properties. Calling `count()` while constructing a string captures its current value; placing the call in `func() string` keeps it reactive. Event handlers batch writes automatically. Use `ui.Batch` for a group of writes elsewhere, and `ui.CreateMemo` for derived values.
+Read signals directly in component text and fluent properties, such as `ui.Text("Count: ", count())` and `.Width(width())`. Custom components accept ordinary `int`, `string`, and struct parameters; calling `LineItem(product, quantity())` preserves its live inputs. The QuickGUI CLI generates the internal getters and bindings automatically. Setup assignments such as `initial := count()` remain snapshots. Explicit accessors are still supported, and are required when using raw Go commands that bypass the view compiler. Event handlers batch writes automatically. Use `ui.Batch` for a group of writes elsewhere, and `ui.CreateMemo` for derived values.
 
 String and numeric signals can be children directly: `ui.Text("Count: ", count)`. The prefix stays retained while only the number updates. Numeric bindings use `strconv`; they do not parse a format string. For a combined string property, use `strconv.Itoa(count())` and concatenation inside an accessor.
 

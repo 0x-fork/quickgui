@@ -16,7 +16,7 @@ fn greeting() -> @ui.Element {
 
 `@ui.create_signal(initial)` returns `(read, write)`. A call such as `@ui.text("Count: \{count()}")` is reactive when built with QuickGUI. The compiler also tracks expressions in button content, native properties, fluent styles, interaction styles, and child lists. Each binding updates its own retained nodes; the component does not rerun. Binding expressions must be pure.
 
-Ordinary setup remains ordinary MoonBit: `let initial = count()` captures a snapshot. Event handlers run only on events. Use `@ui.untrack(count)` for an untracked read. Custom components keep normal parameter types: pass a getter when their input should stay live. Explicit `bind_*` methods and the lower-level `Signal` handle remain available for manual composition and keyed rows.
+Ordinary setup remains ordinary MoonBit: `let initial = count()` captures a snapshot. Event handlers run only on events. Use `@ui.untrack(count)` for an untracked read. Custom components returning `@ui.Element` use plain parameter types: `label(count())` preserves a live input, and reads of that parameter in the child’s view subscribe to it. A setup copy such as `let initial = count` inside the child remains a snapshot. Explicit getter parameters still work. Explicit `bind_*` methods and the lower-level `Signal` handle remain available for manual composition and keyed rows.
 
 ## Derived state
 

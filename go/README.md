@@ -4,7 +4,7 @@ QuickGUI applications are ordinary Go programs. `purego` loads the prebuilt Rust
 
 ## Components
 
-Every component is a `func()` declaration, including window roots, routes, conditional branches, and children blocks. Pass it directly as `WindowOptions.Component`; QuickGUI collects its nodes and owns their lifetime. Components can declare zero, one, or several roots without a return or fragment wrapper.
+Components return a retained native node: `*ui.Element` for the fluent builder or `*native.Node` for lower-level code. Pass a root directly as `WindowOptions.Component`, and compose children as `ui.View(Child(...), ui.Text(count()))`. The compiler recognizes the return type and keeps props and native view expressions reactive without a children callback. Optional callbacks remain available for deferred construction and controls that establish child context.
 
 ```go
 package main
@@ -37,11 +37,11 @@ func main() {
 	}
 }
 
-func Counter() {
+func Counter() *ui.Element {
 	count, setCount := ui.CreateSignal(0)
-	ui.View(
+	return ui.View(
 		ui.Text("Fine-grained native UI").FontSize(28).FontWeight(700),
-		ui.Text("Count: ", count),
+		ui.Text("Count: ", count()),
 		ui.Button("Increment").
 			OnClick(func() { setCount(count() + 1) }).
 			Padding(12).
@@ -58,7 +58,7 @@ func Counter() {
 }
 ```
 
-Components and `func() { ... }` children blocks run once when mounted. UI calls inside a block declare children in order; nested blocks keep their own parent. Ordinary `if` and `for` statements are useful for static construction. Reading a signal inside an accessor subscribes that binding; setting it changes the affected native properties or text nodes. Event handlers batch writes automatically. Use `ui.Batch` to group writes outside an event. Pass string or numeric accessors directly as children: `ui.Text("Count: ", count)` retains the prefix and updates only the number. Numbers use typed `strconv` conversions. Calling `count()` while mounting captures its current value; pass the accessor itself or a `func() int` for derived values. Use `strconv` and concatenation when a property needs one combined string, such as an input value or accessibility label.
+Components and `func() { ... }` children blocks run once when mounted. UI calls inside a block declare children in order; nested blocks keep their own parent. Ordinary `if` and `for` statements are useful for static construction. Reading a signal inside an accessor subscribes that binding; setting it changes the affected native properties or text nodes. Event handlers batch writes automatically. Use `ui.Batch` to group writes outside an event. Pass string or numeric accessors directly as children: `ui.Text("Count: ", count)` retains the prefix and updates only the number. Numbers use typed `strconv` conversions. With the QuickGUI CLI, direct reads such as `ui.Text("Count: ", count())` and `LineItem(product, quantity())` become fine-grained bindings. Component parameters keep plain types such as `Product` and `int`. Functions returning `*ui.Element` or `*native.Node` define component boundaries automatically, including direct calls across local packages. A void helper keeps ordinary parameter evaluation. No annotations are needed. Ordinary setup such as `initial := count()` remains a snapshot; callbacks run on events. Parameters assigned to or addressed as local storage retain normal Go value semantics. Use `strconv` and concatenation when a property needs one combined string, such as an input value or accessibility label.
 
 Pass children or content to constructors, then chain properties, styles, and handlers:
 
@@ -86,7 +86,7 @@ Builder `.When(condition, func(s ui.StyleBuilder) ui.StyleBuilder { ... })` take
 
 ## Conditional options
 
-`.When` tracks a condition and applies one or more options while it is true. Conditional options merge with earlier options; later values win only for the same property. Turning a condition off restores an earlier value, or clears the property when there is no base value. Children stay mounted. Conditional event handlers and value bindings are released when their condition becomes false.
+`.When(selected(), style)` tracks a condition and applies one or more options while it is true. Conditional options merge with earlier options; later values win only for the same property. Turning a condition off restores an earlier value, or clears the property when there is no base value. Children stay mounted. Conditional event handlers and value bindings are released when their condition becomes false.
 
 ```go
 selected, setSelected := ui.CreateSignal(false)
@@ -98,7 +98,7 @@ ui.Button("Toggle selection").
 	OnClick(func() { setSelected(!selected()) })
 ```
 
-For a computed condition, use `.When(func() bool { return count() >= 5 }, ...)`. Keep ref callbacks outside conditional options; refs run after mounting.
+For a computed condition, use `.When(count() >= 5, ...)`. Explicit accessors are also supported. Keep ref callbacks outside conditional options; refs run after mounting.
 
 Run `quickgui fmt` to apply QuickGUI's formatting rule. Long UI calls (over 100 columns), multiline calls, and calls with callback arguments use one argument per line and a trailing comma. Multiline typed props use one field per line. Short calls stay compact; `gofmt` then handles ordinary Go spacing, indentation, and alignment. Comments and string contents are preserved, and generated files are left to their generator. Running `gofmt` afterward preserves the layout.
 
@@ -153,7 +153,7 @@ ui.For(
 )
 ```
 
-Use `.Ref(func(node *native.Node) { ... })` for a node handle, such as a popover anchor. It runs once at its position in the fluent chain. Pass `element.Node` to low-level native APIs. Component callbacks remain `func()`.
+Use `.Ref(func(node *native.Node) { ... })` for a node handle, such as a popover anchor. It runs once at its position in the fluent chain. Pass `element.Node` to low-level native APIs. Component factories may return `*ui.Element` or `*native.Node`; declaration callbacks remain supported.
 
 ## Background work
 
@@ -217,7 +217,9 @@ bun run build:native
 bun packages/cli/src/cli.ts dev --project examples/counter
 ```
 
-Application edits only rebuild Go. To build directly without the CLI:
+Application edits only rebuild Go. `quickgui dev`, `build`, `check`, and `test` use the same view compiler. Generated Go lives in `.quickgui/go-sources` and is supplied through Go’s build overlay; authored files stay unchanged, and unchanged outputs retain their modification times. Use `quickgui check` and `quickgui test` for applications.
+
+Direct Go commands bypass the view compiler, so use explicit accessors when building without the CLI:
 
 ```console
 CGO_ENABLED=0 go -C examples/counter build -o /tmp/quickgui-counter .
@@ -226,6 +228,6 @@ QUICKGUI_LIBRARY="$PWD/target/release/libquickgui_host.dylib" /tmp/quickgui-coun
 
 A Go `replace` directive points each repository example at `../../go`. External applications depend on `github.com/egoist/quickgui/go`; releases use the submodule tag `go/v<version>`. The CLI bundles the matching library under macOS `Contents/Frameworks`, or beside the executable on Linux/Windows. `QUICKGUI_LIBRARY` can select an explicit library for development. Rust and Go protocol versions are checked at load time.
 
-Run `bun run test:go` to check formatting, generated Rust protocol constants, the SDK, and every Go example with CGO disabled. Run `go -C go generate ./protocol` after changing Rust wire constants.
+Run `bun run test:go` to check formatting, generated Rust protocol constants, the SDK, and every Go example through the view compiler with CGO disabled. Run `go -C go generate ./protocol` after changing Rust wire constants.
 
 Automatic updates are a separate opt-in import: `github.com/egoist/quickgui/go/updater`. Call `updater.Start` once per app, configure `[updates]` in `quickgui.toml`, and publish signed appcasts with the Bun CLI. See [automatic updates](https://github.com/egoist/quickgui/blob/main/docs/updater.md).

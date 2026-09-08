@@ -15,8 +15,15 @@ At native view sites,
 expressions containing calls are lifted into callbacks. Tracking discovers their
 actual signal dependencies, including reads through helper functions. Literals and
 setup snapshots stay static. Event callbacks and explicit bindings retain their
-semantics. Custom component parameters remain ordinary values or explicit getters;
-the compiler does not rewrite every application function into a reactive function.
+semantics. Functions returning `@ui.Element` are component boundaries. Their plain
+value parameters stay ordinary types in authored source. The compiler generates
+getter-based implementations, rewrites direct calls across local files and
+workspace packages, and lifts prop reads into the existing native bindings.
+Callbacks and element children retain their ordinary types. Static arguments are
+captured once. Component setup still executes once; `let initial = quantity`
+captures a snapshot. Passing a component as an ordinary function value retains
+normal call semantics. Methods remain ordinary helpers and can accept explicit
+getters. No annotations or special prop types are needed.
 
 Text/content, native properties, styles, and conditional children bind independently.
 Nodes own subscriptions and dispose them on removal. Style chains are merged in

@@ -319,9 +319,13 @@ func insertChildren(parent *native.Node, children any) {
 		for _, child := range typed {
 			insertChildren(parent, child)
 		}
-	case func():
+	case func(), func() *Element, func() *native.Node:
 		insertChildBlock(parent, func() []*native.Node { return childNodes(children) })
 	default:
+		if native.IsComponent(children) {
+			insertChildBlock(parent, func() []*native.Node { return componentNodes(children) })
+			return
+		}
 		for _, child := range childNodes(children) {
 			native.InsertNode(parent, child, nil)
 		}
@@ -399,14 +403,15 @@ func Dynamic(selectComponent func() Component) *native.Node {
 	region.Sentinel.Bind(func() {
 		component := selectComponent()
 		region.Replace(func() []*native.Node {
-			return reactive.Untrack(func() []*native.Node { return native.CollectChildren(component) })
+			return reactive.Untrack(func() []*native.Node { return componentNodes(component) })
 		})
 	})
 	return region.Sentinel
 }
 
 // Show renders children while when is true, else fallback. Children are created lazily.
-func Show(when func() bool, children Component, fallback ...Component) *native.Node {
+func Show(condition any, children Component, fallback ...Component) *native.Node {
+	when := booleanRead(condition)
 	region := NewRegion()
 	shown := 0
 	region.Sentinel.Bind(func() {
@@ -416,7 +421,7 @@ func Show(when func() bool, children Component, fallback ...Component) *native.N
 			}
 			shown = 1
 			region.Replace(func() []*native.Node {
-				return reactive.Untrack(func() []*native.Node { return childNodes(children) })
+				return reactive.Untrack(func() []*native.Node { return componentNodes(children) })
 			})
 			return
 		}
@@ -429,7 +434,7 @@ func Show(when func() bool, children Component, fallback ...Component) *native.N
 			return
 		}
 		region.Replace(func() []*native.Node {
-			return reactive.Untrack(func() []*native.Node { return childNodes(fallback[0]) })
+			return reactive.Untrack(func() []*native.Node { return componentNodes(fallback[0]) })
 		})
 	})
 	return region.Sentinel
@@ -455,21 +460,66 @@ func rowKey[T any](key func(T) any, item T, index int) any {
 }
 
 // For renders one row per item, reusing rows whose key survives.
-func For[T any](each func() []T, children func(item T, index func() int), key func(T) any, fallback Component) *native.Node {
-	return renderList(each, key, func(item func() T, index func() int) {
-		children(item(), index)
+func For[T any](each func() []T, children any, key func(T) any, fallback Component) *native.Node {
+	build := rowRenderer[T](children)
+	return renderList(each, key, func(item func() T, index func() int) *native.Node {
+		return build(item(), index)
 	}, fallback, false)
 }
 
 // KeyedFor keeps each row mounted while its keyed data changes.
-func KeyedFor[T any](each func() []T, key func(T) any, children func(item func() T, index func() int), fallback Component) *native.Node {
-	return renderList(each, key, children, fallback, true)
+func KeyedFor[T any](each func() []T, key func(T) any, children any, fallback Component) *native.Node {
+	return renderList(each, key, rowRenderer[func() T](children), fallback, true)
+}
+
+// Adapt the row signature once when mounting the list. Updates and keyed moves
+// retain the row node; they never reflect over a renderer or rebuild its tree.
+func rowRenderer[T any](children any) func(T, func() int) *native.Node {
+	switch build := children.(type) {
+	case func(T, func() int) *Element:
+		return func(item T, index func() int) *native.Node {
+			return renderComponent(func() *Element { return build(item, index) })
+		}
+	case func(T, func() int) *native.Node:
+		return func(item T, index func() int) *native.Node {
+			return renderComponent(func() *native.Node { return build(item, index) })
+		}
+	case func(T, func() int):
+		return func(item T, index func() int) *native.Node { return renderComponent(func() { build(item, index) }) }
+	case func(T) *Element:
+		return func(item T, _ func() int) *native.Node {
+			return renderComponent(func() *Element { return build(item) })
+		}
+	case func(T) *native.Node:
+		return func(item T, _ func() int) *native.Node {
+			return renderComponent(func() *native.Node { return build(item) })
+		}
+	case func(T):
+		return func(item T, _ func() int) *native.Node { return renderComponent(func() { build(item) }) }
+	default:
+		value := reflect.ValueOf(children)
+		if value.IsValid() {
+			for _, signature := range []reflect.Type{
+				reflect.TypeFor[func(T, func() int) *Element](),
+				reflect.TypeFor[func(T, func() int) *native.Node](),
+				reflect.TypeFor[func(T, func() int)](),
+				reflect.TypeFor[func(T) *Element](),
+				reflect.TypeFor[func(T) *native.Node](),
+				reflect.TypeFor[func(T)](),
+			} {
+				if value.Type().ConvertibleTo(signature) {
+					return rowRenderer[T](value.Convert(signature).Interface())
+				}
+			}
+		}
+		panic(fmt.Sprintf("QuickGUI row renderer must accept an item and optional index accessor, got %T", children))
+	}
 }
 
 func renderList[T any](
 	each func() []T,
 	keyFor func(T) any,
-	render func(item func() T, index func() int),
+	render func(item func() T, index func() int) *native.Node,
 	fallback Component,
 	reactiveItems bool,
 ) *native.Node {
@@ -536,9 +586,7 @@ func renderList[T any](
 				indexSignal := reactive.NewSignal(index)
 				itemSignal := reactive.NewSignal(item)
 				node := reactive.RunWithOwner(owner, func() *native.Node {
-					return renderComponent(func() {
-						render(func() T { return itemSignal.Read() }, func() int { return indexSignal.Read() })
-					})
+					return render(func() T { return itemSignal.Read() }, func() int { return indexSignal.Read() })
 				})
 				next = append(next, forRow[T]{item: itemSignal, key: key, node: node, owner: owner, index: indexSignal})
 			}

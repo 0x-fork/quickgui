@@ -2,23 +2,23 @@ MoonBit 使用子节点列表与链式样式、属性和事件处理器提供与
 
 ## 定义组件
 
-MoonBit 组件是返回 `@ui.Element` 的函数，可以放入子节点列表。自定义组件参数遵循普通 MoonBit 求值规则：子组件需要动态值时传入 getter，再在它的原生视图表达式中读取。
+MoonBit 组件是返回 `@ui.Element` 的函数，可以放入子节点列表。组件参数直接使用普通类型，调用时传入信号读取表达式即可。QuickGUI 会自动在组件之间保留响应式，包括本地工作区的导入组件，无需注解。组件只构建一次，读取参数的原生绑定独立更新。
 
 ```moonbit
-fn counter_label(count : () -> Int) -> @ui.Element {
-  @ui.text("Count: \{count()}").font_size(20)
+fn counter_label(count : Int) -> @ui.Element {
+  @ui.text("Count: \{count}").font_size(20)
 }
 
 fn component_composition() -> @ui.Element {
   let (count, set_count) = @ui.create_signal(0)
   @ui.div([
-    counter_label(count),
+    counter_label(count()),
     @ui.button("Increment").on_click(() => set_count(count() + 1)),
   ]).flex_col()
 }
 ```
 
-可复用容器可以接收子元素数组，再将其展开到标题之后。嵌套的原生视图表达式仍然创建独立绑定。这里的标题参数是静态值；如果自定义标题需要变化，应传入访问器。
+可复用容器可以接收子元素数组，再将其展开到标题之后。嵌套的原生视图表达式仍然创建独立绑定。标题参数可以接收静态字符串或 `title()` 这样的响应式表达式。在组件初始化时复制参数仍会创建快照。
 
 ```moonbit
 fn card_section(title : String, children : Array[@ui.Element]) -> @ui.Element {

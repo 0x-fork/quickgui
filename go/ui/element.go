@@ -15,6 +15,14 @@ type Element struct {
 	update    func()
 }
 
+// NativeNode exposes this builder's retained node to windows and lazy components.
+func (element *Element) NativeNode() *native.Node {
+	if element == nil {
+		return nil
+	}
+	return element.Node
+}
+
 func newElement(tag uint8, arguments []any) *Element {
 	element := &Element{Node: native.CreateElement(tag)}
 	configured := false
@@ -135,7 +143,7 @@ func (element *Element) GroupActiveNamed(name string, build func(StyleBuilder) S
 
 // When applies options while condition is true. Turning it off restores earlier
 // declarations or clears omitted properties, without rebuilding children.
-func (element *Element) When(condition func() bool, options ...Option) *Element {
+func (element *Element) When(condition any, options ...Option) *Element {
 	element.reconcile()
 	return element.configureFields(nil, When(condition, options...))
 }

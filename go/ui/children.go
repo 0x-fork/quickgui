@@ -8,8 +8,8 @@ import (
 	"github.com/egoist/quickgui/go/reactive"
 )
 
-// Component declares a retained subtree. It has the same signature as a children
-// block and can be used for window roots, routes, and conditional branches.
+// Component is a node-returning function used for window roots, routes, and lazy
+// branches. Functions returning *Element or *native.Node and func() blocks work.
 type Component = native.Component
 
 // Child declares existing detached nodes or text inside a children block. Calls
@@ -38,14 +38,30 @@ func withPartChildren(previous Component, children []any) Component {
 	}
 	return func() {
 		if previous != nil {
-			previous()
+			Child(previous)
 		}
 		Child(children)
 	}
 }
 
 func renderComponent(component Component) *native.Node {
-	return Fragment(native.CollectChildren(component))
+	nodes := componentNodes(component)
+	if len(nodes) == 1 {
+		return native.DeclareReturnedNode(nodes[0])
+	}
+	return Fragment(nodes)
+}
+
+func componentNodes(component Component) []*native.Node {
+	if build, ok := component.(func() *Element); ok {
+		return native.CollectChildren(func() *native.Node {
+			if build == nil {
+				return nil
+			}
+			return build().NativeNode()
+		})
+	}
+	return native.CollectChildren(component)
 }
 
 // A block inherits the current compound context, but its effects end when its
@@ -107,6 +123,8 @@ func childNodes(children any) []*native.Node {
 		if child != nil {
 			return native.CollectChildren(child)
 		}
+	case func() *Element, func() *native.Node:
+		return componentNodes(child)
 	case func() string:
 		return []*native.Node{DynamicText(child)}
 	case reactive.Accessor[string]:
@@ -186,6 +204,9 @@ func childNodes(children any) []*native.Node {
 		}
 		return nodes
 	default:
+		if native.IsComponent(children) {
+			return componentNodes(children)
+		}
 		panic(fmt.Sprintf("unsupported QuickGUI child %T", children))
 	}
 	return nil

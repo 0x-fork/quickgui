@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 export CGO_ENABLED=0
 
-unformatted=$(gofmt -l go examples)
+unformatted=$(rg --files -0 go examples -g '*.go' | xargs -0 gofmt -l)
 if [[ -n "$unformatted" ]]; then
   printf 'Run gofmt on:\n%s\n' "$unformatted" >&2
   exit 1
@@ -16,5 +16,6 @@ go -C go/ui run ../internal/cmd/optionsgen -check
 bun scripts/generate-style-helpers.ts --check
 go -C go test ./...
 for module in examples/*/go.mod; do
-  go -C "$(dirname "$module")" test ./...
+  bun packages/cli/src/cli.ts test --project "$(dirname "$module")"
 done
+bun packages/cli/src/cli.ts test --project packages/cli/test-fixtures/go-views

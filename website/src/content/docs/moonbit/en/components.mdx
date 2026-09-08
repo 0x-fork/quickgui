@@ -2,23 +2,23 @@ MoonBit provides the same native component families as Go, using child lists and
 
 ## Defining components
 
-A MoonBit component is a function returning `@ui.Element`. Compose it in a child list. Custom component arguments use ordinary MoonBit evaluation: pass a getter when the child needs a live value, then read that getter in its native view expression.
+A MoonBit component is a function returning `@ui.Element`. Compose it in a child list. Use plain typed parameters and pass signal reads directly. The QuickGUI compiler preserves live expressions through component calls, including imported workspace components. Components construct once and their native bindings track the props they read; no annotation or special prop type is needed.
 
 ```moonbit
-fn counter_label(count : () -> Int) -> @ui.Element {
-  @ui.text("Count: \{count()}").font_size(20)
+fn counter_label(count : Int) -> @ui.Element {
+  @ui.text("Count: \{count}").font_size(20)
 }
 
 fn component_composition() -> @ui.Element {
   let (count, set_count) = @ui.create_signal(0)
   @ui.div([
-    counter_label(count),
+    counter_label(count()),
     @ui.button("Increment").on_click(() => set_count(count() + 1)),
   ]).flex_col()
 }
 ```
 
-Reusable containers can accept an array of children and spread them after their own heading. The nested native expressions still create independent bindings. The title parameter here is intentionally static; pass a getter if your custom title must change.
+Reusable containers can accept an array of children and spread them after their own heading. The nested native expressions still create independent bindings. The title parameter accepts either a static string or a live expression such as `title()`. Creating a local copy inside the component intentionally captures a setup snapshot.
 
 ```moonbit
 fn card_section(title : String, children : Array[@ui.Element]) -> @ui.Element {

@@ -58,10 +58,10 @@ export async function runCli(argv: string[]): Promise<number> {
       if (
         !existsSync(resolve(project, "moon.mod")) &&
         !existsSync(resolve(project, "moon.mod.json"))
-      )
-        throw new CliError(
-          `quickgui ${command.command} currently supports MoonBit projects; use go test for Go`,
-        );
+      ) {
+        const { runGo } = await import("./go-build.ts");
+        return runGo(project, command.command, command.release);
+      }
       const { runMoonbit } = await import("./moonbit-build.ts");
       return runMoonbit(project, [command.command], command.release ? "production" : "development");
     }
@@ -260,7 +260,7 @@ Options:
   -h, --help                 Show this help`;
   }
   if (topic === "check" || topic === "test") {
-    return `Usage: quickgui ${topic} [options]\n\n${topic === "check" ? "Type-check" : "Test"} MoonBit using the same reactive view compiler as dev and build.\n\nOptions:\n  --project <directory>      MoonBit project directory (default: .)\n  --release                  Use the release profile\n  -h, --help                 Show this help`;
+    return `Usage: quickgui ${topic} [options]\n\n${topic === "check" ? "Type-check" : "Test"} Go or MoonBit using the same reactive view compiler as dev and build.\n\nOptions:\n  --project <directory>      Project directory (default: .)\n  --release                  Use the release profile\n  -h, --help                 Show this help`;
   }
   return `QuickGUI CLI ${CLI_VERSION}
 
@@ -272,8 +272,8 @@ Commands:
   dev                        Run a native app with source reload
   build                      Package a production application
   fmt                        Format Go or MoonBit source
-  check                      Type-check compiled MoonBit views
-  test                       Test compiled MoonBit views
+  check                      Type-check compiled Go or MoonBit views
+  test                       Test compiled Go or MoonBit views
   keygen                     Create a Minisign update signing key pair
 
 Run \`quickgui help <command>\` for command-specific help.`;

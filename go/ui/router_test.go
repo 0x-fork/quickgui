@@ -213,7 +213,7 @@ func TestRouterRetainsNestedLayoutsAndDisposesOnlyReplacedBranches(t *testing.T)
 			nodes[name] = View(func() {
 				Text(name)
 				if children != nil {
-					children()
+					Child(children)
 				}
 			}).Node
 		}

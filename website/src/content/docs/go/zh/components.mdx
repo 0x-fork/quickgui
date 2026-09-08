@@ -2,39 +2,37 @@ QuickGUI 将无样式基础组件与具备无障碍行为的复合控件组合�
 
 ## 定义组件
 
-Go 组件是声明原生子节点的 `func()`。用普通参数配置组件，需要持续更新的值则传入信号访问器。每次调用都可以拥有自己的状态和清理逻辑。
+Go 组件返回 `*ui.Element` 或 `*native.Node`。参数使用普通类型，子节点直接组合。编译器根据返回类型识别组件，因此 `CounterLabel(count())` 无需注解或 `ui.View(func() { ... })` 包装即可保持响应式。窗口根组件可直接传入函数。
 
 ```go
-func CounterLabel(count func() int) {
-	ui.Text("Count: ", count).FontSize(20)
+func CounterLabel(count int) *ui.Element {
+	return ui.Text("Count: ", count).FontSize(20)
 }
 
-func ComponentExample() {
+func ComponentExample() *ui.Element {
 	count, setCount := ui.CreateSignal(0)
-	ui.View(func() {
-		CounterLabel(count)
-		ui.Button("Increment", ui.OnClick(func() { setCount(count() + 1) }))
-	})
+	return ui.View(
+		CounterLabel(count()),
+		ui.Button("Increment").OnClick(func() { setCount(count() + 1) }),
+	)
 }
 ```
 
-用回调传递操作，用 children 回调编写可复用容器。在容器内部调用 children，让节点挂到正确的父节点下。普通 Go 函数调用共享当前挂载作用域；当条件分支、带键行或窗口根等所属作用域销毁时，相应清理会执行。
+容器可以直接接收子节点，如下所示。子节点回调是可选的，仅在挂载时执行一次；需要延迟构建或继承复合控件上下文时再使用。事件处理器仍使用回调。
 
 ```go
-func CardComponent(title string, children ui.Component) {
-	ui.View(
-		func() {
-			ui.Text(title).FontWeight(600)
-			children()
-		},
-	).Padding(20).Gap(12).Display("flex").FlexDirection("column")
+func CardComponent(title string, children ...any) *ui.Element {
+	return ui.View(
+		ui.Text(title).FontWeight(600),
+		children,
+	).Padding(20).Gap(12).FlexCol()
 }
 
-func CardComposition() {
-	CardComponent("Account", func() {
-		ui.Text("Manage your account settings.")
-		ui.Button("Save", ui.OnClick(func() { log.Print("Saved") }))
-	})
+func CardComposition() *ui.Element {
+	return CardComponent("Account",
+		ui.Text("Manage your account settings."),
+		ui.Button("Save").OnClick(func() { log.Print("Saved") }),
+	)
 }
 ```
 

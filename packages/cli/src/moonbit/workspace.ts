@@ -16,11 +16,13 @@ import {
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { CliError } from "../error.ts";
 import { createMoonbitParser } from "./parser.ts";
+import { componentDefinitions, type Component } from "./components.ts";
 import {
   identitySourceMap,
   originalPosition,
   transformMoonbit,
   uiAliases,
+  packageImports,
   viewFunctions,
   type ViewSourceMap,
 } from "./transform.ts";
@@ -38,7 +40,14 @@ const excluded = new Set([
 ]);
 const hash = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 const revision = hash(
-  ["workspace.ts", "transform.ts", "parser.ts", "api.generated.json", "parser/moonbit.wasm"]
+  [
+    "workspace.ts",
+    "transform.ts",
+    "components.ts",
+    "parser.ts",
+    "api.generated.json",
+    "parser/moonbit.wasm",
+  ]
     .map((file) => hash(readFileSync(join(import.meta.dir, file))))
     .join("\n"),
 );
@@ -175,6 +184,50 @@ export async function prepareMoonbitWorkspace(project: string): Promise<MoonbitW
         }
       }
     }
+    const catalog = new Map<string, Record<string, Component>>();
+    const packageComponents = new Map<string, Record<string, Component>>();
+    const importedPackages = new Map<string, { path: string; alias: string }[]>();
+    for (const member of members.filter(
+      (member) => selected.has(member.directory) && member.name !== "egoist/quickgui",
+    )) {
+      const scan = (directory: string, inherited: { path: string; alias: string }[] = []) => {
+        const manifest = ["moon.pkg", "moon.pkg.json"].find((file) =>
+          existsSync(join(directory, file)),
+        );
+        const imports = manifest
+          ? packageImports(
+              parser,
+              readFileSync(join(directory, manifest), "utf8"),
+              join(directory, manifest),
+            )
+          : inherited;
+        importedPackages.set(directory, imports);
+        const aliases = imports
+          .filter((item) => item.path === "egoist/quickgui/ui")
+          .map((item) => item.alias);
+        const definitions: Record<string, Component> = {};
+        const entries = readdirSync(directory, { withFileTypes: true });
+        for (const entry of entries) {
+          if (excluded.has(entry.name)) continue;
+          const path = join(directory, entry.name);
+          if (entry.isFile() && entry.name.endsWith(".mbt") && aliases.length)
+            Object.assign(
+              definitions,
+              componentDefinitions(parser, readFileSync(path, "utf8"), path, aliases),
+            );
+          else if (
+            entry.isDirectory() &&
+            !existsSync(join(path, "moon.mod")) &&
+            !existsSync(join(path, "moon.mod.json"))
+          )
+            scan(path, imports);
+        }
+        packageComponents.set(directory, definitions);
+        const suffix = relative(member.directory, directory).replaceAll("\\", "/");
+        catalog.set(member.name + (suffix ? `/${suffix}` : ""), definitions);
+      };
+      scan(member.directory);
+    }
     for (const { directory: member, name } of members.filter((member) =>
       selected.has(member.directory),
     )) {
@@ -210,6 +263,11 @@ export async function prepareMoonbitWorkspace(project: string): Promise<MoonbitW
               return viewFunctions(parser, readFileSync(input, "utf8"), input, aliases);
             }),
         );
+        const components = { ...packageComponents.get(directory) };
+        for (const dependency of importedPackages.get(directory) ?? []) {
+          for (const [name, component] of Object.entries(catalog.get(dependency.path) ?? {}))
+            if (component.public) components[`@${dependency.alias}.${name}`] = component;
+        }
         for (const entry of entries) {
           if (excluded.has(entry.name)) continue;
           const input = join(directory, entry.name),
@@ -221,14 +279,24 @@ export async function prepareMoonbitWorkspace(project: string): Promise<MoonbitW
             if (existsSync(join(input, "moon.mod")) || existsSync(join(input, "moon.mod.json")))
               link(input, target);
             else visit(input, target, aliases);
-          } else if (entry.name.endsWith(".mbt") && aliases.length) {
+          } else if (
+            entry.name.endsWith(".mbt") &&
+            (aliases.length || Object.keys(components).length)
+          ) {
             const source = readFileSync(input, "utf8");
-            const digest = hash(JSON.stringify([aliases, functions]) + source);
+            const digest = hash(JSON.stringify([aliases, functions, components]) + source);
             const old = previous.get(input);
             if (old?.hash === digest && old.generated === target && existsSync(target))
               sources.push(old);
             else {
-              const transformed = transformMoonbit(parser, source, input, aliases, functions);
+              const transformed = transformMoonbit(
+                parser,
+                source,
+                input,
+                aliases,
+                functions,
+                components,
+              );
               if (writeChanged(target, transformed.code)) changedFiles++;
               sources.push({
                 original: input,

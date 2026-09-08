@@ -16,7 +16,7 @@ fn greeting() -> @ui.Element {
 
 `@ui.create_signal(initial)` 返回 `(read, write)`。通过 QuickGUI 构建时，`@ui.text("Count: \{count()}")` 会自动响应变化。编译器也处理按钮内容、原生属性、链式样式、交互样式和子节点列表。每个绑定只更新自己的保留节点，不重新执行整个组件。绑定表达式必须是纯函数式计算。
 
-普通初始化代码仍遵循 MoonBit 语义：`let initial = count()` 只保存快照。事件处理函数只在事件发生时执行。不需要订阅时使用 `@ui.untrack(count)`。自定义组件保持普通参数类型，需要持续更新时传入访问器。底层组合和按键保留的行仍可使用显式 `bind_*` 方法及 `Signal` 句柄。
+普通初始化仍遵循 MoonBit 语义：`let initial = count()` 创建快照，事件处理器只在事件触发时执行。用 `@ui.untrack(count)` 取消跟踪。返回 `@ui.Element` 的自定义组件使用普通参数类型；`label(count())` 自动保留响应式。显式 getter、`bind_*` 和底层 `Signal` 仍可用于手动组合。
 
 ## 派生状态
 

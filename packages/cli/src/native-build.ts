@@ -8,6 +8,7 @@ import { updaterMetadata } from "./packaging/appcast.ts";
 import { unpackResources } from "./extension-resources.ts";
 import { discoverExtensions, extensionLibraryName, resolveExtension } from "./extensions.ts";
 import { compileMoonbitApplication, moonbitBuildPlan, moonbitExtensions } from "./moonbit-build.ts";
+import { prepareGoWorkspace } from "./go-build.ts";
 
 export interface NativeCompileOptions {
   config: ResolvedQuickGuiConfig;
@@ -162,6 +163,11 @@ export async function compileNativeApplication(options: NativeCompileOptions): P
     if (targetInfo(target).platform !== "darwin") libraries.push(metadata);
     return libraries;
   }
+  const overlay = await prepareGoWorkspace(config.projectRoot, [plan.argv.at(-1)!], {
+    tags: config.native.tags,
+    env: plan.env,
+  });
+  if (overlay) plan.argv.splice(2, 0, "-overlay", overlay);
   const child = Bun.spawn(plan.argv, {
     cwd: config.projectRoot,
     stdin: "ignore",

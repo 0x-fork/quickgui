@@ -61,8 +61,8 @@ type conditionalOption struct {
 
 // When applies options while condition is true. Signal reads in condition are
 // tracked; turning it off restores earlier options or clears omitted properties.
-func When(condition func() bool, options ...Option) Option {
-	return conditionalOption{condition: condition, options: options}
+func When(condition any, options ...Option) Option {
+	return conditionalOption{condition: booleanRead(condition), options: options}
 }
 
 func (option conditionalOption) apply(props *Props) {

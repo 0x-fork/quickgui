@@ -151,3 +151,41 @@ test("spread children and array-returning helpers bind collections without misid
   expect(output.code).toContain(".bind_content(() => { items.get().map(");
   expect(output.code).toContain(".bind_content(() => { rows() })");
 });
+
+test("plain component parameters bind through callers without annotations", () => {
+  const source = `fn line_item(product : Product, quantity : Int) -> @ui.Element {
+    let initial = quantity
+    @ui.text("你好 \\{product.name}: \\{product.price * quantity} / \\{initial}")
+  }
+  fn cart() -> @ui.Element { line_item({ name: "Mug", price: 12 }, quantity()) }`;
+  const output = transformMoonbit(parser, source, "cart.mbt");
+  parseMoonbit(parser, output.code, "generated.mbt").delete();
+  expect(output.code).toContain("product : () -> Product, quantity : () -> Int");
+  expect(output.code).toContain("let initial = quantity()");
+  expect(output.code).toContain("product().price * quantity()");
+  expect(output.code).toContain('quickgui_component_line_item_value({ name: "Mug", price: 12 })');
+  const at = output.code.indexOf("product().price");
+  const prefix = output.code.slice(0, at).split("\n");
+  const expected = source.slice(0, source.indexOf("product.price")).split("\n");
+  expect(originalPosition(output.map, prefix.length, prefix.at(-1)!.length + 1)).toEqual({
+    line: expected.length,
+    column: expected.at(-1)!.length + 1,
+  });
+});
+
+test("component prop reads respect local, callback, match, and loop shadows", () => {
+  const source = `fn label(value : String) -> @ui.Element {
+    let echo = value => value
+    for value in ["one"] { ignore(value) }
+    let selected = match Some("two") { Some(value) => value; None => value }
+    let value = echo(value)
+    @ui.text(value + selected)
+  }`;
+  const output = transformMoonbit(parser, source, "shadow.mbt");
+  parseMoonbit(parser, output.code, "generated.mbt").delete();
+  expect(output.code).toContain("let echo = value => value");
+  expect(output.code).toContain('for value in ["one"] { ignore(value) }');
+  expect(output.code).toContain("Some(value) => value; None => value()");
+  expect(output.code).toContain("let value = echo(value())");
+  expect(output.code).toContain("@ui.text(value + selected)");
+});

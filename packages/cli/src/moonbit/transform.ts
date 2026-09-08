@@ -2,6 +2,7 @@ import type { Node, Parser } from "web-tree-sitter";
 import generatedAPI from "./api.generated.json";
 import { children, parseMoonbit, unwrap } from "./parser.ts";
 import { CliError } from "../error.ts";
+import { componentDefinitions, lowerComponents, type Component } from "./components.ts";
 
 export type ViewKind = "element" | "style" | "unknown";
 type Kind = ViewKind;
@@ -152,22 +153,39 @@ function methodCall(node: Node): Call | undefined {
 
 /** Resolve the actual SDK import, including renamed aliases; unrelated @ui packages are untouched. */
 export function uiAliases(parser: Parser, manifest: string, filename = "moon.pkg"): string[] {
+  return packageImports(parser, manifest, filename)
+    .filter((item) => item.path === "egoist/quickgui/ui")
+    .map((item) => item.alias);
+}
+
+export function packageImports(
+  parser: Parser,
+  manifest: string,
+  filename = "moon.pkg",
+): { path: string; alias: string }[] {
   if (filename.endsWith(".json")) {
     const imports = JSON.parse(manifest).import ?? [];
     return imports.flatMap((item: string | { path: string; alias?: string }) => {
       const path = typeof item === "string" ? item : item.path;
-      return path === "egoist/quickgui/ui"
-        ? [typeof item === "string" ? "ui" : (item.alias ?? "ui")]
-        : [];
+      return [
+        {
+          path,
+          alias:
+            typeof item === "string"
+              ? path.split("/").at(-1)!
+              : (item.alias ?? path.split("/").at(-1)!),
+        },
+      ];
     });
   }
   const tree = parseMoonbit(parser, manifest, filename);
   try {
     return tree.rootNode.descendantsOfType("import_item").flatMap((item) => {
       const path = item.childForFieldName("path");
-      if (!path || JSON.parse(path.text) !== "egoist/quickgui/ui") return [];
+      if (!path) return [];
       const alias = item.childForFieldName("alias");
-      return [alias?.text.replace(/^@/, "") ?? "ui"];
+      const name = JSON.parse(path.text) as string;
+      return [{ path: name, alias: alias?.text.replace(/^@/, "") ?? name.split("/").at(-1)! }];
     });
   } finally {
     tree.delete();
@@ -181,8 +199,77 @@ export function transformMoonbit(
   filename: string,
   aliases: string[] = ["ui"],
   packageFunctions: Record<string, Kind> = {},
+  packageComponents: Record<string, Component> = {},
 ): TransformedMoonbit {
+  packageComponents = {
+    ...packageComponents,
+    ...componentDefinitions(parser, source, filename, aliases),
+  };
+  if (Object.keys(packageComponents).length) {
+    const lowered = lowerComponents(parser, source, filename, aliases, packageComponents);
+    if (!aliases.length)
+      return {
+        code: lowered.code,
+        bindings: 0,
+        map: {
+          spans: lowered.spans,
+          originalLines: lineStarts(source),
+          generatedLines: lineStarts(lowered.code),
+        },
+      };
+    const output = transformNativeViews(parser, lowered.code, filename, aliases, {
+      ...packageFunctions,
+      ...Object.fromEntries(
+        Object.entries(packageComponents).map(([name, component]) => [
+          name.includes(".")
+            ? name.slice(0, name.indexOf(".") + 1) + component.generated
+            : component.generated,
+          "element" as const,
+        ]),
+      ),
+    });
+    const spans: ViewSourceMap["spans"] = [];
+    const locate = (offset: number) => {
+      let lo = 0,
+        hi = lowered.spans.length;
+      while (lo + 1 < hi) {
+        const mid = (lo + hi) >>> 1;
+        if (lowered.spans[mid]![0] <= offset) lo = mid;
+        else hi = mid;
+      }
+      return lo;
+    };
+    for (const [generated, original, length] of output.map.spans) {
+      let offset = original,
+        remaining = length,
+        position = generated;
+      do {
+        const index = locate(offset),
+          span = lowered.spans[index]!;
+        const count = Math.min(
+          remaining,
+          (lowered.spans[index + 1]?.[0] ?? lowered.code.length) - offset,
+        );
+        spans.push([position, span[1] + Math.min(offset - span[0], span[2]), span[2] ? count : 0]);
+        if (!remaining || count <= 0) break;
+        offset += count;
+        position += count;
+        remaining -= count;
+      } while (remaining > 0);
+    }
+    return { ...output, map: { ...output.map, spans, originalLines: lineStarts(source) } };
+  }
   if (!aliases.length) return { code: source, bindings: 0, map: identitySourceMap(source) };
+  return transformNativeViews(parser, source, filename, aliases, packageFunctions);
+}
+
+function transformNativeViews(
+  parser: Parser,
+  source: string,
+  filename: string,
+  aliases: string[],
+  packageFunctions: Record<string, Kind>,
+): TransformedMoonbit {
   const tree = parseMoonbit(parser, source, filename);
   const imports = new Set(aliases.map((alias) => `@${alias}`));
   const module = `@${aliases[0]}`;

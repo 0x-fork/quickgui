@@ -2,39 +2,37 @@ QuickGUI combines unstyled primitives with accessible compound controls. Compose
 
 ## Defining components
 
-A Go component is a `func()` that declares native children. Use ordinary parameters to configure it, and pass signal accessors for values that should stay reactive. Each call can own its own state and cleanup.
+A Go component returns `*ui.Element` or `*native.Node`. Use plain typed props and compose children directly. The return type identifies the component, so `CounterLabel(count())` stays reactive without annotations or a `ui.View(func() { ... })` wrapper. Window roots accept the component function directly.
 
 ```go
-func CounterLabel(count func() int) {
-	ui.Text("Count: ", count).FontSize(20)
+func CounterLabel(count int) *ui.Element {
+	return ui.Text("Count: ", count).FontSize(20)
 }
 
-func ComponentExample() {
+func ComponentExample() *ui.Element {
 	count, setCount := ui.CreateSignal(0)
-	ui.View(func() {
-		CounterLabel(count)
-		ui.Button("Increment", ui.OnClick(func() { setCount(count() + 1) }))
-	})
+	return ui.View(
+		CounterLabel(count()),
+		ui.Button("Increment").OnClick(func() { setCount(count() + 1) }),
+	)
 }
 ```
 
-Pass callbacks for actions and a children callback for reusable containers. Call the children callback inside the container so its nodes attach to the right parent. Ordinary Go function calls share the current mount owner; cleanup is released when that owner, such as a conditional branch, keyed row, or window root, is disposed.
+Containers can accept children directly, as shown below. A children callback is optional and runs once when mounted; use it when construction must happen lazily or inside a compound control’s context. Event handlers remain callbacks.
 
 ```go
-func CardComponent(title string, children ui.Component) {
-	ui.View(
-		func() {
-			ui.Text(title).FontWeight(600)
-			children()
-		},
-	).Padding(20).Gap(12).Display("flex").FlexDirection("column")
+func CardComponent(title string, children ...any) *ui.Element {
+	return ui.View(
+		ui.Text(title).FontWeight(600),
+		children,
+	).Padding(20).Gap(12).FlexCol()
 }
 
-func CardComposition() {
-	CardComponent("Account", func() {
-		ui.Text("Manage your account settings.")
-		ui.Button("Save", ui.OnClick(func() { log.Print("Saved") }))
-	})
+func CardComposition() *ui.Element {
+	return CardComponent("Account",
+		ui.Text("Manage your account settings."),
+		ui.Button("Save").OnClick(func() { log.Print("Saved") }),
+	)
 }
 ```
 

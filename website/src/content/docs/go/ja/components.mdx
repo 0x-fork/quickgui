@@ -2,39 +2,37 @@ QuickGUI はスタイルなしのプリミティブとアクセシブルな複�
 
 ## コンポーネントの定義
 
-Go コンポーネントはネイティブの子を宣言する `func()` です。通常の引数で設定し、変化する値にはシグナルのアクセサーを渡します。呼び出しごとに状態と後始末を持てます。
+Go コンポーネントは `*ui.Element` または `*native.Node` を返します。通常の型の props と子ノードを直接組み合わせます。戻り値の型でコンポーネントを識別するため、`CounterLabel(count())` は注釈や `ui.View(func() { ... })` のラッパーなしで更新されます。ウィンドウには関数を直接渡せます。
 
 ```go
-func CounterLabel(count func() int) {
-	ui.Text("Count: ", count).FontSize(20)
+func CounterLabel(count int) *ui.Element {
+	return ui.Text("Count: ", count).FontSize(20)
 }
 
-func ComponentExample() {
+func ComponentExample() *ui.Element {
 	count, setCount := ui.CreateSignal(0)
-	ui.View(func() {
-		CounterLabel(count)
-		ui.Button("Increment", ui.OnClick(func() { setCount(count() + 1) }))
-	})
+	return ui.View(
+		CounterLabel(count()),
+		ui.Button("Increment").OnClick(func() { setCount(count() + 1) }),
+	)
 }
 ```
 
-操作はコールバックで渡し、再利用するコンテナーには children コールバックを渡します。コンテナーの内側で呼び出すと、子ノードが正しい親に接続されます。通常の Go 関数呼び出しは現在のマウント所有者を共有します。条件分岐、キー付き行、ウィンドウのルートなど、その所有者が破棄されるとクリーンアップが実行されます。
+コンテナーは以下のように子ノードを直接受け取れます。子のコールバックは任意で、マウント時に一度実行されます。遅延構築や複合コントロールのコンテキストが必要な場合に使います。イベントハンドラーは引き続きコールバックです。
 
 ```go
-func CardComponent(title string, children ui.Component) {
-	ui.View(
-		func() {
-			ui.Text(title).FontWeight(600)
-			children()
-		},
-	).Padding(20).Gap(12).Display("flex").FlexDirection("column")
+func CardComponent(title string, children ...any) *ui.Element {
+	return ui.View(
+		ui.Text(title).FontWeight(600),
+		children,
+	).Padding(20).Gap(12).FlexCol()
 }
 
-func CardComposition() {
-	CardComponent("Account", func() {
-		ui.Text("Manage your account settings.")
-		ui.Button("Save", ui.OnClick(func() { log.Print("Saved") }))
-	})
+func CardComposition() *ui.Element {
+	return CardComponent("Account",
+		ui.Text("Manage your account settings."),
+		ui.Button("Save").OnClick(func() { log.Print("Saved") }),
+	)
 }
 ```
 

@@ -28,11 +28,11 @@ func main() {
 	}
 }
 
-func Counter() {
+func Counter() *ui.Element {
 	count, setCount := ui.CreateSignal(0)
-	ui.View(
+	return ui.View(
 		ui.Text("Fine-grained native UI").FontSize(28).FontWeight(700),
-		ui.Text("Count: ", count),
+		ui.Text("Count: ", count()),
 		ui.Button("Increment").
 			OnClick(func() { setCount(count() + 1) }).
 			Padding(12).

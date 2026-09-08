@@ -70,7 +70,7 @@ fn counter() -> @ui.Element {
           .text_color(@ui.rgb8(148, 163, 184))
           .font_size(14)
           .line_height(21),
-          @ui.text("Count: \{count()}")
+          count_label(count())
           .font_size(20)
           .font_weight(600)
           .text_color(
@@ -163,4 +163,9 @@ fn main {
     Ok(_) => ()
     Err(error) => abort(error)
   }
+}
+
+///|
+fn count_label(count : Int) -> @ui.Element {
+  @ui.text("Count: \{count}")
 }
