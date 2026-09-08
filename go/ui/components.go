@@ -35,8 +35,8 @@ func NativeElement(tag uint8, arguments ...any) *native.Node {
 	return node
 }
 
-// View declares children followed by style records and property options.
-// Multiple styles merge in order; callback children run once when mounted.
+// View accepts style, property, and event options alongside children, in any
+// order. Later options override the same property; callback children mount once.
 func View(arguments ...any) *native.Node {
 	node := native.CreateElement(protocol.TagView)
 	applyArguments(node, arguments)

@@ -43,21 +43,19 @@ package notice
 
 import "github.com/egoist/quickgui/go/ui"
 
-func Notice(message func() string, style ui.Style) {
+func Notice(message func() string, styles ...ui.StyleDeclaration) {
 	ui.Text(
 		message,
-		ui.Style{
-			Padding:         12,
-			BackgroundColor: "#eff6ff",
-			Color:           "#1e40af",
-			BorderRadius:    8,
-		},
-		style,
+		ui.Padding(12),
+		ui.BackgroundColor("#eff6ff"),
+		ui.Color("#1e40af"),
+		ui.BorderRadius(8),
+		ui.Styles(styles...),
 	)
 }
 ```
 
-コンポーネントや children コールバックから `notice.Notice(message, ui.Style{Padding: 16})` を呼び出します。アクセサーはリアクティブなままで、呼び出し側のスタイルが既定値の後にマージされます。関数はノードを返さずに子要素を宣言します。コンポーネントが所有するリソースには `ui.OnCleanup` を使い、アプリ全体のサービスはその所有権の外に置きます。
+コンポーネントや children コールバックから `notice.Notice(message, ui.Padding(16))` を呼び出します。アクセサーはリアクティブなままで、呼び出し側のスタイルが既定値の後にマージされます。関数はノードを返さずに子要素を宣言します。コンポーネントが所有するリソースには `ui.OnCleanup` を使い、アプリ全体のサービスはその所有権の外に置きます。
 
 Go のバージョンタグで公開し、対応 SDK バージョンを記載してください。利用者はモジュールパスを指定して `go get` します。`terminal` や `updater` の間接インポートも対応バックエンドを取り込むため、オプションの連携は別パッケージやビルドタグ付きファイルに分けます。
 

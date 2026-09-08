@@ -46,17 +46,15 @@ func Vibrancy() {
 				func() {
 					ui.View(
 						func() {
-							ui.Text("Vibrancy", ui.Style{FontSize: 13, FontWeight: 700})
+							ui.Text("Vibrancy", ui.FontSize(13), ui.FontWeight(700))
 						},
-						ui.Style{
-							Display:      "flex",
-							Height:       52,
-							FlexShrink:   0,
-							AlignItems:   "center",
-							PaddingLeft:  90,
-							PaddingRight: 14,
-							AppRegion:    "drag",
-						},
+						ui.Display("flex"),
+						ui.Height(52),
+						ui.FlexShrink(0),
+						ui.AlignItems("center"),
+						ui.PaddingLeft(90),
+						ui.PaddingRight(14),
+						ui.AppRegion("drag"),
 					)
 					ui.View(
 						func() {
@@ -66,37 +64,31 @@ func Vibrancy() {
 									func() {
 										ui.Text(
 											option.label,
-											ui.Style{
-												FontSize:   12,
-												FontWeight: 600,
-											},
+											ui.FontSize(12),
+											ui.FontWeight(600),
 										)
 										ui.Show(selected, checkmark)
 									},
-									ui.Style{
-										Display:         "flex",
-										Width:           "100%",
-										Height:          31,
-										FlexShrink:      0,
-										AlignItems:      "center",
-										JustifyContent:  "space-between",
-										PaddingLeft:     11,
-										PaddingRight:    11,
-										BackgroundColor: "transparent",
-										BorderColor:     "transparent",
-										BorderWidth:     1,
-										BorderRadius:    7,
-										Color:           "#263247",
-										Cursor:          "default",
-										AppRegion:       "no-drag",
-										UserSelect:      "none",
-									},
+									ui.Display("flex"),
+									ui.Width("100%"),
+									ui.Height(31),
+									ui.FlexShrink(0),
+									ui.AlignItems("center"),
+									ui.JustifyContent("space-between"),
+									ui.PaddingLeft(11),
+									ui.PaddingRight(11),
+									ui.BackgroundColor("transparent"),
+									ui.BorderColor("transparent"),
+									ui.BorderWidth(1),
+									ui.BorderRadius(7),
+									ui.Color("#263247"),
+									ui.Cursor("default"),
+									ui.AppRegion("no-drag"),
+									ui.UserSelect("none"),
 									ui.When(
 										selected,
-										ui.Style{
-											BackgroundColor: "#ffffff52",
-											BorderColor:     "#ffffff70",
-										},
+										ui.BackgroundColor("#ffffff52"),
+										ui.BorderColor("#ffffff70"),
 									),
 									ui.Selected(selected),
 									ui.OnClick(func() {
@@ -106,27 +98,23 @@ func Vibrancy() {
 								)
 							}
 						},
-						ui.Style{
-							Display:       "flex",
-							FlexDirection: "column",
-							Flex:          1,
-							MinHeight:     0,
-							Gap:           3,
-							PaddingLeft:   10,
-							PaddingRight:  10,
-							PaddingBottom: 10,
-							OverflowY:     "auto",
-						},
+						ui.Display("flex"),
+						ui.FlexDirection("column"),
+						ui.Flex(1),
+						ui.MinHeight(0),
+						ui.Gap(3),
+						ui.PaddingLeft(10),
+						ui.PaddingRight(10),
+						ui.PaddingBottom(10),
+						ui.OverflowY("auto"),
 					)
 					ui.View(
 						func() {
 							ui.Text(
 								"EFFECT STATE",
-								ui.Style{
-									Color:      "#59667b",
-									FontSize:   11,
-									FontWeight: 700,
-								},
+								ui.Color("#59667b"),
+								ui.FontSize(11),
+								ui.FontWeight(700),
 							)
 							ui.View(
 								func() {
@@ -134,30 +122,26 @@ func Vibrancy() {
 										selected := func() bool { return state() == option.value }
 										ui.Button(
 											option.label,
-											ui.Style{
-												Display:         "flex",
-												Flex:            1,
-												Height:          27,
-												MinWidth:        0,
-												AlignItems:      "center",
-												JustifyContent:  "center",
-												BackgroundColor: "#ffffff24",
-												BorderColor:     "#ffffff3d",
-												BorderWidth:     1,
-												BorderRadius:    6,
-												Color:           "#445168",
-												FontSize:        10,
-												FontWeight:      600,
-												Cursor:          "default",
-												AppRegion:       "no-drag",
-												UserSelect:      "none",
-											},
+											ui.Display("flex"),
+											ui.Flex(1),
+											ui.Height(27),
+											ui.MinWidth(0),
+											ui.AlignItems("center"),
+											ui.JustifyContent("center"),
+											ui.BackgroundColor("#ffffff24"),
+											ui.BorderColor("#ffffff3d"),
+											ui.BorderWidth(1),
+											ui.BorderRadius(6),
+											ui.Color("#445168"),
+											ui.FontSize(10),
+											ui.FontWeight(600),
+											ui.Cursor("default"),
+											ui.AppRegion("no-drag"),
+											ui.UserSelect("none"),
 											ui.When(
 												selected,
-												ui.Style{
-													BackgroundColor: "#ffffff5c",
-													BorderColor:     "#ffffff7a",
-												},
+												ui.BackgroundColor("#ffffff5c"),
+												ui.BorderColor("#ffffff7a"),
 											),
 											ui.Selected(selected),
 											ui.OnClick(func() {
@@ -167,47 +151,42 @@ func Vibrancy() {
 										)
 									}
 								},
-								ui.Style{Display: "flex", Gap: 5},
+								ui.Display("flex"),
+								ui.Gap(5),
 							)
 						},
-						ui.Style{
-							Display:        "flex",
-							FlexDirection:  "column",
-							FlexShrink:     0,
-							Gap:            7,
-							Padding:        12,
-							BorderColor:    "#c1c1c2",
-							BorderTopWidth: 1,
-						},
+						ui.Display("flex"),
+						ui.FlexDirection("column"),
+						ui.FlexShrink(0),
+						ui.Gap(7),
+						ui.Padding(12),
+						ui.BorderColor("#c1c1c2"),
+						ui.BorderTopWidth(1),
 					)
 				},
-				ui.Style{
-					Display:          "flex",
-					FlexDirection:    "column",
-					Width:            254,
-					Height:           "100%",
-					FlexShrink:       0,
-					BackgroundColor:  "transparent",
-					BorderColor:      "#cccccc",
-					BorderRightWidth: 1,
-				},
+				ui.Display("flex"),
+				ui.FlexDirection("column"),
+				ui.Width(254),
+				ui.Height("100%"),
+				ui.FlexShrink(0),
+				ui.BackgroundColor("transparent"),
+				ui.BorderColor("#cccccc"),
+				ui.BorderRightWidth(1),
 			)
 			ui.View(
 				func() {
 					ui.View(
 						func() {
-							ui.Text(material, ui.Style{FontSize: 13, FontWeight: 700})
+							ui.Text(material, ui.FontSize(13), ui.FontWeight(700))
 						},
-						ui.Style{
-							Display:           "flex",
-							Height:            52,
-							FlexShrink:        0,
-							AlignItems:        "center",
-							JustifyContent:    "center",
-							BorderColor:       "#e2e8f0",
-							BorderBottomWidth: 1,
-							AppRegion:         "drag",
-						},
+						ui.Display("flex"),
+						ui.Height(52),
+						ui.FlexShrink(0),
+						ui.AlignItems("center"),
+						ui.JustifyContent("center"),
+						ui.BorderColor("#e2e8f0"),
+						ui.BorderBottomWidth(1),
+						ui.AppRegion("drag"),
 					)
 					ui.View(
 						func() {
@@ -215,25 +194,23 @@ func Vibrancy() {
 								func() {
 									ui.Text(
 										"GO + QUICKGUI",
-										ui.Style{
-											Color:      "#2563eb",
-											FontSize:   12,
-											FontWeight: 700,
-										},
+										ui.Color("#2563eb"),
+										ui.FontSize(12),
+										ui.FontWeight(700),
 									)
 									ui.Text(
 										"Every macOS vibrancy type",
-										ui.Style{
-											FontSize:   26,
-											LineHeight: 33,
-											FontWeight: 700,
-										},
+										ui.FontSize(26),
+										ui.LineHeight(33),
+										ui.FontWeight(700),
 									)
 									ui.Text(
 										"Select any Electron-compatible semantic material. QuickGUI updates one native "+
 											"NSVisualEffectView while the retained QuickGUI tree and Metal surface stay mounted. "+
 											"This pane is opaque, so the selected material remains visually confined to the translucent sidebar.",
-										ui.Style{Color: "#667085", FontSize: 14, LineHeight: 21},
+										ui.Color("#667085"),
+										ui.FontSize(14),
+										ui.LineHeight(21),
 									)
 									ui.View(
 										func() {
@@ -241,50 +218,44 @@ func Vibrancy() {
 											readout("Effect state", state)
 											readout("Content", "Opaque")
 										},
-										ui.Style{Display: "flex", Gap: 10, PaddingTop: 4},
+										ui.Display("flex"),
+										ui.Gap(10),
+										ui.PaddingTop(4),
 									)
 								},
-								ui.Style{
-									Display:         "flex",
-									FlexDirection:   "column",
-									Width:           "100%",
-									MaxWidth:        480,
-									Gap:             16,
-									Padding:         28,
-									BackgroundColor: "#ffffff",
-									BorderColor:     "#dfe5ed",
-									BorderWidth:     1,
-									BorderRadius:    14,
-									BoxShadow:       "0 18px 45px -24px rgba(15, 23, 42, 0.35)",
-								},
+								ui.Display("flex"),
+								ui.FlexDirection("column"),
+								ui.Width("100%"),
+								ui.MaxWidth(480),
+								ui.Gap(16),
+								ui.Padding(28),
+								ui.BackgroundColor("#ffffff"),
+								ui.BorderColor("#dfe5ed"),
+								ui.BorderWidth(1),
+								ui.BorderRadius(14),
+								ui.BoxShadow("0 18px 45px -24px rgba(15, 23, 42, 0.35)"),
 							)
 						},
-						ui.Style{
-							Display:        "flex",
-							Flex:           1,
-							MinHeight:      0,
-							AlignItems:     "center",
-							JustifyContent: "center",
-							Padding:        36,
-						},
+						ui.Display("flex"),
+						ui.Flex(1),
+						ui.MinHeight(0),
+						ui.AlignItems("center"),
+						ui.JustifyContent("center"),
+						ui.Padding(36),
 					)
 				},
-				ui.Style{
-					Display:         "flex",
-					FlexDirection:   "column",
-					Flex:            1,
-					MinWidth:        0,
-					Height:          "100%",
-					BackgroundColor: "#ffffff",
-				},
+				ui.Display("flex"),
+				ui.FlexDirection("column"),
+				ui.Flex(1),
+				ui.MinWidth(0),
+				ui.Height("100%"),
+				ui.BackgroundColor("#ffffff"),
 			)
 		},
-		ui.Style{
-			Display:         "flex",
-			Width:           "100%",
-			Height:          "100%",
-			BackgroundColor: "transparent",
-			Color:           "#172033",
-		},
+		ui.Display("flex"),
+		ui.Width("100%"),
+		ui.Height("100%"),
+		ui.BackgroundColor("transparent"),
+		ui.Color("#172033"),
 	)
 }

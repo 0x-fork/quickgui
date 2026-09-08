@@ -15,7 +15,9 @@ import (
 ```go
 func SvgExample() {
 	ui.SVG(
-		ui.Style{Width: 20, Height: 20, Color: "#2563eb"},
+		ui.Width(20),
+		ui.Height(20),
+		ui.Color("#2563eb"),
 		ui.Value(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M11 4h2v7h7v2h-7v7h-2v-7H4v-2h7z"/></svg>`),
 	)
 }
@@ -26,4 +28,4 @@ func SvgExample() {
 | プロパティ | 説明 |
 | --- | --- |
 | `Value` | コンポーネントが受け取るファイルパス、データ URL、SVG ドキュメント、またはシェーダーソースです。 |
-| `ui.Style{}` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
+| `ui.BackgroundColor(...)`, `ui.Padding(...)`, `ui.Hover(...)` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |

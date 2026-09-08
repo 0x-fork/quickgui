@@ -6,7 +6,8 @@ import (
 
 //go:generate go run ../internal/cmd/optionsgen
 
-// Option configures a primitive. Style records and When are both options.
+// Option configures a primitive. Pass style, property, and event options directly
+// to View, Text, Button, or another primitive, alongside its children.
 type Option interface {
 	apply(*Props)
 }
@@ -15,19 +16,33 @@ type Option interface {
 // omitted fields preserve earlier declarations, including explicit zero values.
 func (style Style) apply(props *Props) { mergeStyle(&props.Style, style) }
 
-// StyleDeclaration is a reusable style record or a compatibility style option.
-// Group styles accept the same records as ordinary primitives.
+// StyleDeclaration is a style option or a reusable style built with Styles.
+// Interaction styles and named groups accept the same declarations.
 type StyleDeclaration interface {
 	applyStyle(*Style)
 }
 
 func (style Style) applyStyle(target *Style) { mergeStyle(target, style) }
 
-// StyleOption can also be nested inside Hover, Active, or Focus.
+// StyleOption sets a style property. It can also be nested inside Styles, Hover,
+// Active, Focus, or another interaction style.
 type StyleOption func(*Style)
 
 func (option StyleOption) apply(props *Props)      { option(&props.Style) }
 func (option StyleOption) applyStyle(style *Style) { option(style) }
+
+// Styles composes reusable style options in declaration order. Later values
+// override the same property; interaction styles merge without mutating inputs.
+// Accessors remain unevaluated until the style is bound to a node.
+// Pass individual options directly to primitives; use Styles for shared styles
+// and the Style field of compound parts.
+func Styles(options ...StyleDeclaration) Style {
+	var style Style
+	for _, option := range options {
+		option.applyStyle(&style)
+	}
+	return style
+}
 
 type propertyOption func(*Props)
 

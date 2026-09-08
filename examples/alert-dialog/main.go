@@ -44,14 +44,12 @@ func Alerts() {
 	}
 	ui.View(
 		func() {
-			ui.Text("System-owned UI", ui.Style{FontSize: 26, LineHeight: 32, FontWeight: 700})
+			ui.Text("System-owned UI", ui.FontSize(26), ui.LineHeight(32), ui.FontWeight(700))
 			ui.Text(
 				"Present a native alert from an event handler and receive the selected button in its completion callback.",
-				ui.Style{
-					Color:      "#9aa6b7",
-					FontSize:   14,
-					LineHeight: 21,
-				},
+				ui.Color("#9aa6b7"),
+				ui.FontSize(14),
+				ui.LineHeight(21),
 			)
 			ui.View(
 				func() {
@@ -98,7 +96,9 @@ func Alerts() {
 						})
 					})
 				},
-				ui.Style{Display: "flex", FlexWrap: "wrap", Gap: 10},
+				ui.Display("flex"),
+				ui.FlexWrap("wrap"),
+				ui.Gap(10),
 			)
 			dialogStatus(status, pending)
 		},

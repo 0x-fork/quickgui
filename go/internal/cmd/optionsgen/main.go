@@ -28,10 +28,10 @@ func main() {
 			}
 			for _, field := range spec.Type.(*ast.StructType).Fields.List {
 				name := field.Names[0].Name
-				if !ast.IsExported(name) || (source.record == "Style" && (name == "GroupHover" || name == "GroupActive" || name == "ObjectFit")) {
+				if !ast.IsExported(name) || (source.record == "Style" && (name == "GroupHover" || name == "GroupActive")) {
 					continue
 				}
-				if source.record == "Props" && (name == "Style" || name == "Children" || name == "OnClick") {
+				if source.record == "Props" && (name == "Style" || name == "Children" || name == "OnClick" || name == "ObjectFit") {
 					continue
 				}
 				var fieldType bytes.Buffer
@@ -42,9 +42,15 @@ func main() {
 						if name == "Disabled" || name == "Selected" || name == "Invalid" {
 							function += "Style"
 						}
-						fmt.Fprintf(&output, "// %s configures the %s interaction style.\nfunc %s(options ...StyleDeclaration) StyleOption {\nreturn func(style *Style) {\nnested := &Style{}\nfor _, option := range options { option.applyStyle(nested) }\nstyle.%s = nested\n}\n}\n\n", function, name, function, name)
+						fmt.Fprintf(&output, "// %s merges options into the %s interaction style.\nfunc %s(options ...StyleDeclaration) StyleOption {\nreturn func(style *Style) {\nnested := mergeStateStyles(style.%s, nil)\nfor _, option := range options { option.applyStyle(nested) }\nstyle.%s = nested\n}\n}\n\n", function, name, function, name, name)
 					} else {
-						fmt.Fprintf(&output, "// %s sets the corresponding style property.\nfunc %s(value %s) StyleOption {\nreturn func(style *Style) { style.%s = value }\n}\n\n", name, name, fieldType.String(), name)
+						// Aliases write the same field so the last declaration wins in
+						// either order, just like composing Style values.
+						target := name
+						if canonical, ok := styleAliases[name]; ok {
+							target = canonical
+						}
+						fmt.Fprintf(&output, "// %s sets the corresponding style property.\nfunc %s(value %s) StyleOption {\nreturn func(style *Style) { style.%s = value }\n}\n\n", name, name, fieldType.String(), target)
 					}
 				} else {
 					fmt.Fprintf(&output, "// %s configures the corresponding node property.\nfunc %s(value %s) Option {\nreturn propertyOption(func(props *Props) { props.%s = value })\n}\n\n", name, name, fieldType.String(), name)
@@ -65,6 +71,17 @@ func main() {
 		return
 	}
 	must(os.WriteFile(path, formatted, 0o644))
+}
+
+var styleAliases = map[string]string{
+	"WordWrap":                 "OverflowWrap",
+	"TransitionTimingFunction": "TransitionEasing",
+	"PaddingInlineStart":       "PaddingStart",
+	"PaddingInlineEnd":         "PaddingEnd",
+	"MarginInlineStart":        "MarginStart",
+	"MarginInlineEnd":          "MarginEnd",
+	"BorderInlineStartWidth":   "BorderStartWidth",
+	"BorderInlineEndWidth":     "BorderEndWidth",
 }
 
 func must(err error) {

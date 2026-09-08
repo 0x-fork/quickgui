@@ -2,71 +2,69 @@ package main
 
 import "github.com/egoist/quickgui/go/ui"
 
-var buttonStyle = ui.Style{
-	Display:         "flex",
-	Width:           "100%",
-	Height:          42,
-	AlignItems:      "center",
-	JustifyContent:  "center",
-	PaddingLeft:     16,
-	PaddingRight:    16,
-	BackgroundColor: "#2563eb",
-	Color:           "#ffffff",
-	BorderRadius:    9,
-	Cursor:          "default",
-	AppRegion:       "no-drag",
-	UserSelect:      "none",
-	Hover:           &ui.Style{BackgroundColor: "#3b82f6"},
-}
+var buttonStyle = ui.Styles(
+	ui.Display("flex"),
+	ui.Width("100%"),
+	ui.Height(42),
+	ui.AlignItems("center"),
+	ui.JustifyContent("center"),
+	ui.PaddingLeft(16),
+	ui.PaddingRight(16),
+	ui.BackgroundColor("#2563eb"),
+	ui.Color("#ffffff"),
+	ui.BorderRadius(9),
+	ui.Cursor("default"),
+	ui.AppRegion("no-drag"),
+	ui.UserSelect("none"),
+	ui.Hover(ui.BackgroundColor("#3b82f6")),
+)
 
 func card(title, description string, children func()) {
 	ui.View(
 		func() {
-			ui.Text(title, ui.Style{FontSize: 17, FontWeight: 700})
-			ui.Text(description, ui.Style{Color: "#9ba8bc", FontSize: 13, LineHeight: 19})
+			ui.Text(title, ui.FontSize(17), ui.FontWeight(700))
+			ui.Text(description, ui.Color("#9ba8bc"), ui.FontSize(13), ui.LineHeight(19))
 			children()
 		},
-		ui.Style{
-			Display:         "flex",
-			FlexDirection:   "column",
-			Flex:            1,
-			MinWidth:        0,
-			Gap:             14,
-			Padding:         20,
-			BackgroundColor: "#151a23",
-			BorderColor:     "#30394a",
-			BorderWidth:     1,
-			BorderRadius:    12,
-		},
+		ui.Display("flex"),
+		ui.FlexDirection("column"),
+		ui.Flex(1),
+		ui.MinWidth(0),
+		ui.Gap(14),
+		ui.Padding(20),
+		ui.BackgroundColor("#151a23"),
+		ui.BorderColor("#30394a"),
+		ui.BorderWidth(1),
+		ui.BorderRadius(12),
 	)
 }
 
 func content(kind, description string, close func()) {
 	count, setCount := ui.CreateSignal(0)
-	actionStyle := ui.Style{
-		BackgroundColor: "#30394a",
-		BorderColor:     "#465166",
-		BorderWidth:     1,
-		Flex:            1,
-		Width:           0,
-		Hover:           &ui.Style{BackgroundColor: "#465166"},
-	}
+	actionStyle := ui.Styles(
+		ui.BackgroundColor("#30394a"),
+		ui.BorderColor("#465166"),
+		ui.BorderWidth(1),
+		ui.Flex(1),
+		ui.Width(0),
+		ui.Hover(ui.BackgroundColor("#465166")),
+	)
 	ui.View(
 		func() {
 			ui.View(
 				func() {
-					ui.Text(kind, ui.Style{Color: "#93c5fd", FontSize: 12, FontWeight: 700})
+					ui.Text(kind, ui.Color("#93c5fd"), ui.FontSize(12), ui.FontWeight(700))
 					ui.Text(
 						"Interactive popover content",
-						ui.Style{
-							FontSize:   19,
-							LineHeight: 24,
-							FontWeight: 700,
-						},
+						ui.FontSize(19),
+						ui.LineHeight(24),
+						ui.FontWeight(700),
 					)
-					ui.Text(description, ui.Style{Color: "#aeb8c9", FontSize: 13, LineHeight: 19})
+					ui.Text(description, ui.Color("#aeb8c9"), ui.FontSize(13), ui.LineHeight(19))
 				},
-				ui.Style{Display: "flex", FlexDirection: "column", Gap: 6},
+				ui.Display("flex"),
+				ui.FlexDirection("column"),
+				ui.Gap(6),
 			)
 			ui.View(
 				func() {
@@ -78,21 +76,20 @@ func content(kind, description string, close func()) {
 					)
 					ui.Button("Close", buttonStyle, actionStyle, ui.OnClick(close))
 				},
-				ui.Style{Display: "flex", Gap: 10},
+				ui.Display("flex"),
+				ui.Gap(10),
 			)
 		},
-		ui.Style{
-			Display:         "flex",
-			FlexDirection:   "column",
-			Width:           "100%",
-			Height:          "100%",
-			Gap:             14,
-			Padding:         20,
-			BackgroundColor: "#151a23",
-			Color:           "#f5f7fb",
-			BorderColor:     "#3b4558",
-			BorderWidth:     1,
-			BorderRadius:    12,
-		},
+		ui.Display("flex"),
+		ui.FlexDirection("column"),
+		ui.Width("100%"),
+		ui.Height("100%"),
+		ui.Gap(14),
+		ui.Padding(20),
+		ui.BackgroundColor("#151a23"),
+		ui.Color("#f5f7fb"),
+		ui.BorderColor("#3b4558"),
+		ui.BorderWidth(1),
+		ui.BorderRadius(12),
 	)
 }

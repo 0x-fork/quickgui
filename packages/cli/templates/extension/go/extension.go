@@ -4,15 +4,13 @@ package {{GO_PACKAGE}}
 import "github.com/egoist/quickgui/go/ui"
 
 // Notice displays a reactive message. Caller styles merge with the defaults.
-func Notice(message func() string, style ui.Style) {
+func Notice(message func() string, styles ...ui.StyleDeclaration) {
 	ui.Text(
 		message,
-		ui.Style{
-			Padding:         16,
-			BorderRadius:    8,
-			BackgroundColor: "#eff6ff",
-			Color:           "#1e40af",
-		},
-		style,
+		ui.Padding(16),
+		ui.BorderRadius(8),
+		ui.BackgroundColor("#eff6ff"),
+		ui.Color("#1e40af"),
+		ui.Styles(styles...),
 	)
 }

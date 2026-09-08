@@ -100,29 +100,25 @@ func historyGraph(row func() *git.GraphRow, width func() float64) {
 				func(layer graphLayer) any { return layer.Color },
 				func(layer func() graphLayer, _ func() int) {
 					gui.SVG(
-						gui.Style{
-							Position: "absolute",
-							Left:     0,
-							Top:      0,
-							Width:    width,
-							Height:   historyRowHeight,
-							Color: func() string {
-								palette := app.Theme().Graph
-								return palette[layer().Color%len(palette)]
-							},
-						},
+						gui.Position("absolute"),
+						gui.Left(0),
+						gui.Top(0),
+						gui.Width(width),
+						gui.Height(historyRowHeight),
+						gui.Color(func() string {
+							palette := app.Theme().Graph
+							return palette[layer().Color%len(palette)]
+						}),
 						gui.Value(func() string { return layer().Source }),
 					)
 				},
 				nil,
 			)
 		},
-		gui.Style{
-			Position:   "relative",
-			Width:      width,
-			Height:     historyRowHeight,
-			FlexShrink: 0,
-			Overflow:   "hidden",
-		},
+		gui.Position("relative"),
+		gui.Width(width),
+		gui.Height(historyRowHeight),
+		gui.FlexShrink(0),
+		gui.Overflow("hidden"),
 	)
 }

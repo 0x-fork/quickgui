@@ -14,7 +14,7 @@ import (
 
 ```go
 func MarkdownExample(source func() string, streaming func() bool) {
-	ui.Markdown(ui.Value(source), ui.Streaming(streaming), ui.Style{Width: "100%"})
+	ui.Markdown(ui.Value(source), ui.Streaming(streaming), ui.Width("100%"))
 }
 ```
 
@@ -24,4 +24,4 @@ func MarkdownExample(source func() string, streaming func() bool) {
 | --- | --- |
 | `Value` | 用于排版和绘制的 Markdown 源文本。 |
 | `Streaming` | 对追加内容使用增量 Markdown 协调。 |
-| `ui.Style{}` | QuickGUI 的布局、绘制、排版和交互状态样式。 |
+| `ui.BackgroundColor(...)`, `ui.Padding(...)`, `ui.Hover(...)` | QuickGUI 的布局、绘制、排版和交互状态样式。 |

@@ -69,75 +69,79 @@ func StatusColor(theme Theme, code string) string {
 }
 
 func (t Theme) Button(kind string) ui.Style {
-	style := ui.Style{
-		Display:        "flex",
-		Height:         22,
-		FlexShrink:     0,
-		AlignItems:     "center",
-		JustifyContent: "center",
-		Gap:            5,
-		PaddingLeft:    11,
-		PaddingRight:   11,
-		BorderRadius:   6,
-		FontSize:       UIFontSize,
-		Cursor:         "default",
-		UserSelect:     "none",
-		AppRegion:      "no-drag",
-		Disabled:       &ui.Style{Opacity: 0.4},
-	}
+	style := ui.Styles(
+		ui.Display("flex"),
+		ui.Height(22),
+		ui.FlexShrink(0),
+		ui.AlignItems("center"),
+		ui.JustifyContent("center"),
+		ui.Gap(5),
+		ui.PaddingLeft(11),
+		ui.PaddingRight(11),
+		ui.BorderRadius(6),
+		ui.FontSize(UIFontSize),
+		ui.Cursor("default"),
+		ui.UserSelect("none"),
+		ui.AppRegion("no-drag"),
+		ui.DisabledStyle(ui.Opacity(0.4)),
+	)
 	if kind == "primary" {
-		style.BackgroundColor = t.Accent
-		style.Color = t.TextOnAccent
-		style.Hover = &ui.Style{BackgroundColor: t.AccentHover}
-	} else {
-		style.BackgroundColor = t.Raised
-		if kind == "danger" {
-			style.Color = t.Danger
-		} else {
-			style.Color = t.Text
-		}
-		style.BorderWidth = 1
-		style.BorderColor = t.BorderStrong
-		style.Hover = &ui.Style{BackgroundColor: t.Hover}
+		return ui.Styles(
+			style,
+			ui.BackgroundColor(t.Accent),
+			ui.Color(t.TextOnAccent),
+			ui.Hover(ui.BackgroundColor(t.AccentHover)),
+		)
 	}
-	return style
+	color := t.Text
+	if kind == "danger" {
+		color = t.Danger
+	}
+	return ui.Styles(
+		style,
+		ui.BackgroundColor(t.Raised),
+		ui.Color(color),
+		ui.BorderWidth(1),
+		ui.BorderColor(t.BorderStrong),
+		ui.Hover(ui.BackgroundColor(t.Hover)),
+	)
 }
 
 func (t Theme) IconButton() ui.Style {
-	return ui.Style{
-		Display:         "flex",
-		Width:           22,
-		Height:          22,
-		FlexShrink:      0,
-		AlignItems:      "center",
-		JustifyContent:  "center",
-		Color:           t.TextSecondary,
-		BackgroundColor: "transparent",
-		BorderRadius:    5,
-		Cursor:          "default",
-		AppRegion:       "no-drag",
-		Hover: &ui.Style{
-			BackgroundColor: t.Hover,
-			Color:           t.Text,
-		},
-		Active:   &ui.Style{BackgroundColor: t.Active},
-		Disabled: &ui.Style{Opacity: 0.4},
-	}
+	return ui.Styles(
+		ui.Display("flex"),
+		ui.Width(22),
+		ui.Height(22),
+		ui.FlexShrink(0),
+		ui.AlignItems("center"),
+		ui.JustifyContent("center"),
+		ui.Color(t.TextSecondary),
+		ui.BackgroundColor("transparent"),
+		ui.BorderRadius(5),
+		ui.Cursor("default"),
+		ui.AppRegion("no-drag"),
+		ui.Hover(
+			ui.BackgroundColor(t.Hover),
+			ui.Color(t.Text),
+		),
+		ui.Active(ui.BackgroundColor(t.Active)),
+		ui.DisabledStyle(ui.Opacity(0.4)),
+	)
 }
 
 func (t Theme) InputStyle() ui.Style {
-	return ui.Style{
-		Display:         "flex",
-		Height:          22,
-		PaddingLeft:     7,
-		PaddingRight:    7,
-		BackgroundColor: t.Input,
-		Color:           t.Text,
-		BorderWidth:     1,
-		BorderColor:     t.InputBorder,
-		BorderRadius:    6,
-		FontSize:        UIFontSize,
-		AppRegion:       "no-drag",
-		Focus:           &ui.Style{BorderColor: t.Accent},
-	}
+	return ui.Styles(
+		ui.Display("flex"),
+		ui.Height(22),
+		ui.PaddingLeft(7),
+		ui.PaddingRight(7),
+		ui.BackgroundColor(t.Input),
+		ui.Color(t.Text),
+		ui.BorderWidth(1),
+		ui.BorderColor(t.InputBorder),
+		ui.BorderRadius(6),
+		ui.FontSize(UIFontSize),
+		ui.AppRegion("no-drag"),
+		ui.Focus(ui.BorderColor(t.Accent)),
+	)
 }

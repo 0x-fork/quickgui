@@ -33,20 +33,20 @@ func AccordionDemo() {
 							Value: entry.value,
 							Index: ptr(index),
 							PartProps: ui.PartProps{Style: func() ui.Style {
-								return ui.Style{
-									Display:         "flex",
-									FlexDirection:   "column",
-									BorderRadius:    10,
-									BorderWidth:     1,
-									BorderColor:     p().Border,
-									BackgroundColor: p().PanelAlt,
-									Overflow:        "hidden",
-								}
+								return ui.Styles(
+									ui.Display("flex"),
+									ui.FlexDirection("column"),
+									ui.BorderRadius(10),
+									ui.BorderWidth(1),
+									ui.BorderColor(p().Border),
+									ui.BackgroundColor(p().PanelAlt),
+									ui.Overflow("hidden"),
+								)
 							}},
 						},
 						func() {
 							ui.Accordion.Header(
-								ui.PartProps{Style: ui.Style{Display: "flex", Width: "100%"}},
+								ui.PartProps{Style: ui.Styles(ui.Display("flex"), ui.Width("100%"))},
 								func() {
 									props := control()
 									s := controlStyle()
@@ -65,7 +65,7 @@ func AccordionDemo() {
 								},
 							)
 							ui.Accordion.Panel(
-								ui.PartProps{Style: ui.Style{Padding: 12, PaddingTop: 4}},
+								ui.PartProps{Style: ui.Styles(ui.Padding(12), ui.PaddingTop(4))},
 								func() { muted(entry.body) },
 							)
 						},
@@ -107,7 +107,8 @@ func AlertDialogDemo() {
 									func() {
 										ui.Text(
 											"Delete “electron-parity”?",
-											ui.Style{FontSize: 15, FontWeight: 700},
+											ui.FontSize(15),
+											ui.FontWeight(700),
 										)
 									},
 								)
@@ -119,10 +120,10 @@ func AlertDialogDemo() {
 								)
 								row(func() {
 									ui.AlertDialog.Close(control(), "Cancel")
-									button("Delete", func() { setOutcome("deleted"); setOpen(false) }, ui.Style{
-										BackgroundColor: color(func(p palette) string { return p.Danger }),
-										Color:           "white",
-									})
+									button("Delete", func() { setOutcome("deleted"); setOpen(false) }, ui.Styles(
+										ui.BackgroundColor(color(func(p palette) string { return p.Danger })),
+										ui.Color("white"),
+									))
 								})
 							},
 						)
@@ -140,18 +141,18 @@ func AvatarDemo() {
 	missing, setMissing := ui.CreateSignal("idle")
 	fallback, setFallback := ui.CreateSignal("idle")
 	shell := func() ui.Style {
-		return ui.Style{
-			Width:           44,
-			Height:          44,
-			BorderRadius:    22,
-			Display:         "flex",
-			AlignItems:      "center",
-			JustifyContent:  "center",
-			BackgroundColor: p().Selection,
-			BorderColor:     p().Border,
-			BorderWidth:     1,
-			Overflow:        "hidden",
-		}
+		return ui.Styles(
+			ui.Width(44),
+			ui.Height(44),
+			ui.BorderRadius(22),
+			ui.Display("flex"),
+			ui.AlignItems("center"),
+			ui.JustifyContent("center"),
+			ui.BackgroundColor(p().Selection),
+			ui.BorderColor(p().Border),
+			ui.BorderWidth(1),
+			ui.Overflow("hidden"),
+		)
 	}
 	panel("Avatar", "Images and fallbacks share one accessible name. Failed loads report their actual status.", func() {
 		row(func() {
@@ -166,10 +167,10 @@ func AvatarDemo() {
 				func() {
 					ui.Avatar.Image(ui.AvatarImageProps{
 						Src: "./avatar-does-not-exist.png",
-						PartProps: ui.PartProps{Style: ui.Style{
-							Width:  44,
-							Height: 44,
-						}},
+						PartProps: ui.PartProps{Style: ui.Styles(
+							ui.Width(44),
+							ui.Height(44),
+						)},
 					})
 					ui.Avatar.Fallback(ui.AvatarFallbackProps{Delay: 120}, "AL")
 				},
@@ -346,7 +347,8 @@ func DialogDemo() {
 									func() {
 										ui.Text(
 											"Publish this build?",
-											ui.Style{FontSize: 15, FontWeight: 700},
+											ui.FontSize(15),
+											ui.FontWeight(700),
 										)
 									},
 								)
@@ -357,19 +359,19 @@ func DialogDemo() {
 									},
 								)
 								ui.Dialog.Viewport(
-									ui.PartProps{Style: ui.Style{
-										Display:       "flex",
-										FlexDirection: "column",
-										Gap:           8,
-										MaxHeight:     160,
-										Padding:       4,
-									}},
+									ui.PartProps{Style: ui.Styles(
+										ui.Display("flex"),
+										ui.FlexDirection("column"),
+										ui.Gap(8),
+										ui.MaxHeight(160),
+										ui.Padding(4),
+									)},
 									func() {
-										input(notes, setNotes, "Release notes", ui.Multiline(true), ui.Style{
-											Width:      "100%",
-											Height:     64,
-											PaddingTop: 6,
-										})
+										input(notes, setNotes, "Release notes", ui.Multiline(true), ui.Styles(
+											ui.Width("100%"),
+											ui.Height(64),
+											ui.PaddingTop(6),
+										))
 									},
 								)
 								row(func() { ui.Dialog.Close(control(), "Cancel"); primary("Publish", func() { setOpen(false) }) })

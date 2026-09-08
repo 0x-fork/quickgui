@@ -2,12 +2,107 @@ package ui
 
 import (
 	"bytes"
+	"reflect"
 	"testing"
 
 	"github.com/egoist/quickgui/go/native"
 	"github.com/egoist/quickgui/go/protocol"
 	"github.com/egoist/quickgui/go/reactive"
 )
+
+func TestStyleOptionsMergeInteractionStatesWithoutChangingSharedStyles(t *testing.T) {
+	for name, state := range map[string]func(...StyleDeclaration) StyleOption{
+		"Hover": Hover, "Active": Active, "Focus": Focus, "Disabled": DisabledStyle,
+		"Selected": SelectedStyle, "Invalid": InvalidStyle, "Dragging": Dragging,
+		"DragOver": DragOver, "FocusWithin": FocusWithin,
+	} {
+		t.Run(name, func(t *testing.T) {
+			shared := Styles(state(Color("white"), BackgroundColor("#222222"), Opacity(.8)))
+			props := resolveProps([]any{
+				shared,
+				state(BackgroundColor("#333333")),
+				state(Opacity(0)),
+			})
+			read := func(style Style) *Style {
+				return reflect.ValueOf(style).FieldByName(name).Interface().(*Style)
+			}
+			merged := read(props.Style)
+			if merged.Color != "white" || merged.BackgroundColor != "#333333" || merged.Opacity != 0 {
+				t.Fatalf("repeated state options lost an earlier property: %+v", merged)
+			}
+			original := read(shared)
+			if original.BackgroundColor != "#222222" || original.Opacity != .8 {
+				t.Fatal("state options mutated a shared style")
+			}
+		})
+	}
+}
+
+func TestStyleOptionAliasesRespectDeclarationOrder(t *testing.T) {
+	for _, pair := range []struct {
+		name             string
+		canonical, alias StyleOption
+		first, last      any
+	}{
+		{"OverflowWrap", OverflowWrap("normal"), WordWrap("anywhere"), "normal", "anywhere"},
+		{"TransitionEasing", TransitionEasing("linear"), TransitionTimingFunction("ease-out"), "linear", "ease-out"},
+		{"PaddingStart", PaddingStart(12), PaddingInlineStart(0), 12, 0},
+		{"PaddingEnd", PaddingEnd(12), PaddingInlineEnd(0), 12, 0},
+		{"MarginStart", MarginStart(12), MarginInlineStart(0), 12, 0},
+		{"MarginEnd", MarginEnd(12), MarginInlineEnd(0), 12, 0},
+		{"BorderStartWidth", BorderStartWidth(1), BorderInlineStartWidth(0), 1, 0},
+		{"BorderEndWidth", BorderEndWidth(1), BorderInlineEndWidth(0), 1, 0},
+	} {
+		t.Run(pair.name, func(t *testing.T) {
+			for _, order := range []struct {
+				options []any
+				want    any
+			}{
+				{[]any{pair.canonical, pair.alias}, pair.last},
+				{[]any{pair.alias, pair.canonical}, pair.first},
+			} {
+				style := normalizeStyleAliases(resolveProps(order.options).Style)
+				if got := reflect.ValueOf(style).FieldByName(pair.name).Interface(); got != order.want {
+					t.Fatalf("declaration order: got %v, want %v", got, order.want)
+				}
+			}
+		})
+	}
+}
+
+func TestComposedStylesKeepPartBindingsIndependent(t *testing.T) {
+	reactive.CreateRoot(func(dispose func()) struct{} {
+		defer dispose()
+		width := reactive.NewSignal(20)
+		color := reactive.NewSignal("#112233")
+		shared := Styles(Width(width.Read), BackgroundColor(color.Read))
+		if len(width.Observers) != 0 || len(color.Observers) != 0 {
+			t.Fatal("composing styles eagerly evaluated accessors")
+		}
+		parent := View()
+		node := View()
+		applyPart(node, PartProps{Style: shared})
+		native.InsertNode(parent, node, nil)
+		offset := len(parent.Pending.Body())
+		width.Write(30)
+		expected := protocol.NewBatch()
+		expected.SetNumber(node.ID, protocol.Width, 30)
+		if !bytes.Equal(parent.Pending.Body()[offset:], expected.Body()) {
+			t.Fatal("a composed part style updated unrelated properties")
+		}
+		native.RemoveNode(parent, node)
+		if len(width.Observers) != 0 || len(color.Observers) != 0 {
+			t.Fatal("a disposed composed style retained its bindings")
+		}
+		if resolveStyle(PaddingLeft(12)).PaddingLeft != 12 {
+			t.Fatal("compound parts did not accept an individual style option")
+		}
+		if Styles(ObjectFit("contain")).ObjectFit != "contain" {
+			t.Fatal("ObjectFit could not be composed with other image styles")
+		}
+		return struct{}{}
+	})
+}
 
 func TestWhenRestoresBaseStyleWithoutRebuildingChildren(t *testing.T) {
 	reactive.CreateRoot(func(dispose func()) struct{} {

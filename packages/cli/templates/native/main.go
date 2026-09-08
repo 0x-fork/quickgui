@@ -32,31 +32,27 @@ func Counter() {
 	count, setCount := ui.CreateSignal(0)
 	ui.View(
 		func() {
-			ui.Text("Fine-grained native UI", ui.Style{FontSize: 28, FontWeight: 700})
+			ui.Text("Fine-grained native UI", ui.FontSize(28), ui.FontWeight(700))
 
 			ui.Text("Count: ", count)
 
 			ui.Button(
 				"Increment",
-				ui.Style{
-					Padding:         12,
-					BorderRadius:    8,
-					BackgroundColor: "#2563eb",
-					Hover:           &ui.Style{BackgroundColor: "#3b82f6"},
-				},
+				ui.Padding(12),
+				ui.BorderRadius(8),
+				ui.BackgroundColor("#2563eb"),
+				ui.Hover(ui.BackgroundColor("#3b82f6")),
 				ui.OnClick(func() { setCount(count() + 1) }),
 			)
 		},
-		ui.Style{
-			Display:         "flex",
-			FlexDirection:   "column",
-			Width:           "100%",
-			Height:          "100%",
-			AlignItems:      "center",
-			JustifyContent:  "center",
-			Gap:             20,
-			BackgroundColor: "#090d16",
-			Color:           "#e2e8f0",
-		},
+		ui.Display("flex"),
+		ui.FlexDirection("column"),
+		ui.Width("100%"),
+		ui.Height("100%"),
+		ui.AlignItems("center"),
+		ui.JustifyContent("center"),
+		ui.Gap(20),
+		ui.BackgroundColor("#090d16"),
+		ui.Color("#e2e8f0"),
 	)
 }

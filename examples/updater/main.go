@@ -41,24 +41,20 @@ func main() {
 			Component: func() {
 				ui.View(
 					func() {
-						ui.Text("Application updates", ui.Style{FontSize: 24, FontWeight: 700})
-						ui.Text(status, ui.Style{LineHeight: 22})
+						ui.Text("Application updates", ui.FontSize(24), ui.FontWeight(700))
+						ui.Text(status, ui.LineHeight(22))
 						ui.Text(
 							"macOS uses Sparkle. Windows and Linux share its signed appcast format.",
-							ui.Style{
-								Color:      "#64748b",
-								LineHeight: 22,
-							},
+							ui.Color("#64748b"),
+							ui.LineHeight(22),
 						)
 						ui.Button(
 							"Check for Updates…",
 							ui.OnClick(func() { updates.Check(report) }),
-							ui.Style{
-								Padding:         10,
-								BackgroundColor: "#2563eb",
-								Color:           "white",
-								BorderRadius:    8,
-							},
+							ui.Padding(10),
+							ui.BackgroundColor("#2563eb"),
+							ui.Color("white"),
+							ui.BorderRadius(8),
 						)
 						ui.Show(
 							func() bool { return state().Status == updater.Available },
@@ -66,12 +62,10 @@ func main() {
 								ui.Button(
 									"Install update",
 									ui.OnClick(func() { updates.Install(report) }),
-									ui.Style{
-										Padding:         10,
-										BackgroundColor: "#16a34a",
-										Color:           "white",
-										BorderRadius:    8,
-									},
+									ui.Padding(10),
+									ui.BackgroundColor("#16a34a"),
+									ui.Color("white"),
+									ui.BorderRadius(8),
 								)
 							},
 						)
@@ -85,17 +79,15 @@ func main() {
 							ui.OnClick(func() {
 								updates.SetAutomaticChecks(!state().AutomaticChecks, report)
 							}),
-							ui.Style{Padding: 10},
+							ui.Padding(10),
 						)
 					},
-					ui.Style{
-						Display:       "flex",
-						FlexDirection: "column",
-						Gap:           16,
-						Padding:       28,
-						Width:         "100%",
-						Height:        "100%",
-					},
+					ui.Display("flex"),
+					ui.FlexDirection("column"),
+					ui.Gap(16),
+					ui.Padding(28),
+					ui.Width("100%"),
+					ui.Height("100%"),
 				)
 			},
 		})

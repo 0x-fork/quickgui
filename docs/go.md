@@ -41,56 +41,53 @@ func Counter() {
 	count, setCount := ui.CreateSignal(0)
 	ui.View(
 		func() {
-			ui.Text("Fine-grained native UI", ui.Style{FontSize: 28, FontWeight: 700})
+			ui.Text("Fine-grained native UI", ui.FontSize(28), ui.FontWeight(700))
 
 			ui.Text("Count: ", count)
 
 			ui.Button(
 				"Increment",
-				ui.Style{
-					Padding:         12,
-					BorderRadius:    8,
-					BackgroundColor: "#2563eb",
-					Hover:           &ui.Style{BackgroundColor: "#3b82f6"},
-				},
+				ui.Padding(12),
+				ui.BorderRadius(8),
+				ui.BackgroundColor("#2563eb"),
+				ui.Hover(ui.BackgroundColor("#3b82f6")),
 				ui.OnClick(func() { setCount(count() + 1) }),
 			)
 		},
-		ui.Style{
-			Display:         "flex",
-			FlexDirection:   "column",
-			Width:           "100%",
-			Height:          "100%",
-			AlignItems:      "center",
-			JustifyContent:  "center",
-			Gap:             20,
-			BackgroundColor: "#090d16",
-			Color:           "#e2e8f0",
-		},
+		ui.Display("flex"),
+		ui.FlexDirection("column"),
+		ui.Width("100%"),
+		ui.Height("100%"),
+		ui.AlignItems("center"),
+		ui.JustifyContent("center"),
+		ui.Gap(20),
+		ui.BackgroundColor("#090d16"),
+		ui.Color("#e2e8f0"),
 	)
 }
 ```
 
 Components and `func() { ... }` children blocks run once when mounted. UI calls inside a block declare children in order; nested blocks keep their own parent. Ordinary `if` and `for` statements are useful for static construction. Reading a signal inside an accessor subscribes that binding; setting it changes the affected native properties or text nodes. Event handlers batch writes automatically. Use `ui.Batch` to group writes outside an event. Pass string or numeric accessors directly as children: `ui.Text("Count: ", count)` retains the prefix and updates only the number. Numbers use typed `strconv` conversions. Calling `count()` while mounting captures its current value; pass the accessor itself or a `func() int` for derived values. Use `strconv` and concatenation when a property needs one combined string, such as an input value or accessibility label.
 
-Put children first, followed by `ui.Style{}` records and event options: `ui.View("Hello", ui.Style{Padding: 20, BackgroundColor: "#ccc"})`. Multiple records merge field by field in declaration order. Only a conflicting field is replaced; nested interaction styles merge too. Shared records are never mutated. Numeric zero is an explicit value and `nil` omits a field. Use `Hover: &ui.Style{...}`, `Active`, `Focus`, `Disabled`, or `Selected` for native interaction styles. `ui.OnClick(func() { ... })` handles ordinary clicks; `ui.OnClickEvent` receives the native event.
+Pass style and event options directly alongside children: `ui.View(ui.BackgroundColor("#ccc"), ui.PaddingLeft(20), "Hello")`. Children can appear before or after options. Options apply in declaration order; a later value replaces only the same property, including explicit zero. Repeated interaction styles merge their properties. Use `ui.Hover(ui.BackgroundColor("#ddd"))`, `ui.Active(...)`, `ui.Focus(...)`, `ui.DisabledStyle(...)`, or `ui.SelectedStyle(...)` for native states. `ui.OnClick(func() { ... })` handles ordinary clicks; `ui.OnClickEvent` receives the native event.
+
+Use `ui.Styles(ui.Padding(12), ui.BorderRadius(8))` to share styles or fill a compound control’s `PartProps.Style` field. It returns a reusable `ui.Style` value; composing it with more options does not mutate it. Scalar accessors are bound independently when mounted, without rerunning the component.
 
 ## Conditional options
 
-`ui.When` tracks a condition and applies one or more options while it is true. Style records merge into the earlier styles; later values win only for conflicting fields. Turning a condition off restores an earlier value, or clears the property when there is no base value. Children stay mounted. Conditional event handlers and value bindings are released when their condition becomes false.
+`ui.When` tracks a condition and applies one or more options while it is true. Conditional options merge with earlier options; later values win only for the same property. Turning a condition off restores an earlier value, or clears the property when there is no base value. Children stay mounted. Conditional event handlers and value bindings are released when their condition becomes false.
 
 ```go
 selected, setSelected := ui.CreateSignal(false)
 ui.Button(
 	"Toggle selection",
-	ui.Style{Padding: 12, BackgroundColor: "#ccc"},
-	ui.Style{BorderRadius: 8},
+	ui.Padding(12),
+	ui.BackgroundColor("#ccc"),
+	ui.BorderRadius(8),
 	ui.When(
 		selected,
-		ui.Style{
-			BackgroundColor: "#2563eb",
-			Color:           "white",
-		},
+		ui.BackgroundColor("#2563eb"),
+		ui.Color("white"),
 	),
 	ui.OnClick(func() { setSelected(!selected()) }),
 )
@@ -98,13 +95,13 @@ ui.Button(
 
 For a computed condition, use `ui.When(func() bool { return count() >= 5 }, ...)`. Keep ref callbacks outside conditional options; refs run after mounting.
 
-Run `quickgui fmt` to apply QuickGUI's formatting rule. Long UI calls (over 100 columns), multiline calls, and calls with callback arguments use one argument per line and a trailing comma. Multiline props and style records use one field per line. Short calls stay compact; `gofmt` then handles ordinary Go spacing, indentation, and alignment. Comments and string contents are preserved, and generated files are left to their generator. Running `gofmt` afterward preserves the layout.
+Run `quickgui fmt` to apply QuickGUI's formatting rule. Long UI calls (over 100 columns), multiline calls, and calls with callback arguments use one argument per line and a trailing comma. Multiline typed props use one field per line. Short calls stay compact; `gofmt` then handles ordinary Go spacing, indentation, and alignment. Comments and string contents are preserved, and generated files are left to their generator. Running `gofmt` afterward preserves the layout.
 
 Use `quickgui fmt --check` in CI or `quickgui fmt --project path/to/app` for another project. The formatter uses the SDK version in the project's `go.mod`. In this repository, `bun run fmt:go` formats the SDK and examples; `bun run test:go` checks the same rule. The Go command can also read source on stdin for editor integration: `go run github.com/egoist/quickgui/go/cmd/quickguifmt`.
 
 ## Groups and named group hover
 
-`ui.Group(true)` marks an unnamed hover group; `ui.Group("card")` names it. A descendant’s `GroupHover: &ui.Style{...}` follows its nearest ancestor group, including named groups. `ui.GroupHoverNamed("card", ...)` follows the nearest ancestor with that name, skipping intervening groups with other names.
+`ui.Group(true)` marks an unnamed hover group; `ui.Group("card")` names it. A descendant’s `ui.GroupHover(...)` follows its nearest ancestor group, including named groups. `ui.GroupHoverNamed("card", ...)` follows the nearest ancestor with that name, skipping intervening groups with other names.
 
 ```go
 func GroupExample() {
@@ -112,28 +109,29 @@ func GroupExample() {
 		func() {
 			ui.Text(
 				"Changes when the card is hovered",
-				ui.Style{Color: "#64748b", GroupHover: &ui.Style{Color: "#2563eb"}},
+				ui.Color("#64748b"),
+				ui.GroupHover(ui.Color("#2563eb")),
 			)
 			ui.View(
 				func() {
 					ui.Text(
 						"Follows the card and the nested toolbar",
-						ui.GroupHoverNamed("card", ui.Style{Color: "#2563eb"}),
-						ui.GroupHoverNamed("toolbar", ui.Style{Opacity: 0.8}),
+						ui.GroupHoverNamed("card", ui.Color("#2563eb")),
+						ui.GroupHoverNamed("toolbar", ui.Opacity(0.8)),
 					)
 				},
 				ui.Group("toolbar"),
 			)
 		},
 		ui.Group("card"),
-		ui.Style{Padding: 20},
+		ui.Padding(20),
 	)
 }
 ```
 
 Hovering any part of the group, including its padding and descendants, activates its rules. A nested group becomes the target for unnamed rules; named rules can still follow an outer group. With no matching ancestor, the rule has no effect. Repeated group rules accumulate in declaration order; a node’s own `Hover` style wins for overlapping properties. Use paint properties such as colors, opacity, outlines, and transforms. Hover updates are handled natively without rerunning components or changing layout.
 
-`GroupActive: &ui.Style{...}` and `ui.GroupActiveNamed("card", ui.Style{...})` use the same group lookup while the group is pressed. `FocusWithin: &ui.Style{...}` follows focus in the node or its descendants. Group and focus-within states accept paint styles and cannot set the cursor.
+`ui.GroupActive(...)` and `ui.GroupActiveNamed("card", ui.Opacity(0.8))` use the same group lookup while the group is pressed. `ui.FocusWithin(...)` follows focus in the node or its descendants. Group and focus-within states accept paint styles and cannot set the cursor.
 
 ## Conditional content and lists
 

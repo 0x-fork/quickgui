@@ -11,7 +11,9 @@ import (
 	"github.com/egoist/quickgui/go/protocol"
 )
 
-// Style is the host style record, including nested interaction states.
+// Style stores a composed style, including nested interaction states.
+// Use options such as BackgroundColor and PaddingLeft directly on primitives;
+// Styles builds a reusable value for shared styles and compound parts.
 type Style struct {
 	ObjectFit                string
 	WordWrap                 string

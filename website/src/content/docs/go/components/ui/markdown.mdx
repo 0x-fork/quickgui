@@ -14,7 +14,7 @@ import (
 
 ```go
 func MarkdownExample(source func() string, streaming func() bool) {
-	ui.Markdown(ui.Value(source), ui.Streaming(streaming), ui.Style{Width: "100%"})
+	ui.Markdown(ui.Value(source), ui.Streaming(streaming), ui.Width("100%"))
 }
 ```
 
@@ -24,4 +24,4 @@ func MarkdownExample(source func() string, streaming func() bool) {
 | --- | --- |
 | `Value` | Markdown source to shape and paint. |
 | `Streaming` | Uses incremental Markdown reconciliation for appended content. |
-| `ui.Style{}` | QuickGUI layout, paint, typography, and interaction-state styles. |
+| `ui.BackgroundColor(...)`, `ui.Padding(...)`, `ui.Hover(...)` | QuickGUI layout, paint, typography, and interaction-state styles. |

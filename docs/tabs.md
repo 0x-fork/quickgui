@@ -199,7 +199,7 @@ func MeasuredTabs() {
 					ui.Tabs.Tab(ui.TabsTabProps{Value: "list", Index: &first}, "List")
 					ui.Tabs.Tab(ui.TabsTabProps{Value: "grid", Index: &second}, "Grid")
 					ui.Tabs.Indicator(ui.TabsIndicatorProps{
-						PartProps: ui.PartProps{Style: ui.Style{Height: 2}},
+						PartProps: ui.PartProps{Style: ui.Styles(ui.Height(2))},
 						Placement: "bottom",
 					})
 				},

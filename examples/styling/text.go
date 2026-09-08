@@ -10,10 +10,16 @@ func TextAlignment() {
 				func() {
 					ui.Text(
 						"textAlign: \""+align+"\" — the core resolves start and end against the inherited direction.",
-						ui.Style{Width: "100%", TextAlign: align, FontSize: 13, Color: ink},
+						ui.Width("100%"),
+						ui.TextAlign(align),
+						ui.FontSize(13),
+						ui.Color(ink),
 					)
 				},
-				ui.Style{Width: "100%", Padding: 8, BorderRadius: 8, BackgroundColor: "#1b2434"},
+				ui.Width("100%"),
+				ui.Padding(8),
+				ui.BorderRadius(8),
+				ui.BackgroundColor("#1b2434"),
 			)
 		}
 	})
@@ -23,69 +29,62 @@ func TextStyling() {
 	Panel("Extended text styling", func() {
 		ui.Text(
 			"letterSpacing 2",
-			ui.Style{
-				FontSize:      20,
-				FontWeight:    700,
-				LetterSpacing: 2,
-				Color:         ink,
-			},
+			ui.FontSize(20),
+			ui.FontWeight(700),
+			ui.LetterSpacing(2),
+			ui.Color(ink),
 		)
 		ui.Text(
 			"wordSpacing 8 pushes every space apart",
-			ui.Style{
-				FontSize:    14,
-				WordSpacing: 8,
-				Color:       ink,
-			},
+			ui.FontSize(14),
+			ui.WordSpacing(8),
+			ui.Color(ink),
 		)
 		ui.Text(
 			"textTransform capitalize keeps selection on the original text",
-			ui.Style{FontSize: 14, TextTransform: "capitalize", Color: ink},
+			ui.FontSize(14),
+			ui.TextTransform("capitalize"),
+			ui.Color(ink),
 		)
 		ui.Text(
 			"textShadow",
-			ui.Style{
-				FontSize:   24,
-				FontWeight: 700,
-				Color:      "#f8fafc",
-				TextShadow: "0 3px 10px #38bdf8aa",
-			},
+			ui.FontSize(24),
+			ui.FontWeight(700),
+			ui.Color("#f8fafc"),
+			ui.TextShadow("0 3px 10px #38bdf8aa"),
 		)
 		ui.Text(
 			"wavy underline in its own color",
-			ui.Style{
-				FontSize:                14,
-				Color:                   ink,
-				TextDecoration:          "underline",
-				TextDecorationColor:     "#f97316",
-				TextDecorationStyle:     "wavy",
-				TextDecorationThickness: 2,
-			},
+			ui.FontSize(14),
+			ui.Color(ink),
+			ui.TextDecoration("underline"),
+			ui.TextDecorationColor("#f97316"),
+			ui.TextDecorationStyle("wavy"),
+			ui.TextDecorationThickness(2),
 		)
 		ui.Text(
 			"line-through and overline together",
-			ui.Style{
-				FontSize:            14,
-				Color:               ink,
-				TextDecoration:      "line-through overline",
-				TextDecorationColor: "#f43f5e",
-			},
+			ui.FontSize(14),
+			ui.Color(ink),
+			ui.TextDecoration("line-through overline"),
+			ui.TextDecorationColor("#f43f5e"),
 		)
 		ui.View(
 			func() {
 				ui.Text(
 					"wordBreak break-all with overflowWrap anywhere: supercalifragilisticexpialidocious",
-					ui.Style{
-						Width:        "100%",
-						FontSize:     13,
-						Color:        muted,
-						WordBreak:    "break-all",
-						OverflowWrap: "anywhere",
-						Hyphens:      "manual",
-					},
+					ui.Width("100%"),
+					ui.FontSize(13),
+					ui.Color(muted),
+					ui.WordBreak("break-all"),
+					ui.OverflowWrap("anywhere"),
+					ui.Hyphens("manual"),
 				)
 			},
-			ui.Style{Width: 200, Padding: 8, BorderRadius: 8, BackgroundColor: "#1b2434"},
+			ui.Width(200),
+			ui.Padding(8),
+			ui.BorderRadius(8),
+			ui.BackgroundColor("#1b2434"),
 		)
 	})
 }
@@ -94,34 +93,41 @@ func Direction() {
 	Panel("Right to left", func() {
 		ui.View(
 			func() {
-				ui.View(ui.Style{Width: 28, Height: 20, BorderRadius: 6, BackgroundColor: "#38bdf8"})
-				ui.View(ui.Style{Width: 20, Height: 20, BorderRadius: 6, BackgroundColor: "#334155"})
+				ui.View(
+					ui.Width(28),
+					ui.Height(20),
+					ui.BorderRadius(6),
+					ui.BackgroundColor("#38bdf8"),
+				)
+				ui.View(
+					ui.Width(20),
+					ui.Height(20),
+					ui.BorderRadius(6),
+					ui.BackgroundColor("#334155"),
+				)
 				ui.Text(
 					"مرحبا بالعالم — hello",
-					ui.Style{
-						FontSize:      13,
-						Color:         ink,
-						TextAlign:     "start",
-						TextDirection: "rtl",
-					},
+					ui.FontSize(13),
+					ui.Color(ink),
+					ui.TextAlign("start"),
+					ui.TextDirection("rtl"),
 				)
 			},
-			ui.Style{
-				Direction:        "rtl",
-				Display:          "flex",
-				Gap:              8,
-				AlignItems:       "center",
-				Padding:          10,
-				PaddingStart:     20,
-				BorderRadius:     10,
-				BorderStartWidth: 3,
-				BorderColor:      "#38bdf8",
-				BackgroundColor:  "#1b2434",
-			},
+			ui.Direction("rtl"),
+			ui.Display("flex"),
+			ui.Gap(8),
+			ui.AlignItems("center"),
+			ui.Padding(10),
+			ui.PaddingStart(20),
+			ui.BorderRadius(10),
+			ui.BorderStartWidth(3),
+			ui.BorderColor("#38bdf8"),
+			ui.BackgroundColor("#1b2434"),
 		)
 		ui.Text(
 			"paddingStart and borderStartWidth resolve to the right edge inside this subtree.",
-			ui.Style{FontSize: 12, Color: muted},
+			ui.FontSize(12),
+			ui.Color(muted),
 		)
 	})
 }

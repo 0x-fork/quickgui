@@ -16,15 +16,13 @@ import (
 func ButtonExample(save func()) {
 	ui.Button(
 		"Save changes",
-		ui.Style{
-			Height:          40,
-			PaddingLeft:     16,
-			PaddingRight:    16,
-			BackgroundColor: "#2563eb",
-			Color:           "white",
-			BorderRadius:    8,
-			Hover:           &ui.Style{BackgroundColor: "#3b82f6"},
-		},
+		ui.Height(40),
+		ui.PaddingLeft(16),
+		ui.PaddingRight(16),
+		ui.BackgroundColor("#2563eb"),
+		ui.Color("white"),
+		ui.BorderRadius(8),
+		ui.Hover(ui.BackgroundColor("#3b82f6")),
 		ui.OnClick(save),
 	)
 }
@@ -34,7 +32,7 @@ func ButtonExample(save func()) {
 
 | プロパティ | 説明 |
 | --- | --- |
-| `ui.Style{}` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
+| `ui.BackgroundColor(...)`, `ui.Padding(...)`, `ui.Hover(...)` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
 | `children` | コンポーネント内にマウントする内容です。 |
 | `OnClick` | コアがアクティブ化を解決した後に実行します。 |
 | `Disabled` | 操作を無効にし、無効状態を公開します。 |

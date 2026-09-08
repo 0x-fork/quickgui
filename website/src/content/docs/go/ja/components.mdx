@@ -8,15 +8,13 @@ QuickGUI はスタイルなしのプリミティブとアクセシブルな複�
 func ButtonExample(save func()) {
 	ui.Button(
 		"Save changes",
-		ui.Style{
-			Height:          40,
-			PaddingLeft:     16,
-			PaddingRight:    16,
-			BackgroundColor: "#2563eb",
-			Color:           "white",
-			BorderRadius:    8,
-			Hover:           &ui.Style{BackgroundColor: "#3b82f6"},
-		},
+		ui.Height(40),
+		ui.PaddingLeft(16),
+		ui.PaddingRight(16),
+		ui.BackgroundColor("#2563eb"),
+		ui.Color("white"),
+		ui.BorderRadius(8),
+		ui.Hover(ui.BackgroundColor("#3b82f6")),
 		ui.OnClick(save),
 	)
 }
@@ -72,18 +70,18 @@ bun packages/cli/src/cli.ts dev --project examples/components
 
 ## 各パーツのスタイル
 
-各パーツのスタイルには `PartProps.Style` を使います。スタイルレコード、そのスライス、またはそれらを返すアクセサーを指定できます。選択状態やテーマのシグナルで、子を作り直さず既存パーツを更新できます。
+各パーツのスタイルには `PartProps.Style` を使います。単一のスタイルオプション、または `ui.Styles(...)` で組み合わせた複数のオプションを渡せます。再利用可能なスタイル、そのスライス、それらを返すアクセサーも使えます。選択状態やテーマのシグナルで、子を作り直さず保持されたパーツを更新できます。
 
 ```go
 ui.PartProps{
-	Style: ui.Style{
-		Display:         "flex",
-		Height:          32,
-		PaddingLeft:     12,
-		PaddingRight:    12,
-		BackgroundColor: "#2563eb",
-		Color:           "white",
-		BorderRadius:    8,
-	},
+	Style: ui.Styles(
+		ui.Display("flex"),
+		ui.Height(32),
+		ui.PaddingLeft(12),
+		ui.PaddingRight(12),
+		ui.BackgroundColor("#2563eb"),
+		ui.Color("white"),
+		ui.BorderRadius(8),
+	),
 }
 ```

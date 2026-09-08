@@ -37,9 +37,15 @@ func App() {
 						setMessage(reply)
 					})
 				}),
-				ui.Style{Padding: 12, BackgroundColor: "#2563eb", Color: "white", BorderRadius: 8},
+				ui.Padding(12),
+				ui.BackgroundColor("#2563eb"),
+				ui.Color("white"),
+				ui.BorderRadius(8),
 			)
 		},
-		ui.Style{Display: "flex", FlexDirection: "column", Padding: 24, Gap: 16},
+		ui.Display("flex"),
+		ui.FlexDirection("column"),
+		ui.Padding(24),
+		ui.Gap(16),
 	)
 }

@@ -137,8 +137,9 @@ export const GO_DOCS_PAGES: readonly DocsPageMeta[] = [
     title: 'Styling & Layout',
     description: 'Lay out and style native nodes with familiar properties.',
     outline: [
-      { id: 'the-style-prop', title: 'The style prop' },
+      { id: 'style-props', title: 'Style props' },
       { id: 'merging-styles', title: 'Merging styles' },
+      { id: 'reusable-styles', title: 'Reusable styles' },
       { id: 'flexbox', title: 'Flexbox' },
       { id: 'grid', title: 'Grid' },
       { id: 'text-and-color', title: 'Text and color' },

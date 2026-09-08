@@ -27,7 +27,9 @@ var refreshIcon string
 
 func icon(svg string, size float64, color func() string) {
 	gui.SVG(
-		gui.Style{Width: size, Height: size, FlexShrink: 0},
+		gui.Width(size),
+		gui.Height(size),
+		gui.FlexShrink(0),
 		gui.Value(func() string { return strings.ReplaceAll(svg, "currentColor", color()) }),
 	)
 }

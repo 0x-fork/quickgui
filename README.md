@@ -38,7 +38,7 @@ native.NewWindow(native.WindowOptions{
 })
 ```
 
-Components are ordinary `func()` declarations, the same as children blocks. Merged style records, event options, children blocks, and signal accessors bind directly to retained native nodes: `ui.View(func() { ui.Text("Hello") }, ui.Style{Padding: 20})`. See the [Go guide](docs/go.md) and [counter](examples/counter/main.go) for a complete application.
+Components are ordinary `func()` declarations, the same as children blocks. Flat style props, event handlers, children blocks, and signal accessors bind directly to retained native nodes: `ui.View(ui.Padding(20), func() { ui.Text("Hello") })`. See the [Go guide](docs/go.md) and [counter](examples/counter/main.go) for a complete application.
 
 ## MoonBit components
 

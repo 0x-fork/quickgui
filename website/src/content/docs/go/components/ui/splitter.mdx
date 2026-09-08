@@ -18,17 +18,17 @@ func SplitterExample() {
 		ui.SplitterRootProps{
 			DefaultValue: []float64{240, 400},
 			Panes:        []ui.SplitterPaneDeclaration{{}, {}},
-			PartProps:    ui.PartProps{Style: ui.Style{Display: "flex", Height: 240}},
+			PartProps:    ui.PartProps{Style: ui.Styles(ui.Display("flex"), ui.Height(240))},
 		},
 		func() {
 			first, second := 0, 1
 			ui.Splitter.Pane(ui.SplitterPaneProps{Index: &first}, "Sidebar")
 			ui.Splitter.Handle(ui.SplitterPaneProps{
 				Index: &first,
-				PartProps: ui.PartProps{Style: ui.Style{
-					Width:  6,
-					Cursor: "col-resize",
-				}},
+				PartProps: ui.PartProps{Style: ui.Styles(
+					ui.Width(6),
+					ui.Cursor("col-resize"),
+				)},
 			})
 			ui.Splitter.Pane(ui.SplitterPaneProps{Index: &second}, "Content")
 		},

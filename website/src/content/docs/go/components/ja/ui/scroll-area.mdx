@@ -23,17 +23,17 @@ func ScrollAreaExample() {
 		func() {
 			state := ui.UseScrollAreaState()
 			ui.ScrollArea.Viewport(
-				ui.PartProps{Style: ui.Style{
-					Width:    320,
-					Height:   160,
-					Overflow: "hidden",
-				}},
+				ui.PartProps{Style: ui.Styles(
+					ui.Width(320),
+					ui.Height(160),
+					ui.Overflow("hidden"),
+				)},
 				func() {
 					ui.ScrollArea.Content(
-						ui.PartProps{Style: func() ui.Style { return ui.Style{Transform: fmt.Sprintf("translateY(%gpx)", -state().Offset.Y)} }},
+						ui.PartProps{Style: func() ui.Style { return ui.Styles(ui.Transform(fmt.Sprintf("translateY(%gpx)", -state().Offset.Y))) }},
 						func() {
 							for index := range 40 {
-								ui.Text("Row ", index, ui.Style{Height: 22})
+								ui.Text("Row ", index, ui.Height(22))
 							}
 						},
 					)

@@ -97,16 +97,16 @@ func ComboboxDemo() {
 								ui.Combobox.Chip(
 									ui.ComboboxChipProps{
 										Index: ptr(index()),
-										PartProps: ui.PartProps{Style: ui.Style{
-											Display:         "flex",
-											AlignItems:      "center",
-											Gap:             4,
-											PaddingLeft:     8,
-											PaddingRight:    6,
-											Height:          22,
-											BorderRadius:    11,
-											BackgroundColor: color(func(p palette) string { return p.Selection }),
-										}},
+										PartProps: ui.PartProps{Style: ui.Styles(
+											ui.Display("flex"),
+											ui.AlignItems("center"),
+											ui.Gap(4),
+											ui.PaddingLeft(8),
+											ui.PaddingRight(6),
+											ui.Height(22),
+											ui.BorderRadius(11),
+											ui.BackgroundColor(color(func(p palette) string { return p.Selection })),
+										)},
 									},
 									func() {
 										label(chip.Label)

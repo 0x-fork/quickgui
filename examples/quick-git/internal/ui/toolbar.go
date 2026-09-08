@@ -37,18 +37,17 @@ func Toolbar() {
 							}
 							return "…"
 						},
-						gui.Style{MinWidth: 0, LineClamp: 1},
+						gui.MinWidth(0),
+						gui.LineClamp(1),
 					)
 				},
 				gui.OnClick(func() { store.SetView(model.ViewBranches) }),
 				app.Theme().Button("secondary"),
-				gui.Style{
-					FlexDirection:   "row",
-					Height:          28,
-					MaxWidth:        260,
-					BackgroundColor: "transparent",
-					BorderWidth:     0,
-				},
+				gui.FlexDirection("row"),
+				gui.Height(28),
+				gui.MaxWidth(260),
+				gui.BackgroundColor("transparent"),
+				gui.BorderWidth(0),
 			)
 			gui.Show(
 				func() bool {
@@ -64,14 +63,12 @@ func Toolbar() {
 							gui.Text(func() string { return fmt.Sprint(store.Status().Behind) })
 						},
 						gui.AriaLabel("Upstream commit counts"),
-						gui.Style{
-							Display:    "flex",
-							AlignItems: "center",
-							Gap:        3,
-							FontSize:   11,
-							Color:      app.Theme().TextSecondary,
-							AppRegion:  "no-drag",
-						},
+						gui.Display("flex"),
+						gui.AlignItems("center"),
+						gui.Gap(3),
+						gui.FontSize(11),
+						gui.Color(app.Theme().TextSecondary),
+						gui.AppRegion("no-drag"),
 					)
 				},
 			)
@@ -80,35 +77,31 @@ func Toolbar() {
 				func() {
 					gui.Text(
 						func() string { return strconv.Itoa(store.Conflicts()) + " conflicted" },
-						gui.Style{
-							FontSize:   11,
-							FontWeight: 600,
-							Color:      app.Theme().Warning,
-							AppRegion:  "no-drag",
-						},
+						gui.FontSize(11),
+						gui.FontWeight(600),
+						gui.Color(app.Theme().Warning),
+						gui.AppRegion("no-drag"),
 					)
 				},
 			)
-			gui.View(gui.Style{Flex: 1, AppRegion: "drag"})
+			gui.View(gui.Flex(1), gui.AppRegion("drag"))
 			gui.Show(busy, toolbarBusy)
 			toolbarButton("Fetch", fetchIcon, store.Fetch, busy, false)
 			toolbarButton("Pull", pullIcon, store.Pull, pullDisabled, false)
 			toolbarButton("Push", pushIcon, store.Push, pushDisabled, false)
 			toolbarButton("Refresh", refreshIcon, store.Refresh, busy, true)
 		},
-		gui.Style{
-			Display:           "flex",
-			Height:            TitlebarHeight,
-			FlexShrink:        0,
-			AlignItems:        "center",
-			Gap:               6,
-			PaddingLeft:       14,
-			PaddingRight:      12,
-			BorderBottomWidth: 1,
-			BorderColor:       app.Theme().Border,
-			BackgroundColor:   app.Theme().Content,
-			AppRegion:         "drag",
-		},
+		gui.Display("flex"),
+		gui.Height(TitlebarHeight),
+		gui.FlexShrink(0),
+		gui.AlignItems("center"),
+		gui.Gap(6),
+		gui.PaddingLeft(14),
+		gui.PaddingRight(12),
+		gui.BorderBottomWidth(1),
+		gui.BorderColor(app.Theme().Border),
+		gui.BackgroundColor(app.Theme().Content),
+		gui.AppRegion("drag"),
 	)
 }
 
@@ -122,7 +115,7 @@ func toolbarBusy() {
 					GaugeFormatProps: gui.GaugeFormatProps{
 						PartProps: gui.PartProps{
 							AriaLabel: "Git operation in progress",
-							Style:     gui.Style{Width: 32, Height: 4, FlexShrink: 0},
+							Style:     gui.Styles(gui.Width(32), gui.Height(4), gui.FlexShrink(0)),
 						},
 					},
 					Indeterminate: func() bool { return true },
@@ -130,21 +123,21 @@ func toolbarBusy() {
 				func() {
 					gui.Progress.Track(
 						gui.PartProps{
-							Style: gui.Style{
-								Width:           "100%",
-								Height:          4,
-								BorderRadius:    2,
-								BackgroundColor: app.Theme().BorderStrong,
-							},
+							Style: gui.Styles(
+								gui.Width("100%"),
+								gui.Height(4),
+								gui.BorderRadius(2),
+								gui.BackgroundColor(app.Theme().BorderStrong),
+							),
 						},
 						func() {
 							gui.Progress.Indicator(gui.PartProps{
-								Style: gui.Style{
-									Width:           12,
-									Height:          4,
-									BorderRadius:    2,
-									BackgroundColor: app.Theme().TextSecondary,
-								},
+								Style: gui.Styles(
+									gui.Width(12),
+									gui.Height(4),
+									gui.BorderRadius(2),
+									gui.BackgroundColor(app.Theme().TextSecondary),
+								),
 							})
 						},
 					)
@@ -157,7 +150,8 @@ func toolbarBusy() {
 					}
 					return ""
 				},
-				gui.Style{FontSize: 12, Color: app.Theme().TextSecondary},
+				gui.FontSize(12),
+				gui.Color(app.Theme().TextSecondary),
 			)
 			gui.Show(
 				func() bool {
@@ -173,14 +167,12 @@ func toolbarBusy() {
 				},
 			)
 		},
-		gui.Style{
-			Display:       "flex",
-			FlexDirection: "row",
-			AlignItems:    "center",
-			Gap:           8,
-			MarginRight:   8,
-			AppRegion:     "no-drag",
-		},
+		gui.Display("flex"),
+		gui.FlexDirection("row"),
+		gui.AlignItems("center"),
+		gui.Gap(8),
+		gui.MarginRight(8),
+		gui.AppRegion("no-drag"),
 	)
 }
 
@@ -197,10 +189,8 @@ func toolbarButton(label, icon string, click func(), disabled func() bool, iconO
 		gui.OnClick(click),
 		gui.Disabled(disabled),
 		app.Theme().Button("secondary"),
-		gui.Style{
-			FlexDirection: "row",
-			Height:        28,
-			BorderRadius:  7,
-		},
+		gui.FlexDirection("row"),
+		gui.Height(28),
+		gui.BorderRadius(7),
 	)
 }

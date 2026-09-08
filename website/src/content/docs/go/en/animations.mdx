@@ -1,4 +1,4 @@
-Animate changes to retained nodes with `ui.Style{Transition: ...}`. The native runtime advances the frames; your component does not rerun for every frame. Import `ui` from `github.com/egoist/quickgui/go/ui`.
+Animate changes to retained nodes with `ui.Transition(...)`. The native runtime advances the frames; your component does not rerun for every frame. Import `ui` from `github.com/egoist/quickgui/go/ui`.
 
 ## Hover transitions
 
@@ -8,12 +8,13 @@ Put the transition on the base style so it applies when the pointer enters and l
 func HoverAction() {
 	ui.Button(
 		"Continue",
-		ui.Style{
-			Padding: 12, BorderRadius: 8,
-			BackgroundColor: "#334155", Color: "white", Opacity: 0.85,
-			Transition: "background-color 160ms ease-out, opacity 160ms ease-out",
-			Hover: &ui.Style{BackgroundColor: "#2563eb", Opacity: 1},
-		},
+		ui.Padding(12),
+		ui.BorderRadius(8),
+		ui.BackgroundColor("#334155"),
+		ui.Color("white"),
+		ui.Opacity(0.85),
+		ui.Transition("background-color 160ms ease-out, opacity 160ms ease-out"),
+		ui.Hover(ui.BackgroundColor("#2563eb"), ui.Opacity(1)),
 	)
 }
 ```
@@ -30,15 +31,18 @@ func AnimatedSelection() {
 			ui.Button("Toggle emphasis", ui.OnClick(func() { setSelected(!selected()) }))
 			ui.View(
 				"Your selection",
-				ui.Style{
-					Padding: 20, BorderRadius: 12,
-					BackgroundColor: "#334155", Color: "white", Opacity: 0.6,
-					Transition: "background-color 180ms ease-out, opacity 180ms ease-out",
-				},
-				ui.When(selected, ui.Style{BackgroundColor: "#2563eb", Opacity: 1}),
+				ui.Padding(20),
+				ui.BorderRadius(12),
+				ui.BackgroundColor("#334155"),
+				ui.Color("white"),
+				ui.Opacity(0.6),
+				ui.Transition("background-color 180ms ease-out, opacity 180ms ease-out"),
+				ui.When(selected, ui.BackgroundColor("#2563eb"), ui.Opacity(1)),
 			)
 		},
-		ui.Style{Display: "flex", FlexDirection: "column", Gap: 12},
+		ui.Display("flex"),
+		ui.FlexDirection("column"),
+		ui.Gap(12),
 	)
 }
 ```
@@ -53,50 +57,51 @@ Use `ui.TransitionDeclaration` when several properties share one timing configur
 func CappedTransition() {
 	ui.Button(
 		"Hover me",
-		ui.Style{
-			Padding: 12, BackgroundColor: "#334155", Color: "white", Opacity: 0.8,
-			Transition: ui.TransitionDeclaration{
-				Properties: []string{"background-color", "opacity"},
-				Duration:   180 * time.Millisecond,
-				Easing:     "ease-out",
-				MaxFps:     30,
-			},
-			Hover: &ui.Style{BackgroundColor: "#2563eb", Opacity: 1},
-		},
+		ui.Padding(12),
+		ui.BackgroundColor("#334155"),
+		ui.Color("white"),
+		ui.Opacity(0.8),
+		ui.Transition(ui.TransitionDeclaration{
+			Properties: []string{"background-color", "opacity"},
+			Duration:   180 * time.Millisecond,
+			Easing:     "ease-out",
+			MaxFps:     30,
+		}),
+		ui.Hover(ui.BackgroundColor("#2563eb"), ui.Opacity(1)),
 	)
 }
 ```
 
-The corresponding longhand fields can also be set directly in `ui.Style{}`:
+Pass longhand transition props directly to the primitive:
 
 | Field | Usage |
 | --- | --- |
-| `TransitionProperty` | A comma-separated string or `[]string` of supported property names. |
-| `TransitionDuration` | Milliseconds as a number, a `time.Duration`, or a string such as `"180ms"` or `"0.18s"`. The host bounds durations to 0–10 seconds. |
-| `TransitionEasing` | `"linear"`, `"ease"`, `"ease-in"`, `"ease-out"`, or `"ease-in-out"`. `"ease"` aliases the default `"ease-in-out"`; these select QuickGUI curves. |
-| `TransitionTimingFunction` | Alias for `TransitionEasing`. |
-| `TransitionMaxFps` | Optional frame-rate cap. Omit it to follow display presentation; completion still occurs at the transition deadline. |
+| `ui.TransitionProperty(...)` | A comma-separated string or `[]string` of supported property names. |
+| `ui.TransitionDuration(...)` | Milliseconds as a number, a `time.Duration`, or a string such as `"180ms"` or `"0.18s"`. The host bounds durations to 0–10 seconds. |
+| `ui.TransitionEasing(...)` | `"linear"`, `"ease"`, `"ease-in"`, `"ease-out"`, or `"ease-in-out"`. `"ease"` aliases the default `"ease-in-out"`; these select QuickGUI curves. |
+| `ui.TransitionTimingFunction(...)` | Alias for `ui.TransitionEasing(...)`. |
+| `ui.TransitionMaxFps(...)` | Optional frame-rate cap. Omit it to follow display presentation; completion still occurs at the transition deadline. |
 
 A node has one duration, easing, and frame-rate cap for all selected properties. Comma-separated shorthand entries collect property names; the last duration and easing apply to the entire list. Delays, `cubic-bezier()`, and independent timings per property are not supported. Explicit longhand fields override the shorthand.
 
-A duration alone, such as `Transition: 180 * time.Millisecond`, transitions background, border, and text colors. Select `"all"` explicitly to include all supported paint properties. Use `Transition: "none"` to remove the shorthand declaration.
+A duration alone, such as `ui.Transition(180 * time.Millisecond)`, transitions background, border, and text colors. Select `"all"` explicitly to include all supported paint properties. Use `ui.Transition("none")` to remove the shorthand declaration.
 
 ## Supported properties
 
-| Transition name | Go style field |
+| Transition name | Go style prop |
 | --- | --- |
-| `background-color` or `background` | `BackgroundColor` or a solid `Background` |
-| `border-color` | `BorderColor` |
-| `border-width` | `BorderWidth` and edge widths |
-| `border-radius` | `BorderRadius` and corner radii |
-| `color` | Inherited `Color` |
-| `opacity` | Subtree `Opacity` |
-| `box-shadow` | `BoxShadow` |
-| `transform` | Subtree `Transform`, including translation, scale, and rotation |
+| `background-color` or `background` | `ui.BackgroundColor(...)` or a solid `ui.Background(...)` |
+| `border-color` | `ui.BorderColor(...)` |
+| `border-width` | `ui.BorderWidth(...)` and edge widths |
+| `border-radius` | `ui.BorderRadius(...)` and corner radii |
+| `color` | Inherited `ui.Color(...)` |
+| `opacity` | Subtree `ui.Opacity(...)` |
+| `box-shadow` | `ui.BoxShadow(...)` |
+| `transform` | Subtree `ui.Transform(...)`, including translation, scale, and rotation |
 
 `"all"` means these properties. Gradient stops, width, height, padding, and other layout values do not interpolate through `Transition`. Unsupported transition property names are rejected.
 
-For a sliding switch thumb, use `Transform: "translateX(20px)"` and `Transition: "transform 160ms ease-out"`, then change the target to `"translateX(0px)"` when unchecked. This moves the painted subtree and its hit area without moving neighboring layout. Transforms interpolate their affine translation, scale, shear, and shortest rotation; `TransformOrigin` itself changes immediately.
+For a sliding switch thumb, use `ui.Transform("translateX(20px)")` and `ui.Transition("transform 160ms ease-out")`, then change the target to `"translateX(0px)"` when unchecked. This moves the painted subtree and its hit area without moving neighboring layout. Transforms interpolate their affine translation, scale, shear, and shortest rotation; `TransformOrigin` itself changes immediately.
 
 The Go UI API exposes paint transitions and animated images. CSS keyframes, timeline callbacks, and spring declarations are not Go style props.
 
@@ -116,7 +121,9 @@ Pass an animated GIF or WebP path to `ui.Image`. The native decoder retains the 
 func AnimatedImage(path string) {
 	ui.Image(
 		ui.Value(path),
-		ui.Style{Width: 96, Height: 96, ObjectFit: "contain"},
+		ui.Width(96),
+		ui.Height(96),
+		ui.ObjectFit("contain"),
 	)
 }
 ```

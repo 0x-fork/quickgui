@@ -8,18 +8,19 @@ export const snippets = {
 			ui.Text("Count: ", count)
 			ui.Button(
 				"Increment",
-				ui.Style{Padding: 12, BorderRadius: 8, BackgroundColor: "#18181b", Color: "white"},
+				ui.Padding(12),
+				ui.BorderRadius(8),
+				ui.BackgroundColor("#18181b"),
+				ui.Color("white"),
 				ui.OnClick(func() { setCount(count() + 1) }),
 			)
 		},
-		ui.Style{
-			Display:        "flex",
-			FlexDirection:  "column",
-			Height:         "100%",
-			AlignItems:     "center",
-			JustifyContent: "center",
-			Gap:            12,
-		},
+		ui.Display("flex"),
+		ui.FlexDirection("column"),
+		ui.Height("100%"),
+		ui.AlignItems("center"),
+		ui.JustifyContent("center"),
+		ui.Gap(12),
 	)
 }
 `,

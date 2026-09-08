@@ -37,27 +37,36 @@ type issue struct {
 }
 
 func column() ui.Style {
-	return ui.Style{Display: "flex", FlexDirection: "column", MinHeight: 0, MinWidth: 0}
+	return ui.Styles(
+		ui.Display("flex"),
+		ui.FlexDirection("column"),
+		ui.MinHeight(0),
+		ui.MinWidth(0),
+	)
 }
-func row() ui.Style     { return ui.Style{Display: "flex", AlignItems: "center", MinWidth: 0} }
-func caption(value any) { ui.Text(value, ui.Style{FontSize: 12, LineHeight: 18, Color: muted}) }
+func row() ui.Style {
+	return ui.Styles(
+		ui.Display("flex"),
+		ui.AlignItems("center"),
+		ui.MinWidth(0),
+	)
+}
+func caption(value any) { ui.Text(value, ui.FontSize(12), ui.LineHeight(18), ui.Color(muted)) }
 func control(label any, click func(), disabled func() bool) {
 	ui.Button(
 		label,
-		ui.Style{
-			Display:         "flex",
-			AlignItems:      "center",
-			JustifyContent:  "center",
-			Height:          32,
-			PaddingLeft:     12,
-			PaddingRight:    12,
-			BorderWidth:     1,
-			BorderColor:     "#dce0e7",
-			BorderRadius:    6,
-			BackgroundColor: "white",
-			FontSize:        12,
-			Disabled:        &ui.Style{Opacity: 0.4},
-		},
+		ui.Display("flex"),
+		ui.AlignItems("center"),
+		ui.JustifyContent("center"),
+		ui.Height(32),
+		ui.PaddingLeft(12),
+		ui.PaddingRight(12),
+		ui.BorderWidth(1),
+		ui.BorderColor("#dce0e7"),
+		ui.BorderRadius(6),
+		ui.BackgroundColor("white"),
+		ui.FontSize(12),
+		ui.DisabledStyle(ui.Opacity(0.4)),
 		ui.OnClick(click),
 		ui.Disabled(disabled),
 	)
@@ -66,10 +75,10 @@ func property(label string, value any) {
 	ui.View(
 		func() {
 			caption(label)
-			ui.Text(value, ui.Style{FontSize: 12, FontWeight: 500})
+			ui.Text(value, ui.FontSize(12), ui.FontWeight(500))
 		},
 		row(),
-		ui.Style{JustifyContent: "space-between"},
+		ui.JustifyContent("space-between"),
 	)
 }
 
@@ -129,79 +138,69 @@ func issueTracker() {
 				func() {
 					ui.Text(
 						"Orbit",
-						ui.Style{
-							FontSize:     22,
-							FontWeight:   700,
-							PaddingLeft:  12,
-							MarginBottom: 6,
-						},
+						ui.FontSize(22),
+						ui.FontWeight(700),
+						ui.PaddingLeft(12),
+						ui.MarginBottom(6),
 					)
 					ui.Text(
 						"Product workspace",
-						ui.Style{
-							FontSize:     12,
-							Color:        muted,
-							PaddingLeft:  12,
-							MarginBottom: 24,
-						},
+						ui.FontSize(12),
+						ui.Color(muted),
+						ui.PaddingLeft(12),
+						ui.MarginBottom(24),
 					)
 					for _, name := range []string{"All issues", "Open", "Completed"} {
 						ui.Button(
 							name,
-							ui.Style{
-								Display:        "flex",
-								Height:         42,
-								PaddingLeft:    12,
-								AlignItems:     "center",
-								JustifyContent: "flex-start",
-								BorderWidth:    0,
-								BorderRadius:   7,
-								FontWeight: func() int {
-									if filter() == name {
-										return 600
-									}
-									return 400
-								},
-								BackgroundColor: func() string {
-									if filter() == name {
-										return "#e4ebfb"
-									}
-									return "transparent"
-								},
-								Color: func() string {
-									if filter() == name {
-										return accent
-									}
-									return ink
-								},
-							},
+							ui.Display("flex"),
+							ui.Height(42),
+							ui.PaddingLeft(12),
+							ui.AlignItems("center"),
+							ui.JustifyContent("flex-start"),
+							ui.BorderWidth(0),
+							ui.BorderRadius(7),
+							ui.FontWeight(func() int {
+								if filter() == name {
+									return 600
+								}
+								return 400
+							}),
+							ui.BackgroundColor(func() string {
+								if filter() == name {
+									return "#e4ebfb"
+								}
+								return "transparent"
+							}),
+							ui.Color(func() string {
+								if filter() == name {
+									return accent
+								}
+								return ink
+							}),
 							ui.OnClick(func() { ui.Batch(func() { setFilter(name); setPage(0) }) }),
 						)
 					}
-					ui.View(ui.Style{Flex: 1})
+					ui.View(ui.Flex(1))
 					ui.Text(
 						"September cycle\n4 projects · 5 teammates",
-						ui.Style{
-							FontSize:   12,
-							LineHeight: 18,
-							Color:      muted,
-							Padding:    12,
-						},
+						ui.FontSize(12),
+						ui.LineHeight(18),
+						ui.Color(muted),
+						ui.Padding(12),
 					)
 				},
 				column(),
-				ui.Style{
-					Width:            176,
-					FlexShrink:       0,
-					PaddingTop:       24,
-					PaddingBottom:    24,
-					PaddingLeft:      12,
-					PaddingRight:     12,
-					Gap:              8,
-					BackgroundColor:  "#f4f5f7",
-					BorderRightWidth: 1,
-					BorderColor:      line,
-				},
+				ui.Width(176),
+				ui.FlexShrink(0),
+				ui.PaddingTop(24),
+				ui.PaddingBottom(24),
+				ui.PaddingLeft(12),
+				ui.PaddingRight(12),
+				ui.Gap(8),
+				ui.BackgroundColor("#f4f5f7"),
+				ui.BorderRightWidth(1),
+				ui.BorderColor(line),
 			)
 			ui.View(
 				func() {
@@ -209,13 +208,13 @@ func issueTracker() {
 						func() {
 							ui.View(
 								func() {
-									ui.Text("Issue inbox", ui.Style{FontSize: 24, FontWeight: 700})
+									ui.Text("Issue inbox", ui.FontSize(24), ui.FontWeight(700))
 									caption(func() string {
 										return strconv.Itoa(len(issues)-completed()) + " open · " + strconv.Itoa(completed()) + " completed"
 									})
 								},
 								column(),
-								ui.Style{Gap: 6},
+								ui.Gap(6),
 							)
 							ui.Input(
 								ui.Value(query),
@@ -224,28 +223,24 @@ func issueTracker() {
 								ui.OnInput(func(e *native.Event) {
 									ui.Batch(func() { setQuery(e.Value); setPage(0) })
 								}),
-								ui.Style{
-									Width:           280,
-									Height:          38,
-									PaddingLeft:     12,
-									PaddingRight:    12,
-									BackgroundColor: "#f8f9fb",
-									BorderWidth:     1,
-									BorderColor:     "#dce0e7",
-									BorderRadius:    7,
-								},
+								ui.Width(280),
+								ui.Height(38),
+								ui.PaddingLeft(12),
+								ui.PaddingRight(12),
+								ui.BackgroundColor("#f8f9fb"),
+								ui.BorderWidth(1),
+								ui.BorderColor("#dce0e7"),
+								ui.BorderRadius(7),
 							)
 						},
 						row(),
-						ui.Style{
-							Height:            94,
-							FlexShrink:        0,
-							PaddingLeft:       24,
-							PaddingRight:      24,
-							JustifyContent:    "space-between",
-							BorderBottomWidth: 1,
-							BorderColor:       line,
-						},
+						ui.Height(94),
+						ui.FlexShrink(0),
+						ui.PaddingLeft(24),
+						ui.PaddingRight(24),
+						ui.JustifyContent("space-between"),
+						ui.BorderBottomWidth(1),
+						ui.BorderColor(line),
 					)
 					ui.View(
 						func() {
@@ -257,16 +252,14 @@ func issueTracker() {
 											caption("Updated this week")
 										},
 										row(),
-										ui.Style{
-											Height:            48,
-											FlexShrink:        0,
-											PaddingLeft:       20,
-											PaddingRight:      20,
-											JustifyContent:    "space-between",
-											BackgroundColor:   "#fafbfc",
-											BorderBottomWidth: 1,
-											BorderColor:       line,
-										},
+										ui.Height(48),
+										ui.FlexShrink(0),
+										ui.PaddingLeft(20),
+										ui.PaddingRight(20),
+										ui.JustifyContent("space-between"),
+										ui.BackgroundColor("#fafbfc"),
+										ui.BorderBottomWidth(1),
+										ui.BorderColor(line),
 									)
 									// A new result page starts at the top; selection and edits keep its viewport.
 									ui.For(
@@ -284,45 +277,39 @@ func issueTracker() {
 																func() {
 																	ui.Text(
 																		item.Title,
-																		ui.Style{
-																			FontSize:     14,
-																			FontWeight:   500,
-																			WhiteSpace:   "nowrap",
-																			TextOverflow: "ellipsis",
-																			Overflow:     "hidden",
-																		},
+																		ui.FontSize(14),
+																		ui.FontWeight(500),
+																		ui.WhiteSpace("nowrap"),
+																		ui.TextOverflow("ellipsis"),
+																		ui.Overflow("hidden"),
 																	)
 																	ui.Text(
 																		func() string {
 																			return item.ID + "  ·  " + item.Project + "  ·  " + item.status() + "  ·  " + item.Owner
 																		},
-																		ui.Style{
-																			FontSize:   11,
-																			Color:      muted,
-																			WhiteSpace: "nowrap",
-																		},
+																		ui.FontSize(11),
+																		ui.Color(muted),
+																		ui.WhiteSpace("nowrap"),
 																	)
 																},
 																column(),
-																ui.Style{
-																	Height:            68,
-																	FlexShrink:        0,
-																	JustifyContent:    "center",
-																	AlignItems:        "stretch",
-																	Gap:               8,
-																	PaddingLeft:       20,
-																	PaddingRight:      20,
-																	BorderWidth:       0,
-																	BorderBottomWidth: 1,
-																	BorderRadius:      0,
-																	BorderColor:       "#edf0f4",
-																	BackgroundColor: func() string {
-																		if selected() == index {
-																			return "#edf3ff"
-																		}
-																		return "white"
-																	},
-																},
+																ui.Height(68),
+																ui.FlexShrink(0),
+																ui.JustifyContent("center"),
+																ui.AlignItems("stretch"),
+																ui.Gap(8),
+																ui.PaddingLeft(20),
+																ui.PaddingRight(20),
+																ui.BorderWidth(0),
+																ui.BorderBottomWidth(1),
+																ui.BorderRadius(0),
+																ui.BorderColor("#edf0f4"),
+																ui.BackgroundColor(func() string {
+																	if selected() == index {
+																		return "#edf3ff"
+																	}
+																	return "white"
+																}),
 																ui.OnClick(func() { setSelected(index) }),
 															)
 														},
@@ -331,7 +318,8 @@ func issueTracker() {
 													)
 												},
 												column(),
-												ui.Style{Flex: 1, OverflowY: "scroll"},
+												ui.Flex(1),
+												ui.OverflowY("scroll"),
 											)
 										},
 										func(key string) any { return key },
@@ -346,23 +334,21 @@ func issueTracker() {
 													control("Next", func() { setPage(currentPage() + 1) }, func() bool { return currentPage()+1 >= pages() })
 												},
 												row(),
-												ui.Style{Gap: 8},
+												ui.Gap(8),
 											)
 										},
 										row(),
-										ui.Style{
-											Height:         58,
-											FlexShrink:     0,
-											JustifyContent: "space-between",
-											PaddingLeft:    20,
-											PaddingRight:   20,
-											BorderTopWidth: 1,
-											BorderColor:    line,
-										},
+										ui.Height(58),
+										ui.FlexShrink(0),
+										ui.JustifyContent("space-between"),
+										ui.PaddingLeft(20),
+										ui.PaddingRight(20),
+										ui.BorderTopWidth(1),
+										ui.BorderColor(line),
 									)
 								},
 								column(),
-								ui.Style{Flex: 1},
+								ui.Flex(1),
 							)
 							ui.View(
 								func() {
@@ -371,13 +357,11 @@ func issueTracker() {
 											caption(func() string { return current().ID + " / " + current().Project })
 											ui.Text(
 												func() string { return current().Title },
-												ui.Style{
-													FontSize:     21,
-													LineHeight:   28,
-													FontWeight:   700,
-													MarginTop:    14,
-													MarginBottom: 22,
-												},
+												ui.FontSize(21),
+												ui.LineHeight(28),
+												ui.FontWeight(700),
+												ui.MarginTop(14),
+												ui.MarginBottom(22),
 											)
 											ui.View(
 												func() {
@@ -386,23 +370,20 @@ func issueTracker() {
 													property("Priority", func() string { return current().Priority })
 												},
 												column(),
-												ui.Style{Gap: 12, MarginBottom: 24},
+												ui.Gap(12),
+												ui.MarginBottom(24),
 											)
 											ui.Text(
 												func() string { return current().Description },
-												ui.Style{
-													FontSize:     13,
-													LineHeight:   20,
-													MarginBottom: 22,
-												},
+												ui.FontSize(13),
+												ui.LineHeight(20),
+												ui.MarginBottom(22),
 											)
 											ui.Text(
 												"Working notes",
-												ui.Style{
-													FontSize:     12,
-													FontWeight:   600,
-													MarginBottom: 8,
-												},
+												ui.FontSize(12),
+												ui.FontWeight(600),
+												ui.MarginBottom(8),
 											)
 											ui.TextArea(
 												ui.Value(func() string { return current().notes() }),
@@ -410,16 +391,14 @@ func issueTracker() {
 												ui.OnInput(func(e *native.Event) {
 													current().setNotes(e.Value)
 												}),
-												ui.Style{
-													Height:       100,
-													FlexShrink:   0,
-													Padding:      10,
-													FontSize:     13,
-													LineHeight:   19,
-													BorderWidth:  1,
-													BorderColor:  "#dce0e7",
-													BorderRadius: 7,
-												},
+												ui.Height(100),
+												ui.FlexShrink(0),
+												ui.Padding(10),
+												ui.FontSize(13),
+												ui.LineHeight(19),
+												ui.BorderWidth(1),
+												ui.BorderColor("#dce0e7"),
+												ui.BorderRadius(7),
 											)
 											ui.Button(
 												func() string {
@@ -437,59 +416,53 @@ func issueTracker() {
 													}
 												}),
 												row(),
-												ui.Style{
-													Height:          36,
-													FlexShrink:      0,
-													JustifyContent:  "center",
-													BorderWidth:     0,
-													BorderRadius:    7,
-													MarginTop:       16,
-													BackgroundColor: accent,
-													Color:           "white",
-													FontWeight:      500,
-												},
+												ui.Height(36),
+												ui.FlexShrink(0),
+												ui.JustifyContent("center"),
+												ui.BorderWidth(0),
+												ui.BorderRadius(7),
+												ui.MarginTop(16),
+												ui.BackgroundColor(accent),
+												ui.Color("white"),
+												ui.FontWeight(500),
 											)
 											ui.Text(
 												"Changes are kept for this session.",
-												ui.Style{
-													FontSize:  11,
-													Color:     muted,
-													MarginTop: 10,
-												},
+												ui.FontSize(11),
+												ui.Color(muted),
+												ui.MarginTop(10),
 											)
 										},
 										column(),
-										ui.Style{FlexShrink: 0},
+										ui.FlexShrink(0),
 									)
 								},
 								column(),
-								ui.Style{
-									Width:           350,
-									FlexShrink:      0,
-									OverflowY:       "auto",
-									Padding:         24,
-									BorderLeftWidth: 1,
-									BorderColor:     line,
-								},
+								ui.Width(350),
+								ui.FlexShrink(0),
+								ui.OverflowY("auto"),
+								ui.Padding(24),
+								ui.BorderLeftWidth(1),
+								ui.BorderColor(line),
 							)
 						},
 						row(),
-						ui.Style{Flex: 1, MinHeight: 0, AlignItems: "stretch"},
+						ui.Flex(1),
+						ui.MinHeight(0),
+						ui.AlignItems("stretch"),
 					)
 				},
 				column(),
-				ui.Style{Flex: 1},
+				ui.Flex(1),
 			)
 		},
 		row(),
-		ui.Style{
-			Width:           "100%",
-			Height:          "100%",
-			AlignItems:      "stretch",
-			Color:           ink,
-			FontSize:        14,
-			BackgroundColor: "white",
-		},
+		ui.Width("100%"),
+		ui.Height("100%"),
+		ui.AlignItems("stretch"),
+		ui.Color(ink),
+		ui.FontSize(14),
+		ui.BackgroundColor("white"),
 	)
 }
 

@@ -21,42 +21,41 @@ func menuAppearance() *ui.MenuAppearance {
 	}
 }
 func menuRow() ui.PartProps {
-	s := controlStyle()
-	s.JustifyContent = "space-between"
-	s.BackgroundColor = "transparent"
-	s.BorderWidth = 0
-	s.Height = 28
-	s.BorderRadius = 5
-	s.PaddingLeft = 10
-	s.PaddingRight = 10
-	s.Hover = &ui.Style{BackgroundColor: color(func(p palette) string { return p.Selection })}
-	return ui.PartProps{Style: s}
+	return ui.PartProps{Style: ui.Styles(
+		controlStyle(),
+		ui.JustifyContent("space-between"),
+		ui.BackgroundColor("transparent"),
+		ui.BorderWidth(0),
+		ui.Height(28),
+		ui.BorderRadius(5),
+		ui.PaddingLeft(10),
+		ui.PaddingRight(10),
+		ui.Hover(ui.BackgroundColor(color(func(p palette) string { return p.Selection }))),
+	)}
 }
 func menuLabel(caption string) {
 	state := ui.UseMenuItemState()
 	ui.Text(
 		caption,
-		ui.Style{
-			Color: func() string { return choose(state().Highlighted, p().Accent, p().Ink) },
-			Flex:  1,
-		},
+		ui.Color(func() string { return choose(state().Highlighted, p().Accent, p().Ink) }),
+		ui.Flex(1),
 	)
 }
 func ContextMenuDemo() {
 	command, setCommand := ui.CreateSignal("nothing yet")
 	parts, setParts := ui.CreateSignal("nothing yet")
 	target := func() ui.ContextMenuTriggerProps {
-		return ui.ContextMenuTriggerProps{PartProps: ui.PartProps{Style: ui.Style{
-			Display:         "flex",
-			Height:          64,
-			BorderRadius:    10,
-			BorderWidth:     1,
-			BorderColor:     color(func(p palette) string { return p.Border }),
-			BorderStyle:     "dashed",
-			AlignItems:      "center",
-			JustifyContent:  "center",
-			BackgroundColor: color(func(p palette) string { return p.PanelAlt }),
-		}}}
+		return ui.ContextMenuTriggerProps{PartProps: ui.PartProps{Style: ui.Styles(
+			ui.Display("flex"),
+			ui.Height(64),
+			ui.BorderRadius(10),
+			ui.BorderWidth(1),
+			ui.BorderColor(color(func(p palette) string { return p.Border })),
+			ui.BorderStyle("dashed"),
+			ui.AlignItems("center"),
+			ui.JustifyContent("center"),
+			ui.BackgroundColor(color(func(p palette) string { return p.PanelAlt })),
+		)}}
 	}
 	panel("Context menu", "Secondary-click menus from a declared row model or from Menu.Item parts.", func() {
 		ui.ContextMenu.Root(
@@ -144,20 +143,18 @@ func SystemContextMenuDemo() {
 	panel("System context menu", "The operating system draws this menu. Actions update the readout below; reopen it to see the current checkmarks.", func() {
 		ui.View(
 			"Right-click here for the system menu",
-			ui.Style{
-				Display:         "flex",
-				Height:          96,
-				AlignItems:      "center",
-				JustifyContent:  "center",
-				BorderRadius:    10,
-				BorderWidth:     1,
-				BorderStyle:     "dashed",
-				BorderColor:     color(func(p palette) string { return p.Border }),
-				BackgroundColor: color(func(p palette) string { return p.PanelAlt }),
-				Color:           color(func(p palette) string { return p.Muted }),
-				AppRegion:       "no-drag",
-				UserSelect:      "none",
-			},
+			ui.Display("flex"),
+			ui.Height(96),
+			ui.AlignItems("center"),
+			ui.JustifyContent("center"),
+			ui.BorderRadius(10),
+			ui.BorderWidth(1),
+			ui.BorderStyle("dashed"),
+			ui.BorderColor(color(func(p palette) string { return p.Border })),
+			ui.BackgroundColor(color(func(p palette) string { return p.PanelAlt })),
+			ui.Color(color(func(p palette) string { return p.Muted })),
+			ui.AppRegion("no-drag"),
+			ui.UserSelect("none"),
 			ui.OnContextMenu(func(event *native.Event) {
 				event.PreventDefault()
 				open()
@@ -220,10 +217,10 @@ func MenuDemo() {
 									},
 									func() { menuLabel("Documentation") },
 								)
-								ui.Menu.Separator(ui.PartProps{Style: ui.Style{
-									Height:          1,
-									BackgroundColor: color(func(p palette) string { return p.Border }),
-								}})
+								ui.Menu.Separator(ui.PartProps{Style: ui.Styles(
+									ui.Height(1),
+									ui.BackgroundColor(color(func(p palette) string { return p.Border })),
+								)})
 								ui.Menu.CheckboxItem(
 									ui.MenuCheckboxItemProps{
 										MenuItemProps: ui.MenuItemProps{
@@ -464,11 +461,11 @@ func PopoverDemo() {
 						ui.Popover.Popup(
 							ui.PopoverPopupProps{PartProps: popup(240)},
 							func() {
-								ui.Popover.Arrow(ui.PartProps{Style: ui.Style{
-									Width:           10,
-									Height:          10,
-									BackgroundColor: color(func(p palette) string { return p.Popup }),
-								}})
+								ui.Popover.Arrow(ui.PartProps{Style: ui.Styles(
+									ui.Width(10),
+									ui.Height(10),
+									ui.BackgroundColor(color(func(p palette) string { return p.Popup })),
+								)})
 								ui.Popover.Title(ui.PartProps{}, "Signed in")
 								ui.Popover.Viewport(ui.PartProps{}, "ada@example.com")
 								ui.Popover.Close(control(), "Done")
@@ -523,11 +520,11 @@ func PreviewCardDemo() {
 						ui.PreviewCardTriggerProps{
 							Delay:      350,
 							CloseDelay: 200,
-							PartProps: ui.PartProps{Style: ui.Style{
-								Padding:            2,
-								Color:              color(func(p palette) string { return p.Accent }),
-								TextDecorationLine: "underline",
-							}},
+							PartProps: ui.PartProps{Style: ui.Styles(
+								ui.Padding(2),
+								ui.Color(color(func(p palette) string { return p.Accent })),
+								ui.TextDecorationLine("underline"),
+							)},
 						},
 						"@ada",
 					)
@@ -584,12 +581,12 @@ func toastDemoBody() {
 			button("Clear", manager.CloseAll)
 		})
 		ui.Toast.Viewport(
-			ui.ToastViewportProps{PartProps: ui.PartProps{Style: ui.Style{
-				Display:       "flex",
-				FlexDirection: "column",
-				Gap:           8,
-				MinHeight:     40,
-			}}},
+			ui.ToastViewportProps{PartProps: ui.PartProps{Style: ui.Styles(
+				ui.Display("flex"),
+				ui.FlexDirection("column"),
+				ui.Gap(8),
+				ui.MinHeight(40),
+			)}},
 			func() {
 				ui.KeyedFor(
 					manager.Stack,
@@ -706,11 +703,11 @@ func TooltipDemo() {
 											func() {
 												ui.Text(choose(i == 0, "Shared hover delay", "Tracks the horizontal cursor"))
 												if i == 0 {
-													ui.Tooltip.Arrow(ui.PartProps{Style: ui.Style{
-														Width:           8,
-														Height:          8,
-														BackgroundColor: color(func(p palette) string { return p.Ink }),
-													}})
+													ui.Tooltip.Arrow(ui.PartProps{Style: ui.Styles(
+														ui.Width(8),
+														ui.Height(8),
+														ui.BackgroundColor(color(func(p palette) string { return p.Ink })),
+													)})
 												}
 											},
 										)

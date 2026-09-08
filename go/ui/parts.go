@@ -227,6 +227,9 @@ func resolveStyle(value any) *Style {
 		return &typed
 	case *Style:
 		return typed
+	case StyleDeclaration:
+		style := Styles(typed)
+		return &style
 	case []Style:
 		merged := Style{}
 		for _, style := range typed {
@@ -243,7 +246,7 @@ func resolveStyle(value any) *Style {
 	case func() any:
 		return resolveStyle(typed())
 	default:
-		panic(fmt.Sprintf("QuickGUI style %T is not a style record or list", value))
+		panic(fmt.Sprintf("QuickGUI style %T is not a style option, composed style, or list", value))
 	}
 }
 

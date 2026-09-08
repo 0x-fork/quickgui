@@ -43,21 +43,19 @@ package notice
 
 import "github.com/egoist/quickgui/go/ui"
 
-func Notice(message func() string, style ui.Style) {
+func Notice(message func() string, styles ...ui.StyleDeclaration) {
 	ui.Text(
 		message,
-		ui.Style{
-			Padding:         12,
-			BackgroundColor: "#eff6ff",
-			Color:           "#1e40af",
-			BorderRadius:    8,
-		},
-		style,
+		ui.Padding(12),
+		ui.BackgroundColor("#eff6ff"),
+		ui.Color("#1e40af"),
+		ui.BorderRadius(8),
+		ui.Styles(styles...),
 	)
 }
 ```
 
-在组件或 children 回调中调用 `notice.Notice(message, ui.Style{Padding: 16})`。访问器保持响应式，调用者的样式在默认样式之后合并。组件函数直接声明子节点，不返回节点。组件资源使用 `ui.OnCleanup` 清理，应用级服务放在组件所有权之外。
+在组件或 children 回调中调用 `notice.Notice(message, ui.Padding(16))`。访问器保持响应式，调用者的样式在默认样式之后合并。组件函数直接声明子节点，不返回节点。组件资源使用 `ui.OnCleanup` 清理，应用级服务放在组件所有权之外。
 
 通过 Go 版本标签发布模块，并说明支持的 SDK 版本。使用者通过你的模块路径执行 `go get`。传递导入 `terminal` 或 `updater` 也会引入对应后端，因此请将可选集成放在独立包或带构建标签的文件中。
 

@@ -19,7 +19,8 @@ func ViewExample() {
 			ui.Text("Hello from Go")
 			ui.Button("Continue", ui.OnClick(func() {}))
 		},
-		ui.Style{Padding: 20, Gap: 12},
+		ui.Padding(20),
+		ui.Gap(12),
 	)
 }
 ```
@@ -28,7 +29,7 @@ func ViewExample() {
 
 | プロパティ | 説明 |
 | --- | --- |
-| `ui.Style{}` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
+| `ui.BackgroundColor(...)`, `ui.Padding(...)`, `ui.Hover(...)` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
 | `children` | コンポーネント内にマウントする内容です。 |
 | `OnClick` | コアがアクティブ化を解決した後に実行します。 |
 | `Ref` | 保持されたネイティブノードを受け取ります。 |

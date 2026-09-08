@@ -1,4 +1,4 @@
-`ui.Style{Transition: ...}` で保持されたノードの変化をアニメーションできます。フレームはネイティブランタイムが進めるため、コンポーネントを毎フレーム実行し直しません。`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
+`ui.Transition(...)` で保持されたノードの変化をアニメーションできます。フレームはネイティブランタイムが進めるため、コンポーネントを毎フレーム実行し直しません。`github.com/egoist/quickgui/go/ui` から `ui` をインポートします。
 
 ## ホバーのトランジション
 
@@ -8,12 +8,13 @@
 func HoverAction() {
 	ui.Button(
 		"Continue",
-		ui.Style{
-			Padding: 12, BorderRadius: 8,
-			BackgroundColor: "#334155", Color: "white", Opacity: 0.85,
-			Transition: "background-color 160ms ease-out, opacity 160ms ease-out",
-			Hover: &ui.Style{BackgroundColor: "#2563eb", Opacity: 1},
-		},
+		ui.Padding(12),
+		ui.BorderRadius(8),
+		ui.BackgroundColor("#334155"),
+		ui.Color("white"),
+		ui.Opacity(0.85),
+		ui.Transition("background-color 160ms ease-out, opacity 160ms ease-out"),
+		ui.Hover(ui.BackgroundColor("#2563eb"), ui.Opacity(1)),
 	)
 }
 ```
@@ -30,15 +31,18 @@ func AnimatedSelection() {
 			ui.Button("Toggle emphasis", ui.OnClick(func() { setSelected(!selected()) }))
 			ui.View(
 				"Your selection",
-				ui.Style{
-					Padding: 20, BorderRadius: 12,
-					BackgroundColor: "#334155", Color: "white", Opacity: 0.6,
-					Transition: "background-color 180ms ease-out, opacity 180ms ease-out",
-				},
-				ui.When(selected, ui.Style{BackgroundColor: "#2563eb", Opacity: 1}),
+				ui.Padding(20),
+				ui.BorderRadius(12),
+				ui.BackgroundColor("#334155"),
+				ui.Color("white"),
+				ui.Opacity(0.6),
+				ui.Transition("background-color 180ms ease-out, opacity 180ms ease-out"),
+				ui.When(selected, ui.BackgroundColor("#2563eb"), ui.Opacity(1)),
 			)
 		},
-		ui.Style{Display: "flex", FlexDirection: "column", Gap: 12},
+		ui.Display("flex"),
+		ui.FlexDirection("column"),
+		ui.Gap(12),
 	)
 }
 ```
@@ -53,50 +57,51 @@ func AnimatedSelection() {
 func CappedTransition() {
 	ui.Button(
 		"Hover me",
-		ui.Style{
-			Padding: 12, BackgroundColor: "#334155", Color: "white", Opacity: 0.8,
-			Transition: ui.TransitionDeclaration{
-				Properties: []string{"background-color", "opacity"},
-				Duration:   180 * time.Millisecond,
-				Easing:     "ease-out",
-				MaxFps:     30,
-			},
-			Hover: &ui.Style{BackgroundColor: "#2563eb", Opacity: 1},
-		},
+		ui.Padding(12),
+		ui.BackgroundColor("#334155"),
+		ui.Color("white"),
+		ui.Opacity(0.8),
+		ui.Transition(ui.TransitionDeclaration{
+			Properties: []string{"background-color", "opacity"},
+			Duration:   180 * time.Millisecond,
+			Easing:     "ease-out",
+			MaxFps:     30,
+		}),
+		ui.Hover(ui.BackgroundColor("#2563eb"), ui.Opacity(1)),
 	)
 }
 ```
 
-対応する個別フィールドを `ui.Style{}` に直接指定することもできます。
+個別のトランジションオプションをプリミティブへ直接渡します。
 
 | フィールド | 使い方 |
 | --- | --- |
-| `TransitionProperty` | 対応するプロパティ名をカンマ区切りの文字列または `[]string` で指定します。 |
-| `TransitionDuration` | ミリ秒数、`time.Duration`、または `"180ms"`、`"0.18s"` などの文字列。ホストは時間を 0〜10 秒に制限します。 |
-| `TransitionEasing` | `"linear"`、`"ease"`、`"ease-in"`、`"ease-out"`、`"ease-in-out"`。`"ease"` は既定の `"ease-in-out"` の別名で、QuickGUI の曲線を選びます。 |
-| `TransitionTimingFunction` | `TransitionEasing` の別名です。 |
-| `TransitionMaxFps` | 任意のフレームレート上限。省略すると画面の描画周期に従います。上限を指定しても終了時刻に完了します。 |
+| `ui.TransitionProperty(...)` | 対応するプロパティ名をカンマ区切りの文字列または `[]string` で指定します。 |
+| `ui.TransitionDuration(...)` | ミリ秒数、`time.Duration`、または `"180ms"`、`"0.18s"` などの文字列。ホストは時間を 0〜10 秒に制限します。 |
+| `ui.TransitionEasing(...)` | `"linear"`、`"ease"`、`"ease-in"`、`"ease-out"`、`"ease-in-out"`。`"ease"` は既定の `"ease-in-out"` の別名で、QuickGUI の曲線を選びます。 |
+| `ui.TransitionTimingFunction(...)` | `ui.TransitionEasing(...)` の別名です。 |
+| `ui.TransitionMaxFps(...)` | 任意のフレームレート上限。省略すると画面の描画周期に従います。上限を指定しても終了時刻に完了します。 |
 
 ひとつのノードでは、対象プロパティすべてが時間、イージング、フレームレート上限を共有します。カンマ区切りの短縮記法はプロパティ名をまとめ、最後の時間とイージングを全体に適用します。遅延、`cubic-bezier()`、プロパティごとの独立した時間指定には対応していません。個別フィールドは短縮記法の設定を上書きします。
 
-`Transition: 180 * time.Millisecond` のように時間だけを指定すると、背景、境界線、文字の色が対象になります。対応する描画プロパティをすべて含めるには `"all"` を明示します。`Transition: "none"` は短縮記法の宣言を解除します。
+`ui.Transition(180 * time.Millisecond)` のように時間だけを指定すると、背景、境界線、文字の色が対象になります。対応する描画プロパティをすべて含めるには `"all"` を明示します。`ui.Transition("none")` は短縮記法の宣言を解除します。
 
 ## 対応するプロパティ
 
-| トランジション名 | Go のスタイルフィールド |
+| トランジション名 | Go のスタイルオプション |
 | --- | --- |
-| `background-color` または `background` | `BackgroundColor` または単色の `Background` |
-| `border-color` | `BorderColor` |
-| `border-width` | `BorderWidth` と各辺の幅 |
-| `border-radius` | `BorderRadius` と各角の半径 |
-| `color` | 継承される `Color` |
-| `opacity` | サブツリーの `Opacity` |
-| `box-shadow` | `BoxShadow` |
-| `transform` | 平行移動、拡大縮小、回転を含むサブツリーの `Transform` |
+| `background-color` または `background` | `ui.BackgroundColor(...)` または単色の `ui.Background(...)` |
+| `border-color` | `ui.BorderColor(...)` |
+| `border-width` | `ui.BorderWidth(...)` と各辺の幅 |
+| `border-radius` | `ui.BorderRadius(...)` と各角の半径 |
+| `color` | 継承される `ui.Color(...)` |
+| `opacity` | サブツリーの `ui.Opacity(...)` |
+| `box-shadow` | `ui.BoxShadow(...)` |
+| `transform` | 平行移動、拡大縮小、回転を含むサブツリーの `ui.Transform(...)` |
 
 `"all"` はこの表のプロパティを指します。グラデーションの色位置、幅、高さ、余白などのレイアウト値は `Transition` では補間しません。未対応のプロパティ名は拒否されます。
 
-スイッチのつまみを滑らかに動かすには、`Transform: "translateX(20px)"` と `Transition: "transform 160ms ease-out"` を指定し、オフ時の目標を `"translateX(0px)"` にします。隣接要素のレイアウトを変えずに、描画サブツリーとヒット領域が一緒に移動します。変換行列の平行移動、拡大縮小、せん断、最短経路の回転を補間します。`TransformOrigin` 自体は即座に変わります。
+スイッチのつまみを滑らかに動かすには、`ui.Transform("translateX(20px)")` と `ui.Transition("transform 160ms ease-out")` を指定し、オフ時の目標を `"translateX(0px)"` にします。隣接要素のレイアウトを変えずに、描画サブツリーとヒット領域が一緒に移動します。変換行列の平行移動、拡大縮小、せん断、最短経路の回転を補間します。`TransformOrigin` 自体は即座に変わります。
 
 Go UI API は描画プロパティのトランジションとアニメーション画像を提供します。CSS キーフレーム、タイムラインのコールバック、スプリング宣言は Go のスタイルプロパティではありません。
 
@@ -116,7 +121,9 @@ Go UI API は描画プロパティのトランジションとアニメーショ�
 func AnimatedImage(path string) {
 	ui.Image(
 		ui.Value(path),
-		ui.Style{Width: 96, Height: 96, ObjectFit: "contain"},
+		ui.Width(96),
+		ui.Height(96),
+		ui.ObjectFit("contain"),
 	)
 }
 ```

@@ -54,25 +54,25 @@ func rowStyle(theme Theme, selected bool) gui.Style {
 	if selected {
 		background = theme.Selection
 	}
-	return gui.Style{
-		Display:         "flex",
-		FlexDirection:   "row",
-		Width:           "100%",
-		MinWidth:        0,
-		Height:          28,
-		FlexShrink:      0,
-		AlignItems:      "center",
-		Gap:             8,
-		PaddingLeft:     10,
-		PaddingRight:    8,
-		BorderRadius:    6,
-		BackgroundColor: background,
-		Color:           theme.Text,
-		Cursor:          "default",
-		UserSelect:      "none",
-		Hover:           &gui.Style{BackgroundColor: theme.Hover},
-		Active:          &gui.Style{BackgroundColor: theme.Active},
-	}
+	return gui.Styles(
+		gui.Display("flex"),
+		gui.FlexDirection("row"),
+		gui.Width("100%"),
+		gui.MinWidth(0),
+		gui.Height(28),
+		gui.FlexShrink(0),
+		gui.AlignItems("center"),
+		gui.Gap(8),
+		gui.PaddingLeft(10),
+		gui.PaddingRight(8),
+		gui.BorderRadius(6),
+		gui.BackgroundColor(background),
+		gui.Color(theme.Text),
+		gui.Cursor("default"),
+		gui.UserSelect("none"),
+		gui.Hover(gui.BackgroundColor(theme.Hover)),
+		gui.Active(gui.BackgroundColor(theme.Active)),
+	)
 }
 
 func RepositoryLabels(paths []string) map[string]string {

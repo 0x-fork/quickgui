@@ -8,15 +8,13 @@ QuickGUI 将无样式基础组件与具备无障碍行为的复合控件组合�
 func ButtonExample(save func()) {
 	ui.Button(
 		"Save changes",
-		ui.Style{
-			Height:          40,
-			PaddingLeft:     16,
-			PaddingRight:    16,
-			BackgroundColor: "#2563eb",
-			Color:           "white",
-			BorderRadius:    8,
-			Hover:           &ui.Style{BackgroundColor: "#3b82f6"},
-		},
+		ui.Height(40),
+		ui.PaddingLeft(16),
+		ui.PaddingRight(16),
+		ui.BackgroundColor("#2563eb"),
+		ui.Color("white"),
+		ui.BorderRadius(8),
+		ui.Hover(ui.BackgroundColor("#3b82f6")),
 		ui.OnClick(save),
 	)
 }
@@ -72,18 +70,18 @@ bun packages/cli/src/cli.ts dev --project examples/components
 
 ## 设置各部件的样式
 
-每个部件都可通过 `PartProps.Style` 设置样式。它接受样式记录、记录切片，或返回这些值的访问器。选中状态和主题信号可以更新已有部件，而不必重新创建子节点。
+通过 `PartProps.Style` 设置每个部件的样式。可以传入单个样式选项，或用 `ui.Styles(...)` 组合多个选项。也支持可复用的样式、样式切片和返回这些值的访问器。选中状态和主题信号会更新保留的部件，不必重建子节点。
 
 ```go
 ui.PartProps{
-	Style: ui.Style{
-		Display:         "flex",
-		Height:          32,
-		PaddingLeft:     12,
-		PaddingRight:    12,
-		BackgroundColor: "#2563eb",
-		Color:           "white",
-		BorderRadius:    8,
-	},
+	Style: ui.Styles(
+		ui.Display("flex"),
+		ui.Height(32),
+		ui.PaddingLeft(12),
+		ui.PaddingRight(12),
+		ui.BackgroundColor("#2563eb"),
+		ui.Color("white"),
+		ui.BorderRadius(8),
+	),
 }
 ```

@@ -96,36 +96,30 @@ func SystemAPIs() {
 		func() {
 			ui.View(
 				"Native system APIs",
-				ui.Style{
-					Display:           "flex",
-					Height:            52,
-					FlexShrink:        0,
-					AlignItems:        "center",
-					JustifyContent:    "center",
-					FontSize:          14,
-					FontWeight:        600,
-					AppRegion:         "drag",
-					BorderColor:       "#1f2530",
-					BorderBottomWidth: 1,
-				},
+				ui.Display("flex"),
+				ui.Height(52),
+				ui.FlexShrink(0),
+				ui.AlignItems("center"),
+				ui.JustifyContent("center"),
+				ui.FontSize(14),
+				ui.FontWeight(600),
+				ui.AppRegion("drag"),
+				ui.BorderColor("#1f2530"),
+				ui.BorderBottomWidth(1),
 			)
 			ui.View(
 				func() {
 					ui.Text(
 						"Native integrations",
-						ui.Style{
-							FontSize:   26,
-							LineHeight: 32,
-							FontWeight: 700,
-						},
+						ui.FontSize(26),
+						ui.LineHeight(32),
+						ui.FontWeight(700),
 					)
 					ui.Text(
 						"Typed Go APIs for application state, desktop services, notifications, and native resources.",
-						ui.Style{
-							Color:      "#9aa6b7",
-							FontSize:   14,
-							LineHeight: 21,
-						},
+						ui.Color("#9aa6b7"),
+						ui.FontSize(14),
+						ui.LineHeight(21),
 					)
 					ui.View(
 						func() {
@@ -138,54 +132,48 @@ func SystemAPIs() {
 								)
 							}
 						},
-						ui.Style{Display: "flex", FlexWrap: "wrap", Gap: 10},
+						ui.Display("flex"),
+						ui.FlexWrap("wrap"),
+						ui.Gap(10),
 					)
 					ui.View(
 						func() {
 							ui.Text(
 								status,
-								ui.Style{
-									FontSize:   13,
-									LineHeight: 19,
-									UserSelect: "text",
-									FontFamily: "monospace",
-									Color: func() string {
-										if busy() {
-											return "#c7d2fe"
-										}
-										return "#aeb9c9"
-									},
-								},
+								ui.FontSize(13),
+								ui.LineHeight(19),
+								ui.UserSelect("text"),
+								ui.FontFamily("monospace"),
+								ui.Color(func() string {
+									if busy() {
+										return "#c7d2fe"
+									}
+									return "#aeb9c9"
+								}),
 							)
 						},
-						ui.Style{
-							MinHeight:       68,
-							Padding:         16,
-							BackgroundColor: "#111620",
-							BorderColor:     "#293242",
-							BorderWidth:     1,
-							BorderRadius:    10,
-						},
+						ui.MinHeight(68),
+						ui.Padding(16),
+						ui.BackgroundColor("#111620"),
+						ui.BorderColor("#293242"),
+						ui.BorderWidth(1),
+						ui.BorderRadius(10),
 					)
 				},
-				ui.Style{
-					Display:       "flex",
-					FlexDirection: "column",
-					Flex:          1,
-					MinHeight:     0,
-					Gap:           18,
-					Padding:       28,
-					OverflowY:     "auto",
-				},
+				ui.Display("flex"),
+				ui.FlexDirection("column"),
+				ui.Flex(1),
+				ui.MinHeight(0),
+				ui.Gap(18),
+				ui.Padding(28),
+				ui.OverflowY("auto"),
 			)
 		},
-		ui.Style{
-			Display:         "flex",
-			FlexDirection:   "column",
-			Width:           "100%",
-			Height:          "100%",
-			BackgroundColor: "#0b0e14",
-			Color:           "#f4f7fb",
-		},
+		ui.Display("flex"),
+		ui.FlexDirection("column"),
+		ui.Width("100%"),
+		ui.Height("100%"),
+		ui.BackgroundColor("#0b0e14"),
+		ui.Color("#f4f7fb"),
 	)
 }

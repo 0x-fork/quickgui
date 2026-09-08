@@ -8,15 +8,13 @@ Start with `ui.View`, `ui.Text`, `ui.Button`, and `ui.Input`. Options and text c
 func ButtonExample(save func()) {
 	ui.Button(
 		"Save changes",
-		ui.Style{
-			Height:          40,
-			PaddingLeft:     16,
-			PaddingRight:    16,
-			BackgroundColor: "#2563eb",
-			Color:           "white",
-			BorderRadius:    8,
-			Hover:           &ui.Style{BackgroundColor: "#3b82f6"},
-		},
+		ui.Height(40),
+		ui.PaddingLeft(16),
+		ui.PaddingRight(16),
+		ui.BackgroundColor("#2563eb"),
+		ui.Color("white"),
+		ui.BorderRadius(8),
+		ui.Hover(ui.BackgroundColor("#3b82f6")),
 		ui.OnClick(save),
 	)
 }
@@ -72,18 +70,18 @@ bun packages/cli/src/cli.ts dev --project examples/components
 
 ## Styling parts
 
-Use `PartProps.Style` for each part. It accepts a style record, a slice of records, or an accessor returning either. This lets selection and theme signals update existing parts without rebuilding children.
+Use `PartProps.Style` for each part. Pass a style option or compose several with `ui.Styles(...)`. Reusable styles, slices of styles, and accessors returning them also work. Selection and theme signals update retained parts without rebuilding children.
 
 ```go
 ui.PartProps{
-	Style: ui.Style{
-		Display:         "flex",
-		Height:          32,
-		PaddingLeft:     12,
-		PaddingRight:    12,
-		BackgroundColor: "#2563eb",
-		Color:           "white",
-		BorderRadius:    8,
-	},
+	Style: ui.Styles(
+		ui.Display("flex"),
+		ui.Height(32),
+		ui.PaddingLeft(12),
+		ui.PaddingRight(12),
+		ui.BackgroundColor("#2563eb"),
+		ui.Color("white"),
+		ui.BorderRadius(8),
+	),
 }
 ```

@@ -103,20 +103,20 @@ func finished(done completion, message string) func(error) {
 	return func(err error) { done(message, err) }
 }
 
-var buttonStyle = ui.Style{
-	Display:         "flex",
-	Height:          38,
-	AlignItems:      "center",
-	JustifyContent:  "center",
-	PaddingLeft:     14,
-	PaddingRight:    14,
-	BackgroundColor: "#252b37",
-	Color:           "#f4f7fb",
-	BorderColor:     "#394253",
-	BorderWidth:     1,
-	BorderRadius:    8,
-	Cursor:          "default",
-	AppRegion:       "no-drag",
-	UserSelect:      "none",
-	Hover:           &ui.Style{BackgroundColor: "#30394a"},
-}
+var buttonStyle = ui.Styles(
+	ui.Display("flex"),
+	ui.Height(38),
+	ui.AlignItems("center"),
+	ui.JustifyContent("center"),
+	ui.PaddingLeft(14),
+	ui.PaddingRight(14),
+	ui.BackgroundColor("#252b37"),
+	ui.Color("#f4f7fb"),
+	ui.BorderColor("#394253"),
+	ui.BorderWidth(1),
+	ui.BorderRadius(8),
+	ui.Cursor("default"),
+	ui.AppRegion("no-drag"),
+	ui.UserSelect("none"),
+	ui.Hover(ui.BackgroundColor("#30394a")),
+)

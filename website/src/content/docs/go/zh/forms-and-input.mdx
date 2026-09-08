@@ -11,10 +11,8 @@ func InputExample() {
 		ui.Value(value),
 		ui.Placeholder("Write here"),
 		ui.OnInput(func(event *native.Event) { setValue(event.Value) }),
-		ui.Style{
-			Width:  320,
-			Height: 32,
-		},
+		ui.Width(320),
+		ui.Height(32),
 	)
 }
 ```

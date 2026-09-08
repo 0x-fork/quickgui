@@ -43,10 +43,10 @@ func FieldDemo() {
 				ui.Field.Control(fieldInput(email, setEmail, "you@example.com"))
 				ui.Field.Description(ui.PartProps{}, "We only use this address for receipts.")
 				ui.Field.Error(
-					ui.PartProps{Style: ui.Style{
-						FontSize: 12,
-						Color:    color(func(p palette) string { return p.Danger }),
-					}},
+					ui.PartProps{Style: ui.Styles(
+						ui.FontSize(12),
+						ui.Color(color(func(p palette) string { return p.Danger })),
+					)},
 					"Enter an address containing @",
 				)
 				ui.Field.Validity(
@@ -131,10 +131,10 @@ func FormDemo() {
 						control.OnSubmit = func(*native.Event) { submit() }
 						ui.Field.Control(control)
 						ui.Field.Error(
-							ui.PartProps{Style: ui.Style{
-								FontSize: 12,
-								Color:    color(func(p palette) string { return p.Danger }),
-							}},
+							ui.PartProps{Style: ui.Styles(
+								ui.FontSize(12),
+								ui.Color(color(func(p palette) string { return p.Danger })),
+							)},
 							"An address containing @ is required",
 						)
 					},
@@ -168,10 +168,8 @@ func FormDemo() {
 					func() {
 						ui.Text(
 							"The terms must be accepted",
-							ui.Style{
-								FontSize: 12,
-								Color:    color(func(p palette) string { return p.Danger }),
-							},
+							ui.FontSize(12),
+							ui.Color(color(func(p palette) string { return p.Danger })),
 						)
 					},
 				)
@@ -199,9 +197,9 @@ func InputDemo() {
 	notes, setNotes := ui.CreateSignal("Two\nlines")
 	submits, setSubmits := ui.CreateSignal(0)
 	panel("Input", "Controlled native editors: single-line, password, and multiline. Return in the first field reports submission.", func() {
-		input(text, setText, "Type and press Return", ui.Style{Width: 300}, ui.OnSubmit(func(*native.Event) { setSubmits(submits() + 1) }))
-		input(secret, setSecret, "Password", ui.Style{Width: 300}, ui.Password(true))
-		input(notes, setNotes, "Notes", ui.Style{Width: 420, Height: 96}, ui.Multiline(true))
+		input(text, setText, "Type and press Return", ui.Styles(ui.Width(300)), ui.OnSubmit(func(*native.Event) { setSubmits(submits() + 1) }))
+		input(secret, setSecret, "Password", ui.Styles(ui.Width(300)), ui.Password(true))
+		input(notes, setNotes, "Notes", ui.Styles(ui.Width(420), ui.Height(96)), ui.Multiline(true))
 		note(func() string {
 			return "text " + strconv.Quote(text()) + " · password length " + strconv.Itoa(len(secret())) + " · notes " + strconv.Quote(notes()) + " · submits " + strconv.Itoa(submits())
 		})
@@ -242,7 +240,7 @@ func NumberFieldDemo() {
 			func() {
 				state := ui.UseNumberFieldState()
 				ui.NumberField.ScrubArea(
-					ui.PartProps{Style: ui.Style{Cursor: "ew-resize", Height: 24}},
+					ui.PartProps{Style: ui.Styles(ui.Cursor("ew-resize"), ui.Height(24))},
 					"Drag here to change quantity",
 				)
 				numberControls()
@@ -440,10 +438,11 @@ func CalendarDemo() {
 				ui.View(
 					func() {
 						for _, name := range []string{"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"} {
-							ui.Text(name, ui.Style{Width: 32, TextAlign: "center", FontSize: 10})
+							ui.Text(name, ui.Width(32), ui.TextAlign("center"), ui.FontSize(10))
 						}
 					},
-					ui.Style{Display: "flex", Gap: 3},
+					ui.Display("flex"),
+					ui.Gap(3),
 				)
 				ui.For(
 					func() [][]string { return monthGrid(month()) },
@@ -451,10 +450,10 @@ func CalendarDemo() {
 						ui.Calendar.Week(
 							ui.CalendarWeekProps{
 								Index: ptr(index()),
-								PartProps: ui.PartProps{Style: ui.Style{
-									Display: "flex",
-									Gap:     3,
-								}},
+								PartProps: ui.PartProps{Style: ui.Styles(
+									ui.Display("flex"),
+									ui.Gap(3),
+								)},
 							},
 							func() {
 								for _, date := range week {
@@ -463,19 +462,19 @@ func CalendarDemo() {
 										ui.CalendarDayProps{
 											Day: date,
 											PartProps: ui.PartProps{Style: func() ui.Style {
-												return ui.Style{
-													Display:         "flex",
-													AlignItems:      "center",
-													JustifyContent:  "center",
-													Width:           32,
-													Height:          28,
-													BorderRadius:    7,
-													BackgroundColor: choose(selected(), p().Accent, p().PanelAlt),
-													Color:           choose(selected(), p().OnAccent, choose(strings.HasPrefix(date, month()), p().Ink, p().Faint)),
-													FontSize:        11,
-													Hover:           &ui.Style{BackgroundColor: choose(selected(), p().Accent, p().ControlHover)},
-													Focus:           &ui.Style{Outline: "2px solid " + p().Accent},
-												}
+												return ui.Styles(
+													ui.Display("flex"),
+													ui.AlignItems("center"),
+													ui.JustifyContent("center"),
+													ui.Width(32),
+													ui.Height(28),
+													ui.BorderRadius(7),
+													ui.BackgroundColor(choose(selected(), p().Accent, p().PanelAlt)),
+													ui.Color(choose(selected(), p().OnAccent, choose(strings.HasPrefix(date, month()), p().Ink, p().Faint))),
+													ui.FontSize(11),
+													ui.Hover(ui.BackgroundColor(choose(selected(), p().Accent, p().ControlHover))),
+													ui.Focus(ui.Outline("2px solid "+p().Accent)),
+												)
 											}},
 										},
 										date[8:],

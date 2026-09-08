@@ -14,7 +14,7 @@ import (
 
 ```go
 func ImageExample(path string) {
-	ui.Image(ui.Value(path), ui.ObjectFit("cover"), ui.Style{Width: 160, Height: 120})
+	ui.Image(ui.Value(path), ui.ObjectFit("cover"), ui.Width(160), ui.Height(120))
 }
 ```
 
@@ -24,4 +24,4 @@ func ImageExample(path string) {
 | --- | --- |
 | `Value` | コンポーネントが受け取るファイルパス、データ URL、SVG ドキュメント、またはシェーダーソースです。 |
 | `ObjectFit` | 宣言したボックスに画像内容を収める方法です。 |
-| `ui.Style{}` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
+| `ui.BackgroundColor(...)`, `ui.Padding(...)`, `ui.Hover(...)` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |

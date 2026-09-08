@@ -27,13 +27,13 @@ go get {{GO_MODULE}}@v0.1.0
 
 ```go
 import (
-	extension "{{GO_MODULE}}"
 	"github.com/egoist/quickgui/go/ui"
+	extension "{{GO_MODULE}}"
 )
 
 func App() {
 	message, _ := ui.CreateSignal("Hello")
-	extension.Notice(message, ui.Style{FontSize: 18})
+	extension.Notice(message, ui.FontSize(18))
 }
 ```
 

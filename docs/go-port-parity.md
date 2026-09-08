@@ -12,7 +12,7 @@ that every interaction has been visually retested on every platform.
 - [x] In-process purego host boundary; application builds use `CGO_ENABLED=0`.
 - [x] Fine-grained signals, owner disposal, batching, keyed children, conditional
   content, callback children, and `func()` components.
-- [x] Children-first primitive declarations, merged `ui.Style{}` records,
+- [x] Primitive declarations with flat style props and reusable `ui.Styles(...)` groups,
   conditional options, and the Go-compatible `quickguifmt` formatter.
 - [x] Typed numeric children and accessors without `fmt` on the numeric binding path.
 - [x] Primitive keyboard, mouse, gesture, focus, action, and drag/drop events,

@@ -14,10 +14,10 @@ func PopoverExample() {
 				ui.PopoverPositionerProps{},
 				func() {
 					ui.Popover.Popup(
-						ui.PopoverPopupProps{PartProps: ui.PartProps{Style: ui.Style{
-							Width:   240,
-							Padding: 16,
-						}}},
+						ui.PopoverPopupProps{PartProps: ui.PartProps{Style: ui.Styles(
+							ui.Width(240),
+							ui.Padding(16),
+						)}},
 						func() {
 							ui.Popover.Title(ui.PartProps{}, "Account")
 							ui.Popover.Close(ui.PartProps{}, "Done")

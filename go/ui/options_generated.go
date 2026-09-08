@@ -4,44 +4,49 @@ package ui
 
 import "github.com/egoist/quickgui/go/native"
 
+// ObjectFit sets the corresponding style property.
+func ObjectFit(value string) StyleOption {
+	return func(style *Style) { style.ObjectFit = value }
+}
+
 // WordWrap sets the corresponding style property.
 func WordWrap(value string) StyleOption {
-	return func(style *Style) { style.WordWrap = value }
+	return func(style *Style) { style.OverflowWrap = value }
 }
 
 // TransitionTimingFunction sets the corresponding style property.
 func TransitionTimingFunction(value any) StyleOption {
-	return func(style *Style) { style.TransitionTimingFunction = value }
+	return func(style *Style) { style.TransitionEasing = value }
 }
 
 // PaddingInlineStart sets the corresponding style property.
 func PaddingInlineStart(value any) StyleOption {
-	return func(style *Style) { style.PaddingInlineStart = value }
+	return func(style *Style) { style.PaddingStart = value }
 }
 
 // PaddingInlineEnd sets the corresponding style property.
 func PaddingInlineEnd(value any) StyleOption {
-	return func(style *Style) { style.PaddingInlineEnd = value }
+	return func(style *Style) { style.PaddingEnd = value }
 }
 
 // MarginInlineStart sets the corresponding style property.
 func MarginInlineStart(value any) StyleOption {
-	return func(style *Style) { style.MarginInlineStart = value }
+	return func(style *Style) { style.MarginStart = value }
 }
 
 // MarginInlineEnd sets the corresponding style property.
 func MarginInlineEnd(value any) StyleOption {
-	return func(style *Style) { style.MarginInlineEnd = value }
+	return func(style *Style) { style.MarginEnd = value }
 }
 
 // BorderInlineStartWidth sets the corresponding style property.
 func BorderInlineStartWidth(value any) StyleOption {
-	return func(style *Style) { style.BorderInlineStartWidth = value }
+	return func(style *Style) { style.BorderStartWidth = value }
 }
 
 // BorderInlineEndWidth sets the corresponding style property.
 func BorderInlineEndWidth(value any) StyleOption {
-	return func(style *Style) { style.BorderInlineEndWidth = value }
+	return func(style *Style) { style.BorderEndWidth = value }
 }
 
 // AspectRatio sets the corresponding style property.
@@ -144,10 +149,10 @@ func TextDecoration(value string) StyleOption {
 	return func(style *Style) { style.TextDecoration = value }
 }
 
-// InvalidStyle configures the Invalid interaction style.
+// InvalidStyle merges options into the Invalid interaction style.
 func InvalidStyle(options ...StyleDeclaration) StyleOption {
 	return func(style *Style) {
-		nested := &Style{}
+		nested := mergeStateStyles(style.Invalid, nil)
 		for _, option := range options {
 			option.applyStyle(nested)
 		}
@@ -155,10 +160,10 @@ func InvalidStyle(options ...StyleDeclaration) StyleOption {
 	}
 }
 
-// Dragging configures the Dragging interaction style.
+// Dragging merges options into the Dragging interaction style.
 func Dragging(options ...StyleDeclaration) StyleOption {
 	return func(style *Style) {
-		nested := &Style{}
+		nested := mergeStateStyles(style.Dragging, nil)
 		for _, option := range options {
 			option.applyStyle(nested)
 		}
@@ -166,10 +171,10 @@ func Dragging(options ...StyleDeclaration) StyleOption {
 	}
 }
 
-// DragOver configures the DragOver interaction style.
+// DragOver merges options into the DragOver interaction style.
 func DragOver(options ...StyleDeclaration) StyleOption {
 	return func(style *Style) {
-		nested := &Style{}
+		nested := mergeStateStyles(style.DragOver, nil)
 		for _, option := range options {
 			option.applyStyle(nested)
 		}
@@ -177,10 +182,10 @@ func DragOver(options ...StyleDeclaration) StyleOption {
 	}
 }
 
-// FocusWithin configures the FocusWithin interaction style.
+// FocusWithin merges options into the FocusWithin interaction style.
 func FocusWithin(options ...StyleDeclaration) StyleOption {
 	return func(style *Style) {
-		nested := &Style{}
+		nested := mergeStateStyles(style.FocusWithin, nil)
 		for _, option := range options {
 			option.applyStyle(nested)
 		}
@@ -738,10 +743,10 @@ func TransformOrigin(value string) StyleOption {
 	return func(style *Style) { style.TransformOrigin = value }
 }
 
-// Hover configures the Hover interaction style.
+// Hover merges options into the Hover interaction style.
 func Hover(options ...StyleDeclaration) StyleOption {
 	return func(style *Style) {
-		nested := &Style{}
+		nested := mergeStateStyles(style.Hover, nil)
 		for _, option := range options {
 			option.applyStyle(nested)
 		}
@@ -749,10 +754,10 @@ func Hover(options ...StyleDeclaration) StyleOption {
 	}
 }
 
-// Active configures the Active interaction style.
+// Active merges options into the Active interaction style.
 func Active(options ...StyleDeclaration) StyleOption {
 	return func(style *Style) {
-		nested := &Style{}
+		nested := mergeStateStyles(style.Active, nil)
 		for _, option := range options {
 			option.applyStyle(nested)
 		}
@@ -760,10 +765,10 @@ func Active(options ...StyleDeclaration) StyleOption {
 	}
 }
 
-// Focus configures the Focus interaction style.
+// Focus merges options into the Focus interaction style.
 func Focus(options ...StyleDeclaration) StyleOption {
 	return func(style *Style) {
-		nested := &Style{}
+		nested := mergeStateStyles(style.Focus, nil)
 		for _, option := range options {
 			option.applyStyle(nested)
 		}
@@ -771,10 +776,10 @@ func Focus(options ...StyleDeclaration) StyleOption {
 	}
 }
 
-// DisabledStyle configures the Disabled interaction style.
+// DisabledStyle merges options into the Disabled interaction style.
 func DisabledStyle(options ...StyleDeclaration) StyleOption {
 	return func(style *Style) {
-		nested := &Style{}
+		nested := mergeStateStyles(style.Disabled, nil)
 		for _, option := range options {
 			option.applyStyle(nested)
 		}
@@ -782,10 +787,10 @@ func DisabledStyle(options ...StyleDeclaration) StyleOption {
 	}
 }
 
-// SelectedStyle configures the Selected interaction style.
+// SelectedStyle merges options into the Selected interaction style.
 func SelectedStyle(options ...StyleDeclaration) StyleOption {
 	return func(style *Style) {
-		nested := &Style{}
+		nested := mergeStateStyles(style.Selected, nil)
 		for _, option := range options {
 			option.applyStyle(nested)
 		}
@@ -1046,11 +1051,6 @@ func ListAlignment(value string) Option {
 // FollowMode configures the corresponding node property.
 func FollowMode(value string) Option {
 	return propertyOption(func(props *Props) { props.FollowMode = value })
-}
-
-// ObjectFit configures the corresponding node property.
-func ObjectFit(value string) Option {
-	return propertyOption(func(props *Props) { props.ObjectFit = value })
 }
 
 // ShaderParameters configures the corresponding node property.

@@ -26,7 +26,9 @@ func icon(name string, size float64, color func() string) {
 }
 func dynamicIcon(name func() string, size float64, color func() string) {
 	ui.SVG(
-		ui.Style{Width: size, Height: size, FlexShrink: 0},
+		ui.Width(size),
+		ui.Height(size),
+		ui.FlexShrink(0),
 		ui.Value(func() string {
 			return strings.ReplaceAll(svgFrame+icons[name()]+"</svg>", "currentColor", color())
 		}),
@@ -58,14 +60,12 @@ func statusGlyph(m *model, status func() string, compact bool) {
 				return m.theme().TextGhost
 			})
 		},
-		ui.Style{
-			Display:        "flex",
-			Width:          size,
-			Height:         size,
-			FlexShrink:     0,
-			AlignItems:     "center",
-			JustifyContent: "center",
-		},
+		ui.Display("flex"),
+		ui.Width(size),
+		ui.Height(size),
+		ui.FlexShrink(0),
+		ui.AlignItems("center"),
+		ui.JustifyContent("center"),
 	)
 }
 func iconButton(m *model, label, name string, size float64, click func(), options ...any) {

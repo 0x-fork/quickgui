@@ -1,17 +1,19 @@
-Primitives accept `ui.Style{}` records, event options, and children directly. Compound parts accept the same records through `ui.PartProps.Style`.
+Pass style props such as `ui.BackgroundColor(...)` and `ui.PaddingLeft(...)` directly to `ui.View`, `ui.Text`, or another primitive, alongside its children and event handlers.
 
-## The style prop
+## Style props
 
-Multiple style records merge field by field in order. A later record only overrides fields it declares, including nested `Hover`, `Active`, and other interaction styles. Shared records are never mutated. Numeric lengths are logical pixels; strings also accept percentages. Zero is an explicit value; `nil` omits a field. Run `bun run fmt` to format long calls consistently.
+Options apply in declaration order. Later values override the same property, including explicit zero; repeated `ui.Hover(...)`, `ui.Active(...)`, and other interaction options merge their properties. Numeric lengths are logical pixels; strings also accept percentages. Run `bun run fmt` to format long calls consistently.
 
 ```go
 func Card() {
 	ui.View(
 		ui.Text(
 			"Hello",
-			ui.Style{Color: "#e2e8f0"},
+			ui.Color("#e2e8f0"),
 		),
-		ui.Style{Padding: 20, BorderRadius: 12, BackgroundColor: "#111827"},
+		ui.Padding(20),
+		ui.BorderRadius(12),
+		ui.BackgroundColor("#111827"),
 	)
 }
 ```
@@ -25,25 +27,41 @@ func MergedCard() {
 	selected, _ := ui.CreateSignal(false)
 	ui.View(
 		"Merged styles",
-		ui.Style{Padding: 20, BorderRadius: 8, BackgroundColor: "#111827"},
-		ui.Style{BorderRadius: 12},
-		ui.When(selected, ui.Style{BackgroundColor: "#2563eb"}),
+		ui.Padding(20),
+		ui.BorderRadius(8),
+		ui.BackgroundColor("#111827"),
+		ui.BorderRadius(12),
+		ui.When(selected, ui.BackgroundColor("#2563eb")),
 	)
+}
+```
+
+## Reusable styles
+
+Compose shared styles with `ui.Styles(...)`. It returns a reusable `ui.Style` value and leaves its inputs unchanged. Pass the result directly to a primitive, or to a compound part’s `Style` field. Individual style options also work in `PartProps.Style`. Accessors stay reactive and bind independently when mounted.
+
+```go
+func SharedCard() {
+	card := ui.Styles(ui.Padding(20), ui.BorderRadius(12))
+	ui.View("Hello", card, ui.BackgroundColor("#111827"))
+	ui.View("Another card", card, ui.PaddingLeft(28))
 }
 ```
 
 ## Flexbox
 
-Set `Display: "flex"`, choose a direction, then declare sizing and alignment. A scrolling flex child usually needs `MinHeight: 0` or `MinWidth: 0` so it can shrink.
+Set `ui.Display("flex")`, choose a direction, then declare sizing and alignment. A scrolling flex child usually needs `ui.MinHeight(0)` or `ui.MinWidth(0)` so it can shrink.
 
 ```go
 func Row() {
 	ui.View(
 		func() {
-			ui.Text("Flexible content", ui.Style{Flex: 1, MinWidth: 0})
-			ui.Button("Action", ui.Style{FlexShrink: 0})
+			ui.Text("Flexible content", ui.Flex(1), ui.MinWidth(0))
+			ui.Button("Action", ui.FlexShrink(0))
 		},
-		ui.Style{Display: "flex", Gap: 12, AlignItems: "center"},
+		ui.Display("flex"),
+		ui.Gap(12),
+		ui.AlignItems("center"),
 	)
 }
 ```
@@ -59,7 +77,9 @@ func Grid() {
 			ui.Text("Sidebar")
 			ui.Text("Content")
 		},
-		ui.Style{Display: "grid", GridTemplateColumns: "220px 1fr", Gap: 16},
+		ui.Display("grid"),
+		ui.GridTemplateColumns("220px 1fr"),
+		ui.Gap(16),
 	)
 }
 ```
@@ -72,22 +92,20 @@ Typography inherits through the node tree. Colors accept hex, `rgb()`/`rgba()`, 
 
 Add `Transition` to the base style to animate changes between paint states. See [Transitions & Animation](/docs/go/animations) for hover effects, signal-driven changes, timing, and reduced motion.
 
-Use `Hover: &ui.Style{...}`, `Active`, `Focus`, `Disabled`, and `Selected` for interaction styles. `ui.When` merges its records while the condition is true and restores the earlier fields when it turns false. Only affected bindings update; children remain mounted.
+Use `ui.Hover(...)`, `ui.Active(...)`, `ui.Focus(...)`, `ui.DisabledStyle(...)`, and `ui.SelectedStyle(...)` for interaction styles. `ui.When` merges its options while the condition is true and restores the earlier values when it turns false. Only affected bindings update; children remain mounted.
 
 ```go
 func SelectableButton() {
 	selected, setSelected := ui.CreateSignal(false)
 	ui.Button(
 		"Toggle selection",
-		ui.Style{BackgroundColor: "#e5e7eb"},
+		ui.BackgroundColor("#e5e7eb"),
 		ui.When(
 			selected,
-			ui.Style{
-				BackgroundColor: "#2563eb",
-				Color:           "white",
-			},
+			ui.BackgroundColor("#2563eb"),
+			ui.Color("white"),
 		),
-		ui.Style{Hover: &ui.Style{Opacity: 0.85}},
+		ui.Hover(ui.Opacity(0.85)),
 		ui.OnClick(func() { setSelected(!selected()) }),
 	)
 }
@@ -95,7 +113,7 @@ func SelectableButton() {
 
 ## Groups and named group hover
 
-`ui.Group(true)` marks an unnamed hover group; `ui.Group("card")` names it. A descendant’s `GroupHover: &ui.Style{...}` follows its nearest ancestor group, including named groups. `ui.GroupHoverNamed("card", ...)` follows the nearest ancestor with that name, skipping intervening groups with other names.
+`ui.Group(true)` marks an unnamed hover group; `ui.Group("card")` names it. A descendant’s `ui.GroupHover(...)` follows its nearest ancestor group, including named groups. `ui.GroupHoverNamed("card", ...)` follows the nearest ancestor with that name, skipping intervening groups with other names.
 
 ```go
 func GroupExample() {
@@ -103,21 +121,22 @@ func GroupExample() {
 		func() {
 			ui.Text(
 				"Changes when the card is hovered",
-				ui.Style{Color: "#64748b", GroupHover: &ui.Style{Color: "#2563eb"}},
+				ui.Color("#64748b"),
+				ui.GroupHover(ui.Color("#2563eb")),
 			)
 			ui.View(
 				func() {
 					ui.Text(
 						"Follows the card and the nested toolbar",
-						ui.GroupHoverNamed("card", ui.Style{Color: "#2563eb"}),
-						ui.GroupHoverNamed("toolbar", ui.Style{Opacity: 0.8}),
+						ui.GroupHoverNamed("card", ui.Color("#2563eb")),
+						ui.GroupHoverNamed("toolbar", ui.Opacity(0.8)),
 					)
 				},
 				ui.Group("toolbar"),
 			)
 		},
 		ui.Group("card"),
-		ui.Style{Padding: 20},
+		ui.Padding(20),
 	)
 }
 ```
@@ -125,4 +144,4 @@ func GroupExample() {
 Hovering any part of the group, including its padding and descendants, activates its rules. A nested group becomes the target for unnamed rules; named rules can still follow an outer group. With no matching ancestor, the rule has no effect. Repeated group rules accumulate in declaration order; a node’s own `Hover` wins for overlapping properties. Use paint properties such as colors, opacity, outlines, and transforms. Hover updates are handled natively without rerunning components or changing layout.
 
 
-`GroupActive: &ui.Style{...}` and `ui.GroupActiveNamed("card", ui.Style{...})` follow pressed groups. `FocusWithin: &ui.Style{...}` follows focus in the node or a descendant. These states accept paint styles and cannot set the cursor.
+`ui.GroupActive(...)` and `ui.GroupActiveNamed("card", ui.Opacity(0.8))` follow pressed groups. `ui.FocusWithin(...)` follows focus in the node or a descendant. These states accept paint styles and cannot set the cursor.

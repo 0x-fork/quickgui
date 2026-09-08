@@ -25,7 +25,8 @@ func ViewExample() {
 			ui.Text("Hello from Go")
 			ui.Button("Continue", ui.OnClick(func() {}))
 		},
-		ui.Style{Padding: 20, Gap: 12},
+		ui.Padding(20),
+		ui.Gap(12),
 	)
 }
 ```

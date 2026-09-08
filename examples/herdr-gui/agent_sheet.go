@@ -18,41 +18,41 @@ func agentSheet(m *model) {
 		},
 		func() {
 			ui.Dialog.Portal(
-				ui.PartProps{Style: ui.Style{
-					Position:       "absolute",
-					Top:            0,
-					Right:          0,
-					Bottom:         0,
-					Left:           0,
-					Display:        "flex",
-					AlignItems:     "center",
-					JustifyContent: "center",
-					Padding:        24,
-				}},
+				ui.PartProps{Style: ui.Styles(
+					ui.Position("absolute"),
+					ui.Top(0),
+					ui.Right(0),
+					ui.Bottom(0),
+					ui.Left(0),
+					ui.Display("flex"),
+					ui.AlignItems("center"),
+					ui.JustifyContent("center"),
+					ui.Padding(24),
+				)},
 				func() {
-					ui.Dialog.Backdrop(ui.PartProps{Style: ui.Style{
-						Position:        "absolute",
-						Top:             0,
-						Right:           0,
-						Bottom:          0,
-						Left:            0,
-						BackgroundColor: m.color(func(t theme) string { return t.Scrim }),
-					}})
+					ui.Dialog.Backdrop(ui.PartProps{Style: ui.Styles(
+						ui.Position("absolute"),
+						ui.Top(0),
+						ui.Right(0),
+						ui.Bottom(0),
+						ui.Left(0),
+						ui.BackgroundColor(m.color(func(t theme) string { return t.Scrim })),
+					)})
 					ui.Dialog.Popup(
 						ui.DialogPopupProps{PartProps: ui.PartProps{
 							AriaLabel: "New agent",
-							Style: ui.Style{
-								Display:         "flex",
-								Width:           472,
-								MaxWidth:        "100%",
-								FlexDirection:   "column",
-								Gap:             17,
-								Padding:         20,
-								BackgroundColor: m.color(func(t theme) string { return t.Surface }),
-								BorderColor:     m.color(func(t theme) string { return t.BorderStrong }),
-								BorderWidth:     1,
-								BorderRadius:    9,
-							},
+							Style: ui.Styles(
+								ui.Display("flex"),
+								ui.Width(472),
+								ui.MaxWidth("100%"),
+								ui.FlexDirection("column"),
+								ui.Gap(17),
+								ui.Padding(20),
+								ui.BackgroundColor(m.color(func(t theme) string { return t.Surface })),
+								ui.BorderColor(m.color(func(t theme) string { return t.BorderStrong })),
+								ui.BorderWidth(1),
+								ui.BorderRadius(9),
+							),
 						}},
 						func() {
 							ui.View(
@@ -60,18 +60,18 @@ func agentSheet(m *model) {
 									ui.View(
 										func() {
 											ui.Dialog.Title(
-												ui.PartProps{Style: ui.Style{
-													Color:      m.color(func(t theme) string { return t.Text }),
-													FontSize:   17,
-													FontWeight: 720,
-												}},
+												ui.PartProps{Style: ui.Styles(
+													ui.Color(m.color(func(t theme) string { return t.Text })),
+													ui.FontSize(17),
+													ui.FontWeight(720),
+												)},
 												"New agent",
 											)
 											ui.Dialog.Description(
-												ui.PartProps{Style: ui.Style{
-													Color:    m.color(func(t theme) string { return t.TextTertiary }),
-													FontSize: 12,
-												}},
+												ui.PartProps{Style: ui.Styles(
+													ui.Color(m.color(func(t theme) string { return t.TextTertiary })),
+													ui.FontSize(12),
+												)},
 												func() {
 													ui.Text(func() string {
 														return "Start a real CLI in " + m.activeSpace().Name
@@ -79,12 +79,15 @@ func agentSheet(m *model) {
 												},
 											)
 										},
-										ui.Style{Display: "flex", FlexDirection: "column", Gap: 4},
+										ui.Display("flex"),
+										ui.FlexDirection("column"),
+										ui.Gap(4),
 									)
-									ui.View(ui.Style{Flex: 1})
+									ui.View(ui.Flex(1))
 									iconButton(m, "Close new agent", "close", 26, m.closeAgentSheet)
 								},
-								ui.Style{Display: "flex", AlignItems: "flex-start"},
+								ui.Display("flex"),
+								ui.AlignItems("flex-start"),
 							)
 							formGroup(func() {
 								formLabel(m, "Agent")
@@ -101,47 +104,37 @@ func agentSheet(m *model) {
 															func() {
 																ui.Text(
 																	read().Mark,
-																	ui.Style{
-																		FontSize:   13,
-																		FontWeight: 750,
-																	},
+																	ui.FontSize(13),
+																	ui.FontWeight(750),
 																)
 															},
-															ui.Style{
-																Display:         "flex",
-																Width:           24,
-																Height:          24,
-																FlexShrink:      0,
-																AlignItems:      "center",
-																JustifyContent:  "center",
-																BackgroundColor: m.color(func(t theme) string { return t.AccentWash }),
-																BorderRadius:    5,
-															},
+															ui.Display("flex"),
+															ui.Width(24),
+															ui.Height(24),
+															ui.FlexShrink(0),
+															ui.AlignItems("center"),
+															ui.JustifyContent("center"),
+															ui.BackgroundColor(m.color(func(t theme) string { return t.AccentWash })),
+															ui.BorderRadius(5),
 														)
 														ui.View(
 															func() {
 																ui.Text(
 																	read().Label,
-																	ui.Style{
-																		FontSize:   12,
-																		FontWeight: 620,
-																	},
+																	ui.FontSize(12),
+																	ui.FontWeight(620),
 																)
 																ui.Text(
 																	func() string {
 																		return choose(read().installed(), "Available", "Not found")
 																	},
-																	ui.Style{
-																		Color:    m.color(func(t theme) string { return t.TextGhost }),
-																		FontSize: 10,
-																	},
+																	ui.Color(m.color(func(t theme) string { return t.TextGhost })),
+																	ui.FontSize(10),
 																)
 															},
-															ui.Style{
-																Display:       "flex",
-																FlexDirection: "column",
-																Gap:           2,
-															},
+															ui.Display("flex"),
+															ui.FlexDirection("column"),
+															ui.Gap(2),
 														)
 													},
 													ui.AriaLabel(read().Label),
@@ -149,40 +142,39 @@ func agentSheet(m *model) {
 													ui.OnClick(func() {
 														m.SelectedLauncherID.Write(read().ID)
 													}),
-													ui.Style{
-														Display:      "flex",
-														Flex:         1,
-														MinWidth:     0,
-														Height:       54,
-														AlignItems:   "center",
-														Gap:          8,
-														PaddingLeft:  8,
-														PaddingRight: 8,
-														BackgroundColor: func() string {
-															return choose(selected(), m.theme().Selected, "transparent")
-														},
-														Color: func() string {
-															return choose(read().installed(), m.theme().Text, m.theme().TextGhost)
-														},
-														BorderColor: func() string {
-															return choose(selected(), m.theme().Accent, m.theme().Border)
-														},
-														BorderWidth:  1,
-														BorderRadius: 6,
-														Hover: &ui.Style{BackgroundColor: func() string {
-															return choose(read().installed(), m.theme().Hover, "transparent")
-														}},
-														Opacity: func() float64 {
-															return choose(read().installed(), 1.0, .5)
-														},
-														Cursor: "default",
-													},
+													ui.Display("flex"),
+													ui.Flex(1),
+													ui.MinWidth(0),
+													ui.Height(54),
+													ui.AlignItems("center"),
+													ui.Gap(8),
+													ui.PaddingLeft(8),
+													ui.PaddingRight(8),
+													ui.BackgroundColor(func() string {
+														return choose(selected(), m.theme().Selected, "transparent")
+													}),
+													ui.Color(func() string {
+														return choose(read().installed(), m.theme().Text, m.theme().TextGhost)
+													}),
+													ui.BorderColor(func() string {
+														return choose(selected(), m.theme().Accent, m.theme().Border)
+													}),
+													ui.BorderWidth(1),
+													ui.BorderRadius(6),
+													ui.Hover(ui.BackgroundColor(func() string {
+														return choose(read().installed(), m.theme().Hover, "transparent")
+													})),
+													ui.Opacity(func() float64 {
+														return choose(read().installed(), 1.0, .5)
+													}),
+													ui.Cursor("default"),
 												)
 											},
 											nil,
 										)
 									},
-									ui.Style{Display: "flex", Gap: 8},
+									ui.Display("flex"),
+									ui.Gap(8),
 								)
 								ui.Text(
 									func() string {
@@ -191,10 +183,8 @@ func agentSheet(m *model) {
 										}
 										return m.selectedLauncher().Description
 									},
-									ui.Style{
-										Color:    m.color(func(t theme) string { return t.TextGhost }),
-										FontSize: 11,
-									},
+									ui.Color(m.color(func(t theme) string { return t.TextGhost })),
+									ui.FontSize(11),
 								)
 							})
 							formGroup(func() {
@@ -211,25 +201,23 @@ func agentSheet(m *model) {
 											true,
 										)
 									}),
-									ui.Style{
-										Display:         "flex",
-										Height:          88,
-										Width:           "100%",
-										PaddingLeft:     10,
-										PaddingRight:    10,
-										PaddingTop:      9,
-										PaddingBottom:   9,
-										BackgroundColor: m.color(func(t theme) string { return t.Terminal }),
-										Color:           m.color(func(t theme) string { return t.Text }),
-										BorderColor:     m.color(func(t theme) string { return t.BorderStrong }),
-										BorderWidth:     1,
-										BorderRadius:    6,
-										FontSize:        12.5,
-										Focus: &ui.Style{
-											OutlineWidth: 1,
-											OutlineColor: m.color(func(t theme) string { return t.Accent }),
-										},
-									},
+									ui.Display("flex"),
+									ui.Height(88),
+									ui.Width("100%"),
+									ui.PaddingLeft(10),
+									ui.PaddingRight(10),
+									ui.PaddingTop(9),
+									ui.PaddingBottom(9),
+									ui.BackgroundColor(m.color(func(t theme) string { return t.Terminal })),
+									ui.Color(m.color(func(t theme) string { return t.Text })),
+									ui.BorderColor(m.color(func(t theme) string { return t.BorderStrong })),
+									ui.BorderWidth(1),
+									ui.BorderRadius(6),
+									ui.FontSize(12.5),
+									ui.Focus(
+										ui.OutlineWidth(1),
+										ui.OutlineColor(m.color(func(t theme) string { return t.Accent })),
+									),
 								)
 							})
 							ui.Show(
@@ -249,24 +237,20 @@ func agentSheet(m *model) {
 										func() {
 											ui.Text(
 												"No supported agent CLI was found. You can still open a terminal and run any installed agent; the sidebar detects it automatically.",
-												ui.Style{
-													Color:      m.color(func(t theme) string { return t.Warning }),
-													FontSize:   11.5,
-													LineHeight: 16,
-												},
+												ui.Color(m.color(func(t theme) string { return t.Warning })),
+												ui.FontSize(11.5),
+												ui.LineHeight(16),
 											)
 										},
-										ui.Style{
-											Display:         "flex",
-											MinHeight:       36,
-											AlignItems:      "center",
-											PaddingLeft:     10,
-											PaddingRight:    10,
-											PaddingTop:      7,
-											PaddingBottom:   7,
-											BackgroundColor: m.color(func(t theme) string { return t.AccentWash }),
-											BorderRadius:    5,
-										},
+										ui.Display("flex"),
+										ui.MinHeight(36),
+										ui.AlignItems("center"),
+										ui.PaddingLeft(10),
+										ui.PaddingRight(10),
+										ui.PaddingTop(7),
+										ui.PaddingBottom(7),
+										ui.BackgroundColor(m.color(func(t theme) string { return t.AccentWash })),
+										ui.BorderRadius(5),
 									)
 								},
 							)
@@ -284,11 +268,13 @@ func agentSheet(m *model) {
 										},
 										m.buttonStyle(true),
 										ui.Disabled(disabled),
-										ui.Style{Opacity: func() float64 { return choose(disabled(), .45, 1.0) }},
+										ui.Opacity(func() float64 { return choose(disabled(), .45, 1.0) }),
 										ui.OnClick(m.launchAgent),
 									)
 								},
-								ui.Style{Display: "flex", JustifyContent: "flex-end", Gap: 8},
+								ui.Display("flex"),
+								ui.JustifyContent("flex-end"),
+								ui.Gap(8),
 							)
 						},
 					)
@@ -298,15 +284,13 @@ func agentSheet(m *model) {
 	)
 }
 func formGroup(children ui.Component) {
-	ui.View(children, ui.Style{Display: "flex", FlexDirection: "column", Gap: 7})
+	ui.View(children, ui.Display("flex"), ui.FlexDirection("column"), ui.Gap(7))
 }
 func formLabel(m *model, label string) {
 	ui.Text(
 		label,
-		ui.Style{
-			Color:      m.color(func(t theme) string { return t.TextSecondary }),
-			FontSize:   11.5,
-			FontWeight: 620,
-		},
+		ui.Color(m.color(func(t theme) string { return t.TextSecondary })),
+		ui.FontSize(11.5),
+		ui.FontWeight(620),
 	)
 }

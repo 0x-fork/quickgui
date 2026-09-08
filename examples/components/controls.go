@@ -21,35 +21,35 @@ func gaugeReadout() {
 }
 func gaugeTrack() ui.PartProps {
 	return ui.PartProps{Style: func() ui.Style {
-		return ui.Style{
-			Display:         "flex",
-			Width:           gaugeWidth,
-			Height:          8,
-			BorderRadius:    4,
-			BackgroundColor: p().Track,
-			Overflow:        "hidden",
-		}
+		return ui.Styles(
+			ui.Display("flex"),
+			ui.Width(gaugeWidth),
+			ui.Height(8),
+			ui.BorderRadius(4),
+			ui.BackgroundColor(p().Track),
+			ui.Overflow("hidden"),
+		)
 	}}
 }
 func sliderParts(values func() []float64) {
 	ui.Slider.Control(
-		ui.PartProps{Style: ui.Style{
-			Position:   "relative",
-			Display:    "flex",
-			AlignItems: "center",
-			Width:      gaugeWidth,
-			Height:     24,
-		}},
+		ui.PartProps{Style: ui.Styles(
+			ui.Position("relative"),
+			ui.Display("flex"),
+			ui.AlignItems("center"),
+			ui.Width(gaugeWidth),
+			ui.Height(24),
+		)},
 		func() {
 			ui.Slider.Track(
 				ui.PartProps{Style: func() ui.Style {
-					return ui.Style{
-						Display:         "flex",
-						Width:           gaugeWidth,
-						Height:          4,
-						BorderRadius:    2,
-						BackgroundColor: p().Track,
-					}
+					return ui.Styles(
+						ui.Display("flex"),
+						ui.Width(gaugeWidth),
+						ui.Height(4),
+						ui.BorderRadius(2),
+						ui.BackgroundColor(p().Track),
+					)
 				}},
 				func() {
 					style := func() ui.Style {
@@ -58,13 +58,13 @@ func sliderParts(values func() []float64) {
 						if len(v) > 1 {
 							left, width = v[0], v[1]-v[0]
 						}
-						return ui.Style{
-							Height:          4,
-							BorderRadius:    2,
-							BackgroundColor: p().Accent,
-							MarginLeft:      left * gaugeWidth / 100,
-							Width:           strconv.FormatFloat(width, 'g', -1, 64) + "%",
-						}
+						return ui.Styles(
+							ui.Height(4),
+							ui.BorderRadius(2),
+							ui.BackgroundColor(p().Accent),
+							ui.MarginLeft(left*gaugeWidth/100),
+							ui.Width(strconv.FormatFloat(width, 'g', -1, 64)+"%"),
+						)
 					}
 					if len(values()) > 1 {
 						ui.Slider.Range(ui.PartProps{Style: style})
@@ -77,20 +77,20 @@ func sliderParts(values func() []float64) {
 				ui.Slider.Thumb(ui.SliderThumbProps{
 					Index: ptr(i),
 					PartProps: ui.PartProps{Style: func() ui.Style {
-						return ui.Style{
-							Position:        "absolute",
-							Left:            values()[i]*gaugeWidth/100 - 10,
-							Top:             2,
-							Width:           20,
-							Height:          20,
-							BorderRadius:    10,
-							BackgroundColor: p().Panel,
-							BorderWidth:     1,
-							BorderColor:     p().Border,
-							BoxShadow:       "0 1px 2px #0000003d",
-							Focus:           &ui.Style{Outline: "2px solid " + p().Accent},
-							OutlineOffset:   2,
-						}
+						return ui.Styles(
+							ui.Position("absolute"),
+							ui.Left(values()[i]*gaugeWidth/100-10),
+							ui.Top(2),
+							ui.Width(20),
+							ui.Height(20),
+							ui.BorderRadius(10),
+							ui.BackgroundColor(p().Panel),
+							ui.BorderWidth(1),
+							ui.BorderColor(p().Border),
+							ui.BoxShadow("0 1px 2px #0000003d"),
+							ui.Focus(ui.Outline("2px solid "+p().Accent)),
+							ui.OutlineOffset(2),
+						)
 					}},
 				})
 			}
@@ -128,12 +128,12 @@ func MeterDemo() {
 					func() {
 						ui.Meter.Indicator(ui.PartProps{Style: func() ui.Style {
 							value := level()[0]
-							return ui.Style{
-								Height:          8,
-								BorderRadius:    4,
-								Width:           strconv.FormatFloat(value, 'g', -1, 64) + "%",
-								BackgroundColor: choose(value < 25, p().Danger, choose(value > 80, "#c88a00", p().Accent)),
-							}
+							return ui.Styles(
+								ui.Height(8),
+								ui.BorderRadius(4),
+								ui.Width(strconv.FormatFloat(value, 'g', -1, 64)+"%"),
+								ui.BackgroundColor(choose(value < 25, p().Danger, choose(value > 80, "#c88a00", p().Accent))),
+							)
 						}})
 					},
 				)
@@ -186,12 +186,12 @@ func ProgressDemo() {
 					gaugeTrack(),
 					func() {
 						ui.Progress.Indicator(ui.PartProps{Style: func() ui.Style {
-							return ui.Style{
-								Height:          8,
-								BorderRadius:    4,
-								BackgroundColor: p().Accent,
-								Width:           strconv.FormatFloat(choose(indeterminate(), 35.0, float64(done())/12*100), 'g', -1, 64) + "%",
-							}
+							return ui.Styles(
+								ui.Height(8),
+								ui.BorderRadius(4),
+								ui.BackgroundColor(p().Accent),
+								ui.Width(strconv.FormatFloat(choose(indeterminate(), 35.0, float64(done())/12*100), 'g', -1, 64)+"%"),
+							)
 						}})
 					},
 				)
@@ -213,14 +213,14 @@ func RadioDemo() {
 			ui.RadioProps{Value: value, PartProps: ui.PartProps{Style: checkboxStyle()}},
 			func() {
 				ui.Radio.Indicator(ui.PartProps{Style: func() ui.Style {
-					return ui.Style{
-						Width:           15,
-						Height:          15,
-						BorderRadius:    8,
-						BorderWidth:     choose(selected(), 4, 1),
-						BorderColor:     choose(selected(), p().Accent, p().Border),
-						BackgroundColor: p().Control,
-					}
+					return ui.Styles(
+						ui.Width(15),
+						ui.Height(15),
+						ui.BorderRadius(8),
+						ui.BorderWidth(choose(selected(), 4, 1)),
+						ui.BorderColor(choose(selected(), p().Accent, p().Border)),
+						ui.BackgroundColor(p().Control),
+					)
 				}})
 				label(caption)
 			},
@@ -260,10 +260,10 @@ func SeparatorDemo() {
 		label("Above the rule")
 		ui.Separator.Root(ui.SeparatorProps{
 			Orientation: "horizontal",
-			PartProps: ui.PartProps{Style: ui.Style{
-				Height:          1,
-				BackgroundColor: color(func(p palette) string { return p.Border }),
-			}},
+			PartProps: ui.PartProps{Style: ui.Styles(
+				ui.Height(1),
+				ui.BackgroundColor(color(func(p palette) string { return p.Border })),
+			)},
 		})
 		label("Below the rule")
 		row(func() {
@@ -271,11 +271,11 @@ func SeparatorDemo() {
 				if i > 0 {
 					ui.Separator.Root(ui.SeparatorProps{
 						Orientation: "vertical",
-						PartProps: ui.PartProps{Style: ui.Style{
-							Width:           1,
-							Height:          18,
-							BackgroundColor: color(func(p palette) string { return p.Border }),
-						}},
+						PartProps: ui.PartProps{Style: ui.Styles(
+							ui.Width(1),
+							ui.Height(18),
+							ui.BackgroundColor(color(func(p palette) string { return p.Border })),
+						)},
 					})
 				}
 				label(caption)
@@ -345,36 +345,36 @@ func SplitterDemo() {
 				Step:          8,
 				OnSizesChange: change(setSizes),
 				Panes:         []ui.SplitterPaneDeclaration{{Min: ptr(80.0)}, {Min: ptr(80.0)}, {Min: ptr(60.0), Collapsible: true}},
-				PartProps: ui.PartProps{Style: ui.Style{
-					Display:         "flex",
-					Height:          140,
-					BorderRadius:    10,
-					BorderWidth:     1,
-					BorderColor:     color(func(p palette) string { return p.Border }),
-					Overflow:        "hidden",
-					BackgroundColor: color(func(p palette) string { return p.PanelAlt }),
-				}},
+				PartProps: ui.PartProps{Style: ui.Styles(
+					ui.Display("flex"),
+					ui.Height(140),
+					ui.BorderRadius(10),
+					ui.BorderWidth(1),
+					ui.BorderColor(color(func(p palette) string { return p.Border })),
+					ui.Overflow("hidden"),
+					ui.BackgroundColor(color(func(p palette) string { return p.PanelAlt })),
+				)},
 			},
 			func() {
 				for i := range 3 {
 					if i > 0 {
 						ui.Splitter.Handle(ui.SplitterPaneProps{
 							Index: ptr(i - 1),
-							PartProps: ui.PartProps{Style: ui.Style{
-								Width:           6,
-								BackgroundColor: color(func(p palette) string { return p.Border }),
-								Cursor:          "col-resize",
-							}},
+							PartProps: ui.PartProps{Style: ui.Styles(
+								ui.Width(6),
+								ui.BackgroundColor(color(func(p palette) string { return p.Border })),
+								ui.Cursor("col-resize"),
+							)},
 						})
 					}
 					ui.Splitter.Pane(
 						ui.SplitterPaneProps{
 							Index: ptr(i),
-							PartProps: ui.PartProps{Style: ui.Style{
-								Display:        "flex",
-								AlignItems:     "center",
-								JustifyContent: "center",
-							}},
+							PartProps: ui.PartProps{Style: ui.Styles(
+								ui.Display("flex"),
+								ui.AlignItems("center"),
+								ui.JustifyContent("center"),
+							)},
 						},
 						func() {
 							muted(func() string {
@@ -398,30 +398,30 @@ func switchControl(checked func() bool, set func(bool), readOnly bool, caption s
 				PartProps: ui.PartProps{
 					AriaLabel: caption,
 					Style: func() ui.Style {
-						return ui.Style{
-							Width:           44,
-							Height:          24,
-							BorderRadius:    12,
-							Padding:         2,
-							Display:         "flex",
-							AlignItems:      "center",
-							BackgroundColor: choose(checked(), p().Accent, p().Track),
-							Transition:      "background-color 160ms ease-out",
-						}
+						return ui.Styles(
+							ui.Width(44),
+							ui.Height(24),
+							ui.BorderRadius(12),
+							ui.Padding(2),
+							ui.Display("flex"),
+							ui.AlignItems("center"),
+							ui.BackgroundColor(choose(checked(), p().Accent, p().Track)),
+							ui.Transition("background-color 160ms ease-out"),
+						)
 					},
 				},
 			},
 			func() {
 				ui.Switch.Thumb(ui.PartProps{Style: func() ui.Style {
-					return ui.Style{
-						Width:           20,
-						Height:          20,
-						BorderRadius:    10,
-						BackgroundColor: "white",
-						FlexShrink:      0,
-						Transform:       choose(checked(), "translateX(20px)", "translateX(0px)"),
-						Transition:      "transform 160ms ease-out",
-					}
+					return ui.Styles(
+						ui.Width(20),
+						ui.Height(20),
+						ui.BorderRadius(10),
+						ui.BackgroundColor("white"),
+						ui.FlexShrink(0),
+						ui.Transform(choose(checked(), "translateX(20px)", "translateX(0px)")),
+						ui.Transition("transform 160ms ease-out"),
+					)
 				}})
 			},
 		)
@@ -472,10 +472,10 @@ func TabsDemo() {
 						}
 						ui.Tabs.Indicator(ui.TabsIndicatorProps{
 							Placement: "bottom",
-							PartProps: ui.PartProps{Style: ui.Style{
-								Height:          2,
-								BackgroundColor: color(func(p palette) string { return p.Accent }),
-							}},
+							PartProps: ui.PartProps{Style: ui.Styles(
+								ui.Height(2),
+								ui.BackgroundColor(color(func(p palette) string { return p.Accent })),
+							)},
 						})
 					},
 				)
@@ -528,12 +528,12 @@ func ToggleDemo() {
 					PartProps:       togglePart(pinned),
 				},
 				func() {
-					ui.Toggle.Indicator(ui.PartProps{Style: ui.Style{
-						Width:           6,
-						Height:          6,
-						BorderRadius:    3,
-						BackgroundColor: color(func(p palette) string { return p.Accent }),
-					}})
+					ui.Toggle.Indicator(ui.PartProps{Style: ui.Styles(
+						ui.Width(6),
+						ui.Height(6),
+						ui.BorderRadius(3),
+						ui.BackgroundColor(color(func(p palette) string { return p.Accent })),
+					)})
 					label("Pinned")
 				},
 			)
@@ -609,11 +609,11 @@ func ToolbarDemo() {
 						}
 					},
 				)
-				ui.Toolbar.Separator(ui.PartProps{Style: ui.Style{
-					Width:           1,
-					Height:          20,
-					BackgroundColor: color(func(p palette) string { return p.Border }),
-				}})
+				ui.Toolbar.Separator(ui.PartProps{Style: ui.Styles(
+					ui.Width(1),
+					ui.Height(20),
+					ui.BackgroundColor(color(func(p palette) string { return p.Border })),
+				)})
 				ui.Toolbar.Button(
 					ui.ToolbarItemProps{Value: "share", PartProps: control()},
 					"Share",

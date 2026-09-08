@@ -83,8 +83,9 @@ const GUIDE_TRANSLATIONS: Record<
       title: '样式与布局',
       description: '使用熟悉的属性布局并设置原生节点样式。',
       outline: [
-        { id: 'style-属性', title: 'style 属性' },
+        { id: '样式选项', title: '样式选项' },
         { id: '合并样式', title: '合并样式' },
+        { id: '复用样式', title: '复用样式' },
         { id: 'flexbox', title: 'Flexbox' },
         { id: '网格布局', title: '网格布局' },
         { id: '文本与颜色', title: '文本与颜色' },
@@ -229,8 +230,9 @@ const GUIDE_TRANSLATIONS: Record<
       title: 'スタイルとレイアウト',
       description: '使い慣れたプロパティでネイティブノードを配置し、スタイルします。',
       outline: [
-        { id: 'style-プロパティ', title: 'style プロパティ' },
+        { id: 'スタイルオプション', title: 'スタイルオプション' },
         { id: 'スタイルのマージ', title: 'スタイルのマージ' },
+        { id: 'スタイルの再利用', title: 'スタイルの再利用' },
         { id: 'flexbox', title: 'Flexbox' },
         { id: 'グリッド', title: 'グリッド' },
         { id: 'テキストと色', title: 'テキストと色' },

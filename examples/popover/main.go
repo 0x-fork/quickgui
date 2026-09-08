@@ -60,24 +60,22 @@ func Popovers() {
 		Placement:      "bottom-start",
 		Gap:            &gap,
 		ViewportMargin: &margin,
-		PartProps:      ui.PartProps{Style: ui.Style{Width: "100%", Height: "100%"}},
+		PartProps:      ui.PartProps{Style: ui.Styles(ui.Width("100%"), ui.Height("100%"))},
 	}
 	ui.View(
 		func() {
 			ui.View(
 				func() {
-					ui.Text("Native popover surfaces", ui.Style{FontSize: 14, FontWeight: 600})
+					ui.Text("Native popover surfaces", ui.FontSize(14), ui.FontWeight(600))
 				},
-				ui.Style{
-					Display:           "flex",
-					Height:            52,
-					FlexShrink:        0,
-					AlignItems:        "center",
-					JustifyContent:    "center",
-					AppRegion:         "drag",
-					BorderColor:       "#202838",
-					BorderBottomWidth: 1,
-				},
+				ui.Display("flex"),
+				ui.Height(52),
+				ui.FlexShrink(0),
+				ui.AlignItems("center"),
+				ui.JustifyContent("center"),
+				ui.AppRegion("drag"),
+				ui.BorderColor("#202838"),
+				ui.BorderBottomWidth(1),
 			)
 			ui.View(
 				func() {
@@ -87,22 +85,20 @@ func Popovers() {
 								func() {
 									ui.Text(
 										"System and in-window popovers",
-										ui.Style{
-											FontSize:   28,
-											LineHeight: 34,
-											FontWeight: 700,
-										},
+										ui.FontSize(28),
+										ui.LineHeight(34),
+										ui.FontWeight(700),
 									)
 									ui.Text(
 										"Both use the same controlled Go API. SystemPopover opens a native child window; Popover stays in this window's retained overlay plane.",
-										ui.Style{
-											Color:      "#9ba8bc",
-											FontSize:   14,
-											LineHeight: 21,
-										},
+										ui.Color("#9ba8bc"),
+										ui.FontSize(14),
+										ui.LineHeight(21),
 									)
 								},
-								ui.Style{Display: "flex", FlexDirection: "column", Gap: 8},
+								ui.Display("flex"),
+								ui.FlexDirection("column"),
+								ui.Gap(8),
 							)
 							ui.View(
 								func() {
@@ -161,52 +157,45 @@ func Popovers() {
 										)
 									})
 								},
-								ui.Style{Display: "flex", Gap: 14},
+								ui.Display("flex"),
+								ui.Gap(14),
 							)
 							ui.View(
 								func() {
-									ui.Text(status, ui.Style{Color: "#b8c4d6", FontSize: 13})
+									ui.Text(status, ui.Color("#b8c4d6"), ui.FontSize(13))
 								},
-								ui.Style{
-									Display:         "flex",
-									MinHeight:       50,
-									AlignItems:      "center",
-									JustifyContent:  "center",
-									PaddingLeft:     16,
-									PaddingRight:    16,
-									BackgroundColor: "#10151e",
-									BorderColor:     "#293244",
-									BorderWidth:     1,
-									BorderRadius:    9,
-								},
+								ui.Display("flex"),
+								ui.MinHeight(50),
+								ui.AlignItems("center"),
+								ui.JustifyContent("center"),
+								ui.PaddingLeft(16),
+								ui.PaddingRight(16),
+								ui.BackgroundColor("#10151e"),
+								ui.BorderColor("#293244"),
+								ui.BorderWidth(1),
+								ui.BorderRadius(9),
 							)
 						},
-						ui.Style{
-							Display:       "flex",
-							FlexDirection: "column",
-							Width:         "100%",
-							MaxWidth:      680,
-							Gap:           20,
-						},
+						ui.Display("flex"),
+						ui.FlexDirection("column"),
+						ui.Width("100%"),
+						ui.MaxWidth(680),
+						ui.Gap(20),
 					)
 				},
-				ui.Style{
-					Display:        "flex",
-					Flex:           1,
-					MinHeight:      0,
-					AlignItems:     "center",
-					JustifyContent: "center",
-					Padding:        36,
-				},
+				ui.Display("flex"),
+				ui.Flex(1),
+				ui.MinHeight(0),
+				ui.AlignItems("center"),
+				ui.JustifyContent("center"),
+				ui.Padding(36),
 			)
 		},
-		ui.Style{
-			Display:         "flex",
-			FlexDirection:   "column",
-			Width:           "100%",
-			Height:          "100%",
-			BackgroundColor: "#0b0f17",
-			Color:           "#f5f7fb",
-		},
+		ui.Display("flex"),
+		ui.FlexDirection("column"),
+		ui.Width("100%"),
+		ui.Height("100%"),
+		ui.BackgroundColor("#0b0f17"),
+		ui.Color("#f5f7fb"),
 	)
 }

@@ -34,7 +34,7 @@ export const ALL_COMPONENT_DOCS = [
     description:
       'A general-purpose retained container for layout, paint, pointer input, and accessibility.',
     parts: [],
-    keyProps: ['Style', 'children', 'OnClick', 'Ref'],
+    keyProps: ['BackgroundColor', 'Padding', 'children', 'OnClick', 'Ref'],
   },
   {
     kind: 'ui',
@@ -44,7 +44,7 @@ export const ALL_COMPONENT_DOCS = [
     description:
       'Shapes and paints Unicode text with inherited typography, selection, and accessibility.',
     parts: [],
-    keyProps: ['Style', 'children', 'Ref'],
+    keyProps: ['BackgroundColor', 'Padding', 'children', 'Ref'],
   },
   {
     kind: 'ui',
@@ -54,7 +54,7 @@ export const ALL_COMPONENT_DOCS = [
     description:
       'An accessible press target that you style and compose with text or other content.',
     parts: [],
-    keyProps: ['Style', 'children', 'OnClick', 'Disabled'],
+    keyProps: ['BackgroundColor', 'Padding', 'children', 'OnClick', 'Disabled'],
   },
   {
     kind: 'ui',
@@ -73,7 +73,7 @@ export const ALL_COMPONENT_DOCS = [
     description:
       'The multiline text-editing primitive, with the same controlled value contract as Input.',
     parts: [],
-    keyProps: ['Value', 'Placeholder', 'OnInput', 'Style'],
+    keyProps: ['Value', 'Placeholder', 'OnInput', 'BackgroundColor', 'Padding'],
   },
   {
     kind: 'ui',
@@ -82,7 +82,7 @@ export const ALL_COMPONENT_DOCS = [
     section: 'Primitives',
     description: 'Renders retained Markdown, including an incremental mode for streaming content.',
     parts: [],
-    keyProps: ['Value', 'Streaming', 'Style'],
+    keyProps: ['Value', 'Streaming', 'BackgroundColor', 'Padding'],
   },
   {
     kind: 'ui',
@@ -92,7 +92,7 @@ export const ALL_COMPONENT_DOCS = [
     description:
       'Displays a filesystem path, file URL, or base64 data URL with retained image resources.',
     parts: [],
-    keyProps: ['Value', 'ObjectFit', 'Style'],
+    keyProps: ['Value', 'ObjectFit', 'BackgroundColor', 'Padding'],
   },
   {
     kind: 'ui',
@@ -101,7 +101,7 @@ export const ALL_COMPONENT_DOCS = [
     section: 'Primitives',
     description: 'Renders a complete inline SVG document without loading external SVG resources.',
     parts: [],
-    keyProps: ['Value', 'Style'],
+    keyProps: ['Value', 'BackgroundColor', 'Padding'],
   },
   {
     kind: 'ui',
@@ -110,7 +110,7 @@ export const ALL_COMPONENT_DOCS = [
     section: 'Primitives',
     description: 'Paints validated WGSL with a bounded set of numeric shader parameters.',
     parts: [],
-    keyProps: ['Value', 'ShaderParameters', 'Style'],
+    keyProps: ['Value', 'ShaderParameters', 'BackgroundColor', 'Padding'],
   },
   {
     kind: 'ui',

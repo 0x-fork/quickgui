@@ -10,8 +10,8 @@ func App() {
 	message, setMessage := ui.CreateSignal("Ready to call the {{TYPE}} extension")
 	ui.View(
 		func() {
-			ui.Text("{{NAME}}", ui.Style{FontSize: 24, FontWeight: 700})
-			ui.Text(message, ui.Style{FontSize: 16})
+			ui.Text("{{NAME}}", ui.FontSize(24), ui.FontWeight(700))
+			ui.Text(message, ui.FontSize(16))
 			ui.Button(
 				"Call extension",
 				ui.OnClick(func() {
@@ -23,22 +23,18 @@ func App() {
 						setMessage(reply)
 					})
 				}),
-				ui.Style{
-					Padding:         12,
-					BorderRadius:    8,
-					BackgroundColor: "#2563eb",
-					Color:           "white",
-					Hover:           &ui.Style{BackgroundColor: "#3b82f6"},
-				},
+				ui.Padding(12),
+				ui.BorderRadius(8),
+				ui.BackgroundColor("#2563eb"),
+				ui.Color("white"),
+				ui.Hover(ui.BackgroundColor("#3b82f6")),
 			)
 		},
-		ui.Style{
-			Display:        "flex",
-			FlexDirection:  "column",
-			JustifyContent: "center",
-			Height:         "100%",
-			Padding:        24,
-			Gap:            16,
-		},
+		ui.Display("flex"),
+		ui.FlexDirection("column"),
+		ui.JustifyContent("center"),
+		ui.Height("100%"),
+		ui.Padding(24),
+		ui.Gap(16),
 	)
 }

@@ -67,40 +67,40 @@ func main() {
 }
 
 func buttonStyle() ui.Style {
-	return ui.Style{
-		Display:         "flex",
-		AlignItems:      "center",
-		JustifyContent:  "center",
-		Height:          34,
-		FlexShrink:      0,
-		PaddingLeft:     12,
-		PaddingRight:    12,
-		BorderRadius:    7,
-		BackgroundColor: "#253855",
-		Color:           "#e2e8f0",
-		UserSelect:      "none",
-		AppRegion:       "no-drag",
-		Cursor:          "default",
-		FontSize:        13,
-		Hover:           &ui.Style{BackgroundColor: "#304869"},
-		Disabled:        &ui.Style{Opacity: 0.45},
-	}
+	return ui.Styles(
+		ui.Display("flex"),
+		ui.AlignItems("center"),
+		ui.JustifyContent("center"),
+		ui.Height(34),
+		ui.FlexShrink(0),
+		ui.PaddingLeft(12),
+		ui.PaddingRight(12),
+		ui.BorderRadius(7),
+		ui.BackgroundColor("#253855"),
+		ui.Color("#e2e8f0"),
+		ui.UserSelect("none"),
+		ui.AppRegion("no-drag"),
+		ui.Cursor("default"),
+		ui.FontSize(13),
+		ui.Hover(ui.BackgroundColor("#304869")),
+		ui.DisabledStyle(ui.Opacity(0.45)),
+	)
 }
 
 func inputStyle() ui.Style {
-	return ui.Style{
-		Height:          38,
-		Width:           "100%",
-		PaddingLeft:     12,
-		PaddingRight:    12,
-		BackgroundColor: "#0b1020",
-		Color:           "#e2e8f0",
-		BorderRadius:    7,
-		BorderWidth:     1,
-		BorderColor:     "#334155",
-		FontSize:        14,
-		AppRegion:       "no-drag",
-	}
+	return ui.Styles(
+		ui.Height(38),
+		ui.Width("100%"),
+		ui.PaddingLeft(12),
+		ui.PaddingRight(12),
+		ui.BackgroundColor("#0b1020"),
+		ui.Color("#e2e8f0"),
+		ui.BorderRadius(7),
+		ui.BorderWidth(1),
+		ui.BorderColor("#334155"),
+		ui.FontSize(14),
+		ui.AppRegion("no-drag"),
+	)
 }
 
 func (controller *chatController) view() {
@@ -121,14 +121,12 @@ func (controller *chatController) view() {
 								nil,
 							)
 						},
-						ui.Style{
-							Flex:       1,
-							MinHeight:  0,
-							Width:      "100%",
-							Padding:    20,
-							Gap:        14,
-							AlignItems: "center",
-						},
+						ui.Flex(1),
+						ui.MinHeight(0),
+						ui.Width("100%"),
+						ui.Padding(20),
+						ui.Gap(14),
+						ui.AlignItems("center"),
 						ui.EstimatedItemHeight(240),
 						ui.Overscan(1),
 						ui.ListAlignment("top"),
@@ -136,23 +134,25 @@ func (controller *chatController) view() {
 					)
 					controller.composer()
 				},
-				ui.Style{
-					Display:       "flex",
-					FlexDirection: "column",
-					Flex:          1,
-					MinWidth:      0,
-					Height:        "100%",
-				},
+				ui.Display("flex"),
+				ui.FlexDirection("column"),
+				ui.Flex(1),
+				ui.MinWidth(0),
+				ui.Height("100%"),
 			)
 		},
-		ui.Style{Display: "flex", Width: "100%", Height: "100%", Color: "#e2e8f0", FontSize: 14},
+		ui.Display("flex"),
+		ui.Width("100%"),
+		ui.Height("100%"),
+		ui.Color("#e2e8f0"),
+		ui.FontSize(14),
 	)
 }
 
 func (controller *chatController) sidebar() {
 	ui.View(
 		func() {
-			ui.Text("Conversations", ui.Style{FontSize: 18, FontWeight: 700})
+			ui.Text("Conversations", ui.FontSize(18), ui.FontWeight(700))
 			ui.Button(
 				"New chat",
 				buttonStyle(),
@@ -169,39 +169,36 @@ func (controller *chatController) sidebar() {
 								func() {
 									ui.Text(
 										func() string { return conversation().Title },
-										ui.Style{
-											Width:        "100%",
-											FontWeight:   600,
-											WhiteSpace:   "nowrap",
-											Overflow:     "hidden",
-											TextOverflow: "ellipsis",
-										},
+										ui.Width("100%"),
+										ui.FontWeight(600),
+										ui.WhiteSpace("nowrap"),
+										ui.Overflow("hidden"),
+										ui.TextOverflow("ellipsis"),
 									)
 									ui.Text(
 										func() string {
 											return time.UnixMilli(conversation().UpdatedAt).Format("Jan 2, 15:04")
 										},
-										ui.Style{FontSize: 11, Color: "#94a3b8"},
+										ui.FontSize(11),
+										ui.Color("#94a3b8"),
 									)
 								},
-								ui.Style{
-									Display:       "flex",
-									FlexDirection: "column",
-									Gap:           5,
-									Padding:       12,
-									Width:         "100%",
-									FlexShrink:    0,
-									BorderRadius:  8,
-									AppRegion:     "no-drag",
-									Cursor:        "default",
-									UserSelect:    "none",
-									Hover:         &ui.Style{BackgroundColor: "#1c2b42"},
-								},
+								ui.Display("flex"),
+								ui.FlexDirection("column"),
+								ui.Gap(5),
+								ui.Padding(12),
+								ui.Width("100%"),
+								ui.FlexShrink(0),
+								ui.BorderRadius(8),
+								ui.AppRegion("no-drag"),
+								ui.Cursor("default"),
+								ui.UserSelect("none"),
+								ui.Hover(ui.BackgroundColor("#1c2b42")),
 								ui.When(
 									func() bool {
 										return controller.state.Read().ActiveConversationID == conversation().ID
 									},
-									ui.Style{BackgroundColor: "#263854"},
+									ui.BackgroundColor("#263854"),
 								),
 								ui.Disabled(controller.busy.Read),
 								ui.OnClick(func() { controller.selectConversation(conversation().ID) }),
@@ -210,31 +207,29 @@ func (controller *chatController) sidebar() {
 						nil,
 					)
 				},
-				ui.Style{
-					Display:       "flex",
-					FlexDirection: "column",
-					Flex:          1,
-					MinHeight:     0,
-					OverflowY:     "scroll",
-					Gap:           6,
-				},
+				ui.Display("flex"),
+				ui.FlexDirection("column"),
+				ui.Flex(1),
+				ui.MinHeight(0),
+				ui.OverflowY("scroll"),
+				ui.Gap(6),
 			)
 			ui.Text(
 				"Conversations and drafts are saved locally.",
-				ui.Style{FontSize: 11, Color: "#94a3b8", LineHeight: 16},
+				ui.FontSize(11),
+				ui.Color("#94a3b8"),
+				ui.LineHeight(16),
 			)
 		},
-		ui.Style{
-			Display:         "flex",
-			FlexDirection:   "column",
-			Width:           248,
-			Height:          "100%",
-			FlexShrink:      0,
-			Padding:         16,
-			PaddingTop:      52,
-			Gap:             14,
-			BackgroundColor: "#121b2b",
-		},
+		ui.Display("flex"),
+		ui.FlexDirection("column"),
+		ui.Width(248),
+		ui.Height("100%"),
+		ui.FlexShrink(0),
+		ui.Padding(16),
+		ui.PaddingTop(52),
+		ui.Gap(14),
+		ui.BackgroundColor("#121b2b"),
 	)
 }
 
@@ -245,20 +240,23 @@ func (controller *chatController) toolbar() {
 				func() {
 					ui.Text(
 						func() string { return controller.current().Title },
-						ui.Style{
-							FontSize:     18,
-							FontWeight:   700,
-							WhiteSpace:   "nowrap",
-							TextOverflow: "ellipsis",
-							Overflow:     "hidden",
-						},
+						ui.FontSize(18),
+						ui.FontWeight(700),
+						ui.WhiteSpace("nowrap"),
+						ui.TextOverflow("ellipsis"),
+						ui.Overflow("hidden"),
 					)
 					ui.Text(
 						"DeepSeek · native streaming Markdown",
-						ui.Style{FontSize: 12, Color: "#94a3b8"},
+						ui.FontSize(12),
+						ui.Color("#94a3b8"),
 					)
 				},
-				ui.Style{Display: "flex", FlexDirection: "column", Flex: 1, MinWidth: 0, Gap: 4},
+				ui.Display("flex"),
+				ui.FlexDirection("column"),
+				ui.Flex(1),
+				ui.MinWidth(0),
+				ui.Gap(4),
 			)
 			ui.SystemPopover.Root(
 				ui.PopoverRootProps{
@@ -292,17 +290,15 @@ func (controller *chatController) toolbar() {
 				},
 			)
 		},
-		ui.Style{
-			Display:           "flex",
-			AlignItems:        "center",
-			Height:            72,
-			FlexShrink:        0,
-			Padding:           20,
-			Gap:               16,
-			AppRegion:         "drag",
-			BorderBottomWidth: 1,
-			BorderColor:       "#243247",
-		},
+		ui.Display("flex"),
+		ui.AlignItems("center"),
+		ui.Height(72),
+		ui.FlexShrink(0),
+		ui.Padding(20),
+		ui.Gap(16),
+		ui.AppRegion("drag"),
+		ui.BorderBottomWidth(1),
+		ui.BorderColor("#243247"),
 	)
 }
 
@@ -316,20 +312,20 @@ func messageCard(message func() ChatMessage) {
 					}
 					return "DeepSeek"
 				},
-				ui.Style{FontSize: 12, FontWeight: 700, Color: "#93c5fd"},
+				ui.FontSize(12),
+				ui.FontWeight(700),
+				ui.Color("#93c5fd"),
 			)
 			ui.Markdown(
-				ui.Style{
-					Width:                  "100%",
-					FontSize:               14,
-					LineHeight:             22,
-					Color:                  "#e2e8f0",
-					MarkdownLinkColor:      "#93c5fd",
-					MarkdownCodeTextColor:  "#c4b5fd",
-					MarkdownCodeBackground: "#0b1020",
-					MarkdownBorderColor:    "#475569",
-					MarkdownMutedColor:     "#94a3b8",
-				},
+				ui.Width("100%"),
+				ui.FontSize(14),
+				ui.LineHeight(22),
+				ui.Color("#e2e8f0"),
+				ui.MarkdownLinkColor("#93c5fd"),
+				ui.MarkdownCodeTextColor("#c4b5fd"),
+				ui.MarkdownCodeBackground("#0b1020"),
+				ui.MarkdownBorderColor("#475569"),
+				ui.MarkdownMutedColor("#94a3b8"),
 				ui.Streaming(func() bool { return message().Streaming }),
 				ui.Value(func() string {
 					if message().Streaming && message().Content == "" {
@@ -343,21 +339,20 @@ func messageCard(message func() ChatMessage) {
 				func() {
 					ui.Text(
 						"Response interrupted. You can send another message to continue.",
-						ui.Style{FontSize: 12, Color: "#fca5a5"},
+						ui.FontSize(12),
+						ui.Color("#fca5a5"),
 					)
 				},
 			)
 		},
-		ui.Style{
-			Display:         "flex",
-			FlexDirection:   "column",
-			Width:           "100%",
-			MaxWidth:        760,
-			Gap:             10,
-			Padding:         16,
-			BorderRadius:    10,
-			BackgroundColor: "#151f31",
-		},
+		ui.Display("flex"),
+		ui.FlexDirection("column"),
+		ui.Width("100%"),
+		ui.MaxWidth(760),
+		ui.Gap(10),
+		ui.Padding(16),
+		ui.BorderRadius(10),
+		ui.BackgroundColor("#151f31"),
 	)
 }
 
@@ -369,10 +364,8 @@ func (controller *chatController) composer() {
 				func() {
 					ui.Text(
 						controller.status.Read,
-						ui.Style{
-							FontSize: 12,
-							Color:    "#94a3b8",
-						},
+						ui.FontSize(12),
+						ui.Color("#94a3b8"),
 					)
 				},
 			)
@@ -380,7 +373,8 @@ func (controller *chatController) composer() {
 				func() {
 					ui.Input(
 						inputStyle(),
-						ui.Style{Flex: 1, MinWidth: 0},
+						ui.Flex(1),
+						ui.MinWidth(0),
 						ui.Value(func() string { return controller.current().Draft }),
 						ui.Placeholder("Message DeepSeek…"),
 						ui.Disabled(controller.busy.Read),
@@ -398,10 +392,8 @@ func (controller *chatController) composer() {
 							return "Send"
 						},
 						buttonStyle(),
-						ui.Style{
-							BackgroundColor: "#2563eb",
-							Hover:           &ui.Style{BackgroundColor: "#3b82f6"},
-						},
+						ui.BackgroundColor("#2563eb"),
+						ui.Hover(ui.BackgroundColor("#3b82f6")),
 						ui.Disabled(func() bool {
 							return !controller.busy.Read() && strings.TrimSpace(controller.current().Draft) == ""
 						}),
@@ -414,7 +406,10 @@ func (controller *chatController) composer() {
 						}),
 					)
 				},
-				ui.Style{Display: "flex", Width: "100%", Gap: 10, AlignItems: "center"},
+				ui.Display("flex"),
+				ui.Width("100%"),
+				ui.Gap(10),
+				ui.AlignItems("center"),
 			)
 			ui.Text(
 				func() string {
@@ -423,18 +418,17 @@ func (controller *chatController) composer() {
 					}
 					return "Enter to send · responses stream into individual message cards"
 				},
-				ui.Style{FontSize: 11, Color: "#94a3b8"},
+				ui.FontSize(11),
+				ui.Color("#94a3b8"),
 			)
 		},
-		ui.Style{
-			Display:        "flex",
-			FlexDirection:  "column",
-			FlexShrink:     0,
-			Padding:        20,
-			Gap:            10,
-			BorderTopWidth: 1,
-			BorderColor:    "#243247",
-		},
+		ui.Display("flex"),
+		ui.FlexDirection("column"),
+		ui.FlexShrink(0),
+		ui.Padding(20),
+		ui.Gap(10),
+		ui.BorderTopWidth(1),
+		ui.BorderColor("#243247"),
 	)
 }
 
@@ -446,16 +440,19 @@ func (controller *chatController) providerSettings() {
 	close := func() { controller.settingsOpen.Write(false) }
 	ui.View(
 		func() {
-			ui.Text("DeepSeek API key", ui.Style{FontSize: 19, FontWeight: 700})
+			ui.Text("DeepSeek API key", ui.FontSize(19), ui.FontWeight(700))
 			ui.Text(
 				"Stored in your operating system’s credential store. Your key is never written to conversation history.",
-				ui.Style{FontSize: 12, LineHeight: 18, Color: "#94a3b8"},
+				ui.FontSize(12),
+				ui.LineHeight(18),
+				ui.Color("#94a3b8"),
 			)
 			ui.View(
 				func() {
 					ui.Input(
 						inputStyle(),
-						ui.Style{Flex: 1, MinWidth: 0},
+						ui.Flex(1),
+						ui.MinWidth(0),
 						ui.Value(value),
 						ui.Password(func() bool { return !reveal() }),
 						ui.Disabled(controller.credentialBusy.Read),
@@ -472,16 +469,18 @@ func (controller *chatController) providerSettings() {
 						ui.OnClick(func() { setReveal(!reveal()) }),
 					)
 				},
-				ui.Style{Display: "flex", Gap: 8, AlignItems: "center"},
+				ui.Display("flex"),
+				ui.Gap(8),
+				ui.AlignItems("center"),
 			)
-			ui.Text(errorText, ui.Style{FontSize: 12, Color: "#fca5a5", MinHeight: 18})
-			ui.View(ui.Style{Flex: 1})
+			ui.Text(errorText, ui.FontSize(12), ui.Color("#fca5a5"), ui.MinHeight(18))
+			ui.View(ui.Flex(1))
 			ui.View(
 				func() {
 					ui.Button(
 						"Remove key",
 						buttonStyle(),
-						ui.Style{Color: "#fca5a5"},
+						ui.Color("#fca5a5"),
 						ui.Disabled(controller.credentialBusy.Read),
 						ui.OnClick(func() {
 							controller.credentialBusy.Write(true)
@@ -503,7 +502,7 @@ func (controller *chatController) providerSettings() {
 							)
 						}),
 					)
-					ui.View(ui.Style{Flex: 1})
+					ui.View(ui.Flex(1))
 					ui.Button(
 						"Cancel",
 						buttonStyle(),
@@ -513,7 +512,7 @@ func (controller *chatController) providerSettings() {
 					ui.Button(
 						"Save",
 						buttonStyle(),
-						ui.Style{BackgroundColor: "#2563eb"},
+						ui.BackgroundColor("#2563eb"),
 						ui.Disabled(controller.credentialBusy.Read),
 						ui.OnClick(func() {
 							secret := strings.TrimSpace(value())
@@ -547,19 +546,19 @@ func (controller *chatController) providerSettings() {
 						}),
 					)
 				},
-				ui.Style{Display: "flex", Gap: 8, AlignItems: "center"},
+				ui.Display("flex"),
+				ui.Gap(8),
+				ui.AlignItems("center"),
 			)
 		},
-		ui.Style{
-			Display:         "flex",
-			FlexDirection:   "column",
-			Width:           "100%",
-			Height:          "100%",
-			Padding:         20,
-			Gap:             12,
-			BackgroundColor: "#182338",
-			Color:           "#e2e8f0",
-		},
+		ui.Display("flex"),
+		ui.FlexDirection("column"),
+		ui.Width("100%"),
+		ui.Height("100%"),
+		ui.Padding(20),
+		ui.Gap(12),
+		ui.BackgroundColor("#182338"),
+		ui.Color("#e2e8f0"),
 	)
 }
 
