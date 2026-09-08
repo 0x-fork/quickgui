@@ -1,22 +1,14 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { Logo } from '../logo'
-import {
-  COMPONENT_NAV_GROUPS,
-  SWIFT_UI_NAV_GROUP,
-  componentDocsPath,
-  type ComponentDoc,
-} from '../../lib/component-docs'
+import { docsNavGroups } from '../../lib/docs-navigation'
 import {
   docsPath,
-  findDocsPage,
   isDocsFrontend,
   switchDocsFrontend,
   type DocsFrontend,
   type DocsOutlineItem,
-  type DocsSlug,
 } from '../../lib/docs'
-import { localizedComponentDescription, localizedDocsPage } from '../../lib/docs-locales'
 import { localePath, type Locale } from '../../i18n'
 import { site } from '../../lib/site'
 import { LanguageMenu } from '../language-menu'
@@ -33,33 +25,14 @@ export interface DocsShellPage {
   area: DocsArea
 }
 
-interface NavItem {
-  title: string
-  description: string
-  path: string
-  terms: string
-}
-
-interface NavGroup {
-  title: string
-  items: readonly NavItem[]
-}
-
 const sidebarScrollTop = new Map<string, number>()
+const collapsedSidebarGroups = new Map<DocsFrontend, Set<string>>()
 
 const ui = {
   en: {
     guide: 'Guide',
     components: 'Components',
     swiftUi: 'SwiftUI',
-    introduction: 'Introduction',
-    ui: 'QuickGUI UI',
-    primitives: 'Primitives',
-    forms: 'Forms & Controls',
-    layout: 'Layout & Data',
-    overlays: 'Overlays',
-    menus: 'Menus & Navigation',
-    swiftComponents: 'SwiftUI Components',
     search: 'Search',
     searchDocs: 'Search documentation',
     noResults: 'No documentation found.',
@@ -87,14 +60,6 @@ const ui = {
     guide: '指南',
     components: '组件',
     swiftUi: 'SwiftUI',
-    introduction: '简介',
-    ui: 'QuickGUI UI',
-    primitives: '基础组件',
-    forms: '表单与控件',
-    layout: '布局与数据',
-    overlays: '浮层',
-    menus: '菜单与导航',
-    swiftComponents: 'SwiftUI 组件',
     search: '搜索',
     searchDocs: '搜索文档',
     noResults: '未找到相关文档。',
@@ -122,14 +87,6 @@ const ui = {
     guide: 'ガイド',
     components: 'コンポーネント',
     swiftUi: 'SwiftUI',
-    introduction: 'はじめに',
-    ui: 'QuickGUI UI',
-    primitives: 'プリミティブ',
-    forms: 'フォームとコントロール',
-    layout: 'レイアウトとデータ',
-    overlays: 'オーバーレイ',
-    menus: 'メニューとナビゲーション',
-    swiftComponents: 'SwiftUI コンポーネント',
     search: '検索',
     searchDocs: 'ドキュメントを検索',
     noResults: '該当するドキュメントはありません。',
@@ -159,84 +116,6 @@ function localize(locale: Locale, path: string): string {
   return locale === 'en' ? path : `/${locale}${path}`
 }
 
-function guideItem(slug: DocsSlug, locale: Locale, frontend: DocsFrontend = 'go'): NavItem {
-  const source = findDocsPage(frontend, slug)
-  if (!source) throw new Error(`Unknown docs page: ${slug}`)
-  const page = localizedDocsPage(source, locale)
-  return {
-    title: page.title,
-    description: page.description,
-    path: docsPath(frontend, page.slug),
-    terms: page.searchTerms.join(' '),
-  }
-}
-
-function componentItem(component: ComponentDoc, locale: Locale, frontend: DocsFrontend): NavItem {
-  return {
-    title: component.name,
-    description: localizedComponentDescription(component, locale),
-    path: componentDocsPath(component, frontend),
-    terms: `${component.section} ${component.parts.join(' ')} ${component.keyProps.join(' ')}`,
-  }
-}
-
-function navGroups(locale: Locale, frontend: DocsFrontend): readonly NavGroup[] {
-  const labels = ui[locale]
-  const componentGroupTitles: Record<string, string> = {
-    Primitives: labels.primitives,
-    'Forms & Controls': labels.forms,
-    'Layout & Data': labels.layout,
-    Overlays: labels.overlays,
-    'Menus & Navigation': labels.menus,
-  }
-
-  return [
-    {
-      title: labels.introduction,
-      items: [
-        guideItem('getting-started', locale, frontend),
-        guideItem('project-structure', locale, frontend),
-        guideItem('updater', locale, frontend),
-        guideItem('extensions', locale, frontend),
-      ],
-    },
-    {
-      title: labels.ui,
-      items: [
-        guideItem('ui', locale, frontend),
-        guideItem('styling', locale, frontend),
-        guideItem('animations', locale, frontend),
-      ],
-    },
-    {
-      title: labels.components,
-      items: [
-        guideItem('components', locale, frontend),
-        guideItem('forms-and-input', locale, frontend),
-        guideItem('overlays-and-dialogs', locale, frontend),
-        ...(frontend === 'moonbit' ? [guideItem('native-services', locale, frontend)] : []),
-      ],
-    },
-    ...COMPONENT_NAV_GROUPS.map((group) => ({
-      title: componentGroupTitles[group.title] ?? group.title,
-      items: group.items.map((component) => componentItem(component, locale, frontend)),
-    })),
-    {
-      title: labels.swiftUi,
-      items: [
-        guideItem('swift-ui', locale, frontend),
-        guideItem('swift-ui-hosting', locale, frontend),
-      ],
-    },
-    {
-      title: labels.swiftComponents,
-      items: SWIFT_UI_NAV_GROUP.items.map((component) =>
-        componentItem(component, locale, frontend),
-      ),
-    },
-  ]
-}
-
 function DocsSidebar({
   currentPath,
   locale,
@@ -254,6 +133,15 @@ function DocsSidebar({
   const navigate = useNavigate()
   const pickerId = useId()
   const scrollKey = `${frontend}:${mobile ? 'mobile' : 'desktop'}`
+
+  useLayoutEffect(() => {
+    const collapsed = collapsedSidebarGroups.get(frontend)
+    const groups = sidebarRef.current?.querySelectorAll<HTMLDetailsElement>('.docs-nav-group')
+    for (const group of groups ?? []) {
+      group.open =
+        Boolean(group.querySelector('[aria-current="page"]')) || !collapsed?.has(group.dataset.group!)
+    }
+  }, [currentPath, frontend, mobile])
 
   useLayoutEffect(() => {
     if (sidebarRef.current) {
@@ -295,9 +183,24 @@ function DocsSidebar({
         </div>
       </div>
       <nav aria-label={ui[locale].menu}>
-        {navGroups(locale, frontend).map((group) => (
-          <section className="docs-nav-group" key={group.title}>
-            <h2>{group.title}</h2>
+        {docsNavGroups(locale, frontend).map((group) => (
+          <details
+            className="docs-nav-group"
+            data-group={group.id}
+            key={group.id}
+            open
+            onToggle={(event) => {
+              const collapsed = collapsedSidebarGroups.get(frontend) ?? new Set<string>()
+              if (event.currentTarget.open) collapsed.delete(group.id)
+              else collapsed.add(group.id)
+              collapsedSidebarGroups.set(frontend, collapsed)
+              rememberScrollPosition()
+            }}
+          >
+            <summary>
+              <h2>{group.title}</h2>
+              <span className="i-lucide-chevron-right" aria-hidden />
+            </summary>
             <ul>
               {group.items.map((item) => (
                 <li key={item.path}>
@@ -314,7 +217,7 @@ function DocsSidebar({
                 </li>
               ))}
             </ul>
-          </section>
+          </details>
         ))}
       </nav>
     </aside>
@@ -751,7 +654,7 @@ function DocsPager({
   locale: Locale
   frontend: DocsFrontend
 }) {
-  const pages = navGroups(locale, frontend).flatMap((group) => group.items)
+  const pages = docsNavGroups(locale, frontend).flatMap((group) => group.items)
   const index = pages.findIndex((candidate) => candidate.path === page.path)
   const previous = index > 0 ? pages[index - 1] : undefined
   const next = index >= 0 && index < pages.length - 1 ? pages[index + 1] : undefined

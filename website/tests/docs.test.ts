@@ -3,8 +3,9 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import GithubSlugger from 'github-slugger'
 import { SUPPORTED_LOCALES } from '../src/i18n'
-import { ALL_COMPONENT_DOCS, componentDocsPath } from '../src/lib/component-docs'
+import { ALL_COMPONENT_DOCS, UI_COMPONENTS, componentDocsPath } from '../src/lib/component-docs'
 import { DOCS_FRONTENDS, docsPages, docsPath, switchDocsFrontend } from '../src/lib/docs'
+import { docsNavGroups } from '../src/lib/docs-navigation'
 import { localizedDocsPage } from '../src/lib/docs-locales'
 import { resolveDocsRoute } from '../src/lib/docs-routing'
 import { searchDocs } from '../src/lib/docs-search'
@@ -45,7 +46,7 @@ describe('frontend documentation routes', () => {
 
   test('switches shared topics and falls back for frontend-specific pages', () => {
     expect(switchDocsFrontend('/docs/go/styling', 'moonbit')).toBe('/docs/moonbit/styling')
-    expect(switchDocsFrontend('/docs/moonbit/ui', 'go')).toBe('/docs/go/ui')
+    expect(switchDocsFrontend('/docs/moonbit/ui', 'go')).toBe('/docs/go/rendering')
     expect(switchDocsFrontend('/docs/go', 'moonbit')).toBe('/docs/moonbit')
     expect(switchDocsFrontend('/docs/moonbit', 'go')).toBe('/docs/go')
     expect(switchDocsFrontend('/docs/go/components/button', 'moonbit')).toBe(
@@ -54,9 +55,66 @@ describe('frontend documentation routes', () => {
     expect(switchDocsFrontend('/docs/go/swift-ui', 'moonbit')).toBe('/docs/moonbit/swift-ui')
     expect(switchDocsFrontend('/docs/moonbit/native-services', 'go')).toBe('/docs/go')
   })
+
+  test('redirects the former UI guide to Rendering in either frontend', () => {
+    for (const frontend of DOCS_FRONTENDS) {
+      expect(resolveDocsRoute(frontend, 'ui')).toEqual({
+        kind: 'redirect',
+        path: `/docs/${frontend}/rendering`,
+      })
+      for (const slug of ['reactivity', 'rendering', 'components', 'routing', 'styling']) {
+        expect(resolveDocsRoute(frontend, slug)?.kind).toBe('page')
+        expect(switchDocsFrontend(`/docs/go/${slug}`, frontend)).toBe(`/docs/${frontend}/${slug}`)
+      }
+    }
+    expect(resolveDocsRoute('ui')).toEqual({ kind: 'redirect', path: '/docs/go/rendering' })
+  })
 })
 
-test('localized guides exist and MoonBit outlines and examples match their content', async () => {
+test('the sidebar separates concepts from one complete component reference', async () => {
+  for (const frontend of DOCS_FRONTENDS) {
+    for (const locale of SUPPORTED_LOCALES) {
+      const groups = docsNavGroups(locale, frontend)
+      const concepts = groups.find((group) => group.id === 'concepts')!
+      expect(concepts.items.map((item) => item.path)).toEqual(
+        ['reactivity', 'rendering', 'components', 'routing', 'styling', 'animations'].map(
+          (slug) => `/docs/${frontend}/${slug}`,
+        ),
+      )
+      const components = groups.filter((group) => group.id === 'components')
+      expect(components).toHaveLength(1)
+      expect(components[0].items.map((item) => item.path).sort()).toEqual(
+        UI_COMPONENTS.map((component) => componentDocsPath(component, frontend)).sort(),
+      )
+      const names = components[0].items.map((item) => item.title)
+      expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b, 'en')))
+      const paths = groups.flatMap((group) => group.items.map((item) => item.path))
+      expect(new Set(paths).size).toBe(paths.length)
+      if (locale === 'en') {
+        expect(concepts.title).toBe('Concepts')
+        expect(groups.map((group) => group.title)).not.toContain('Primitives')
+        expect(groups.map((group) => group.title)).not.toContain('QuickGUI UI')
+      }
+      for (const component of UI_COMPONENTS) {
+        const content = await readFile(
+          resolve(
+            root,
+            'src/content/docs',
+            frontend,
+            'components',
+            locale === 'en' ? '' : locale,
+            'ui',
+            `${component.slug}.mdx`,
+          ),
+          'utf8',
+        )
+        expect(content.trim().length).toBeGreaterThan(0)
+      }
+    }
+  }
+})
+
+test('localized concepts and MoonBit guides keep matching outlines and examples', async () => {
   for (const frontend of DOCS_FRONTENDS) {
     for (const source of docsPages(frontend)) {
       let englishExamples: string[] = []
@@ -65,7 +123,11 @@ test('localized guides exist and MoonBit outlines and examples match their conte
           resolve(root, 'src/content/docs', frontend, locale, `${source.slug}.mdx`),
           'utf8',
         )
-        if (frontend !== 'moonbit') continue
+        if (
+          frontend !== 'moonbit' &&
+          !['reactivity', 'rendering', 'components', 'routing', 'styling'].includes(source.slug)
+        )
+          continue
         const page = localizedDocsPage(source, locale)
         const slugger = new GithubSlugger()
         const headings = [...content.matchAll(/^## (.+)$/gm)].map((match) => ({

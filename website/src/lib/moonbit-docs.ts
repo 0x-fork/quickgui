@@ -93,62 +93,203 @@ export const MOONBIT_DOCS_PAGES: readonly DocsPageMeta[] = [
     },
   },
   {
-    frontend: "moonbit",
-    slug: "ui",
-    title: "QuickGUI UI Usage",
-    description: "Build retained components with signals, bindings, and owned children.",
-    outline: [
-      { id: "view-syntax", title: "View syntax" },
-      { id: "live-bindings", title: "Live bindings" },
-      { id: "derived-state-and-cleanup", title: "Derived state and cleanup" },
-      { id: "conditional-children", title: "Conditional children" },
-      { id: "keyed-children", title: "Keyed children" },
-      { id: "checking-testing-and-debugging", title: "Checking, testing, and debugging" },
+    "frontend": "moonbit",
+    "slug": "reactivity",
+    "title": "Reactivity",
+    "description": "Signals connect state to the text and properties that read it. Updates change retained nodes without rerunning the entire component.",
+    "outline": [
+      {
+        "id": "live-bindings",
+        "title": "Live bindings"
+      },
+      {
+        "id": "derived-state-and-cleanup",
+        "title": "Derived state and cleanup"
+      }
     ],
-    searchTerms: [
-      "child lists",
-      "fluent properties and handlers",
-      "rabbita",
-      "signals",
+    "searchTerms": [
+      "signal",
       "reactivity",
       "memo",
       "effect",
       "batch",
-      "cleanup",
-      "create_signal",
-      "compiler",
-      "debugging",
-      "children_keyed",
-      "信号",
-      "响应式",
-      "シグナル",
+      "cleanup"
     ],
-    translations: {
-      zh: {
-        title: "使用 QuickGUI UI",
-        description: "使用信号、绑定和具有生命周期的子节点构建保留组件。",
-        outline: [
-          { id: "视图语法", title: "视图语法" },
-          { id: "实时绑定", title: "实时绑定" },
-          { id: "派生状态与清理", title: "派生状态与清理" },
-          { id: "条件子节点", title: "条件子节点" },
-          { id: "按键保留子节点", title: "按键保留子节点" },
-          { id: "检查测试与调试", title: "检查、测试与调试" },
-        ],
+    "translations": {
+      "zh": {
+        "title": "响应式",
+        "description": "信号将状态连接到读取它的文本和属性。更新只改变保留的节点，不会重新执行整个组件。",
+        "outline": [
+          {
+            "id": "实时绑定",
+            "title": "实时绑定"
+          },
+          {
+            "id": "派生状态与清理",
+            "title": "派生状态与清理"
+          }
+        ]
       },
-      ja: {
-        title: "QuickGUI UI の使い方",
-        description: "シグナル、バインディング、所有する子ノードでコンポーネントを構築します。",
-        outline: [
-          { id: "ビューの構文", title: "ビューの構文" },
-          { id: "動的バインディング", title: "動的バインディング" },
-          { id: "派生状態とクリーンアップ", title: "派生状態とクリーンアップ" },
-          { id: "条件付きの子ノード", title: "条件付きの子ノード" },
-          { id: "キー付きの子ノード", title: "キー付きの子ノード" },
-          { id: "チェックテストデバッグ", title: "チェック・テスト・デバッグ" },
-        ],
+      "ja": {
+        "title": "リアクティビティ",
+        "description": "シグナルは状態を、それを読むテキストやプロパティに結び付けます。更新時は保持されたノードだけを変更し、コンポーネント全体を再実行しません。",
+        "outline": [
+          {
+            "id": "動的バインディング",
+            "title": "動的バインディング"
+          },
+          {
+            "id": "派生状態とクリーンアップ",
+            "title": "派生状態とクリーンアップ"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "frontend": "moonbit",
+    "slug": "rendering",
+    "title": "Rendering",
+    "description": "Components construct a retained tree once when mounted. Reactive bindings update the affected nodes; the native core handles layout, painting, and accessibility.",
+    "outline": [
+      {
+        "id": "view-syntax",
+        "title": "View syntax"
       },
-    },
+      {
+        "id": "conditional-children",
+        "title": "Conditional children"
+      },
+      {
+        "id": "keyed-children",
+        "title": "Keyed children"
+      },
+      {
+        "id": "checking-testing-and-debugging",
+        "title": "Checking, testing, and debugging"
+      }
+    ],
+    "searchTerms": [
+      "rendering",
+      "retained",
+      "children",
+      "mount",
+      "lifecycle",
+      "keyed"
+    ],
+    "translations": {
+      "zh": {
+        "title": "渲染",
+        "description": "组件在挂载时创建保留树。响应式绑定更新受影响的节点，原生核心负责布局、绘制和无障碍行为。",
+        "outline": [
+          {
+            "id": "视图语法",
+            "title": "视图语法"
+          },
+          {
+            "id": "条件子节点",
+            "title": "条件子节点"
+          },
+          {
+            "id": "按键保留子节点",
+            "title": "按键保留子节点"
+          },
+          {
+            "id": "检查测试与调试",
+            "title": "检查、测试与调试"
+          }
+        ]
+      },
+      "ja": {
+        "title": "レンダリング",
+        "description": "コンポーネントはマウント時に保持ツリーを作成します。リアクティブなバインディングが対象ノードを更新し、レイアウト、描画、アクセシビリティはネイティブコアが担当します。",
+        "outline": [
+          {
+            "id": "ビューの構文",
+            "title": "ビューの構文"
+          },
+          {
+            "id": "条件付きの子ノード",
+            "title": "条件付きの子ノード"
+          },
+          {
+            "id": "キー付きの子ノード",
+            "title": "キー付きの子ノード"
+          },
+          {
+            "id": "チェックテストデバッグ",
+            "title": "チェック・テスト・デバッグ"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "frontend": "moonbit",
+    "slug": "routing",
+    "title": "Routing",
+    "description": "The router selects components from the current application path and keeps a navigation history. Routes render native QuickGUI content in the current window.",
+    "outline": [
+      {
+        "id": "nested-layouts",
+        "title": "Nested layouts"
+      },
+      {
+        "id": "navigation",
+        "title": "Navigation"
+      },
+      {
+        "id": "retained-outlets",
+        "title": "Retained outlets"
+      }
+    ],
+    "searchTerms": [
+      "router",
+      "route",
+      "layout",
+      "outlet",
+      "navigation",
+      "history",
+      "parameters"
+    ],
+    "translations": {
+      "zh": {
+        "title": "路由",
+        "description": "路由根据应用当前路径选择组件并维护导航历史。路由内容在当前窗口中以原生 QuickGUI 节点渲染。",
+        "outline": [
+          {
+            "id": "嵌套布局",
+            "title": "嵌套布局"
+          },
+          {
+            "id": "导航",
+            "title": "导航"
+          },
+          {
+            "id": "保留的路由出口",
+            "title": "保留的路由出口"
+          }
+        ]
+      },
+      "ja": {
+        "title": "ルーティング",
+        "description": "ルーターは現在のアプリ内パスからコンポーネントを選び、ナビゲーション履歴を管理します。ルートは現在のウィンドウにネイティブ QuickGUI コンテンツを描画します。",
+        "outline": [
+          {
+            "id": "入れ子のレイアウト",
+            "title": "入れ子のレイアウト"
+          },
+          {
+            "id": "ナビゲーション",
+            "title": "ナビゲーション"
+          },
+          {
+            "id": "保持されるアウトレット",
+            "title": "保持されるアウトレット"
+          }
+        ]
+      }
+    }
   },
   {
     frontend: "moonbit",
@@ -248,6 +389,7 @@ export const MOONBIT_DOCS_PAGES: readonly DocsPageMeta[] = [
     title: "Components",
     description: "Use MoonBit primitives, native table parts, and resizable panels.",
     outline: [
+      { id: "defining-components", title: "Defining components" },
       { id: "interactive-gallery", title: "Interactive gallery" },
       { id: "primitives", title: "Primitives" },
       { id: "tables-and-visible-rows", title: "Tables and visible rows" },
@@ -272,6 +414,7 @@ export const MOONBIT_DOCS_PAGES: readonly DocsPageMeta[] = [
         title: "组件",
         description: "使用 MoonBit 基础组件、原生表格部件和可调整面板。",
         outline: [
+          { id: "定义组件", title: "定义组件" },
           { id: "交互式组件示例", title: "交互式组件示例" },
           { id: "基础组件", title: "基础组件" },
           { id: "表格与可见行", title: "表格与可见行" },
@@ -284,6 +427,7 @@ export const MOONBIT_DOCS_PAGES: readonly DocsPageMeta[] = [
         description:
           "MoonBit のプリミティブ、ネイティブテーブルのパーツ、サイズ変更可能なパネルを使います。",
         outline: [
+          { id: "コンポーネントの定義", title: "コンポーネントの定義" },
           { id: "対話式ギャラリー", title: "対話式ギャラリー" },
           { id: "プリミティブ", title: "プリミティブ" },
           { id: "テーブルと可視行", title: "テーブルと可視行" },

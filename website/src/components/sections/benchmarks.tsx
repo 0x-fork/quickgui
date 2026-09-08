@@ -86,14 +86,15 @@ function MeasurementChart({ metric }: { metric: Metric }) {
           {measured.results.map((row, index) => {
             const y = 28 + index * 54;
             const value = valueOf(row);
+            const range = metric === "memory"
+              ? ` · ${t("benchmarks.range", {
+                  min: number(row.memoryMinBytes / MB),
+                  max: number(row.memoryMaxBytes / MB),
+                })}`
+              : "";
             return (
               <g key={row.id}>
-                <title>
-                  {row.name} {row.version}: {number(value)} MB
-                  {metric === "memory"
-                    ? ` · ${t("benchmarks.range", { min: number(row.memoryMinBytes / MB), max: number(row.memoryMaxBytes / MB) })}`
-                    : ""}
-                </title>
+                <title>{`${row.name} ${row.version}: ${number(value)} MB${range}`}</title>
                 <text x={0} y={y + 4} fill="var(--foreground)" fontSize="12" fontWeight="500">
                   {row.name}
                 </text>

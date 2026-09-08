@@ -95,11 +95,7 @@ function pageDefinitions(locale: Locale, frontend: DocsFrontend): SearchPage[] {
       area:
         page.slug === 'swift-ui' || page.slug === 'swift-ui-hosting'
           ? 'swift-ui'
-          : page.slug === 'components' ||
-              page.slug === 'forms-and-input' ||
-              page.slug === 'overlays-and-dialogs'
-            ? 'ui'
-            : 'guide',
+          : 'guide',
       path: docsPath(frontend, page.slug),
       sourcePath: guideSource(page, locale),
       fallbackPath: guideSource(page, 'en'),

@@ -9,7 +9,9 @@ export type GoDocsSlug =
   | 'project-structure'
   | 'updater'
   | 'extensions'
-  | 'ui'
+  | 'reactivity'
+  | 'rendering'
+  | 'routing'
   | 'styling'
   | 'animations'
   | 'components'
@@ -118,18 +120,105 @@ export const GO_DOCS_PAGES: readonly DocsPageMeta[] = [
     searchTerms: ['files', 'config', 'entry', 'package', 'quickgui.config'],
   },
   {
-    frontend: 'go',
-    slug: 'ui',
-    title: 'QuickGUI UI Usage',
-    description: 'Use QuickGUI UI reactivity to render retained native UI.',
-    outline: [
-      { id: 'rendering-model', title: 'Rendering model' },
-      { id: 'reactive-state', title: 'Reactive state' },
-      { id: 'window-lifecycle', title: 'Window lifecycle' },
-      { id: 'current-window', title: 'Current window' },
-      { id: 'routing', title: 'Routing' },
+    "frontend": "go",
+    "slug": "reactivity",
+    "title": "Reactivity",
+    "description": "Signals connect state to the text and properties that read it. Updates change retained nodes without rerunning the entire component.",
+    "outline": [
+      {
+        "id": "reactive-state",
+        "title": "Reactive state"
+      },
+      {
+        "id": "derived-state",
+        "title": "Derived state"
+      },
+      {
+        "id": "effects-and-cleanup",
+        "title": "Effects and cleanup"
+      },
+      {
+        "id": "batched-updates",
+        "title": "Batched updates"
+      }
     ],
-    searchTerms: ['go', 'signal', 'component', 'reactivity', 'lifecycle', 'router'],
+    "searchTerms": [
+      "signal",
+      "reactivity",
+      "memo",
+      "effect",
+      "batch",
+      "cleanup"
+    ]
+  },
+  {
+    "frontend": "go",
+    "slug": "rendering",
+    "title": "Rendering",
+    "description": "Components construct a retained tree once when mounted. Reactive bindings update the affected nodes; the native core handles layout, painting, and accessibility.",
+    "outline": [
+      {
+        "id": "rendering-model",
+        "title": "Rendering model"
+      },
+      {
+        "id": "conditional-content",
+        "title": "Conditional content"
+      },
+      {
+        "id": "lists-and-identity",
+        "title": "Lists and identity"
+      },
+      {
+        "id": "window-lifecycle",
+        "title": "Window lifecycle"
+      },
+      {
+        "id": "current-window",
+        "title": "Current window"
+      }
+    ],
+    "searchTerms": [
+      "rendering",
+      "retained",
+      "children",
+      "mount",
+      "lifecycle",
+      "keyed"
+    ]
+  },
+  {
+    "frontend": "go",
+    "slug": "routing",
+    "title": "Routing",
+    "description": "The router selects components from the current application path and keeps a navigation history. Routes render native QuickGUI content in the current window.",
+    "outline": [
+      {
+        "id": "routes",
+        "title": "Routes"
+      },
+      {
+        "id": "nested-layouts",
+        "title": "Nested layouts"
+      },
+      {
+        "id": "navigation",
+        "title": "Navigation"
+      },
+      {
+        "id": "route-parameters",
+        "title": "Route parameters"
+      }
+    ],
+    "searchTerms": [
+      "router",
+      "route",
+      "layout",
+      "outlet",
+      "navigation",
+      "history",
+      "parameters"
+    ]
   },
   {
     frontend: 'go',
@@ -179,6 +268,7 @@ export const GO_DOCS_PAGES: readonly DocsPageMeta[] = [
     title: 'Components',
     description: 'Choose between primitives and accessible compound components.',
     outline: [
+      { id: 'defining-components', title: 'Defining components' },
       { id: 'primitives', title: 'Primitives' },
       { id: 'compound-components', title: 'Compound components' },
       { id: 'controlled-state', title: 'Controlled state' },
@@ -257,7 +347,7 @@ export function docsPath(frontend: DocsFrontend, slug: DocsSlug = 'getting-start
 }
 
 export function findDocsPage(frontend: DocsFrontend, slug?: string): DocsPageMeta | undefined {
-  const normalized = slug || 'getting-started'
+  const normalized = slug === 'ui' ? 'rendering' : slug || 'getting-started'
   return docsPages(frontend).find((page) => page.slug === normalized)
 }
 

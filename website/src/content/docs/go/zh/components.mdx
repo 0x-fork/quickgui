@@ -1,5 +1,23 @@
 QuickGUI 将无样式基础组件与具备无障碍行为的复合控件组合在一起。两者都可以通过普通 Go 函数进行组合。
 
+## 定义组件
+
+Go 组件是声明原生子节点的 `func()`。用普通参数配置组件，需要持续更新的值则传入信号访问器。每次调用都可以拥有自己的状态和清理逻辑。
+
+```go
+func CounterLabel(count func() int) {
+	ui.Text("Count: ", count, ui.FontSize(20))
+}
+
+func ComponentExample() {
+	count, setCount := ui.CreateSignal(0)
+	ui.View(func() {
+		CounterLabel(count)
+		ui.Button("Increment", ui.OnClick(func() { setCount(count() + 1) }))
+	})
+}
+```
+
 ## 基础组件
 
 从 `ui.View`、`ui.Text`、`ui.Button` 和 `ui.Input` 开始。可以直接传入选项与文本。`func() { ... }` 参数将多个子节点分组到当前父节点下。
@@ -85,3 +103,5 @@ ui.PartProps{
 	),
 }
 ```
+
+组件侧栏中每个原生控件都有独立页面。完整使用流程见[表单与输入](/docs/go/forms-and-input)和[浮层与对话框](/docs/go/overlays-and-dialogs)。

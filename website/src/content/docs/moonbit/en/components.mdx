@@ -1,5 +1,24 @@
 MoonBit provides the same native component families as Go, using child lists and fluent styles, properties, and event handlers. The sidebar includes the full component reference and macOS SwiftUI hosts.
 
+## Defining components
+
+A MoonBit component is a function returning `@ui.Element`. Compose it in a child list. Custom component arguments use ordinary MoonBit evaluation: pass a getter when the child needs a live value, then read that getter in its native view expression.
+
+```moonbit
+fn counter_label(count : () -> Int) -> @ui.Element {
+  @ui.text("Count: \{count()}").font_size(20)
+}
+
+fn component_composition() -> @ui.Element {
+  let (count, set_count) = @reactive.create_signal(0)
+  @ui.div([
+    counter_label(count),
+    @ui.button("Increment").on_click(() => set_count(count() + 1)),
+  ])
+  .flex_col()
+}
+```
+
 ## Interactive gallery
 
 The [MoonBit components example](https://github.com/egoist/quickgui/tree/main/examples/components-moonbit) includes all 43 demos from the Go gallery, with the same sidebar and light/dark appearance. Explore mixed and read-only controls, animated switches, pickers, native menus, dialogs, a virtual table with 5,000 rows, and lazy tree children.
@@ -85,3 +104,5 @@ fn notifications() -> @ui.Element {
   box.children([box.slot(@ui.Indicator)]).width(20).height(20)
 }
 ```
+
+Every native control has a dedicated page in the Components sidebar. For complete workflows, see [Forms & Input](/docs/moonbit/forms-and-input) and [Overlays & Dialogs](/docs/moonbit/overlays-and-dialogs).

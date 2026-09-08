@@ -7,8 +7,8 @@ export function resolveDocsRoute(frontend?: string, slug?: string): DocsRoute | 
   if (isDocsFrontend(frontend)) {
     const page = findDocsPage(frontend, slug)
     if (!page) return undefined
-    return slug === 'getting-started'
-      ? { kind: 'redirect', path: docsPath(frontend) }
+    return slug === 'getting-started' || (slug !== undefined && slug !== page.slug)
+      ? { kind: 'redirect', path: docsPath(frontend, page.slug) }
       : { kind: 'page', page }
   }
 

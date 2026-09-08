@@ -21,7 +21,7 @@ export interface ComponentDoc {
 }
 
 export interface ComponentNavGroup {
-  title: ComponentDocSection
+  title: ComponentDocSection | 'Components'
   items: readonly ComponentDoc[]
 }
 
@@ -834,15 +834,11 @@ export const SWIFT_UI_COMPONENTS: readonly ComponentDoc[] = ALL_COMPONENT_DOCS.f
 )
 
 export const COMPONENT_NAV_GROUPS: readonly ComponentNavGroup[] = [
-  'Primitives',
-  'Forms & Controls',
-  'Layout & Data',
-  'Overlays',
-  'Menus & Navigation',
-].map((title) => ({
-  title: title as ComponentDocSection,
-  items: UI_COMPONENTS.filter((component) => component.section === title),
-}))
+  {
+    title: 'Components',
+    items: [...UI_COMPONENTS].sort((left, right) => left.name.localeCompare(right.name, 'en')),
+  },
+]
 
 export const SWIFT_UI_NAV_GROUP: ComponentNavGroup = {
   title: 'SwiftUI Components',

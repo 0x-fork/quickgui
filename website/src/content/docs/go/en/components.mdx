@@ -1,5 +1,23 @@
 QuickGUI combines unstyled primitives with accessible compound controls. Compose both through ordinary Go functions.
 
+## Defining components
+
+A Go component is a `func()` that declares native children. Use ordinary parameters to configure it, and pass signal accessors for values that should stay reactive. Each call can own its own state and cleanup.
+
+```go
+func CounterLabel(count func() int) {
+	ui.Text("Count: ", count, ui.FontSize(20))
+}
+
+func ComponentExample() {
+	count, setCount := ui.CreateSignal(0)
+	ui.View(func() {
+		CounterLabel(count)
+		ui.Button("Increment", ui.OnClick(func() { setCount(count() + 1) }))
+	})
+}
+```
+
 ## Primitives
 
 Start with `ui.View`, `ui.Text`, `ui.Button`, and `ui.Input`. Options and text can be passed directly. A `func() { ... }` argument groups multiple children under the current parent.
@@ -85,3 +103,5 @@ ui.PartProps{
 	),
 }
 ```
+
+Every native control has a dedicated page in the Components sidebar. For complete workflows, see [Forms & Input](/docs/go/forms-and-input) and [Overlays & Dialogs](/docs/go/overlays-and-dialogs).

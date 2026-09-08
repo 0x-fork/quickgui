@@ -6,6 +6,7 @@
 		"#/*": "./src/*"
 	},
 	"scripts": {
+		"test": "bun test --tsconfig-override ./tsconfig.cloudflare.json ./tests",
 		"docs:index": "bun ./scripts/build-docs-search-index.ts",
 		"docs:check": "bun run docs:index && bun test ./tests/docs.test.ts",
 		"docs:translate": "bun ./scripts/generate-doc-translations.ts",

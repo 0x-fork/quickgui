@@ -1,5 +1,23 @@
 QuickGUI はスタイルなしのプリミティブとアクセシブルな複合コントロールを組み合わせます。どちらも通常の Go 関数で構成できます。
 
+## コンポーネントの定義
+
+Go コンポーネントはネイティブの子を宣言する `func()` です。通常の引数で設定し、変化する値にはシグナルのアクセサーを渡します。呼び出しごとに状態と後始末を持てます。
+
+```go
+func CounterLabel(count func() int) {
+	ui.Text("Count: ", count, ui.FontSize(20))
+}
+
+func ComponentExample() {
+	count, setCount := ui.CreateSignal(0)
+	ui.View(func() {
+		CounterLabel(count)
+		ui.Button("Increment", ui.OnClick(func() { setCount(count() + 1) }))
+	})
+}
+```
+
 ## プリミティブ
 
 `ui.View`、`ui.Text`、`ui.Button`、`ui.Input` から始めます。オプションとテキストを直接渡せます。`func() { ... }` 引数は複数の子を現在の親の下にまとめます。
@@ -85,3 +103,5 @@ ui.PartProps{
 	),
 }
 ```
+
+Components サイドバーでは各ネイティブコントロールに専用ページがあります。実際の組み合わせは[フォームと入力](/docs/go/forms-and-input)と[オーバーレイとダイアログ](/docs/go/overlays-and-dialogs)を参照してください。

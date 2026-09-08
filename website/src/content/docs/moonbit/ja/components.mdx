@@ -1,5 +1,24 @@
 MoonBit は子要素のリストと fluent なスタイル、プロパティ、イベントハンドラーで Go と同じネイティブコンポーネント群を提供します。サイドバーには全コンポーネントのリファレンスと macOS の SwiftUI ホストがあります。
 
+## コンポーネントの定義
+
+MoonBit コンポーネントは `@ui.Element` を返す関数で、子要素リストに組み込めます。独自コンポーネントの引数は通常の MoonBit として評価されます。動的な値には getter を渡し、子のネイティブビュー式で読み取ります。
+
+```moonbit
+fn counter_label(count : () -> Int) -> @ui.Element {
+  @ui.text("Count: \{count()}").font_size(20)
+}
+
+fn component_composition() -> @ui.Element {
+  let (count, set_count) = @reactive.create_signal(0)
+  @ui.div([
+    counter_label(count),
+    @ui.button("Increment").on_click(() => set_count(count() + 1)),
+  ])
+  .flex_col()
+}
+```
+
 ## 対話式ギャラリー
 
 [MoonBit コンポーネントのサンプル](https://github.com/egoist/quickgui/tree/main/examples/components-moonbit) には Go 版と同じ 43 個のデモがあり、サイドバーとライト／ダーク表示も揃えています。混合状態や読み取り専用のコントロール、アニメーション付きスイッチ、ピッカー、ネイティブメニュー、ダイアログ、5,000 行の仮想テーブル、子ノードを遅延読み込みするツリーを試せます。
@@ -85,3 +104,5 @@ fn notifications() -> @ui.Element {
   box.children([box.slot(@ui.Indicator)]).width(20).height(20)
 }
 ```
+
+Components サイドバーでは各ネイティブコントロールに専用ページがあります。実際の組み合わせは[フォームと入力](/docs/moonbit/forms-and-input)と[オーバーレイとダイアログ](/docs/moonbit/overlays-and-dialogs)を参照してください。

@@ -67,17 +67,100 @@ const GUIDE_TRANSLATIONS: Record<
       ],
       searchTerms: ['文件', '配置', '入口', '软件包', 'quickgui.config'],
     },
-    ui: {
-      title: '使用 QuickGUI UI',
-      description: '使用 QuickGUI UI 响应式能力渲染保留式原生界面。',
-      outline: [
-        { id: '渲染模型', title: '渲染模型' },
-        { id: '响应式状态', title: '响应式状态' },
-        { id: '窗口生命周期', title: '窗口生命周期' },
-        { id: '当前窗口', title: '当前窗口' },
-        { id: '路由', title: '路由' },
+    reactivity: {
+      "title": "响应式",
+      "description": "信号将状态连接到读取它的文本和属性。更新只改变保留的节点，不会重新执行整个组件。",
+      "outline": [
+        {
+          "id": "响应式状态",
+          "title": "响应式状态"
+        },
+        {
+          "id": "派生状态",
+          "title": "派生状态"
+        },
+        {
+          "id": "副作用与清理",
+          "title": "副作用与清理"
+        },
+        {
+          "id": "批量更新",
+          "title": "批量更新"
+        }
       ],
-      searchTerms: ['Go', '信号', '组件', '响应式', '生命周期', '路由'],
+      "searchTerms": [
+        "signal",
+        "reactivity",
+        "memo",
+        "effect",
+        "batch",
+        "cleanup"
+      ]
+    },
+    rendering: {
+      "title": "渲染",
+      "description": "组件在挂载时创建保留树。响应式绑定更新受影响的节点，原生核心负责布局、绘制和无障碍行为。",
+      "outline": [
+        {
+          "id": "渲染模型",
+          "title": "渲染模型"
+        },
+        {
+          "id": "条件内容",
+          "title": "条件内容"
+        },
+        {
+          "id": "列表与节点身份",
+          "title": "列表与节点身份"
+        },
+        {
+          "id": "窗口生命周期",
+          "title": "窗口生命周期"
+        },
+        {
+          "id": "当前窗口",
+          "title": "当前窗口"
+        }
+      ],
+      "searchTerms": [
+        "rendering",
+        "retained",
+        "children",
+        "mount",
+        "lifecycle",
+        "keyed"
+      ]
+    },
+    routing: {
+      "title": "路由",
+      "description": "路由根据应用当前路径选择组件并维护导航历史。路由内容在当前窗口中以原生 QuickGUI 节点渲染。",
+      "outline": [
+        {
+          "id": "路由声明",
+          "title": "路由声明"
+        },
+        {
+          "id": "嵌套布局",
+          "title": "嵌套布局"
+        },
+        {
+          "id": "导航",
+          "title": "导航"
+        },
+        {
+          "id": "路由参数",
+          "title": "路由参数"
+        }
+      ],
+      "searchTerms": [
+        "router",
+        "route",
+        "layout",
+        "outlet",
+        "navigation",
+        "history",
+        "parameters"
+      ]
     },
     styling: {
       title: '样式与布局',
@@ -111,6 +194,7 @@ const GUIDE_TRANSLATIONS: Record<
       title: '组件',
       description: '在基础组件与具备无障碍行为的复合组件之间进行选择。',
       outline: [
+        { id: '定义组件', title: '定义组件' },
         { id: '基础组件', title: '基础组件' },
         { id: '复合组件', title: '复合组件' },
         { id: '受控状态', title: '受控状态' },
@@ -214,17 +298,100 @@ const GUIDE_TRANSLATIONS: Record<
       ],
       searchTerms: ['ファイル', '設定', 'エントリ', 'パッケージ', 'quickgui.config'],
     },
-    ui: {
-      title: 'QuickGUI UI の使い方',
-      description: 'QuickGUI UI のリアクティビティで保持型のネイティブ UI を描画します。',
-      outline: [
-        { id: 'レンダリングモデル', title: 'レンダリングモデル' },
-        { id: 'リアクティブな状態', title: 'リアクティブな状態' },
-        { id: 'ウィンドウのライフサイクル', title: 'ウィンドウのライフサイクル' },
-        { id: '現在のウィンドウ', title: '現在のウィンドウ' },
-        { id: 'ルーティング', title: 'ルーティング' },
+    reactivity: {
+      "title": "リアクティビティ",
+      "description": "シグナルは状態を、それを読むテキストやプロパティに結び付けます。更新時は保持されたノードだけを変更し、コンポーネント全体を再実行しません。",
+      "outline": [
+        {
+          "id": "リアクティブな状態",
+          "title": "リアクティブな状態"
+        },
+        {
+          "id": "派生状態",
+          "title": "派生状態"
+        },
+        {
+          "id": "副作用とクリーンアップ",
+          "title": "副作用とクリーンアップ"
+        },
+        {
+          "id": "更新のバッチ処理",
+          "title": "更新のバッチ処理"
+        }
       ],
-      searchTerms: ['Go', 'シグナル', 'コンポーネント', 'リアクティブ', 'ライフサイクル', 'ルーター'],
+      "searchTerms": [
+        "signal",
+        "reactivity",
+        "memo",
+        "effect",
+        "batch",
+        "cleanup"
+      ]
+    },
+    rendering: {
+      "title": "レンダリング",
+      "description": "コンポーネントはマウント時に保持ツリーを作成します。リアクティブなバインディングが対象ノードを更新し、レイアウト、描画、アクセシビリティはネイティブコアが担当します。",
+      "outline": [
+        {
+          "id": "レンダリングモデル",
+          "title": "レンダリングモデル"
+        },
+        {
+          "id": "条件付きコンテンツ",
+          "title": "条件付きコンテンツ"
+        },
+        {
+          "id": "リストとノードの同一性",
+          "title": "リストとノードの同一性"
+        },
+        {
+          "id": "ウィンドウのライフサイクル",
+          "title": "ウィンドウのライフサイクル"
+        },
+        {
+          "id": "現在のウィンドウ",
+          "title": "現在のウィンドウ"
+        }
+      ],
+      "searchTerms": [
+        "rendering",
+        "retained",
+        "children",
+        "mount",
+        "lifecycle",
+        "keyed"
+      ]
+    },
+    routing: {
+      "title": "ルーティング",
+      "description": "ルーターは現在のアプリ内パスからコンポーネントを選び、ナビゲーション履歴を管理します。ルートは現在のウィンドウにネイティブ QuickGUI コンテンツを描画します。",
+      "outline": [
+        {
+          "id": "ルートの宣言",
+          "title": "ルートの宣言"
+        },
+        {
+          "id": "入れ子のレイアウト",
+          "title": "入れ子のレイアウト"
+        },
+        {
+          "id": "ナビゲーション",
+          "title": "ナビゲーション"
+        },
+        {
+          "id": "ルートパラメーター",
+          "title": "ルートパラメーター"
+        }
+      ],
+      "searchTerms": [
+        "router",
+        "route",
+        "layout",
+        "outlet",
+        "navigation",
+        "history",
+        "parameters"
+      ]
     },
     styling: {
       title: 'スタイルとレイアウト',
@@ -258,6 +425,7 @@ const GUIDE_TRANSLATIONS: Record<
       title: 'コンポーネント',
       description: 'プリミティブと、アクセシブルな複合コンポーネントを使い分けます。',
       outline: [
+        { id: 'コンポーネントの定義', title: 'コンポーネントの定義' },
         { id: 'プリミティブ', title: 'プリミティブ' },
         { id: '複合コンポーネント', title: '複合コンポーネント' },
         { id: '制御された状態', title: '制御された状態' },

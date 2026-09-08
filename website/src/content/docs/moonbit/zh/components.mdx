@@ -1,5 +1,24 @@
 MoonBit 使用子节点列表与链式样式、属性和事件处理器提供与 Go 相同的原生组件系列。侧栏包含完整的组件参考和 macOS SwiftUI 托管接口。
 
+## 定义组件
+
+MoonBit 组件是返回 `@ui.Element` 的函数，可以放入子节点列表。自定义组件参数遵循普通 MoonBit 求值规则：子组件需要动态值时传入 getter，再在它的原生视图表达式中读取。
+
+```moonbit
+fn counter_label(count : () -> Int) -> @ui.Element {
+  @ui.text("Count: \{count()}").font_size(20)
+}
+
+fn component_composition() -> @ui.Element {
+  let (count, set_count) = @reactive.create_signal(0)
+  @ui.div([
+    counter_label(count),
+    @ui.button("Increment").on_click(() => set_count(count() + 1)),
+  ])
+  .flex_col()
+}
+```
+
 ## 交互式组件示例
 
 [MoonBit 组件示例](https://github.com/egoist/quickgui/tree/main/examples/components-moonbit) 包含 Go 示例中的全部 43 个演示，并采用相同的侧栏和浅色／深色外观。可以体验混合状态和只读控件、带动画的开关、选择器、原生菜单、对话框、5,000 行虚拟表格以及按需加载的树节点。
@@ -85,3 +104,5 @@ fn notifications() -> @ui.Element {
   box.children([box.slot(@ui.Indicator)]).width(20).height(20)
 }
 ```
+
+组件侧栏中每个原生控件都有独立页面。完整使用流程见[表单与输入](/docs/moonbit/forms-and-input)和[浮层与对话框](/docs/moonbit/overlays-and-dialogs)。
