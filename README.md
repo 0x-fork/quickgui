@@ -1,6 +1,6 @@
 # QuickGUI
 
-QuickGUI is a damage-driven, GPU-accelerated GUI framework for Go and Rust desktop applications. It combines a GPUI-style fluent view API, Taffy Flexbox, CSS Grid and parent-size container queries, WGPU rendering, retained Unicode text, native accessibility, and bounded virtual scrolling.
+QuickGUI is a damage-driven, GPU-accelerated GUI framework for Go, MoonBit, and Rust desktop applications. It combines a GPUI-style fluent view API, Taffy Flexbox, CSS Grid and parent-size container queries, WGPU rendering, retained Unicode text, native accessibility, and bounded virtual scrolling.
 
 The current focus is production-quality macOS behavior with low idle CPU and bounded memory. Windows and Linux compile through Winit/WGPU but still need native runtime and visual acceptance.
 
@@ -39,6 +39,26 @@ native.NewWindow(native.WindowOptions{
 ```
 
 Components are ordinary `func()` declarations, the same as children blocks. Merged style records, event options, children blocks, and signal accessors bind directly to retained native nodes: `ui.View(func() { ui.Text("Hello") }, ui.Style{Padding: 20})`. See the [Go guide](docs/go.md) and [counter](examples/counter/main.go) for a complete application.
+
+## MoonBit components
+
+The [MoonBit frontend](moonbit/README.md) uses child lists, fluent properties, and fine-grained signals alongside Go:
+
+```moonbit
+let (count, set_count) = @reactive.create_signal(0)
+@ui.div([
+  @ui.text("Count: \{count()}"),
+  @ui.button("Increment").on_click(() => set_count(count() + 1)),
+])
+.size_full()
+.flex_col()
+.items_center()
+.gap(12)
+```
+
+Run `bun packages/cli/src/cli.ts dev --project examples/moonbit-counter` from this checkout. `quickgui init my-app --frontend moonbit` creates a MoonBit project; the default remains Go. Native application edits reuse the shared libraries. See the guide for the current API coverage and platform validation limits.
+
+The [MoonBit components gallery](examples/components-moonbit/README.md) includes all 43 demos from the Go gallery, including pickers, native menus, dialogs, animated controls, virtual tables, and lazy trees. Run `bun --cwd examples/components-moonbit dev`.
 
 ## View API
 
@@ -224,6 +244,12 @@ branches, stashes, and first-class worktrees:
 ```console
 cd examples/quick-git
 bun run dev
+```
+
+The [MoonBit Quick Git example](examples/quick-git-moonbit/README.md) recreates these views with child lists, fluent properties, and an independent I/O extension:
+
+```console
+bun --cwd examples/quick-git-moonbit dev
 ```
 
 The TypeScript CLI compiles Go with `CGO_ENABLED=0` and bundles the reusable Rust shared library

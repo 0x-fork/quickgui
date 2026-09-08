@@ -265,6 +265,10 @@ pub enum ColorMode {
     /// produce physically accurate color blending when rendering.
     Accurate,
 
+    /// Encoded sRGB UI blending with DirectWrite-style grayscale contrast and gamma.
+    /// Used with DirectWrite/Swash masks on Windows and Linux; CoreText already treats its masks.
+    Platform,
+
     /// Web color management.
     ///
     /// This mode reproduces the color management strategy used in the Web and
@@ -309,7 +313,7 @@ impl TextAtlas {
             Kind::Color {
                 srgb: match color_mode {
                     ColorMode::Accurate => true,
-                    ColorMode::Web => false,
+                    ColorMode::Web | ColorMode::Platform => false,
                 },
             },
         );

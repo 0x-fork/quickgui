@@ -55,6 +55,14 @@ pub struct Font {
     id: fontdb::ID,
     monospace_fallback: Option<FontMonospaceFallback>,
     pub(crate) italic_or_oblique: bool,
+    pub(crate) supports_optical_size: bool,
+    #[cfg(all(
+        feature = "std",
+        feature = "swash",
+        any(target_os = "macos", target_os = "windows")
+    ))]
+    pub(crate) has_color_glyphs: bool,
+    normalized_coords: Vec<i16>,
 }
 
 impl fmt::Debug for Font {
@@ -90,6 +98,15 @@ impl Font {
         self.data.data.data()
     }
 
+    #[cfg(all(
+        feature = "std",
+        feature = "swash",
+        any(target_os = "macos", target_os = "windows")
+    ))]
+    pub(crate) fn face_index(&self) -> u32 {
+        self.data.index
+    }
+
     pub fn shaper(&self) -> &harfrust::Shaper<'_> {
         self.harfrust.borrow_dependent()
     }
@@ -100,6 +117,10 @@ impl Font {
 
     pub fn metrics(&self) -> &Metrics {
         &self.harfrust.borrow_owner().metrics
+    }
+
+    pub(crate) fn normalized_coords(&self) -> &[i16] {
+        &self.normalized_coords
     }
 
     #[cfg(feature = "peniko")]
@@ -120,6 +141,15 @@ impl Font {
 
 impl Font {
     pub fn new(db: &fontdb::Database, id: fontdb::ID, weight: fontdb::Weight) -> Option<Self> {
+        Self::new_with_optical_size(db, id, weight, None)
+    }
+
+    pub(crate) fn new_with_optical_size(
+        db: &fontdb::Database,
+        id: fontdb::ID,
+        weight: fontdb::Weight,
+        optical_size: Option<f32>,
+    ) -> Option<Self> {
         let info = db.face(id)?;
 
         let data = match &info.source {
@@ -138,9 +168,27 @@ impl Font {
         // `ShaperData`, and once to create the persistent `FontRef` tied to the
         // lifetime of the face data.
         let font_ref = FontRef::from_index((*data).as_ref(), info.index).ok()?;
-        let location = font_ref
+        let supports_optical_size = font_ref
             .axes()
-            .location([(Tag::new(b"wght"), weight.0 as f32)]);
+            .iter()
+            .any(|axis| axis.tag() == Tag::new(b"opsz"))
+            || font_ref.trak().is_ok();
+        #[cfg(all(
+            feature = "std",
+            feature = "swash",
+            any(target_os = "macos", target_os = "windows")
+        ))]
+        let has_color_glyphs =
+            font_ref.colr().is_ok() || font_ref.cbdt().is_ok() || font_ref.sbix().is_ok();
+        let location = font_ref.axes().location(
+            core::iter::once((Tag::new(b"wght"), weight.0 as f32))
+                .chain(optical_size.map(|size| (Tag::new(b"opsz"), size))),
+        );
+        let normalized_coords = location
+            .coords()
+            .iter()
+            .map(|coord| coord.to_bits())
+            .collect();
         let metrics = font_ref.metrics(Size::unscaled(), &location);
 
         let monospace_fallback = if cfg!(feature = "monospace_fallback") {
@@ -229,6 +277,7 @@ impl Font {
                     let shaper = shaper_data
                         .shaper(&font_ref)
                         .instance(Some(shaper_instance))
+                        .point_size(optical_size)
                         .build();
                     Ok::<_, ReadError>(shaper)
                 },
@@ -236,6 +285,14 @@ impl Font {
             .ok()?,
             data: FontData::new(Blob::new(data), info.index),
             italic_or_oblique: info.style == Style::Italic || info.style == Style::Oblique,
+            supports_optical_size,
+            #[cfg(all(
+                feature = "std",
+                feature = "swash",
+                any(target_os = "macos", target_os = "windows")
+            ))]
+            has_color_glyphs,
+            normalized_coords,
         })
     }
 }

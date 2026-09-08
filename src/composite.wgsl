@@ -109,12 +109,7 @@ fn decode_srgb(value: f32) -> f32 {
 
 fn apply_color_matrix(color: vec4<f32>) -> vec4<f32> {
     let straight = to_straight(color);
-    let encoded = vec4<f32>(
-        encode_srgb(straight.r),
-        encode_srgb(straight.g),
-        encode_srgb(straight.b),
-        straight.a,
-    );
+    let encoded = straight;
     let filtered = vec4<f32>(
         dot(composite.matrix_r, encoded) + composite.matrix_offset.x,
         dot(composite.matrix_g, encoded) + composite.matrix_offset.y,
@@ -122,12 +117,7 @@ fn apply_color_matrix(color: vec4<f32>) -> vec4<f32> {
         dot(composite.matrix_a, encoded) + composite.matrix_offset.w,
     );
     let clamped = clamp(filtered, vec4<f32>(0.0), vec4<f32>(1.0));
-    let linear = vec3<f32>(
-        decode_srgb(clamped.r),
-        decode_srgb(clamped.g),
-        decode_srgb(clamped.b),
-    );
-    return vec4<f32>(linear * clamped.a, clamped.a);
+    return vec4<f32>(clamped.rgb * clamped.a, clamped.a);
 }
 
 fn blend_channel(mode: u32, source: f32, backdrop: f32) -> f32 {
@@ -197,7 +187,8 @@ fn composite_fragment(input: CompositeVertex) -> @location(0) vec4<f32> {
 
     if composite.tint.a >= 0.0 {
         // Drop shadow: keep only the group's coverage and tint it.
-        color = composite.tint * color.a;
+        let tint = to_straight(composite.tint);
+        color = vec4<f32>(vec3<f32>(encode_srgb(tint.r), encode_srgb(tint.g), encode_srgb(tint.b)) * composite.tint.a, composite.tint.a) * color.a;
     } else if composite.params.w > 0.5 {
         color = apply_color_matrix(color);
     }

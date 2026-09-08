@@ -21,6 +21,8 @@
     "packages/cli/src/**/*.ts",
     "packages/native/build.ts",
     "examples/*/quickgui.config.ts",
+    "examples/quick-git-moonbit/*.ts",
+    "examples/components-moonbit/*.ts",
     "scripts/*.ts"
   ],
   "exclude": [

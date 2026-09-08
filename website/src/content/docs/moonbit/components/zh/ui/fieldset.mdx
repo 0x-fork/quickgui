@@ -1,0 +1,46 @@
+在同一个图例和共享语义状态下组织相关字段。
+
+## 导入
+
+在 `moon.pkg` 中添加以下包：
+
+```moonbit
+import {
+  "egoist/quickgui/ui",
+  "egoist/quickgui/reactive",
+}
+```
+
+## 用法
+
+```moonbit
+fn component_example() -> @ui.Element {
+  let fields = @ui.fieldset([])
+  fields
+  .flex_col()
+  .gap(8)
+  .children([
+    fields.slot(@ui.Legend).label("Profile"),
+    fields.slot(@ui.Control).placeholder("Display name"),
+  ])
+}
+```
+
+原生核心负责交互、布局、无障碍和动画。这些部件不预设视觉样式，请按应用需要设置尺寸、颜色和间距。
+
+## 结构
+
+通过根元素或条目的 `.slot(...)` 创建部件。部件继承组件作用域和条目标识。每次调用都返回 `Element`，可继续使用相同的链式样式和子元素方法。
+
+- `root.slot(@ui.Legend)`
+- `root.slot(@ui.Description)`
+- `root.slot(@ui.Control)`
+
+## 主要属性
+
+在链式属性方法中直接读取信号访问器，QuickGUI CLI 会为表达式创建受控绑定。通过变更回调写入状态；字面量属性初始化组件内部状态。底层组合仍可使用显式 `bind_` 方法。
+
+| 方法 | 用途 |
+| --- | --- |
+| `disabled(...)` | 禁止交互，并暴露禁用状态。 |
+| `style(...), [children]` | 布局、字体、颜色、交互状态和子元素组合。 |

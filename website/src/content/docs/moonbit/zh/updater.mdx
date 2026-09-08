@@ -1,0 +1,13 @@
+为 MoonBit 应用打包可选更新服务。
+
+## 配置
+
+在 `quickgui.toml` 的 `[updates]` 中配置公钥和下载地址。TypeScript CLI 为两个前端生成 appcast 元数据和签名包。
+
+## 原生扩展
+
+在 `[native].extensions` 中选择 updater 扩展的目录。CLI 读取其中的 `quickgui.extension.json` 并打包后端；MoonBit 不分析 Go 导入。macOS 使用 Sparkle，其他平台使用兼容的原生更新服务。封装通过[编写扩展](/docs/moonbit/extensions)文档中的同一 ABI 调用。
+
+## 发布产物
+
+使用 `quickgui keygen --sparkle` 创建签名密钥，将私钥保存在仓库之外。运行 `quickgui build`，然后将生成的 appcast 和签名归档发布到配置的下载地址。

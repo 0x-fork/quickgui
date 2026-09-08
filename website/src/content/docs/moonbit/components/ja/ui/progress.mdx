@@ -1,0 +1,57 @@
+確定または不確定のタスク進捗を、組み合わせ可能なラベルとトラックで表します。
+
+## インポート
+
+`moon.pkg` に次のパッケージを追加します。
+
+```moonbit
+import {
+  "egoist/quickgui/ui",
+  "egoist/quickgui/reactive",
+}
+```
+
+## 使い方
+
+```moonbit
+fn component_example() -> @ui.Element {
+  let progress = @ui.progress([]).values([0.65]).maximum(1)
+  progress
+  .width(240)
+  .flex_col()
+  .gap(6)
+  .children([
+    progress.slot(@ui.Label).label("Upload"),
+    progress
+    .slot(@ui.Track)
+    .children([progress.slot(@ui.Indicator).bg(@ui.rgb8(40, 120, 230))])
+    .height(6),
+    progress.slot(@ui.Value),
+  ])
+}
+```
+
+ネイティブコアが操作、レイアウト、アクセシビリティ、アニメーションを管理します。パーツに既定の見た目はないため、サイズ、色、間隔を設定してください。
+
+## 構成
+
+ルートまたは項目の `.slot(...)` からパーツを作成します。パーツはコンポーネントのスコープと項目の識別子を継承します。すべて `Element` を返すため、共通の fluent API でスタイルと子要素を設定できます。
+
+- `root.slot(@ui.Track)`
+- `root.slot(@ui.Indicator)`
+- `root.slot(@ui.Label)`
+- `root.slot(@ui.Value)`
+
+## 主なプロパティ
+
+fluent プロパティメソッドでシグナルの getter を直接読みます。QuickGUI CLI が式を制御用バインディングに変換します。変更コールバックで状態を書き込み、リテラルは内部状態の初期値に使います。低レベルの組み立てには明示的な `bind_` メソッドも使えます。
+
+| メソッド | 用途 |
+| --- | --- |
+| `values(...)` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `maximum(...)` | 受け入れる最大値です。 |
+| `indeterminate(...)` | 完了量が不明な進捗を表します。 |
+| `value_text(...)` | 支援技術向けの読みやすい値です。 |
+| `format(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (Format) |
+| `on_change(handler)` | ネイティブコアが通知するコンポーネントの状態を受け取ります。 |
+| `style(...), [children]` | レイアウト、文字、色、操作状態、子要素の構成。 |

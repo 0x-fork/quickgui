@@ -1323,12 +1323,15 @@ fn begin_pass<'encoder>(
             resolve_target: None,
             ops: Operations {
                 load: match clear {
-                    Some(color) => LoadOp::Clear(wgpu::Color {
-                        r: f64::from(color.r),
-                        g: f64::from(color.g),
-                        b: f64::from(color.b),
-                        a: f64::from(color.a),
-                    }),
+                    Some(color) => {
+                        let [r, g, b, a] = color.premultiplied_srgba();
+                        LoadOp::Clear(wgpu::Color {
+                            r: f64::from(r),
+                            g: f64::from(g),
+                            b: f64::from(b),
+                            a: f64::from(a),
+                        })
+                    }
                     None => LoadOp::Load,
                 },
                 store: wgpu::StoreOp::Store,
@@ -1717,7 +1720,7 @@ mod cache_tests {
             byte_limit: 16 * 16 * 4,
             ..Default::default()
         };
-        let format = TextureFormat::Rgba8UnormSrgb;
+        let format = TextureFormat::Rgba8Unorm;
         cache.begin_frame();
         let (original, _) = cache
             .acquire(device, LayerTextureKey::Content(1), 16, 16, format)

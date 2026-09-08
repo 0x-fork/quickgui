@@ -1,0 +1,4 @@
+This extension includes the MoonBit runtime and compiled MoonBit core library.
+Copyright 2026 International Digital Economy Academy.
+Licensed under the Apache License, Version 2.0. See LICENSE-MoonBit.
+The runtime is compiled with private symbol visibility for use in this library.

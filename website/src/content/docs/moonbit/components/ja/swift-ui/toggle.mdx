@@ -1,0 +1,44 @@
+制御されたネイティブ SwiftUI オン／オフスイッチです。
+
+## インポート
+
+`moon.pkg` に次のパッケージを追加します。
+
+```moonbit
+import {
+  "egoist/quickgui/ui",
+  "egoist/quickgui/reactive",
+}
+```
+
+## 使い方
+
+```moonbit
+fn component_example() -> @ui.Element {
+  let (checked, set_checked) = @reactive.create_signal(false)
+  @ui.swift_ui_host([
+    @ui.swift_ui_toggle()
+    .checked(checked())
+    .on_bool_input(next => set_checked(next))
+    .label("Notifications"),
+  ])
+}
+```
+
+SwiftUI コントロールは macOS 専用で、`swift_ui_host([])` の内側に配置します。`label(...)` はラベル、`value(...)` は値、`swift_ui_modifiers(...)` は SwiftUI 修飾子を設定します。
+
+## 主なプロパティ
+
+SwiftUI コントロールは macOS 専用で、`swift_ui_host([])` の内側に配置します。`label(...)` はラベル、`value(...)` は値、`swift_ui_modifiers(...)` は SwiftUI 修飾子を設定します。
+
+| メソッド | 用途 |
+| --- | --- |
+| `signal(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (Signal) |
+| `swift_ui_host(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (SwiftUiHost) |
+| `swift_ui_toggle(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (SwiftUiToggle) |
+| `bind_checked(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (Checked) |
+| `get(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (Get) |
+| `on_bool_input(...)` | ネイティブ SwiftUI Toggle が受け入れた値を通知します。 |
+| `set(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (Set) |
+| `label(...)` | ネイティブ SwiftUI コントロールに表示するラベルです。 |
+| `style(...), [children]` | レイアウト、文字、色、操作状態、子要素の構成。 |

@@ -1,0 +1,76 @@
+QuickGUI の MoonBit フロントエンドでは、子要素のリスト、fluent プロパティ、細粒度のシグナルを使います。コンポーネントは保持されるネイティブノードを作り、変更されたバインディングだけを更新します。サイドバーから Go のドキュメントも選べます。
+
+## 必要な環境
+
+- [MoonBit ツールチェーン](https://www.moonbitlang.com/download/)（`moon 0.1.20260827` / `moonc v0.10.11` で検証）
+- Bun 1.3 以降
+- C コンパイラ。macOS では Xcode Command Line Tools をインストール
+
+対象の OS とアーキテクチャ上でビルドしてください。macOS のネイティブ実行は検証済みです。Linux と Windows の実行・表示の検証はまだ必要です。
+
+## カウンターを実行
+
+CLI と MoonBit SDK はまだ公開されていません。[QuickGUI のチェックアウト](https://github.com/egoist/quickgui)を使ってください。`moon.work` がローカルの SDK を解決します。
+
+```sh
+bun install
+bun packages/cli/src/cli.ts dev --project examples/moonbit-counter
+```
+
+新しいプロジェクトは `bun packages/cli/src/cli.ts init ../my-app --frontend moonbit --no-install` で作成できます。[プロジェクト構成](/docs/moonbit/project-structure)に従って、生成したモジュールをこのチェックアウトに接続します。
+
+## 最初のウィンドウ
+
+`main/main.mbt` に記述し、`main/moon.pkg` で `egoist/quickgui/ui`、`egoist/quickgui/native`、`egoist/quickgui/reactive` をインポートします。コンポーネントはすべて `@ui.Element` を返します。
+
+```moonbit
+///|
+fn counter() -> @ui.Element {
+  let (count, set_count) = @reactive.create_signal(0)
+  @ui.div([
+    @ui.text("Count: \{count()}").font_size(24),
+    @ui.button("Increment")
+    .on_click(() => set_count(count() + 1))
+    .px(16)
+    .py(8)
+    .border_radius(8)
+    .bg(@ui.rgb8(45, 105, 180))
+    .text_color(@ui.rgb8(255, 255, 255)),
+  ])
+  .size_full()
+  .flex_col()
+  .items_center()
+  .justify_center()
+  .gap(12)
+}
+
+///|
+fn main {
+  match
+    @native.run(() => {
+      ignore(
+        @ui.window(counter, options={
+          "title": "Counter",
+          "width": 620,
+          "height": 480,
+        }),
+      )
+    }) {
+    Ok(_) => ()
+    Err(error) => abort(error)
+  }
+}
+```
+
+## ビルドとサンプル
+
+チェックアウトからサンプルを整形・パッケージ化します。
+
+```sh
+bun packages/cli/src/cli.ts fmt --project examples/moonbit-counter
+bun packages/cli/src/cli.ts build --project examples/moonbit-counter
+```
+
+Apple Silicon macOS と x64 Linux/Windows の開発ビルドでは高速な native バックエンドを使い、`.quickgui/moonbit` 内のブリッジとランタイムのオブジェクトを再利用します。リリースビルドとその他のホストでは最適化された C バックエンドを使います。開発時に `MOONBIT_NEW_NATIVE=0` を設定すると C バックエンドを試せます。
+
+大きなアプリの例は `bun --cwd examples/quick-git-moonbit dev` で実行できます。[Quick Git](https://github.com/egoist/quickgui/tree/main/examples/quick-git-moonbit) は複数ウィンドウ、メニュー、仮想化された差分、履歴グラフ、独立した I/O 拡張を実装しています。

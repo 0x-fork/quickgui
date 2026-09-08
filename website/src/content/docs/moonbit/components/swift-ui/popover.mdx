@@ -1,0 +1,65 @@
+Presents a native SwiftUI popover from a composed SwiftUI trigger.
+
+## Import
+
+Add these package imports to `moon.pkg`:
+
+```moonbit
+import {
+  "egoist/quickgui/ui",
+  "egoist/quickgui/reactive",
+}
+```
+
+## Usage
+
+```moonbit
+fn component_example() -> @ui.Element {
+  let (opened, set_opened) = @reactive.create_signal(false)
+  @ui.swift_ui_host([
+    @ui.swift_ui_popover([
+      @ui.swift_ui_popover_trigger([
+        @ui.swift_ui_button()
+        .value("Details")
+        .on_click(() => set_opened(!opened())),
+      ]),
+      @ui.swift_ui_popover_content([
+        @ui.swift_ui_button().value("Close").on_click(() => set_opened(false)),
+      ]),
+    ])
+    .swift_ui_is_presented(opened())
+    .on("presentation", 0, event => set_opened(event.value == Some("true"))),
+  ])
+}
+```
+
+SwiftUI controls require macOS and a `swift_ui_host([])` ancestor. Use `label(...)` for a native control label, `value(...)` for its value, and `swift_ui_modifiers(...)` for native SwiftUI modifiers.
+
+## Anatomy
+
+SwiftUI controls require macOS and a `swift_ui_host([])` ancestor. Use `label(...)` for a native control label, `value(...)` for its value, and `swift_ui_modifiers(...)` for native SwiftUI modifiers.
+
+
+
+`swift_ui_popover_trigger([]) / swift_ui_popover_content([])`
+
+## Key props
+
+SwiftUI controls require macOS and a `swift_ui_host([])` ancestor. Use `label(...)` for a native control label, `value(...)` for its value, and `swift_ui_modifiers(...)` for native SwiftUI modifiers.
+
+| Method | Purpose |
+| --- | --- |
+| `signal(...)` | Native component configuration; `bind_` accepts a reactive accessor. (Signal) |
+| `swift_ui_host(...)` | Native component configuration; `bind_` accepts a reactive accessor. (SwiftUiHost) |
+| `swift_ui_popover(...)` | Native component configuration; `bind_` accepts a reactive accessor. (SwiftUiPopover) |
+| `swift_ui_popover_trigger(...)` | Native component configuration; `bind_` accepts a reactive accessor. (SwiftUiPopoverTrigger) |
+| `swift_ui_button(...)` | Native component configuration; `bind_` accepts a reactive accessor. (SwiftUiButton) |
+| `value(...)` | Native component configuration; `bind_` accepts a reactive accessor. (Value) |
+| `on_click(...)` | Native component configuration; `bind_` accepts a reactive accessor. (OnPress) |
+| `update(...)` | Native component configuration; `bind_` accepts a reactive accessor. (Update) |
+| `swift_ui_popover_content(...)` | Native component configuration; `bind_` accepts a reactive accessor. (SwiftUiPopoverContent) |
+| `set(...)` | Native component configuration; `bind_` accepts a reactive accessor. (Set) |
+| `bind_swift_ui_is_presented(...)` | Controlled native SwiftUI popover presentation state. |
+| `get(...)` | Native component configuration; `bind_` accepts a reactive accessor. (Get) |
+| `on(...)` | Native component configuration; `bind_` accepts a reactive accessor. (On) |
+| `style(...), [children]` | Layout, typography, colors, interaction states and child composition. |

@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "name": "quick-git-io",
+  "abi": 1,
+  "package": "@quickgui-example/quick-git-io",
+  "version": "1.0.0",
+  "library": "quickgui_quick_git_io"
+}

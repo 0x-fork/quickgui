@@ -1,3 +1,5 @@
+import { redirect } from 'react-router'
+import { resolveDocsRoute } from '../lib/docs-routing'
 import type { Route } from './+types/docs'
 import docsCss from '../docs.css?url'
 import { DocsShell, type DocsArea } from '../components/docs/docs-shell'
@@ -27,13 +29,18 @@ function docsArea(slug: DocsSlug): DocsArea {
 
 export function loader({ params, request }: Route.LoaderArgs) {
   const locale = resolveLocale(params.locale)
-  const page = findDocsPage(params.slug)
-  if (!locale || !page) throw new Response('Page not found', { status: 404 })
+  const route = resolveDocsRoute(params.frontend, params.slug)
+  if (!locale || !route) throw new Response('Page not found', { status: 404 })
+  if (route.kind === 'redirect') {
+    return redirect(localizedPath(locale, route.path) + new URL(request.url).search, 308)
+  }
+  const page = route.page
 
   return {
     locale,
     origin: new URL(request.url).origin,
     slug: page.slug,
+    frontend: page.frontend,
   }
 }
 
@@ -42,13 +49,14 @@ export const links: Route.LinksFunction = () => [
 ]
 
 export const meta: Route.MetaFunction = ({ loaderData }) => {
-  const source = findDocsPage(loaderData?.slug)
-  if (!source || !loaderData) return []
+  if (!loaderData) return []
+  const source = findDocsPage(loaderData.frontend, loaderData.slug)
+  if (!source) return []
 
   const { locale, origin } = loaderData
   const page = localizedDocsPage(source, locale)
-  const path = docsPath(page.slug)
-  const title = `${page.title} | QuickGUI`
+  const path = docsPath(page.frontend, page.slug)
+  const title = `${page.title} | QuickGUI ${page.frontend === 'go' ? 'Go' : 'MoonBit'}`
 
   return [
     ...siteMeta(origin, title),
@@ -77,19 +85,20 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
 }
 
 export default function DocsRoute({ loaderData }: Route.ComponentProps) {
-  const source = findDocsPage(loaderData.slug)
+  const source = findDocsPage(loaderData.frontend, loaderData.slug)
   if (!source) return null
   const page = localizedDocsPage(source, loaderData.locale)
 
-  const Content = guideMdx(source.slug, loaderData.locale)
+  const Content = guideMdx(source.frontend, source.slug, loaderData.locale)
   return (
     <DocsShell
+      frontend={loaderData.frontend}
       locale={loaderData.locale}
       page={{
         title: page.title,
         description: page.description,
         outline: page.outline,
-        path: docsPath(page.slug),
+        path: docsPath(page.frontend, page.slug),
         area: docsArea(page.slug),
       }}
     >

@@ -1,25 +1,18 @@
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { resolveConfig } from "./config.ts";
+import { resolveConfig, type Frontend } from "./config.ts";
 import { CliError } from "./error.ts";
 
 export interface InitProjectOptions {
+  frontend?: Frontend;
   directory: string;
   install: boolean;
   name?: string;
   identifier?: string;
 }
 
-const templateRoot = fileURLToPath(new URL("../templates/native/", import.meta.url));
 const templateFiles = [
   ["package.json", "package.json"],
   ["quickgui.config.ts", "quickgui.config.ts"],
@@ -27,6 +20,15 @@ const templateFiles = [
   ["gitignore", ".gitignore"],
   ["README.md", "README.md"],
   ["main.go", "main.go"],
+] as const;
+const moonbitFiles = [
+  ["package.json", "package.json"],
+  ["quickgui.toml", "quickgui.toml"],
+  ["moon.mod", "moon.mod"],
+  ["gitignore", ".gitignore"],
+  ["README.md", "README.md"],
+  ["main/moon.pkg", "main/moon.pkg"],
+  ["main/main.mbt", "main/main.mbt"],
 ] as const;
 
 export async function initProject(options: InitProjectOptions): Promise<string> {
@@ -48,11 +50,16 @@ export async function initProject(options: InitProjectOptions): Promise<string> 
     "{{IDENTIFIER}}": JSON.stringify(identifier),
     "{{PACKAGE_NAME}}": JSON.stringify(packageName(name)),
     "{{GO_MODULE}}": `example.com/${packageName(name)}`,
+    "{{MOON_MODULE}}": JSON.stringify(`myapp/${packageName(name)}`),
     "{{README_TITLE}}": name.replaceAll("\n", " ").replaceAll("\r", " "),
   };
 
   mkdirSync(destination, { recursive: true });
-  for (const [sourceName, targetName] of templateFiles) {
+  const moonbit = options.frontend === "moonbit";
+  const templateRoot = fileURLToPath(
+    new URL(`../templates/${moonbit ? "moonbit" : "native"}/`, import.meta.url),
+  );
+  for (const [sourceName, targetName] of moonbit ? moonbitFiles : templateFiles) {
     const source = join(templateRoot, sourceName);
     if (!existsSync(source)) throw new CliError(`CLI template is missing: ${source}`);
     const target = join(destination, targetName);
@@ -77,8 +84,16 @@ export async function initProject(options: InitProjectOptions): Promise<string> 
         `Project created at ${destination}, but \`bun install\` failed with status ${status}`,
       );
     }
-    const go = Bun.spawn(["go", "mod", "tidy"], { cwd: destination, stdin: "inherit", stdout: "inherit", stderr: "inherit", env: { ...process.env, CGO_ENABLED: "0" } });
-    if (await go.exited !== 0) throw new CliError(`Project created at ${destination}, but go mod tidy failed`);
+    const argv = moonbit ? ["moon", "check", "--target", "native"] : ["go", "mod", "tidy"];
+    const prepare = Bun.spawn(argv, {
+      cwd: destination,
+      stdin: "inherit",
+      stdout: "inherit",
+      stderr: "inherit",
+      env: { ...process.env, CGO_ENABLED: "0" },
+    });
+    if ((await prepare.exited) !== 0)
+      throw new CliError(`Project created at ${destination}, but ${argv.join(" ")} failed`);
   }
 
   return destination;

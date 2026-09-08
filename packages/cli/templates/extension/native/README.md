@@ -71,5 +71,5 @@ is optional: the CLI can fetch its exact version from npm during packaging.
 For local builds, `scripts/dev.ts` sets `QUICKGUI_EXTENSION_DIR` to the built
 target directory. The root npm package remains private development tooling.
 
-See [extension authoring](https://github.com/egoist/quickgui/blob/main/website/src/content/docs/en/extensions.mdx) for sessions,
+See [extension authoring](https://github.com/egoist/quickgui/blob/main/website/src/content/docs/go/en/extensions.mdx) for sessions,
 resource bundles, platform support, and ABI lifecycle rules.

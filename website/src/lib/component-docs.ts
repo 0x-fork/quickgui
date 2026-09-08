@@ -1,4 +1,4 @@
-import type { DocsOutlineItem } from './docs'
+import type { DocsOutlineItem, DocsFrontend } from './docs'
 
 export type ComponentDocKind = 'ui' | 'swift-ui'
 
@@ -27,1336 +27,811 @@ export interface ComponentNavGroup {
 
 export const ALL_COMPONENT_DOCS = [
   {
-    "kind": "ui",
-    "slug": "view",
-    "name": "View",
-    "section": "Primitives",
-    "description": "A general-purpose retained container for layout, paint, pointer input, and accessibility.",
-    "parts": [],
-    "keyProps": [
-      "Style",
-      "children",
-      "OnClick",
-      "Ref"
-    ]
+    kind: 'ui',
+    slug: 'view',
+    name: 'View',
+    section: 'Primitives',
+    description:
+      'A general-purpose retained container for layout, paint, pointer input, and accessibility.',
+    parts: [],
+    keyProps: ['Style', 'children', 'OnClick', 'Ref'],
   },
   {
-    "kind": "ui",
-    "slug": "text",
-    "name": "Text",
-    "section": "Primitives",
-    "description": "Shapes and paints Unicode text with inherited typography, selection, and accessibility.",
-    "parts": [],
-    "keyProps": [
-      "Style",
-      "children",
-      "Ref"
-    ]
+    kind: 'ui',
+    slug: 'text',
+    name: 'Text',
+    section: 'Primitives',
+    description:
+      'Shapes and paints Unicode text with inherited typography, selection, and accessibility.',
+    parts: [],
+    keyProps: ['Style', 'children', 'Ref'],
   },
   {
-    "kind": "ui",
-    "slug": "button",
-    "name": "Button",
-    "section": "Primitives",
-    "description": "An accessible press target that you style and compose with text or other content.",
-    "parts": [],
-    "keyProps": [
-      "Style",
-      "children",
-      "OnClick",
-      "Disabled"
-    ]
+    kind: 'ui',
+    slug: 'button',
+    name: 'Button',
+    section: 'Primitives',
+    description:
+      'An accessible press target that you style and compose with text or other content.',
+    parts: [],
+    keyProps: ['Style', 'children', 'OnClick', 'Disabled'],
   },
   {
-    "kind": "ui",
-    "slug": "input",
-    "name": "Input",
-    "section": "Primitives",
-    "description": "A controlled, core-owned text editor with native keyboard and text services.",
-    "parts": [],
-    "keyProps": [
-      "Value",
-      "Placeholder",
-      "Multiline",
-      "OnInput"
-    ]
+    kind: 'ui',
+    slug: 'input',
+    name: 'Input',
+    section: 'Primitives',
+    description: 'A controlled, core-owned text editor with native keyboard and text services.',
+    parts: [],
+    keyProps: ['Value', 'Placeholder', 'Multiline', 'OnInput'],
   },
   {
-    "kind": "ui",
-    "slug": "text-area",
-    "name": "TextArea",
-    "section": "Primitives",
-    "description": "The multiline text-editing primitive, with the same controlled value contract as Input.",
-    "parts": [],
-    "keyProps": [
-      "Value",
-      "Placeholder",
-      "OnInput",
-      "Style"
-    ]
+    kind: 'ui',
+    slug: 'text-area',
+    name: 'TextArea',
+    section: 'Primitives',
+    description:
+      'The multiline text-editing primitive, with the same controlled value contract as Input.',
+    parts: [],
+    keyProps: ['Value', 'Placeholder', 'OnInput', 'Style'],
   },
   {
-    "kind": "ui",
-    "slug": "markdown",
-    "name": "Markdown",
-    "section": "Primitives",
-    "description": "Renders retained Markdown, including an incremental mode for streaming content.",
-    "parts": [],
-    "keyProps": [
-      "Value",
-      "Streaming",
-      "Style"
-    ]
+    kind: 'ui',
+    slug: 'markdown',
+    name: 'Markdown',
+    section: 'Primitives',
+    description: 'Renders retained Markdown, including an incremental mode for streaming content.',
+    parts: [],
+    keyProps: ['Value', 'Streaming', 'Style'],
   },
   {
-    "kind": "ui",
-    "slug": "image",
-    "name": "Image",
-    "section": "Primitives",
-    "description": "Displays a filesystem path, file URL, or base64 data URL with retained image resources.",
-    "parts": [],
-    "keyProps": [
-      "Value",
-      "ObjectFit",
-      "Style"
-    ]
+    kind: 'ui',
+    slug: 'image',
+    name: 'Image',
+    section: 'Primitives',
+    description:
+      'Displays a filesystem path, file URL, or base64 data URL with retained image resources.',
+    parts: [],
+    keyProps: ['Value', 'ObjectFit', 'Style'],
   },
   {
-    "kind": "ui",
-    "slug": "svg",
-    "name": "SVG",
-    "section": "Primitives",
-    "description": "Renders a complete inline SVG document without loading external SVG resources.",
-    "parts": [],
-    "keyProps": [
-      "Value",
-      "Style"
-    ]
+    kind: 'ui',
+    slug: 'svg',
+    name: 'SVG',
+    section: 'Primitives',
+    description: 'Renders a complete inline SVG document without loading external SVG resources.',
+    parts: [],
+    keyProps: ['Value', 'Style'],
   },
   {
-    "kind": "ui",
-    "slug": "shader",
-    "name": "Shader",
-    "section": "Primitives",
-    "description": "Paints validated WGSL with a bounded set of numeric shader parameters.",
-    "parts": [],
-    "keyProps": [
-      "Value",
-      "ShaderParameters",
-      "Style"
-    ]
+    kind: 'ui',
+    slug: 'shader',
+    name: 'Shader',
+    section: 'Primitives',
+    description: 'Paints validated WGSL with a bounded set of numeric shader parameters.',
+    parts: [],
+    keyProps: ['Value', 'ShaderParameters', 'Style'],
   },
   {
-    "kind": "ui",
-    "slug": "virtual-list",
-    "name": "VirtualList",
-    "section": "Primitives",
-    "description": "Lays out and paints the visible part of a long or variable-height collection.",
-    "parts": [],
-    "keyProps": [
-      "EstimatedItemHeight",
-      "Overscan",
-      "ListAlignment",
-      "FollowMode",
-      "children"
-    ]
+    kind: 'ui',
+    slug: 'virtual-list',
+    name: 'VirtualList',
+    section: 'Primitives',
+    description: 'Lays out and paints the visible part of a long or variable-height collection.',
+    parts: [],
+    keyProps: ['EstimatedItemHeight', 'Overscan', 'ListAlignment', 'FollowMode', 'children'],
   },
   {
-    "kind": "ui",
-    "slug": "terminal",
-    "name": "Terminal",
-    "section": "Primitives",
-    "description": "Embeds the retained Ghostty terminal surface and reports process lifecycle events.",
-    "parts": [],
-    "keyProps": [
-      "Program",
-      "Args",
-      "WorkingDirectory",
-      "Environment",
-      "OnStatus"
-    ]
+    kind: 'ui',
+    slug: 'terminal',
+    name: 'Terminal',
+    section: 'Primitives',
+    description:
+      'Embeds the retained Ghostty terminal surface and reports process lifecycle events.',
+    parts: [],
+    keyProps: ['Program', 'Args', 'WorkingDirectory', 'Environment', 'OnStatus'],
   },
   {
-    "kind": "ui",
-    "slug": "checkbox",
-    "name": "Checkbox",
-    "section": "Forms & Controls",
-    "description": "A binary or indeterminate choice with a separately styled indicator.",
-    "parts": [
-      "Root",
-      "Indicator"
+    kind: 'ui',
+    slug: 'checkbox',
+    name: 'Checkbox',
+    section: 'Forms & Controls',
+    description: 'A binary or indeterminate choice with a separately styled indicator.',
+    parts: ['Root', 'Indicator'],
+    keyProps: ['Checked', 'DefaultChecked', 'OnCheckedChange', 'ReadOnly', 'Disabled'],
+  },
+  {
+    kind: 'ui',
+    slug: 'checkbox-group',
+    name: 'CheckboxGroup',
+    section: 'Forms & Controls',
+    description:
+      'Coordinates a bounded set of checkbox values and an optional derived parent checkbox.',
+    parts: ['Root'],
+    keyProps: ['AllValues', 'Value', 'DefaultValue', 'OnValueChange', 'Disabled'],
+  },
+  {
+    kind: 'ui',
+    slug: 'radio',
+    name: 'Radio',
+    section: 'Forms & Controls',
+    description: 'One selectable item, normally declared inside a RadioGroup.',
+    parts: ['Root', 'Indicator'],
+    keyProps: ['Value', 'Checked', 'OnCheckedChange', 'Disabled'],
+  },
+  {
+    kind: 'ui',
+    slug: 'radio-group',
+    name: 'RadioGroup',
+    section: 'Forms & Controls',
+    description: 'Owns single-choice selection and keyboard movement across Radio items.',
+    parts: ['Root'],
+    keyProps: ['Value', 'DefaultValue', 'OnValueChange', 'ReadOnly', 'Required'],
+  },
+  {
+    kind: 'ui',
+    slug: 'switch',
+    name: 'Switch',
+    section: 'Forms & Controls',
+    description: 'An on/off control with a root track and independently styled thumb.',
+    parts: ['Root', 'Thumb'],
+    keyProps: ['Checked', 'DefaultChecked', 'OnCheckedChange', 'Disabled'],
+  },
+  {
+    kind: 'ui',
+    slug: 'toggle',
+    name: 'Toggle',
+    section: 'Forms & Controls',
+    description: 'A pressable control that retains an on or off pressed state.',
+    parts: ['Root', 'Indicator'],
+    keyProps: ['Pressed', 'DefaultPressed', 'OnPressedChange', 'Disabled'],
+  },
+  {
+    kind: 'ui',
+    slug: 'toggle-group',
+    name: 'ToggleGroup',
+    section: 'Forms & Controls',
+    description: 'Coordinates single or multiple pressed values with roving keyboard focus.',
+    parts: ['Root', 'Item'],
+    keyProps: ['Items', 'Value', 'DefaultValue', 'Multiple', 'OnValueChange'],
+  },
+  {
+    kind: 'ui',
+    slug: 'slider',
+    name: 'Slider',
+    section: 'Forms & Controls',
+    description:
+      'A single- or multi-thumb range input with core-owned pointer and keyboard interaction.',
+    parts: ['Root', 'Label', 'Value', 'Control', 'Track', 'Range', 'Indicator', 'Thumb'],
+    keyProps: ['Value', 'DefaultValue', 'Min', 'Max', 'Step', 'OnValueChange'],
+  },
+  {
+    kind: 'ui',
+    slug: 'number-field',
+    name: 'NumberField',
+    section: 'Forms & Controls',
+    description: 'A numeric editor with increment, decrement, and drag-to-scrub parts.',
+    parts: ['Root', 'Group', 'Input', 'Increment', 'Decrement', 'ScrubArea', 'ScrubAreaCursor'],
+    keyProps: ['Value', 'DefaultValue', 'Min', 'Max', 'Step', 'OnValueChange'],
+  },
+  {
+    kind: 'ui',
+    slug: 'select',
+    name: 'Select',
+    section: 'Forms & Controls',
+    description:
+      'A single- or multiple-choice picker whose option surface is rendered in a native popover window.',
+    parts: [
+      'Root',
+      'Trigger',
+      'Option',
+      'Label',
+      'Value',
+      'Icon',
+      'Backdrop',
+      'Portal',
+      'Positioner',
+      'Popup',
+      'Arrow',
+      'List',
+      'Item',
+      'ItemText',
+      'ItemIndicator',
+      'Group',
+      'GroupLabel',
+      'Separator',
+      'ScrollUpArrow',
+      'ScrollDownArrow',
     ],
-    "keyProps": [
-      "Checked",
-      "DefaultChecked",
-      "OnCheckedChange",
-      "ReadOnly",
-      "Disabled"
-    ]
+    keyProps: ['Items', 'Value', 'DefaultValue', 'Multiple', 'OnValueChange'],
   },
   {
-    "kind": "ui",
-    "slug": "checkbox-group",
-    "name": "CheckboxGroup",
-    "section": "Forms & Controls",
-    "description": "Coordinates a bounded set of checkbox values and an optional derived parent checkbox.",
-    "parts": [
-      "Root"
+    kind: 'ui',
+    slug: 'combobox',
+    name: 'Combobox',
+    section: 'Forms & Controls',
+    description:
+      'Combines editable text, filtering, optional chips, and a native suggestion surface.',
+    parts: [
+      'Root',
+      'Input',
+      'Option',
+      'Label',
+      'Value',
+      'Icon',
+      'InputGroup',
+      'Clear',
+      'Trigger',
+      'Chips',
+      'Chip',
+      'ChipRemove',
+      'Backdrop',
+      'Portal',
+      'Positioner',
+      'Popup',
+      'Arrow',
+      'Status',
+      'Empty',
+      'List',
+      'Row',
+      'Item',
+      'ItemIndicator',
+      'Group',
+      'GroupLabel',
+      'Collection',
+      'Separator',
     ],
-    "keyProps": [
-      "AllValues",
-      "Value",
-      "DefaultValue",
-      "OnValueChange",
-      "Disabled"
-    ]
+    keyProps: ['Items', 'Value', 'InputValue', 'Multiple', 'FilterMode', 'OnValueChange'],
   },
   {
-    "kind": "ui",
-    "slug": "radio",
-    "name": "Radio",
-    "section": "Forms & Controls",
-    "description": "One selectable item, normally declared inside a RadioGroup.",
-    "parts": [
-      "Root",
-      "Indicator"
+    kind: 'ui',
+    slug: 'autocomplete',
+    name: 'Autocomplete',
+    section: 'Forms & Controls',
+    description: 'Filters suggestions for free-form text without requiring a selected value.',
+    parts: [
+      'Root',
+      'Input',
+      'Option',
+      'Label',
+      'Value',
+      'Icon',
+      'InputGroup',
+      'Clear',
+      'Portal',
+      'Positioner',
+      'Popup',
+      'Arrow',
+      'Status',
+      'Empty',
+      'List',
+      'Item',
+      'ItemIndicator',
+      'Group',
+      'GroupLabel',
+      'Collection',
+      'Separator',
     ],
-    "keyProps": [
-      "Value",
-      "Checked",
-      "OnCheckedChange",
-      "Disabled"
-    ]
+    keyProps: ['Items', 'InputValue', 'FilterMode', 'OnInputValueChange', 'OnCommit'],
   },
   {
-    "kind": "ui",
-    "slug": "radio-group",
-    "name": "RadioGroup",
-    "section": "Forms & Controls",
-    "description": "Owns single-choice selection and keyboard movement across Radio items.",
-    "parts": [
-      "Root"
+    kind: 'ui',
+    slug: 'field',
+    name: 'Field',
+    section: 'Forms & Controls',
+    description:
+      'Connects one control to its label, description, validation state, and error message.',
+    parts: ['Root', 'Item', 'Label', 'Control', 'Validity', 'Description', 'Error'],
+    keyProps: ['Invalid', 'Required', 'ValidationMessage', 'ValidationMode', 'OnValidationChange'],
+  },
+  {
+    kind: 'ui',
+    slug: 'fieldset',
+    name: 'Fieldset',
+    section: 'Forms & Controls',
+    description: 'Groups related fields under one legend and shared semantic state.',
+    parts: ['Root', 'Legend', 'Description', 'Control'],
+    keyProps: ['Disabled', 'children', 'Style'],
+  },
+  {
+    kind: 'ui',
+    slug: 'date-field',
+    name: 'DateField',
+    section: 'Forms & Controls',
+    description: 'A segmented, keyboard-editable date field with locale-aware date parts.',
+    parts: ['Root', 'Segment'],
+    keyProps: ['Value', 'Min', 'Max', 'OnValueChange', 'Disabled'],
+  },
+  {
+    kind: 'ui',
+    slug: 'time-field',
+    name: 'TimeField',
+    section: 'Forms & Controls',
+    description:
+      'A segmented, keyboard-editable time field with hour, minute, second, and period parts.',
+    parts: ['Root', 'Segment'],
+    keyProps: ['Value', 'DefaultValue', 'Hour12', 'ShowSeconds', 'OnValueChange'],
+  },
+  {
+    kind: 'ui',
+    slug: 'calendar',
+    name: 'Calendar',
+    section: 'Forms & Controls',
+    description: 'A keyboard-navigable month grid for single-date selection.',
+    parts: ['Root', 'Week', 'Day'],
+    keyProps: ['Value', 'DefaultValue', 'Min', 'Max', 'FirstWeekday', 'OnValueChange'],
+  },
+  {
+    kind: 'ui',
+    slug: 'otp-field',
+    name: 'OtpField',
+    section: 'Forms & Controls',
+    description: 'A bounded one-time-code editor made from individually styled input cells.',
+    parts: ['Root', 'Input', 'Separator'],
+    keyProps: ['Value', 'Length', 'OnValueChange', 'Disabled'],
+  },
+  {
+    kind: 'ui',
+    slug: 'tabs',
+    name: 'Tabs',
+    section: 'Layout & Data',
+    description: 'Switches between labeled panels with automatic or manual keyboard activation.',
+    parts: ['Root', 'List', 'Tab', 'Indicator', 'Panel'],
+    keyProps: ['Value', 'DefaultValue', 'OnValueChange', 'Orientation', 'Activation'],
+  },
+  {
+    kind: 'ui',
+    slug: 'accordion',
+    name: 'Accordion',
+    section: 'Layout & Data',
+    description: 'Coordinates one or more expandable sections and their keyboard focus.',
+    parts: ['Root', 'Item', 'Header', 'Trigger', 'Panel'],
+    keyProps: ['Value', 'DefaultValue', 'OnValueChange', 'Multiple', 'KeepMounted'],
+  },
+  {
+    kind: 'ui',
+    slug: 'collapsible',
+    name: 'Collapsible',
+    section: 'Layout & Data',
+    description: 'Shows and hides one panel from a trigger while preserving accessible state.',
+    parts: ['Root', 'Trigger', 'Panel'],
+    keyProps: ['Open', 'DefaultOpen', 'OnOpenChange', 'KeepMounted'],
+  },
+  {
+    kind: 'ui',
+    slug: 'splitter',
+    name: 'Splitter',
+    section: 'Layout & Data',
+    description: 'Creates resizable panes with pointer and keyboard-operated handles.',
+    parts: ['Root', 'Pane', 'Handle'],
+    keyProps: ['Value', 'DefaultValue', 'Panes', 'Orientation', 'OnSizesChange'],
+  },
+  {
+    kind: 'ui',
+    slug: 'scroll-area',
+    name: 'ScrollArea',
+    section: 'Layout & Data',
+    description:
+      'Composes a scrollable viewport with caller-styled scrollbars, thumbs, and corner.',
+    parts: ['Root', 'Viewport', 'Content', 'Scrollbar', 'Thumb', 'Corner'],
+    keyProps: ['ViewportSize', 'ContentSize', 'OverflowEdgeThreshold', 'OnScrollStateChange'],
+  },
+  {
+    kind: 'ui',
+    slug: 'table',
+    name: 'Table',
+    section: 'Layout & Data',
+    description: 'A virtualized tabular collection with header, row, and cell parts.',
+    parts: ['Root', 'Header', 'Row', 'Cell'],
+    keyProps: ['Columns', 'RowCount', 'RowHeight', 'SelectionMode', 'Selection'],
+  },
+  {
+    kind: 'ui',
+    slug: 'tree',
+    name: 'Tree',
+    section: 'Layout & Data',
+    description:
+      'A virtualized hierarchical collection with expansion, selection, and keyboard navigation.',
+    parts: ['Root', 'Row'],
+    keyProps: ['Nodes', 'Expanded', 'Value', 'OnExpandedChange', 'OnValueChange'],
+  },
+  {
+    kind: 'ui',
+    slug: 'separator',
+    name: 'Separator',
+    section: 'Layout & Data',
+    description: 'A semantic horizontal or vertical divider with no built-in visual style.',
+    parts: ['Root'],
+    keyProps: ['Orientation', 'Style'],
+  },
+  {
+    kind: 'ui',
+    slug: 'avatar',
+    name: 'Avatar',
+    section: 'Layout & Data',
+    description: 'Shows an image with a fallback that appears when the image is unavailable.',
+    parts: ['Root', 'Image', 'Fallback'],
+    keyProps: ['AriaLabel', 'Src', 'Delay', 'OnLoadingStatusChange'],
+  },
+  {
+    kind: 'ui',
+    slug: 'progress',
+    name: 'Progress',
+    section: 'Layout & Data',
+    description:
+      'Represents determinate or indeterminate task progress with composable labels and track.',
+    parts: ['Root', 'Track', 'Indicator', 'Label', 'Value'],
+    keyProps: ['Value', 'Max', 'Indeterminate', 'ValueText', 'OnStatusChange'],
+  },
+  {
+    kind: 'ui',
+    slug: 'meter',
+    name: 'Meter',
+    section: 'Layout & Data',
+    description:
+      'Displays a scalar measurement within a known range and semantic low, high, and optimum bands.',
+    parts: ['Root', 'Track', 'Indicator', 'Label', 'Value'],
+    keyProps: ['Value', 'Min', 'Max', 'Low', 'High', 'Optimum'],
+  },
+  {
+    kind: 'ui',
+    slug: 'toolbar',
+    name: 'Toolbar',
+    section: 'Layout & Data',
+    description: 'Groups actions and inputs under one roving-focus keyboard model.',
+    parts: ['Root', 'Item', 'Button', 'Link', 'Input', 'Group', 'Separator'],
+    keyProps: ['Items', 'Active', 'DefaultActive', 'Orientation', 'OnActiveChange'],
+  },
+  {
+    kind: 'ui',
+    slug: 'popover',
+    name: 'Popover',
+    section: 'Overlays',
+    description: 'Places caller-styled content beside an anchor inside the current window.',
+    parts: [
+      'Root',
+      'Trigger',
+      'Content',
+      'Portal',
+      'Backdrop',
+      'Positioner',
+      'Popup',
+      'Arrow',
+      'Viewport',
+      'Title',
+      'Description',
+      'Close',
     ],
-    "keyProps": [
-      "Value",
-      "DefaultValue",
-      "OnValueChange",
-      "ReadOnly",
-      "Required"
-    ]
+    keyProps: ['Open', 'DefaultOpen', 'OnOpenChange', 'Side', 'Align', 'Modal'],
   },
   {
-    "kind": "ui",
-    "slug": "switch",
-    "name": "Switch",
-    "section": "Forms & Controls",
-    "description": "An on/off control with a root track and independently styled thumb.",
-    "parts": [
-      "Root",
-      "Thumb"
+    kind: 'ui',
+    slug: 'system-popover',
+    name: 'SystemPopover',
+    section: 'Overlays',
+    description:
+      'Presents QuickGUI content in a separate native child window that can extend beyond its owner.',
+    parts: ['Root', 'Trigger', 'Content'],
+    keyProps: ['Open', 'DefaultOpen', 'OnOpenChange', 'Width', 'Height', 'Placement'],
+  },
+  {
+    kind: 'ui',
+    slug: 'dialog',
+    name: 'Dialog',
+    section: 'Overlays',
+    description:
+      'An in-window modal with focus containment, dismissal, and exact transition completion.',
+    parts: [
+      'Root',
+      'Trigger',
+      'Portal',
+      'Backdrop',
+      'Viewport',
+      'Popup',
+      'Title',
+      'Description',
+      'Close',
     ],
-    "keyProps": [
-      "Checked",
-      "DefaultChecked",
-      "OnCheckedChange",
-      "Disabled"
-    ]
+    keyProps: ['Open', 'DefaultOpen', 'OnOpenChange', 'DismissOnEscape', 'ExitDuration'],
   },
   {
-    "kind": "ui",
-    "slug": "toggle",
-    "name": "Toggle",
-    "section": "Forms & Controls",
-    "description": "A pressable control that retains an on or off pressed state.",
-    "parts": [
-      "Root",
-      "Indicator"
+    kind: 'ui',
+    slug: 'alert-dialog',
+    name: 'AlertDialog',
+    section: 'Overlays',
+    description:
+      'The confirmation-focused dialog variant with stricter backdrop-dismissal defaults.',
+    parts: [
+      'Root',
+      'Trigger',
+      'Portal',
+      'Backdrop',
+      'Viewport',
+      'Popup',
+      'Title',
+      'Description',
+      'Close',
     ],
-    "keyProps": [
-      "Pressed",
-      "DefaultPressed",
-      "OnPressedChange",
-      "Disabled"
-    ]
+    keyProps: ['Open', 'DefaultOpen', 'OnOpenChange', 'DismissOnEscape', 'ExitDuration'],
   },
   {
-    "kind": "ui",
-    "slug": "toggle-group",
-    "name": "ToggleGroup",
-    "section": "Forms & Controls",
-    "description": "Coordinates single or multiple pressed values with roving keyboard focus.",
-    "parts": [
-      "Root",
-      "Item"
+    kind: 'ui',
+    slug: 'tooltip',
+    name: 'Tooltip',
+    section: 'Overlays',
+    description:
+      'Shows passive help after an exact core-owned delay and supports provider-level warm-up behavior.',
+    parts: ['Provider', 'Root', 'Trigger', 'Portal', 'Positioner', 'Popup', 'Arrow'],
+    keyProps: ['Open', 'DefaultOpen', 'Delay', 'CloseDelay', 'Side', 'Hoverable'],
+  },
+  {
+    kind: 'ui',
+    slug: 'preview-card',
+    name: 'PreviewCard',
+    section: 'Overlays',
+    description:
+      'Shows a richer hover or focus preview beside a trigger without changing the current screen.',
+    parts: ['Root', 'Trigger', 'Portal', 'Backdrop', 'Positioner', 'Popup', 'Arrow'],
+    keyProps: ['Open', 'DefaultOpen', 'Delay', 'CloseDelay', 'Placement'],
+  },
+  {
+    kind: 'ui',
+    slug: 'toast',
+    name: 'Toast',
+    section: 'Overlays',
+    description: 'Presents timed, stacked notifications with action, close, and swipe behavior.',
+    parts: [
+      'Provider',
+      'Portal',
+      'Viewport',
+      'Positioner',
+      'Root',
+      'Content',
+      'Title',
+      'Description',
+      'Action',
+      'Close',
     ],
-    "keyProps": [
-      "Items",
-      "Value",
-      "DefaultValue",
-      "Multiple",
-      "OnValueChange"
-    ]
+    keyProps: ['Toasts', 'ToastID', 'Timeout', 'SwipeDirection', 'OnDismiss'],
   },
   {
-    "kind": "ui",
-    "slug": "slider",
-    "name": "Slider",
-    "section": "Forms & Controls",
-    "description": "A single- or multi-thumb range input with core-owned pointer and keyboard interaction.",
-    "parts": [
-      "Root",
-      "Label",
-      "Value",
-      "Control",
-      "Track",
-      "Range",
-      "Indicator",
-      "Thumb"
+    kind: 'ui',
+    slug: 'menu',
+    name: 'Menu',
+    section: 'Menus & Navigation',
+    description:
+      'A fully composable menu with submenus, groups, links, checkbox items, and radio items.',
+    parts: [
+      'Root',
+      'Trigger',
+      'Portal',
+      'Backdrop',
+      'Positioner',
+      'Popup',
+      'Arrow',
+      'Item',
+      'LinkItem',
+      'SubmenuRoot',
+      'SubmenuTrigger',
+      'Group',
+      'GroupLabel',
+      'RadioGroup',
+      'RadioItem',
+      'RadioItemIndicator',
+      'CheckboxItem',
+      'CheckboxItemIndicator',
+      'Separator',
     ],
-    "keyProps": [
-      "Value",
-      "DefaultValue",
-      "Min",
-      "Max",
-      "Step",
-      "OnValueChange"
-    ]
+    keyProps: ['Open', 'DefaultOpen', 'OnOpenChange', 'Orientation', 'LoopFocus'],
   },
   {
-    "kind": "ui",
-    "slug": "number-field",
-    "name": "NumberField",
-    "section": "Forms & Controls",
-    "description": "A numeric editor with increment, decrement, and drag-to-scrub parts.",
-    "parts": [
-      "Root",
-      "Group",
-      "Input",
-      "Increment",
-      "Decrement",
-      "ScrubArea",
-      "ScrubAreaCursor"
+    kind: 'ui',
+    slug: 'popover-menu',
+    name: 'PopoverMenu',
+    section: 'Menus & Navigation',
+    description: 'A compact model-driven menu rendered in a native popover window.',
+    parts: ['Root', 'Trigger', 'Popup'],
+    keyProps: ['Items', 'Appearance', 'Open', 'OnOpenChange', 'OnSelect'],
+  },
+  {
+    kind: 'ui',
+    slug: 'context-menu',
+    name: 'ContextMenu',
+    section: 'Menus & Navigation',
+    description: 'Opens a model-driven native menu from a secondary-button press on its trigger.',
+    parts: ['Root', 'Trigger'],
+    keyProps: ['Items', 'Appearance', 'OnSelect', 'Loop'],
+  },
+  {
+    kind: 'ui',
+    slug: 'menubar',
+    name: 'Menubar',
+    section: 'Menus & Navigation',
+    description: 'Coordinates a horizontal in-window menubar and its menu items.',
+    parts: ['Root', 'Item'],
+    keyProps: ['Count', 'Open', 'DefaultOpen', 'OnOpenChange', 'OnActiveChange'],
+  },
+  {
+    kind: 'ui',
+    slug: 'navigation-menu',
+    name: 'NavigationMenu',
+    section: 'Menus & Navigation',
+    description:
+      'A disclosure-style navigation surface with animated direction, viewport, and popup parts.',
+    parts: [
+      'Root',
+      'List',
+      'Item',
+      'Trigger',
+      'Icon',
+      'Content',
+      'Link',
+      'Portal',
+      'Positioner',
+      'Popup',
+      'Viewport',
+      'Arrow',
+      'Backdrop',
     ],
-    "keyProps": [
-      "Value",
-      "DefaultValue",
-      "Min",
-      "Max",
-      "Step",
-      "OnValueChange"
-    ]
+    keyProps: ['Value', 'DefaultValue', 'OnValueChange', 'Orientation', 'Delay'],
   },
   {
-    "kind": "ui",
-    "slug": "select",
-    "name": "Select",
-    "section": "Forms & Controls",
-    "description": "A single- or multiple-choice picker whose option surface is rendered in a native popover window.",
-    "parts": [
-      "Root",
-      "Trigger",
-      "Option",
-      "Label",
-      "Value",
-      "Icon",
-      "Backdrop",
-      "Portal",
-      "Positioner",
-      "Popup",
-      "Arrow",
-      "List",
-      "Item",
-      "ItemText",
-      "ItemIndicator",
-      "Group",
-      "GroupLabel",
-      "Separator",
-      "ScrollUpArrow",
-      "ScrollDownArrow"
-    ],
-    "keyProps": [
-      "Items",
-      "Value",
-      "DefaultValue",
-      "Multiple",
-      "OnValueChange"
-    ]
+    kind: 'ui',
+    slug: 'router',
+    name: 'Router',
+    section: 'Menus & Navigation',
+    description:
+      'A QuickGUI UI projection of QuickGUI core routing with nested layouts and bounded memory history.',
+    parts: ['Router', 'Route', 'Layout', 'Link', 'Outlet'],
+    keyProps: ['InitialPath', 'Fallback', 'Routes', 'Path', 'Component', 'Href'],
   },
   {
-    "kind": "ui",
-    "slug": "combobox",
-    "name": "Combobox",
-    "section": "Forms & Controls",
-    "description": "Combines editable text, filtering, optional chips, and a native suggestion surface.",
-    "parts": [
-      "Root",
-      "Input",
-      "Option",
-      "Label",
-      "Value",
-      "Icon",
-      "InputGroup",
-      "Clear",
-      "Trigger",
-      "Chips",
-      "Chip",
-      "ChipRemove",
-      "Backdrop",
-      "Portal",
-      "Positioner",
-      "Popup",
-      "Arrow",
-      "Status",
-      "Empty",
-      "List",
-      "Row",
-      "Item",
-      "ItemIndicator",
-      "Group",
-      "GroupLabel",
-      "Collection",
-      "Separator"
-    ],
-    "keyProps": [
-      "Items",
-      "Value",
-      "InputValue",
-      "Multiple",
-      "FilterMode",
-      "OnValueChange"
-    ]
+    kind: 'swift-ui',
+    slug: 'host',
+    name: 'Host',
+    section: 'SwiftUI Components',
+    description:
+      'The NSHostingView-backed leaf that mounts one SwiftUI component tree inside QuickGUI.',
+    parts: [],
+    keyProps: ['MatchContents', 'Style', 'children'],
   },
   {
-    "kind": "ui",
-    "slug": "autocomplete",
-    "name": "Autocomplete",
-    "section": "Forms & Controls",
-    "description": "Filters suggestions for free-form text without requiring a selected value.",
-    "parts": [
-      "Root",
-      "Input",
-      "Option",
-      "Label",
-      "Value",
-      "Icon",
-      "InputGroup",
-      "Clear",
-      "Portal",
-      "Positioner",
-      "Popup",
-      "Arrow",
-      "Status",
-      "Empty",
-      "List",
-      "Item",
-      "ItemIndicator",
-      "Group",
-      "GroupLabel",
-      "Collection",
-      "Separator"
-    ],
-    "keyProps": [
-      "Items",
-      "InputValue",
-      "FilterMode",
-      "OnInputValueChange",
-      "OnCommit"
-    ]
+    kind: 'swift-ui',
+    slug: 'button',
+    name: 'Button',
+    section: 'SwiftUI Components',
+    description: 'A native SwiftUI button with text, SF Symbol, semantic role, and press handling.',
+    parts: [],
+    keyProps: ['Label', 'SystemImage', 'Role', 'OnPress', 'Modifiers'],
   },
   {
-    "kind": "ui",
-    "slug": "field",
-    "name": "Field",
-    "section": "Forms & Controls",
-    "description": "Connects one control to its label, description, validation state, and error message.",
-    "parts": [
-      "Root",
-      "Item",
-      "Label",
-      "Control",
-      "Validity",
-      "Description",
-      "Error"
-    ],
-    "keyProps": [
-      "Invalid",
-      "Required",
-      "ValidationMessage",
-      "ValidationMode",
-      "OnValidationChange"
-    ]
+    kind: 'swift-ui',
+    slug: 'slider',
+    name: 'Slider',
+    section: 'SwiftUI Components',
+    description: 'A controlled native slider with continuous or stepped values.',
+    parts: [],
+    keyProps: ['Value', 'Min', 'Max', 'Step', 'Label', 'OnValueChange'],
   },
   {
-    "kind": "ui",
-    "slug": "fieldset",
-    "name": "Fieldset",
-    "section": "Forms & Controls",
-    "description": "Groups related fields under one legend and shared semantic state.",
-    "parts": [
-      "Root",
-      "Legend",
-      "Description",
-      "Control"
-    ],
-    "keyProps": [
-      "Disabled",
-      "children",
-      "Style"
-    ]
+    kind: 'swift-ui',
+    slug: 'toggle',
+    name: 'Toggle',
+    section: 'SwiftUI Components',
+    description: 'A controlled native SwiftUI on/off switch.',
+    parts: [],
+    keyProps: ['IsOn', 'Label', 'OnIsOnChange', 'Modifiers'],
   },
   {
-    "kind": "ui",
-    "slug": "date-field",
-    "name": "DateField",
-    "section": "Forms & Controls",
-    "description": "A segmented, keyboard-editable date field with locale-aware date parts.",
-    "parts": [
-      "Root",
-      "Segment"
-    ],
-    "keyProps": [
-      "Value",
-      "Min",
-      "Max",
-      "OnValueChange",
-      "Disabled"
-    ]
+    kind: 'swift-ui',
+    slug: 'progress-view',
+    name: 'ProgressView',
+    section: 'SwiftUI Components',
+    description: 'A determinate or indeterminate native SwiftUI progress indicator.',
+    parts: [],
+    keyProps: ['Value', 'Total', 'Label', 'CurrentValueLabel'],
   },
   {
-    "kind": "ui",
-    "slug": "time-field",
-    "name": "TimeField",
-    "section": "Forms & Controls",
-    "description": "A segmented, keyboard-editable time field with hour, minute, second, and period parts.",
-    "parts": [
-      "Root",
-      "Segment"
-    ],
-    "keyProps": [
-      "Value",
-      "DefaultValue",
-      "Hour12",
-      "ShowSeconds",
-      "OnValueChange"
-    ]
+    kind: 'swift-ui',
+    slug: 'stepper',
+    name: 'Stepper',
+    section: 'SwiftUI Components',
+    description: 'A controlled native numeric stepper with bounded values.',
+    parts: [],
+    keyProps: ['Value', 'Min', 'Max', 'Step', 'Label', 'OnValueChange'],
   },
   {
-    "kind": "ui",
-    "slug": "calendar",
-    "name": "Calendar",
-    "section": "Forms & Controls",
-    "description": "A keyboard-navigable month grid for single-date selection.",
-    "parts": [
-      "Root",
-      "Week",
-      "Day"
-    ],
-    "keyProps": [
-      "Value",
-      "DefaultValue",
-      "Min",
-      "Max",
-      "FirstWeekday",
-      "OnValueChange"
-    ]
+    kind: 'swift-ui',
+    slug: 'text-field',
+    name: 'TextField',
+    section: 'SwiftUI Components',
+    description: 'A controlled native SwiftUI text field with edit and submit callbacks.',
+    parts: [],
+    keyProps: ['Value', 'Placeholder', 'OnValueChange', 'OnSubmit'],
   },
   {
-    "kind": "ui",
-    "slug": "otp-field",
-    "name": "OtpField",
-    "section": "Forms & Controls",
-    "description": "A bounded one-time-code editor made from individually styled input cells.",
-    "parts": [
-      "Root",
-      "Input",
-      "Separator"
-    ],
-    "keyProps": [
-      "Value",
-      "Length",
-      "OnValueChange",
-      "Disabled"
-    ]
+    kind: 'swift-ui',
+    slug: 'secure-field',
+    name: 'SecureField',
+    section: 'SwiftUI Components',
+    description: 'The concealed native editor with the same controlled contract as TextField.',
+    parts: [],
+    keyProps: ['Value', 'Placeholder', 'OnValueChange', 'OnSubmit'],
   },
   {
-    "kind": "ui",
-    "slug": "tabs",
-    "name": "Tabs",
-    "section": "Layout & Data",
-    "description": "Switches between labeled panels with automatic or manual keyboard activation.",
-    "parts": [
-      "Root",
-      "List",
-      "Tab",
-      "Indicator",
-      "Panel"
-    ],
-    "keyProps": [
-      "Value",
-      "DefaultValue",
-      "OnValueChange",
-      "Orientation",
-      "Activation"
-    ]
+    kind: 'swift-ui',
+    slug: 'picker',
+    name: 'Picker',
+    section: 'SwiftUI Components',
+    description:
+      'A controlled SwiftUI picker with menu, segmented, radio-group, and inline styles.',
+    parts: [],
+    keyProps: ['Selection', 'Options', 'Label', 'Style', 'OnSelectionChange'],
   },
   {
-    "kind": "ui",
-    "slug": "accordion",
-    "name": "Accordion",
-    "section": "Layout & Data",
-    "description": "Coordinates one or more expandable sections and their keyboard focus.",
-    "parts": [
-      "Root",
-      "Item",
-      "Header",
-      "Trigger",
-      "Panel"
-    ],
-    "keyProps": [
-      "Value",
-      "DefaultValue",
-      "OnValueChange",
-      "Multiple",
-      "KeepMounted"
-    ]
+    kind: 'swift-ui',
+    slug: 'segmented-control',
+    name: 'SegmentedControl',
+    section: 'SwiftUI Components',
+    description:
+      'A native segmented picker with value-selection and neutral Xcode-style tab roles.',
+    parts: [],
+    keyProps: ['Selection', 'Options', 'Label', 'Role', 'OnSelectionChange'],
   },
   {
-    "kind": "ui",
-    "slug": "collapsible",
-    "name": "Collapsible",
-    "section": "Layout & Data",
-    "description": "Shows and hides one panel from a trigger while preserving accessible state.",
-    "parts": [
-      "Root",
-      "Trigger",
-      "Panel"
-    ],
-    "keyProps": [
-      "Open",
-      "DefaultOpen",
-      "OnOpenChange",
-      "KeepMounted"
-    ]
+    kind: 'swift-ui',
+    slug: 'date-picker',
+    name: 'DatePicker',
+    section: 'SwiftUI Components',
+    description: 'A controlled native date or date-and-time picker.',
+    parts: [],
+    keyProps: ['Value', 'Min', 'Max', 'DisplayedComponents', 'Style', 'OnValueChange'],
   },
   {
-    "kind": "ui",
-    "slug": "splitter",
-    "name": "Splitter",
-    "section": "Layout & Data",
-    "description": "Creates resizable panes with pointer and keyboard-operated handles.",
-    "parts": [
-      "Root",
-      "Pane",
-      "Handle"
-    ],
-    "keyProps": [
-      "Value",
-      "DefaultValue",
-      "Panes",
-      "Orientation",
-      "OnSizesChange"
-    ]
+    kind: 'swift-ui',
+    slug: 'color-picker',
+    name: 'ColorPicker',
+    section: 'SwiftUI Components',
+    description: 'A native SwiftUI color well that returns CSS-style RGBA color strings.',
+    parts: [],
+    keyProps: ['Selection', 'Label', 'SupportsOpacity', 'OnSelectionChange'],
   },
   {
-    "kind": "ui",
-    "slug": "scroll-area",
-    "name": "ScrollArea",
-    "section": "Layout & Data",
-    "description": "Composes a scrollable viewport with caller-styled scrollbars, thumbs, and corner.",
-    "parts": [
-      "Root",
-      "Viewport",
-      "Content",
-      "Scrollbar",
-      "Thumb",
-      "Corner"
-    ],
-    "keyProps": [
-      "ViewportSize",
-      "ContentSize",
-      "OverflowEdgeThreshold",
-      "OnScrollStateChange"
-    ]
+    kind: 'swift-ui',
+    slug: 'gauge',
+    name: 'Gauge',
+    section: 'SwiftUI Components',
+    description: 'A native SwiftUI gauge with linear and circular accessory styles.',
+    parts: [],
+    keyProps: ['Value', 'Min', 'Max', 'Label', 'CurrentValueLabel', 'Style'],
   },
   {
-    "kind": "ui",
-    "slug": "table",
-    "name": "Table",
-    "section": "Layout & Data",
-    "description": "A virtualized tabular collection with header, row, and cell parts.",
-    "parts": [
-      "Root",
-      "Header",
-      "Row",
-      "Cell"
-    ],
-    "keyProps": [
-      "Columns",
-      "RowCount",
-      "RowHeight",
-      "SelectionMode",
-      "Selection"
-    ]
+    kind: 'swift-ui',
+    slug: 'quickgui-host-view',
+    name: 'QuickGUIHostView',
+    section: 'SwiftUI Components',
+    description: 'Reverse-hosts one ordinary QuickGUI subtree inside a SwiftUI hierarchy.',
+    parts: [],
+    keyProps: ['Width', 'Height', 'MatchContents', 'Background', 'children'],
   },
   {
-    "kind": "ui",
-    "slug": "tree",
-    "name": "Tree",
-    "section": "Layout & Data",
-    "description": "A virtualized hierarchical collection with expansion, selection, and keyboard navigation.",
-    "parts": [
-      "Root",
-      "Row"
-    ],
-    "keyProps": [
-      "Nodes",
-      "Expanded",
-      "Value",
-      "OnExpandedChange",
-      "OnValueChange"
-    ]
+    kind: 'swift-ui',
+    slug: 'popover',
+    name: 'Popover',
+    section: 'SwiftUI Components',
+    description: 'Presents a native SwiftUI popover from a composed SwiftUI trigger.',
+    parts: ['Trigger', 'Content'],
+    keyProps: ['IsPresented', 'OnIsPresentedChange', 'AttachmentAnchor', 'ArrowEdge'],
   },
-  {
-    "kind": "ui",
-    "slug": "separator",
-    "name": "Separator",
-    "section": "Layout & Data",
-    "description": "A semantic horizontal or vertical divider with no built-in visual style.",
-    "parts": [
-      "Root"
-    ],
-    "keyProps": [
-      "Orientation",
-      "Style"
-    ]
-  },
-  {
-    "kind": "ui",
-    "slug": "avatar",
-    "name": "Avatar",
-    "section": "Layout & Data",
-    "description": "Shows an image with a fallback that appears when the image is unavailable.",
-    "parts": [
-      "Root",
-      "Image",
-      "Fallback"
-    ],
-    "keyProps": [
-      "AriaLabel",
-      "Src",
-      "Delay",
-      "OnLoadingStatusChange"
-    ]
-  },
-  {
-    "kind": "ui",
-    "slug": "progress",
-    "name": "Progress",
-    "section": "Layout & Data",
-    "description": "Represents determinate or indeterminate task progress with composable labels and track.",
-    "parts": [
-      "Root",
-      "Track",
-      "Indicator",
-      "Label",
-      "Value"
-    ],
-    "keyProps": [
-      "Value",
-      "Max",
-      "Indeterminate",
-      "ValueText",
-      "OnStatusChange"
-    ]
-  },
-  {
-    "kind": "ui",
-    "slug": "meter",
-    "name": "Meter",
-    "section": "Layout & Data",
-    "description": "Displays a scalar measurement within a known range and semantic low, high, and optimum bands.",
-    "parts": [
-      "Root",
-      "Track",
-      "Indicator",
-      "Label",
-      "Value"
-    ],
-    "keyProps": [
-      "Value",
-      "Min",
-      "Max",
-      "Low",
-      "High",
-      "Optimum"
-    ]
-  },
-  {
-    "kind": "ui",
-    "slug": "toolbar",
-    "name": "Toolbar",
-    "section": "Layout & Data",
-    "description": "Groups actions and inputs under one roving-focus keyboard model.",
-    "parts": [
-      "Root",
-      "Item",
-      "Button",
-      "Link",
-      "Input",
-      "Group",
-      "Separator"
-    ],
-    "keyProps": [
-      "Items",
-      "Active",
-      "DefaultActive",
-      "Orientation",
-      "OnActiveChange"
-    ]
-  },
-  {
-    "kind": "ui",
-    "slug": "popover",
-    "name": "Popover",
-    "section": "Overlays",
-    "description": "Places caller-styled content beside an anchor inside the current window.",
-    "parts": [
-      "Root",
-      "Trigger",
-      "Content",
-      "Portal",
-      "Backdrop",
-      "Positioner",
-      "Popup",
-      "Arrow",
-      "Viewport",
-      "Title",
-      "Description",
-      "Close"
-    ],
-    "keyProps": [
-      "Open",
-      "DefaultOpen",
-      "OnOpenChange",
-      "Side",
-      "Align",
-      "Modal"
-    ]
-  },
-  {
-    "kind": "ui",
-    "slug": "system-popover",
-    "name": "SystemPopover",
-    "section": "Overlays",
-    "description": "Presents QuickGUI content in a separate native child window that can extend beyond its owner.",
-    "parts": [
-      "Root",
-      "Trigger",
-      "Content"
-    ],
-    "keyProps": [
-      "Open",
-      "DefaultOpen",
-      "OnOpenChange",
-      "Width",
-      "Height",
-      "Placement"
-    ]
-  },
-  {
-    "kind": "ui",
-    "slug": "dialog",
-    "name": "Dialog",
-    "section": "Overlays",
-    "description": "An in-window modal with focus containment, dismissal, and exact transition completion.",
-    "parts": [
-      "Root",
-      "Trigger",
-      "Portal",
-      "Backdrop",
-      "Viewport",
-      "Popup",
-      "Title",
-      "Description",
-      "Close"
-    ],
-    "keyProps": [
-      "Open",
-      "DefaultOpen",
-      "OnOpenChange",
-      "DismissOnEscape",
-      "ExitDuration"
-    ]
-  },
-  {
-    "kind": "ui",
-    "slug": "alert-dialog",
-    "name": "AlertDialog",
-    "section": "Overlays",
-    "description": "The confirmation-focused dialog variant with stricter backdrop-dismissal defaults.",
-    "parts": [
-      "Root",
-      "Trigger",
-      "Portal",
-      "Backdrop",
-      "Viewport",
-      "Popup",
-      "Title",
-      "Description",
-      "Close"
-    ],
-    "keyProps": [
-      "Open",
-      "DefaultOpen",
-      "OnOpenChange",
-      "DismissOnEscape",
-      "ExitDuration"
-    ]
-  },
-  {
-    "kind": "ui",
-    "slug": "tooltip",
-    "name": "Tooltip",
-    "section": "Overlays",
-    "description": "Shows passive help after an exact core-owned delay and supports provider-level warm-up behavior.",
-    "parts": [
-      "Provider",
-      "Root",
-      "Trigger",
-      "Portal",
-      "Positioner",
-      "Popup",
-      "Arrow"
-    ],
-    "keyProps": [
-      "Open",
-      "DefaultOpen",
-      "Delay",
-      "CloseDelay",
-      "Side",
-      "Hoverable"
-    ]
-  },
-  {
-    "kind": "ui",
-    "slug": "preview-card",
-    "name": "PreviewCard",
-    "section": "Overlays",
-    "description": "Shows a richer hover or focus preview beside a trigger without changing the current screen.",
-    "parts": [
-      "Root",
-      "Trigger",
-      "Portal",
-      "Backdrop",
-      "Positioner",
-      "Popup",
-      "Arrow"
-    ],
-    "keyProps": [
-      "Open",
-      "DefaultOpen",
-      "Delay",
-      "CloseDelay",
-      "Placement"
-    ]
-  },
-  {
-    "kind": "ui",
-    "slug": "toast",
-    "name": "Toast",
-    "section": "Overlays",
-    "description": "Presents timed, stacked notifications with action, close, and swipe behavior.",
-    "parts": [
-      "Provider",
-      "Portal",
-      "Viewport",
-      "Positioner",
-      "Root",
-      "Content",
-      "Title",
-      "Description",
-      "Action",
-      "Close"
-    ],
-    "keyProps": [
-      "Toasts",
-      "ToastID",
-      "Timeout",
-      "SwipeDirection",
-      "OnDismiss"
-    ]
-  },
-  {
-    "kind": "ui",
-    "slug": "menu",
-    "name": "Menu",
-    "section": "Menus & Navigation",
-    "description": "A fully composable menu with submenus, groups, links, checkbox items, and radio items.",
-    "parts": [
-      "Root",
-      "Trigger",
-      "Portal",
-      "Backdrop",
-      "Positioner",
-      "Popup",
-      "Arrow",
-      "Item",
-      "LinkItem",
-      "SubmenuRoot",
-      "SubmenuTrigger",
-      "Group",
-      "GroupLabel",
-      "RadioGroup",
-      "RadioItem",
-      "RadioItemIndicator",
-      "CheckboxItem",
-      "CheckboxItemIndicator",
-      "Separator"
-    ],
-    "keyProps": [
-      "Open",
-      "DefaultOpen",
-      "OnOpenChange",
-      "Orientation",
-      "LoopFocus"
-    ]
-  },
-  {
-    "kind": "ui",
-    "slug": "popover-menu",
-    "name": "PopoverMenu",
-    "section": "Menus & Navigation",
-    "description": "A compact model-driven menu rendered in a native popover window.",
-    "parts": [
-      "Root",
-      "Trigger",
-      "Popup"
-    ],
-    "keyProps": [
-      "Items",
-      "Appearance",
-      "Open",
-      "OnOpenChange",
-      "OnSelect"
-    ]
-  },
-  {
-    "kind": "ui",
-    "slug": "context-menu",
-    "name": "ContextMenu",
-    "section": "Menus & Navigation",
-    "description": "Opens a model-driven native menu from a secondary-button press on its trigger.",
-    "parts": [
-      "Root",
-      "Trigger"
-    ],
-    "keyProps": [
-      "Items",
-      "Appearance",
-      "OnSelect",
-      "Loop"
-    ]
-  },
-  {
-    "kind": "ui",
-    "slug": "menubar",
-    "name": "Menubar",
-    "section": "Menus & Navigation",
-    "description": "Coordinates a horizontal in-window menubar and its menu items.",
-    "parts": [
-      "Root",
-      "Item"
-    ],
-    "keyProps": [
-      "Count",
-      "Open",
-      "DefaultOpen",
-      "OnOpenChange",
-      "OnActiveChange"
-    ]
-  },
-  {
-    "kind": "ui",
-    "slug": "navigation-menu",
-    "name": "NavigationMenu",
-    "section": "Menus & Navigation",
-    "description": "A disclosure-style navigation surface with animated direction, viewport, and popup parts.",
-    "parts": [
-      "Root",
-      "List",
-      "Item",
-      "Trigger",
-      "Icon",
-      "Content",
-      "Link",
-      "Portal",
-      "Positioner",
-      "Popup",
-      "Viewport",
-      "Arrow",
-      "Backdrop"
-    ],
-    "keyProps": [
-      "Value",
-      "DefaultValue",
-      "OnValueChange",
-      "Orientation",
-      "Delay"
-    ]
-  },
-  {
-    "kind": "ui",
-    "slug": "router",
-    "name": "Router",
-    "section": "Menus & Navigation",
-    "description": "A QuickGUI UI projection of QuickGUI core routing with nested layouts and bounded memory history.",
-    "parts": [
-      "Router",
-      "Route",
-      "Layout",
-      "Link",
-      "Outlet"
-    ],
-    "keyProps": [
-      "InitialPath",
-      "Fallback",
-      "Routes",
-      "Path",
-      "Component",
-      "Href"
-    ]
-  },
-  {
-    "kind": "swift-ui",
-    "slug": "host",
-    "name": "Host",
-    "section": "SwiftUI Components",
-    "description": "The NSHostingView-backed leaf that mounts one SwiftUI component tree inside QuickGUI.",
-    "parts": [],
-    "keyProps": [
-      "MatchContents",
-      "Style",
-      "children"
-    ]
-  },
-  {
-    "kind": "swift-ui",
-    "slug": "button",
-    "name": "Button",
-    "section": "SwiftUI Components",
-    "description": "A native SwiftUI button with text, SF Symbol, semantic role, and press handling.",
-    "parts": [],
-    "keyProps": [
-      "Label",
-      "SystemImage",
-      "Role",
-      "OnPress",
-      "Modifiers"
-    ]
-  },
-  {
-    "kind": "swift-ui",
-    "slug": "slider",
-    "name": "Slider",
-    "section": "SwiftUI Components",
-    "description": "A controlled native slider with continuous or stepped values.",
-    "parts": [],
-    "keyProps": [
-      "Value",
-      "Min",
-      "Max",
-      "Step",
-      "Label",
-      "OnValueChange"
-    ]
-  },
-  {
-    "kind": "swift-ui",
-    "slug": "toggle",
-    "name": "Toggle",
-    "section": "SwiftUI Components",
-    "description": "A controlled native SwiftUI on/off switch.",
-    "parts": [],
-    "keyProps": [
-      "IsOn",
-      "Label",
-      "OnIsOnChange",
-      "Modifiers"
-    ]
-  },
-  {
-    "kind": "swift-ui",
-    "slug": "progress-view",
-    "name": "ProgressView",
-    "section": "SwiftUI Components",
-    "description": "A determinate or indeterminate native SwiftUI progress indicator.",
-    "parts": [],
-    "keyProps": [
-      "Value",
-      "Total",
-      "Label",
-      "CurrentValueLabel"
-    ]
-  },
-  {
-    "kind": "swift-ui",
-    "slug": "stepper",
-    "name": "Stepper",
-    "section": "SwiftUI Components",
-    "description": "A controlled native numeric stepper with bounded values.",
-    "parts": [],
-    "keyProps": [
-      "Value",
-      "Min",
-      "Max",
-      "Step",
-      "Label",
-      "OnValueChange"
-    ]
-  },
-  {
-    "kind": "swift-ui",
-    "slug": "text-field",
-    "name": "TextField",
-    "section": "SwiftUI Components",
-    "description": "A controlled native SwiftUI text field with edit and submit callbacks.",
-    "parts": [],
-    "keyProps": [
-      "Value",
-      "Placeholder",
-      "OnValueChange",
-      "OnSubmit"
-    ]
-  },
-  {
-    "kind": "swift-ui",
-    "slug": "secure-field",
-    "name": "SecureField",
-    "section": "SwiftUI Components",
-    "description": "The concealed native editor with the same controlled contract as TextField.",
-    "parts": [],
-    "keyProps": [
-      "Value",
-      "Placeholder",
-      "OnValueChange",
-      "OnSubmit"
-    ]
-  },
-  {
-    "kind": "swift-ui",
-    "slug": "picker",
-    "name": "Picker",
-    "section": "SwiftUI Components",
-    "description": "A controlled SwiftUI picker with menu, segmented, radio-group, and inline styles.",
-    "parts": [],
-    "keyProps": [
-      "Selection",
-      "Options",
-      "Label",
-      "Style",
-      "OnSelectionChange"
-    ]
-  },
-  {
-    "kind": "swift-ui",
-    "slug": "segmented-control",
-    "name": "SegmentedControl",
-    "section": "SwiftUI Components",
-    "description": "A native segmented picker with value-selection and neutral Xcode-style tab roles.",
-    "parts": [],
-    "keyProps": [
-      "Selection",
-      "Options",
-      "Label",
-      "Role",
-      "OnSelectionChange"
-    ]
-  },
-  {
-    "kind": "swift-ui",
-    "slug": "date-picker",
-    "name": "DatePicker",
-    "section": "SwiftUI Components",
-    "description": "A controlled native date or date-and-time picker.",
-    "parts": [],
-    "keyProps": [
-      "Value",
-      "Min",
-      "Max",
-      "DisplayedComponents",
-      "Style",
-      "OnValueChange"
-    ]
-  },
-  {
-    "kind": "swift-ui",
-    "slug": "color-picker",
-    "name": "ColorPicker",
-    "section": "SwiftUI Components",
-    "description": "A native SwiftUI color well that returns CSS-style RGBA color strings.",
-    "parts": [],
-    "keyProps": [
-      "Selection",
-      "Label",
-      "SupportsOpacity",
-      "OnSelectionChange"
-    ]
-  },
-  {
-    "kind": "swift-ui",
-    "slug": "gauge",
-    "name": "Gauge",
-    "section": "SwiftUI Components",
-    "description": "A native SwiftUI gauge with linear and circular accessory styles.",
-    "parts": [],
-    "keyProps": [
-      "Value",
-      "Min",
-      "Max",
-      "Label",
-      "CurrentValueLabel",
-      "Style"
-    ]
-  },
-  {
-    "kind": "swift-ui",
-    "slug": "quickgui-host-view",
-    "name": "QuickGUIHostView",
-    "section": "SwiftUI Components",
-    "description": "Reverse-hosts one ordinary QuickGUI subtree inside a SwiftUI hierarchy.",
-    "parts": [],
-    "keyProps": [
-      "Width",
-      "Height",
-      "MatchContents",
-      "Background",
-      "children"
-    ]
-  },
-  {
-    "kind": "swift-ui",
-    "slug": "popover",
-    "name": "Popover",
-    "section": "SwiftUI Components",
-    "description": "Presents a native SwiftUI popover from a composed SwiftUI trigger.",
-    "parts": [
-      "Trigger",
-      "Content"
-    ],
-    "keyProps": [
-      "IsPresented",
-      "OnIsPresentedChange",
-      "AttachmentAnchor",
-      "ArrowEdge"
-    ]
-  }
 ] as const satisfies readonly ComponentDoc[]
 
-export const UI_COMPONENTS: readonly ComponentDoc[] =
-  ALL_COMPONENT_DOCS.filter((component) => component.kind === 'ui')
+export const UI_COMPONENTS: readonly ComponentDoc[] = ALL_COMPONENT_DOCS.filter(
+  (component) => component.kind === 'ui',
+)
 
-export const SWIFT_UI_COMPONENTS: readonly ComponentDoc[] =
-  ALL_COMPONENT_DOCS.filter((component) => component.kind === 'swift-ui')
+export const SWIFT_UI_COMPONENTS: readonly ComponentDoc[] = ALL_COMPONENT_DOCS.filter(
+  (component) => component.kind === 'swift-ui',
+)
 
 export const COMPONENT_NAV_GROUPS: readonly ComponentNavGroup[] = [
   'Primitives',
@@ -1374,27 +849,20 @@ export const SWIFT_UI_NAV_GROUP: ComponentNavGroup = {
   items: SWIFT_UI_COMPONENTS,
 }
 
-export function componentDocsPath(component: ComponentDoc): string {
+export function componentDocsPath(component: ComponentDoc, frontend: DocsFrontend = 'go'): string {
   const section = component.kind === 'swift-ui' ? 'swift-ui' : 'components'
-  return `/docs/${section}/${component.slug}`
+  return `/docs/${frontend}/${section}/${component.slug}`
 }
 
-export function findComponentDoc(
-  kind: ComponentDocKind,
-  slug?: string,
-): ComponentDoc | undefined {
-  return ALL_COMPONENT_DOCS.find(
-    (component) => component.kind === kind && component.slug === slug,
-  )
+export function findComponentDoc(kind: ComponentDocKind, slug?: string): ComponentDoc | undefined {
+  return ALL_COMPONENT_DOCS.find((component) => component.kind === kind && component.slug === slug)
 }
 
 export function componentOutline(component: ComponentDoc): readonly DocsOutlineItem[] {
   return [
     { id: 'import', title: 'Import' },
     { id: 'usage', title: 'Usage' },
-    ...(component.parts.length
-      ? [{ id: 'anatomy', title: 'Anatomy' } as const]
-      : []),
+    ...(component.parts.length ? [{ id: 'anatomy', title: 'Anatomy' } as const] : []),
     { id: 'key-props', title: 'Key props' },
   ]
 }

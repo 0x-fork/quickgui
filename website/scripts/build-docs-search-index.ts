@@ -6,16 +6,15 @@ import remarkGfm from 'remark-gfm'
 import remarkMdx from 'remark-mdx'
 import remarkParse from 'remark-parse'
 import { create, insertMultiple, save } from 'zbsearch'
+import { ALL_COMPONENT_DOCS, componentDocsPath, type ComponentDoc } from '../src/lib/component-docs'
 import {
-  ALL_COMPONENT_DOCS,
-  componentDocsPath,
-  type ComponentDoc,
-} from '../src/lib/component-docs'
-import { DOCS_PAGES, docsPath, type DocsPageMeta } from '../src/lib/docs'
-import {
-  localizedComponentDescription,
-  localizedDocsPage,
-} from '../src/lib/docs-locales'
+  DOCS_FRONTENDS,
+  docsPages,
+  docsPath,
+  type DocsFrontend,
+  type DocsPageMeta,
+} from '../src/lib/docs'
+import { localizedComponentDescription, localizedDocsPage } from '../src/lib/docs-locales'
 import {
   DOCS_SEARCH_SCHEMA,
   type DocsSearchArea,
@@ -37,6 +36,7 @@ interface SearchPage {
   area: DocsSearchArea
   path: string
   sourcePath: string
+  fallbackPath: string
 }
 
 const websiteRoot = resolve(import.meta.dir, '..')
@@ -50,26 +50,22 @@ function localizedPath(locale: Locale, path: string): string {
 }
 
 function guideSource(page: DocsPageMeta, locale: Locale): string {
-  const localized = resolve(contentRoot, locale, `${page.slug}.mdx`)
-  const fallback = resolve(contentRoot, 'en', `${page.slug}.mdx`)
+  const localized = resolve(contentRoot, page.frontend, locale, `${page.slug}.mdx`)
+  const fallback = resolve(contentRoot, page.frontend, 'en', `${page.slug}.mdx`)
   return locale === 'en' ? fallback : localized
 }
 
-function componentSource(component: ComponentDoc, locale: Locale): string {
+function componentSource(component: ComponentDoc, locale: Locale, frontend: DocsFrontend): string {
   const family = component.kind === 'swift-ui' ? 'swift-ui' : 'ui'
   const localized = resolve(
     contentRoot,
+    frontend,
     'components',
     locale,
     family,
     `${component.slug}.mdx`,
   )
-  const fallback = resolve(
-    contentRoot,
-    'components',
-    family,
-    `${component.slug}.mdx`,
-  )
+  const fallback = resolve(contentRoot, frontend, 'components', family, `${component.slug}.mdx`)
   return locale === 'en' ? fallback : localized
 }
 
@@ -89,8 +85,8 @@ async function readableSource(preferred: string, fallback: string): Promise<stri
   }
 }
 
-function pageDefinitions(locale: Locale): SearchPage[] {
-  const guides: SearchPage[] = DOCS_PAGES.map((source) => {
+function pageDefinitions(locale: Locale, frontend: DocsFrontend): SearchPage[] {
+  const guides: SearchPage[] = docsPages(frontend).map((source) => {
     const page = localizedDocsPage(source, locale)
     return {
       title: page.title,
@@ -104,8 +100,9 @@ function pageDefinitions(locale: Locale): SearchPage[] {
               page.slug === 'overlays-and-dialogs'
             ? 'ui'
             : 'guide',
-      path: docsPath(page.slug),
+      path: docsPath(frontend, page.slug),
       sourcePath: guideSource(page, locale),
+      fallbackPath: guideSource(page, 'en'),
     }
   })
 
@@ -114,8 +111,9 @@ function pageDefinitions(locale: Locale): SearchPage[] {
     description: localizedComponentDescription(component, locale),
     keywords: [component.section, ...component.parts, ...component.keyProps],
     area: component.kind,
-    path: componentDocsPath(component),
-    sourcePath: componentSource(component, locale),
+    path: componentDocsPath(component, frontend),
+    sourcePath: componentSource(component, locale, frontend),
+    fallbackPath: componentSource(component, 'en', frontend),
   }))
 
   return [...guides, ...components]
@@ -143,11 +141,7 @@ function normalizeText(value: string): string {
   return value.replace(/\s+/g, ' ').trim()
 }
 
-function recordsForPage(
-  page: SearchPage,
-  source: string,
-  locale: Locale,
-): DocsSearchDocument[] {
+function recordsForPage(page: SearchPage, source: string, locale: Locale): DocsSearchDocument[] {
   const tree = parser.parse(source) as MarkdownNode
   const slugger = new GithubSlugger()
   const records: DocsSearchDocument[] = []
@@ -194,14 +188,11 @@ function recordsForPage(
   return records
 }
 
-async function buildLocale(locale: Locale) {
+async function buildLocale(locale: Locale, frontend: DocsFrontend) {
   const records: DocsSearchDocument[] = []
 
-  for (const page of pageDefinitions(locale)) {
-    const fallback = page.sourcePath
-      .replace(`/docs/${locale}/`, '/docs/en/')
-      .replace(`/components/${locale}/`, '/components/')
-    const source = await readableSource(page.sourcePath, fallback)
+  for (const page of pageDefinitions(locale, frontend)) {
+    const source = await readableSource(page.sourcePath, page.fallbackPath)
     records.push(...recordsForPage(page, source, locale))
   }
 
@@ -212,16 +203,20 @@ async function buildLocale(locale: Locale) {
   insertMultiple(database, records)
 
   const payload = save(database)
-  const destination = resolve(outputRoot, `${locale}.json`)
+  const destination = resolve(outputRoot, frontend, `${locale}.json`)
   await mkdir(dirname(destination), { recursive: true })
   await writeFile(destination, JSON.stringify(payload))
 
-  return { locale, records: records.length }
+  return { locale, frontend, records: records.length }
 }
 
-const summaries = await Promise.all(SUPPORTED_LOCALES.map(buildLocale))
+const summaries = await Promise.all(
+  DOCS_FRONTENDS.flatMap((frontend) =>
+    SUPPORTED_LOCALES.map((locale) => buildLocale(locale, frontend)),
+  ),
+)
 console.log(
   `Built documentation search indexes (${summaries
-    .map(({ locale, records }) => `${locale}: ${records}`)
+    .map(({ locale, frontend, records }) => `${frontend}/${locale}: ${records}`)
     .join(', ')})`,
 )

@@ -1,0 +1,53 @@
+Element methods and `@ui.style()` share the same native style properties. Numeric dimensions are pixels; strings support percentages and native keywords.
+
+## Fluent layout
+
+```moonbit
+fn card() -> @ui.Element {
+  @ui.div([@ui.text("A retained card").font_size(24).font_weight(600)])
+  .flex_col()
+  .width(420)
+  .max_width("100%")
+  .padding(24)
+  .gap(12)
+  .border_radius(12)
+  .bg(@ui.rgb8(17, 24, 39))
+  .text_color(@ui.rgb8(226, 232, 240))
+}
+```
+
+Use `.flex_row()`, `.flex_col()`, `.items_center()`, and `.justify_center()` for common layouts. `.flex(1)` sets grow, shrink, and a zero basis. Give scrollable flex children `.min_height(0)` and a bounded parent size.
+
+## Merging and reactive styles
+
+`.style(base).style(overrides)` merges declarations in order; later properties win. `.merge(other)` does the same for style builders. Applying a style takes a snapshot. Changing the builder later does not update the mounted element.
+
+```moonbit
+///|
+fn selectable() -> @ui.Element {
+  let (selected, set_selected) = @reactive.create_signal(false)
+  @ui.button("Select")
+  .on_click(() => set_selected(!selected()))
+  .style(
+    @ui.style()
+    .padding(12)
+    .bg(@ui.rgb8(51, 65, 85))
+    .text_color(@ui.rgb8(255, 255, 255))
+    .when(selected(), s => s.bg(@ui.rgb8(37, 99, 235))),
+  )
+}
+```
+
+The compiler binds getter reads inside `.style(...)` and fluent modifiers. Later declarations keep precedence on every update; disappearing declarations are cleared or reveal an earlier fallback. Interaction-style callbacks can also read getters. Mutating an already-applied reusable builder is still a snapshot mutation, so derive styles from signals instead.
+
+## Interaction states
+
+Use `.hover(s => ...)`, `.active(s => ...)`, and `.focus_style(s => ...)` for native pointer and focus states. `.selected_style` styles selected compound parts. These states are resolved by the native core. For a drop target’s drag-over appearance, use `bind_json` with `@protocol.DRAG_OVER_STYLE` and return a style’s `.json()`. Configure the node as a drop target as well; a style does not enable drop behavior. Import `egoist/quickgui/protocol` when using protocol constants.
+
+Add [transitions](/docs/moonbit/animations) to the base style to animate state changes.
+
+## Colors and SVG
+
+Use `@ui.rgb8(r, g, b)` or `@ui.rgba8(r, g, b, a)`, with channels from 0 to 255. Window options accept these colors as JSON values; a raw integer uses `0xAABBGGRR` (`0` for transparent). Do not pass CSS color strings as a window’s `background`.
+
+`@ui.svg(source)` produces a mask tinted by `.text_color(...)`. For multiple graph colors, use separate tinted SVG layers, as shown in Quick Git.

@@ -1700,9 +1700,9 @@ fn visual_blend_modes_evaluate_the_separable_css_formulas() {
     let expect = |mode: crate::BlendMode, blend: fn(f32, f32) -> f32| {
         let actual = sample(mode);
         for (channel, source) in [64.0_f32, 192.0, 255.0].into_iter().enumerate() {
-            let source = srgb_to_linear(source / 255.0);
-            let backdrop = srgb_to_linear(128.0 / 255.0);
-            let expected = (linear_to_srgb(blend(source, backdrop)) * 255.0).round() as i32;
+            let source = source / 255.0;
+            let backdrop = 128.0 / 255.0;
+            let expected = (blend(source, backdrop) * 255.0).round() as i32;
             assert!(
                 i32::from(actual[channel]).abs_diff(expected) <= 10,
                 "{mode:?} channel {channel} is {} not about {expected}",
@@ -1763,25 +1763,6 @@ fn visual_blend_modes_evaluate_the_separable_css_formulas() {
             1.0 - ((1.0 - backdrop) / source).min(1.0)
         }
     });
-}
-
-#[cfg(target_os = "macos")]
-fn srgb_to_linear(value: f32) -> f32 {
-    if value <= 0.04045 {
-        value / 12.92
-    } else {
-        ((value + 0.055) / 1.055).powf(2.4)
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn linear_to_srgb(value: f32) -> f32 {
-    let value = value.clamp(0.0, 1.0);
-    if value <= 0.003_130_8 {
-        value * 12.92
-    } else {
-        1.055 * value.powf(1.0 / 2.4) - 0.055
-    }
 }
 
 #[cfg(target_os = "macos")]

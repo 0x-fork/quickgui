@@ -1,0 +1,60 @@
+ヘッダー、行、セルのパーツを持つ仮想化テーブルコレクションです。
+
+## インポート
+
+`moon.pkg` に次のパッケージを追加します。
+
+```moonbit
+import {
+  "egoist/quickgui/ui",
+  "egoist/quickgui/reactive",
+}
+```
+
+## 使い方
+
+```moonbit
+fn component_example() -> @ui.Element {
+  let table = @ui.data_table([])
+    .columns([{ "id": "name", "track": "1fr" }])
+    .row_count(1)
+    .row_height(32)
+    .header_height(0)
+    .selection_mode("single")
+  table
+  .children([
+    table
+    .slot(@ui.Row, index=0)
+    .children([table.slot(@ui.Cell, value="name").children([@ui.text("Ada")])]),
+  ])
+  .height(160)
+  .overflow_y("scroll")
+}
+```
+
+ネイティブコアが操作、レイアウト、アクセシビリティ、アニメーションを管理します。パーツに既定の見た目はないため、サイズ、色、間隔を設定してください。
+
+## 構成
+
+ルートまたは項目の `.slot(...)` からパーツを作成します。パーツはコンポーネントのスコープと項目の識別子を継承します。すべて `Element` を返すため、共通の fluent API でスタイルと子要素を設定できます。
+
+- `root.slot(@ui.Header)`
+- `root.slot(@ui.Row)`
+- `root.slot(@ui.Cell)`
+
+## 主なプロパティ
+
+fluent プロパティメソッドでシグナルの getter を直接読みます。QuickGUI CLI が式を制御用バインディングに変換します。変更コールバックで状態を書き込み、リテラルは内部状態の初期値に使います。低レベルの組み立てには明示的な `bind_` メソッドも使えます。
+
+| メソッド | 用途 |
+| --- | --- |
+| `columns(...)` | 仮想テーブルの列宣言です。 |
+| `row_count(...)` | 論理上の総行数です。 |
+| `row_height(...)` | 仮想化された各行の論理高さです。 |
+| `header_height(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (HeaderHeight) |
+| `selection_mode(...)` | テーブルで単一選択または複数選択を有効にします。 |
+| `selection(...)` | テーブル、ネイティブピッカー、カラーコントロールの制御選択値です。 |
+| `sort_column(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (SortColumn) |
+| `sort_direction(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (SortDirection) |
+| `on_change(handler)` | ネイティブコアが通知するコンポーネントの状態を受け取ります。 |
+| `style(...), [children]` | レイアウト、文字、色、操作状態、子要素の構成。 |

@@ -1,4 +1,10 @@
-export type DocsSlug =
+import type { Locale } from '../i18n'
+import { MOONBIT_DOCS_PAGES } from './moonbit-docs'
+
+export const DOCS_FRONTENDS = ['go', 'moonbit'] as const
+export type DocsFrontend = (typeof DOCS_FRONTENDS)[number]
+
+export type GoDocsSlug =
   | 'getting-started'
   | 'project-structure'
   | 'updater'
@@ -12,27 +18,30 @@ export type DocsSlug =
   | 'swift-ui'
   | 'swift-ui-hosting'
 
+export type DocsSlug = GoDocsSlug | 'native-services'
+
 export interface DocsOutlineItem {
   id: string
   title: string
   level?: 2 | 3
 }
 
-export interface DocsPageMeta {
-  slug: DocsSlug
+export interface DocsPageTranslation {
   title: string
   description: string
   outline: readonly DocsOutlineItem[]
   searchTerms: readonly string[]
 }
 
-export interface DocsNavGroup {
-  title: string
-  items: readonly DocsSlug[]
+export interface DocsPageMeta extends DocsPageTranslation {
+  frontend: DocsFrontend
+  slug: DocsSlug
+  translations?: Partial<Record<Locale, Omit<DocsPageTranslation, 'searchTerms'>>>
 }
 
-export const DOCS_PAGES: readonly DocsPageMeta[] = [
+export const GO_DOCS_PAGES: readonly DocsPageMeta[] = [
   {
+    frontend: 'go',
     slug: 'extensions',
     title: 'Authoring Extensions',
     description: 'Share Go components and build optional native providers for QuickGUI.',
@@ -47,10 +56,29 @@ export const DOCS_PAGES: readonly DocsPageMeta[] = [
       { id: 'build-and-package-artifacts', title: 'Build and package artifacts' },
       { id: 'test-and-distribute', title: 'Test and distribute' },
     ],
-    searchTerms: ['extension', 'authoring', 'init-extension', 'zig', 'rust', 'plugin', 'native provider', 'third-party', 'purego', 'manifest', 'ABI', 'ServiceApi', 'RequireExtension', 'InvokeExtension', 'OpenExtension', 'npm'],
+    searchTerms: [
+      'extension',
+      'authoring',
+      'init-extension',
+      'zig',
+      'rust',
+      'plugin',
+      'native provider',
+      'third-party',
+      'purego',
+      'manifest',
+      'ABI',
+      'ServiceApi',
+      'RequireExtension',
+      'InvokeExtension',
+      'OpenExtension',
+      'npm',
+    ],
   },
   {
-    slug: 'updater', title: 'Automatic Updates',
+    frontend: 'go',
+    slug: 'updater',
+    title: 'Auto Updater',
     description: 'Add optional Sparkle-compatible updates to a Go application.',
     outline: [
       { id: 'configuration', title: 'Configuration' },
@@ -63,6 +91,7 @@ export const DOCS_PAGES: readonly DocsPageMeta[] = [
     searchTerms: ['updater', 'sparkle', 'appcast', 'ed25519', 'extension', 'updates'],
   },
   {
+    frontend: 'go',
     slug: 'getting-started',
     title: 'Getting Started',
     description: 'Create and run a native QuickGUI app with QuickGUI UI.',
@@ -76,6 +105,7 @@ export const DOCS_PAGES: readonly DocsPageMeta[] = [
     searchTerms: ['install', 'create', 'cli', 'window', 'bun', 'macos'],
   },
   {
+    frontend: 'go',
     slug: 'project-structure',
     title: 'Project Structure',
     description: 'Understand the files in a generated QuickGUI UI project.',
@@ -88,6 +118,7 @@ export const DOCS_PAGES: readonly DocsPageMeta[] = [
     searchTerms: ['files', 'config', 'entry', 'package', 'quickgui.config'],
   },
   {
+    frontend: 'go',
     slug: 'ui',
     title: 'QuickGUI UI Usage',
     description: 'Use QuickGUI UI reactivity to render retained native UI.',
@@ -101,6 +132,7 @@ export const DOCS_PAGES: readonly DocsPageMeta[] = [
     searchTerms: ['go', 'signal', 'component', 'reactivity', 'lifecycle', 'router'],
   },
   {
+    frontend: 'go',
     slug: 'styling',
     title: 'Styling & Layout',
     description: 'Lay out and style native nodes with familiar properties.',
@@ -116,6 +148,7 @@ export const DOCS_PAGES: readonly DocsPageMeta[] = [
     searchTerms: ['style', 'layout', 'flexbox', 'grid', 'color', 'hover'],
   },
   {
+    frontend: 'go',
     slug: 'animations',
     title: 'Transitions & Animation',
     description: 'Animate native style changes and images with retained Go components.',
@@ -127,9 +160,20 @@ export const DOCS_PAGES: readonly DocsPageMeta[] = [
       { id: 'mounting-and-reduced-motion', title: 'Mounting and reduced motion' },
       { id: 'animated-images', title: 'Animated images' },
     ],
-    searchTerms: ['transition', 'animation', 'easing', 'duration', 'hover', 'opacity', 'reduced motion', 'gif', 'webp'],
+    searchTerms: [
+      'transition',
+      'animation',
+      'easing',
+      'duration',
+      'hover',
+      'opacity',
+      'reduced motion',
+      'gif',
+      'webp',
+    ],
   },
   {
+    frontend: 'go',
     slug: 'components',
     title: 'Components',
     description: 'Choose between primitives and accessible compound components.',
@@ -143,6 +187,7 @@ export const DOCS_PAGES: readonly DocsPageMeta[] = [
     searchTerms: ['view', 'text', 'button', 'tabs', 'checkbox', 'unstyled'],
   },
   {
+    frontend: 'go',
     slug: 'forms-and-input',
     title: 'Forms & Input',
     description: 'Build controlled fields, choices, and selection controls.',
@@ -156,6 +201,7 @@ export const DOCS_PAGES: readonly DocsPageMeta[] = [
     searchTerms: ['input', 'field', 'checkbox', 'radio', 'select', 'events'],
   },
   {
+    frontend: 'go',
     slug: 'overlays-and-dialogs',
     title: 'Overlays & Dialogs',
     description: 'Present in-window overlays and operating-system dialogs.',
@@ -168,6 +214,7 @@ export const DOCS_PAGES: readonly DocsPageMeta[] = [
     searchTerms: ['popover', 'dialog', 'overlay', 'alert', 'file picker'],
   },
   {
+    frontend: 'go',
     slug: 'swift-ui',
     title: 'SwiftUI',
     description: 'Mount real SwiftUI controls inside a QuickGUI UI application.',
@@ -181,6 +228,7 @@ export const DOCS_PAGES: readonly DocsPageMeta[] = [
     searchTerms: ['swiftui', 'host', 'slider', 'toggle', 'picker', 'native'],
   },
   {
+    frontend: 'go',
     slug: 'swift-ui-hosting',
     title: 'Modifiers & Hosting',
     description: 'Style SwiftUI controls and host QuickGUI content back inside them.',
@@ -194,34 +242,30 @@ export const DOCS_PAGES: readonly DocsPageMeta[] = [
   },
 ]
 
-export const DOCS_NAV: readonly DocsNavGroup[] = [
-  {
-    title: 'Introduction',
-    items: ['getting-started', 'project-structure', 'updater', 'extensions'],
-  },
-  {
-    title: 'QuickGUI UI',
-    items: ['ui', 'styling', 'animations'],
-  },
-  {
-    title: 'Components',
-    items: ['components', 'forms-and-input', 'overlays-and-dialogs'],
-  },
-  {
-    title: 'SwiftUI',
-    items: ['swift-ui', 'swift-ui-hosting'],
-  },
-]
-
-export function docsPath(slug: DocsSlug): string {
-  return slug === 'getting-started' ? '/docs' : `/docs/${slug}`
+export function isDocsFrontend(value: string | undefined): value is DocsFrontend {
+  return value === 'go' || value === 'moonbit'
 }
 
-export function findDocsPage(slug?: string): DocsPageMeta | undefined {
+export function docsPages(frontend: DocsFrontend): readonly DocsPageMeta[] {
+  return frontend === 'go' ? GO_DOCS_PAGES : MOONBIT_DOCS_PAGES
+}
+
+export function docsPath(frontend: DocsFrontend, slug: DocsSlug = 'getting-started'): string {
+  const root = `/docs/${frontend}`
+  return slug === 'getting-started' ? root : `${root}/${slug}`
+}
+
+export function findDocsPage(frontend: DocsFrontend, slug?: string): DocsPageMeta | undefined {
   const normalized = slug || 'getting-started'
-  return DOCS_PAGES.find((page) => page.slug === normalized)
+  return docsPages(frontend).find((page) => page.slug === normalized)
 }
 
-export function docsPageIndex(slug: DocsSlug): number {
-  return DOCS_PAGES.findIndex((page) => page.slug === slug)
+// Preserve the current guide or component when switching language frontends.
+export function switchDocsFrontend(path: string, frontend: DocsFrontend): string {
+  const [, , , slug, component] = path.split('/')
+  if (component && (slug === 'components' || slug === 'swift-ui')) {
+    return `/docs/${frontend}/${slug}/${component}`
+  }
+  const page = findDocsPage(frontend, slug)
+  return docsPath(frontend, page?.slug)
 }

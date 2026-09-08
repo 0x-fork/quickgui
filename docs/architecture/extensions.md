@@ -1,6 +1,6 @@
 # Native extensions
 
-For the authoring walkthrough, see the [website guide](../../website/src/content/docs/en/extensions.mdx). It covers reusable Go packages, independently authored native services, packaging, and automatic registration.
+For the authoring walkthroughs, see the [Go guide](../../website/src/content/docs/go/en/extensions.mdx) and [MoonBit guide](../../website/src/content/docs/moonbit/en/extensions.mdx). They cover reusable packages, independently authored native services, packaging, and registration.
 
 Go applications load one QuickGUI core shared library through purego. Optional backends ship as separate libraries. Third-party services own their names, versions, and npm scopes; they do not need a provider-specific core or CLI change. The terminal extension separates rendering from its backend: the core keeps its retained terminal view while `quickgui-terminal` owns Ghostty, the PTY, and terminal workers. The updater extension uses Sparkle on macOS and a compatible signed-appcast backend on Windows/Linux. Its network and installer code is absent from the default core.
 
@@ -38,6 +38,12 @@ Manifests may declare bounded per-platform `resources`: installer helpers or `.q
 macOS bundles place core and extension images in `Contents/Frameworks`. Linux and Windows payloads place them beside the executable, including AppDir, Debian, and NSIS payloads. Removing a Go import removes the extension from the next fresh bundle. End users need only the packaged application.
 
 ## Generic services
+
+`quickgui init-extension <directory> --type go|rust|zig|moonbit` scaffolds reusable components (Go) or an independent native service (Rust, Zig, MoonBit). MoonBit providers put service operations in `native/extension.mbt`. Bun tooling compiles the native module to C and links a shared library against a private runtime built from the matching toolchain sources. Export lists and symbol visibility expose only `quickgui_extension_v1`; MoonBit allocation/layout tables cannot interpose those in the application or another provider. The provider does not depend on QuickGUI's language SDKs or renderer.
+
+The MoonBit template's C adapter initializes its runtime lazily on the frontend UI worker. A nonblocking atomic gate serializes runtime access: host main-thread shutdown defers to an active handler, and overlapping/reentrant requests receive a busy error. A pending shutdown cannot be lost while the handler releases the gate. The adapter copies bounded request spans into MoonBit-owned bytes, borrows reply bytes only during sink emission, and releases the sink exactly once on success and error paths. It supports bounded synchronous handlers; asynchronous native work or persistent sessions must extend the adapter to copy inputs and retain sinks separately. Background workers must never enter MoonBit or retain its managed objects. Registration only returns immutable metadata and does not initialize MoonBit on the loader's thread.
+
+The same service artifact works from both frontends. Go opts in through an imported manifest and `host.RequireExtension`; MoonBit lists extension directories in `native.extensions` in `quickgui.toml`. Paths resolve from the app project, and the CLI reads `quickgui.extension.json` inside each directory. Both package the exact provider release before application startup. All scaffold build scripts are TypeScript run with Bun.
 
 Every request/reply/event provider uses `SERVICE_EXTENSION` (kind 2) and the same `ServiceApi`, keyed by its declared name. Registration copies metadata and function tables into a registry bounded to 32 providers, rejects conflicting identities, and accepts identical repeated registration. Function pointers are copied out before invocation or shutdown, so foreign code never runs under the registry lock. `UPDATER_EXTENSION` remains an alias for binary/source compatibility.
 

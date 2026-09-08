@@ -263,6 +263,7 @@ fn shape_fallback(
             font_monospace_em_width: font.monospace_em_width(),
             font_id: font.id(),
             font_weight: attrs.weight,
+            optical_size_bits: attrs.optical_size_bits,
             glyph_id: info.glyph_id.try_into().expect("failed to cast glyph ID"),
             //TODO: color should not be related to shaping
             color_opt: attrs.color_opt,
@@ -343,7 +344,8 @@ fn shape_run(
         &scripts,
         &line[start_run..end_run],
         attrs.weight,
-    );
+    )
+    .with_optical_size(attrs.optical_size_bits);
 
     let font = font_iter.next().expect("no default font found");
 
@@ -526,7 +528,8 @@ fn shape_skip(
         &[],
         word,
         attrs.weight,
-    );
+    )
+    .with_optical_size(attrs.optical_size_bits);
 
     let font = font_iter.next().expect("no default font found");
     let glyph_start = glyphs.len();
@@ -542,8 +545,8 @@ fn shape_skip(
         };
         let swash = fallback.as_swash();
         let charmap = swash.charmap();
-        let metrics = swash.metrics(&[]);
-        let glyph_metrics = swash.glyph_metrics(&[]).scale(1.0);
+        let metrics = swash.metrics(fallback.normalized_coords());
+        let glyph_metrics = swash.glyph_metrics(fallback.normalized_coords()).scale(1.0);
         let scale = f32::from(metrics.units_per_em);
 
         for glyph in glyphs[glyph_start..]
@@ -586,8 +589,10 @@ fn shape_skip_glyphs(
     let swash_font = font.as_swash();
 
     let charmap = swash_font.charmap();
-    let metrics = swash_font.metrics(&[]);
-    let glyph_metrics = swash_font.glyph_metrics(&[]).scale(1.0);
+    let metrics = swash_font.metrics(font.normalized_coords());
+    let glyph_metrics = swash_font
+        .glyph_metrics(font.normalized_coords())
+        .scale(1.0);
 
     let ascent = metrics.ascent / f32::from(metrics.units_per_em);
     let descent = metrics.descent / f32::from(metrics.units_per_em);
@@ -617,6 +622,7 @@ fn shape_skip_glyphs(
                     font_monospace_em_width,
                     font_id,
                     font_weight: attrs.weight,
+                    optical_size_bits: attrs.optical_size_bits,
                     glyph_id,
                     color_opt: attrs.color_opt,
                     metadata: attrs.metadata,
@@ -653,6 +659,7 @@ pub struct ShapeGlyph {
     pub font_monospace_em_width: Option<f32>,
     pub font_id: fontdb::ID,
     pub font_weight: fontdb::Weight,
+    pub optical_size_bits: u32,
     pub glyph_id: u16,
     pub color_opt: Option<Color>,
     pub metadata: usize,
@@ -677,6 +684,7 @@ impl ShapeGlyph {
             line_height_opt,
             font_id: self.font_id,
             font_weight: self.font_weight,
+            optical_size_bits: self.optical_size_bits,
             glyph_id: self.glyph_id,
             x,
             y,
@@ -1003,7 +1011,8 @@ impl ShapeSpan {
                             &[],
                             &probe_text,
                             attrs.weight,
-                        );
+                        )
+                        .with_optical_size(attrs.optical_size_bits);
 
                         if let Some(font) = font_iter.next() {
                             let mut glyphs = Vec::new();
@@ -1132,7 +1141,11 @@ impl ShapeSpan {
                 .next()
                 .and_then(|glyph| {
                     font_system
-                        .get_font(glyph.font_id, glyph.font_weight)
+                        .get_font_with_optical_size(
+                            glyph.font_id,
+                            glyph.font_weight,
+                            glyph.optical_size_bits,
+                        )
                         .map(|font| decoration_metrics(&font))
                 });
 

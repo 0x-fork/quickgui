@@ -1,4 +1,5 @@
 export type {
+  Frontend,
   MacOSConfig,
   MacOSNotarizationConfig,
   QuickGuiConfig,

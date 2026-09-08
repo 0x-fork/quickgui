@@ -1,0 +1,56 @@
+管理一组有限的复选框值，并可派生出可选的父复选框状态。
+
+## 导入
+
+在 `moon.pkg` 中添加以下包：
+
+```moonbit
+import {
+  "egoist/quickgui/ui",
+  "egoist/quickgui/reactive",
+}
+```
+
+## 用法
+
+```moonbit
+fn component_example() -> @ui.Element {
+  let group = @ui.checkbox_group([]).items(["email", "push"]).values(["email"])
+  group
+  .flex_col()
+  .gap(8)
+  .children([
+    group.slot(@ui.Item, value="email").label("Email"),
+    group.slot(@ui.Item, value="push").label("Push"),
+    group.slot(@ui.Parent).label("All notifications"),
+  ])
+}
+```
+
+原生核心负责交互、布局、无障碍和动画。这些部件不预设视觉样式，请按应用需要设置尺寸、颜色和间距。
+
+## 结构
+
+通过根元素或条目的 `.slot(...)` 创建部件。部件继承组件作用域和条目标识。每次调用都返回 `Element`，可继续使用相同的链式样式和子元素方法。
+
+- `root.slot(@ui.Item)`
+- `root.slot(@ui.Indicator)`
+- `root.slot(@ui.Parent)`
+
+## 主要属性
+
+在链式属性方法中直接读取信号访问器，QuickGUI CLI 会为表达式创建受控绑定。通过变更回调写入状态；字面量属性初始化组件内部状态。底层组合仍可使用显式 `bind_` 方法。
+
+| 方法 | 用途 |
+| --- | --- |
+| `disabled(...)` | 禁止交互，并暴露禁用状态。 |
+| `read_only(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (ReadOnly) |
+| `required(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Required) |
+| `active_value(...)` | 受控值，具体类型取决于该组件的约定。 |
+| `values(...)` | 受控值，具体类型取决于该组件的约定。 |
+| `items(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Items) |
+| `multiple(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Multiple) |
+| `orientation(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Orientation) |
+| `loop_focus(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (LoopFocus) |
+| `on_change(handler)` | 接收原生核心报告的组件语义状态。 |
+| `style(...), [children]` | 布局、字体、颜色、交互状态和子元素组合。 |

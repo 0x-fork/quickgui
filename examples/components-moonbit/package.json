@@ -1,0 +1,14 @@
+{
+  "name": "quickgui-components-moonbit-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "quickgui dev",
+    "build": "quickgui build",
+    "fmt": "quickgui fmt",
+    "check": "bun check.ts"
+  },
+  "devDependencies": {
+    "@quickgui/cli": "workspace:*"
+  }
+}

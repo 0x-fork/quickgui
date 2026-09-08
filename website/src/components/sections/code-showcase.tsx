@@ -1,32 +1,39 @@
-import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { cn } from '@/lib/utils'
-import { CodeBlock } from '../code-block'
-import { SectionHeading } from '../section-heading'
-import type { HighlightedSnippets } from '../../lib/snippets'
+import { useTranslation } from "react-i18next";
+import { cn } from "@/lib/utils";
+import { CodeBlock } from "../code-block";
+import { SectionHeading } from "../section-heading";
+import type { HighlightedSnippets } from "../../lib/snippets";
+import type { DocsFrontend } from "../../lib/docs";
 
 const PANES = [
   {
-    key: 'counter',
-    file: 'counter.go',
+    key: "go",
+    snippet: "counter",
+    file: "counter.go",
+    name: "Go",
   },
   {
-    key: 'window',
-    file: 'main.go',
+    key: "moonbit",
+    snippet: "moonbitCounter",
+    file: "counter.mbt",
+    name: "MoonBit",
   },
-] as const
+] as const;
 
 export function CodeShowcase({
   highlighted,
+  frontend,
+  onFrontendChange,
 }: {
-  highlighted: HighlightedSnippets
+  highlighted: HighlightedSnippets;
+  frontend: DocsFrontend;
+  onFrontendChange: (frontend: DocsFrontend) => void;
 }) {
-  const { t } = useTranslation()
-  const [active, setActive] = useState<(typeof PANES)[number]['key']>('counter')
+  const { t } = useTranslation();
 
   return (
     <section id="code" className="border-b border-border">
-      <SectionHeading title={t('code.title')} lead={t('code.lead')} />
+      <SectionHeading title={t("code.title")} lead={t("code.lead")} />
 
       {/* Mobile: tab bar switches the panes; desktop shows both side by side. */}
       <div className="flex border-b border-border lg:hidden">
@@ -34,13 +41,13 @@ export function CodeShowcase({
           <button
             key={pane.key}
             type="button"
-            aria-pressed={active === pane.key}
-            onClick={() => setActive(pane.key)}
+            aria-pressed={frontend === pane.key}
+            onClick={() => onFrontendChange(pane.key)}
             className={cn(
-              'flex-1 border-r border-border py-3 font-mono text-xs transition-colors last:border-r-0',
-              active === pane.key
-                ? 'bg-background text-foreground'
-                : 'bg-card-2 text-muted-foreground',
+              "flex-1 border-r border-border py-3 font-mono text-xs transition-colors last:border-r-0",
+              frontend === pane.key
+                ? "bg-background text-foreground"
+                : "bg-card-2 text-muted-foreground",
             )}
           >
             {pane.file}
@@ -52,22 +59,18 @@ export function CodeShowcase({
         {PANES.map((pane) => (
           <div
             key={pane.key}
-            className={cn(
-              'min-w-0 bg-background',
-              active !== pane.key && 'hidden lg:block',
-            )}
+            className={cn("min-w-0 bg-background", frontend !== pane.key && "hidden lg:block")}
           >
             <div className="hidden items-center justify-between border-b border-border bg-card-2 px-5 py-2.5 lg:flex">
               <span className="font-mono text-xs">{pane.file}</span>
               <span className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
-                <span className="i-simple-icons-go size-4" aria-hidden />
-                Go · QuickGUI
+                {pane.name} · QuickGUI
               </span>
             </div>
-            <CodeBlock html={highlighted[pane.key]} />
+            <CodeBlock html={highlighted[pane.snippet]} />
           </div>
         ))}
       </div>
     </section>
-  )
+  );
 }

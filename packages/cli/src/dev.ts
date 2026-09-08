@@ -6,6 +6,7 @@ import { buildProject, type BuildResult } from "./build.ts";
 import { loadConfig, type ResolvedQuickGuiConfig } from "./config.ts";
 import { CliError, errorMessage } from "./error.ts";
 import { hostTarget, type QuickGuiTarget } from "./targets.ts";
+import { loadMoonbitSourceMaps, remapMoonbitDiagnostics } from "./moonbit/workspace.ts";
 
 export interface DevOptions {
   project: string;
@@ -16,7 +17,8 @@ export interface DevOptions {
   signingIdentity?: string;
 }
 
-type AppProcess = Bun.Subprocess<"ignore", "inherit", "inherit">;
+type AppProcess = Bun.Subprocess<"ignore", "inherit" | "pipe", "inherit" | "pipe">;
+const appOutput = new WeakMap<AppProcess, Promise<unknown>>();
 
 let nextReadySocket = 1;
 
@@ -68,7 +70,9 @@ export async function runDev(options: DevOptions): Promise<number> {
   if (options.once) {
     const child = await launchApplication(build, config);
     console.log(`[quickgui] App ready (pid ${child.pid})`);
-    return await child.exited;
+    const status = await child.exited;
+    await appOutput.get(child);
+    return status;
   }
 
   const abortController = new AbortController();
@@ -86,11 +90,7 @@ export async function runDev(options: DevOptions): Promise<number> {
   const reload = async (): Promise<void> => {
     try {
       const nextConfig = await loadConfig(projectRoot, options.configFile);
-      const nextBuild = await packageDevelopmentHost(
-        nextConfig,
-        target,
-        options.signingIdentity,
-      );
+      const nextBuild = await packageDevelopmentHost(nextConfig, target, options.signingIdentity);
       const candidate = await launchApplication(nextBuild, nextConfig, abortController.signal);
       if (stopping) {
         await stopApplication(candidate);
@@ -150,7 +150,9 @@ export async function runDev(options: DevOptions): Promise<number> {
       processes.activate(child);
       console.log(`[quickgui] App ready (pid ${child.pid}); watching for changes`);
     } catch (error) {
-      console.error(`[quickgui] App failed to start; watching for changes.\n${errorMessage(error)}`);
+      console.error(
+        `[quickgui] App failed to start; watching for changes.\n${errorMessage(error)}`,
+      );
     }
 
     await waitForShutdown(abortController);
@@ -218,10 +220,19 @@ async function launchApplication(
       QUICKGUI_READY_SOCKET: socketPath,
     },
     stdin: "ignore",
-    stdout: "inherit",
-    stderr: "inherit",
+    stdout: config.frontend === "moonbit" ? "pipe" : "inherit",
+    stderr: config.frontend === "moonbit" ? "pipe" : "inherit",
   });
-  void child.exited.then((status) => {
+  // Keep the launch's maps: a rebuild can replace them before the old process
+  // finishes. Drain its final traceback before stopping the CLI.
+  const maps = config.frontend === "moonbit" ? loadMoonbitSourceMaps(config.projectRoot) : [];
+  const output = Promise.all([
+    forwardOutput(child.stdout, (text) => process.stdout.write(text), maps, config.projectRoot),
+    forwardOutput(child.stderr, (text) => process.stderr.write(text), maps, config.projectRoot),
+  ]);
+  appOutput.set(child, output);
+  void child.exited.then(async (status) => {
+    await output;
     if (!ready) {
       rejectReady(
         new CliError(`Application exited before its first window was ready (status ${status})`),
@@ -252,15 +263,50 @@ async function launchApplication(
   }
 }
 
+async function forwardOutput(
+  stream: ReadableStream<Uint8Array> | number | null | undefined,
+  write: (text: string) => unknown,
+  maps: ReturnType<typeof loadMoonbitSourceMaps>,
+  cwd: string,
+): Promise<void> {
+  if (!stream || typeof stream === "number") return;
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let pending = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      pending += decoder.decode(value, { stream: !done });
+      const end = pending.lastIndexOf("\n") + 1;
+      if (end) {
+        write(remapMoonbitDiagnostics(pending.slice(0, end), maps, cwd));
+        pending = pending.slice(end);
+      }
+      // Do not retain unbounded output from apps that log without newlines.
+      if (done || pending.length > 65_536) {
+        write(remapMoonbitDiagnostics(pending, maps, cwd));
+        pending = "";
+      }
+      if (done) break;
+    }
+  } catch (error) {
+    console.error(`[quickgui] Could not read application output: ${errorMessage(error)}`);
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 async function stopApplication(child: AppProcess): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) {
     await child.exited;
+    await appOutput.get(child);
     return;
   }
   child.kill("SIGTERM");
   await Promise.race([child.exited, Bun.sleep(1_500)]);
   if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
   await child.exited;
+  await appOutput.get(child);
 }
 
 /**
@@ -279,7 +325,18 @@ export function shouldIgnoreChange(
   if (basename(path).endsWith(".bun-build")) return true;
   const parts = pathFromRoot.split(sep);
   if (
-    parts.some((part) => [".git", ".quickgui", ".zig-cache", "node_modules", "target"].includes(part))
+    parts.some((part) =>
+      [
+        ".git",
+        ".quickgui",
+        ".zig-cache",
+        ".mooncakes",
+        ".repos",
+        "_build",
+        "node_modules",
+        "target",
+      ].includes(part),
+    )
   ) {
     return true;
   }
@@ -300,8 +357,7 @@ export function shouldIgnoreChange(
     outDirFromRoot !== "" && !outDirFromRoot.startsWith("..") && !isAbsolute(outDirFromRoot);
   if (!outDirIsInsideRoot) return false;
   const pathFromOutDir = relative(outDir, path);
-  return pathFromOutDir === "" ||
-    (!pathFromOutDir.startsWith("..") && !isAbsolute(pathFromOutDir));
+  return pathFromOutDir === "" || (!pathFromOutDir.startsWith("..") && !isAbsolute(pathFromOutDir));
 }
 
 async function waitForShutdown(abortController: AbortController): Promise<void> {

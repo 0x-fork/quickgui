@@ -1,0 +1,13 @@
+{
+  "name": "quickgui-example-quick-git-moonbit",
+  "private": true,
+  "scripts": {
+    "dev": "bun build-extension.ts dev",
+    "build": "bun build-extension.ts build",
+    "test": "bun check.ts",
+    "fmt": "quickgui fmt"
+  },
+  "devDependencies": {
+    "@quickgui/cli": "workspace:*"
+  }
+}

@@ -1,0 +1,52 @@
+QuickGUI の内容を独立したネイティブ子ウィンドウに表示し、親ウィンドウの外側にも広げられます。
+
+## インポート
+
+`moon.pkg` に次のパッケージを追加します。
+
+```moonbit
+import {
+  "egoist/quickgui/ui",
+  "egoist/quickgui/reactive",
+}
+```
+
+## 使い方
+
+```moonbit
+fn component_example() -> @ui.Element {
+  @ui.system_popover([])
+  .label("Open details")
+  .system_content(
+    () => @ui.div([@ui.text("Native child window")]).padding(16),
+    options={
+      "width": 260,
+      "height": 120,
+      "popoverPlacement": "bottom-start",
+      "popoverDismissOnEscape": true,
+      "popoverDismissOnPointerOutside": true,
+    },
+  )
+}
+```
+
+ネイティブコアが操作、レイアウト、アクセシビリティ、アニメーションを管理します。パーツに既定の見た目はないため、サイズ、色、間隔を設定してください。
+
+## 構成
+
+ネイティブコアが操作、レイアウト、アクセシビリティ、アニメーションを管理します。パーツに既定の見た目はないため、サイズ、色、間隔を設定してください。
+
+
+
+`system_popover([]).system_content(...)`
+
+## 主なプロパティ
+
+fluent プロパティメソッドでシグナルの getter を直接読みます。QuickGUI CLI が式を制御用バインディングに変換します。変更コールバックで状態を書き込み、リテラルは内部状態の初期値に使います。低レベルの組み立てには明示的な `bind_` メソッドも使えます。
+
+| メソッド | 用途 |
+| --- | --- |
+| `open(...)` | 制御された開閉状態です。 |
+| `disabled(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (Disabled) |
+| `on_change(handler)` | ネイティブコアが通知するコンポーネントの状態を受け取ります。 |
+| `style(...), [children]` | レイアウト、文字、色、操作状態、子要素の構成。 |

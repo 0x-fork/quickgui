@@ -50,7 +50,7 @@ impl OffscreenRenderer {
             .request_device(&DeviceDescriptor::default())
             .await
             .map_err(|error| crate::VisualTestError::Device(error.to_string()))?;
-        let format = TextureFormat::Rgba8UnormSrgb;
+        let format = TextureFormat::Rgba8Unorm;
         let shapes = ShapeRenderer::new(&device, format, None);
         let path = PathRenderer::new(&device, format);
         let custom_shader = CustomShaderRenderer::new(&device, format);

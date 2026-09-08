@@ -30,6 +30,8 @@
     "src/init.ts",
     "src/init-extension.ts",
     "src/native-build.ts",
+    "src/moonbit-build.ts",
+    "src/moonbit",
     "src/targets.ts",
     "templates",
     "src/packaging",
@@ -39,7 +41,8 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@quickgui/native": "workspace:*"
+    "@quickgui/native": "workspace:*",
+    "web-tree-sitter": "0.27.0"
   },
   "engines": {
     "bun": ">=1.3.0"

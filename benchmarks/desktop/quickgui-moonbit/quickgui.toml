@@ -1,0 +1,4 @@
+name = "Benchmark QuickGUI MoonBit"
+identifier = "dev.quickgui.benchmark.moonbit"
+frontend = "moonbit"
+entry = "main"

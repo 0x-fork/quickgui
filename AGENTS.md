@@ -2,9 +2,10 @@
 
 ## Architecture
 
-- Applications and components use the Go frontend, which loads the Rust shared library in the same process through `purego` with `CGO_ENABLED=0`. There is no JavaScript application runtime. Do not reintroduce CGO or an IPC frontend bridge.
-- Implement shared native framework capabilities in the Rust core whenever possible. Go bindings should expose core behavior instead of maintaining a parallel source of truth; Go-specific component construction and fine-grained reactivity belong in the Go frontend.
-- TypeScript and Bun are development, CLI, configuration, and packaging tooling only. Preserve fast application builds: ordinary Go edits reuse the native shared library and recompile only Go.
+- Applications use Go or MoonBit. Go loads the shared library through `purego` with `CGO_ENABLED=0`; MoonBit uses native compilation and the bounded C FFI transport in `moonbit/native`. Both run in the same process. Do not introduce CGO, or an IPC frontend bridge.
+- Implement shared native framework capabilities in the Rust core. Language bindings expose core behavior; language-specific component construction and fine-grained reactivity belong in the respective frontend. MoonBit view constructors accept only children or content; styles, properties, and handlers use fluent methods. Go keeps its existing component API.
+- TypeScript and Bun are development, CLI, configuration, and packaging tooling only. Ordinary application edits reuse native shared libraries and rebuild only the selected frontend. See the [MoonBit guide](moonbit/README.md) for its toolchain and checks.
+- MoonBit examples use constructor child lists, signal getter/setter pairs, and direct reactive expressions. Read the [view compiler contract](docs/architecture/moonbit-views.md) before changing their compiler, bindings, tests, or source mapping.
 
 ## Performance
 

@@ -324,6 +324,8 @@ pub struct Attrs<'a> {
     pub stretch: Stretch,
     pub style: Style,
     pub weight: Weight,
+    /// Logical font size used for optical sizing and font-provided tracking; zero disables it.
+    pub optical_size_bits: u32,
     pub metadata: usize,
     pub cache_key_flags: CacheKeyFlags,
     pub metrics_opt: Option<CacheMetrics>,
@@ -347,6 +349,7 @@ impl<'a> Attrs<'a> {
             stretch: Stretch::Normal,
             style: Style::Normal,
             weight: Weight::NORMAL,
+            optical_size_bits: 0,
             metadata: 0,
             cache_key_flags: CacheKeyFlags::empty(),
             metrics_opt: None,
@@ -390,6 +393,16 @@ impl<'a> Attrs<'a> {
     /// Set [Weight]
     pub const fn weight(mut self, weight: Weight) -> Self {
         self.weight = weight;
+        self
+    }
+
+    /// Select the font's size-specific outlines and tracking, independently of display scale.
+    pub fn optical_size(mut self, size: f32) -> Self {
+        self.optical_size_bits = if size.is_finite() && size > 0.0 {
+            size.to_bits()
+        } else {
+            0
+        };
         self
     }
 
@@ -466,6 +479,7 @@ impl<'a> Attrs<'a> {
             && self.stretch == other.stretch
             && self.style == other.style
             && self.weight == other.weight
+            && self.optical_size_bits == other.optical_size_bits
             && self.font_features == other.font_features
     }
 }
@@ -500,6 +514,7 @@ pub struct AttrsOwned {
     pub stretch: Stretch,
     pub style: Style,
     pub weight: Weight,
+    pub optical_size_bits: u32,
     pub metadata: usize,
     pub cache_key_flags: CacheKeyFlags,
     pub metrics_opt: Option<CacheMetrics>,
@@ -520,6 +535,7 @@ impl AttrsOwned {
             stretch: attrs.stretch,
             style: attrs.style,
             weight: attrs.weight,
+            optical_size_bits: attrs.optical_size_bits,
             metadata: attrs.metadata,
             cache_key_flags: attrs.cache_key_flags,
             metrics_opt: attrs.metrics_opt,
@@ -538,6 +554,7 @@ impl AttrsOwned {
             stretch: self.stretch,
             style: self.style,
             weight: self.weight,
+            optical_size_bits: self.optical_size_bits,
             metadata: self.metadata,
             cache_key_flags: self.cache_key_flags,
             metrics_opt: self.metrics_opt,

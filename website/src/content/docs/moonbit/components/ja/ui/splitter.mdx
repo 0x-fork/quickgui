@@ -1,0 +1,51 @@
+ポインターとキーボードで操作できるハンドルを備えた、サイズ変更可能なペインを作ります。
+
+## インポート
+
+`moon.pkg` に次のパッケージを追加します。
+
+```moonbit
+import {
+  "egoist/quickgui/ui",
+  "egoist/quickgui/reactive",
+}
+```
+
+## 使い方
+
+```moonbit
+fn component_example() -> @ui.Element {
+  let split = @ui.splitter([])
+    .values([240, 480])
+    .items([{ "min": 160 }, { "min": 240 }])
+  split
+  .size_full()
+  .flex_row()
+  .children([
+    split.slot(@ui.Pane, index=0).children([@ui.text("Sidebar")]),
+    split.slot(@ui.Handle, index=0).width(4).cursor("col-resize"),
+    split.slot(@ui.Pane, index=1).children([@ui.text("Content")]),
+  ])
+}
+```
+
+ネイティブコアが操作、レイアウト、アクセシビリティ、アニメーションを管理します。パーツに既定の見た目はないため、サイズ、色、間隔を設定してください。
+
+## 構成
+
+ルートまたは項目の `.slot(...)` からパーツを作成します。パーツはコンポーネントのスコープと項目の識別子を継承します。すべて `Element` を返すため、共通の fluent API でスタイルと子要素を設定できます。
+
+- `root.slot(@ui.Pane)`
+- `root.slot(@ui.Handle)`
+
+## 主なプロパティ
+
+fluent プロパティメソッドでシグナルの getter を直接読みます。QuickGUI CLI が式を制御用バインディングに変換します。変更コールバックで状態を書き込み、リテラルは内部状態の初期値に使います。低レベルの組み立てには明示的な `bind_` メソッドも使えます。
+
+| メソッド | 用途 |
+| --- | --- |
+| `values(...)` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `items(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (Items) |
+| `orientation(...)` | 水平または垂直のレイアウトと、それに対応するキーボード方向です。 |
+| `on_change(handler)` | ネイティブコアが通知するコンポーネントの状態を受け取ります。 |
+| `style(...), [children]` | レイアウト、文字、色、操作状態、子要素の構成。 |

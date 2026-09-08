@@ -174,6 +174,9 @@ pub struct ServiceSink {
 /// "start"; subsequent commands carry that ID in their JSON. Shutdown cancels sessions without
 /// waiting for network or main-thread work. Copy any borrowed input retained after returning.
 /// One-shot operations can reply and release their sink without opening a session.
+/// Invoke runs on the frontend UI worker; shutdown may run on the native main thread
+/// concurrently with a final invoke. Providers must serialize their own state without
+/// blocking the main thread.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct ServiceApi {

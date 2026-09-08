@@ -1,0 +1,47 @@
+Shows and hides one panel from a trigger while preserving accessible state.
+
+## Import
+
+Add these package imports to `moon.pkg`:
+
+```moonbit
+import {
+  "egoist/quickgui/ui",
+  "egoist/quickgui/reactive",
+}
+```
+
+## Usage
+
+```moonbit
+fn component_example() -> @ui.Element {
+  let section = @ui.collapsible([])
+  section
+  .flex_col()
+  .children([
+    section.slot(@ui.Trigger).label("Details"),
+    section.slot(@ui.Panel).children([@ui.text("Expanded content")]),
+  ])
+}
+```
+
+The native core owns interaction, layout, accessibility and animation. These parts are unstyled: set sizes, colors and spacing for your application.
+
+## Anatomy
+
+Create parts from the root or an item with `.slot(...)`. They inherit the component scope and item identity. Each call returns an `Element`, so the same fluent styling and child methods work throughout.
+
+- `root.slot(@ui.Trigger)`
+- `root.slot(@ui.Panel)`
+
+## Key props
+
+Read signal getters directly in fluent property setters. The QuickGUI CLI creates controlled bindings for those expressions. Use change callbacks to write state; literal properties initialize component-owned state. Explicit `bind_` methods remain available for lower-level composition.
+
+| Method | Purpose |
+| --- | --- |
+| `open(...)` | Controlled open state. |
+| `disabled(...)` | Native component configuration; `bind_` accepts a reactive accessor. (Disabled) |
+| `keep_mounted(...)` | Keeps inactive content mounted with display disabled. |
+| `on_change(handler)` | Receives semantic component state reported by the native core. |
+| `style(...), [children]` | Layout, typography, colors, interaction states and child composition. |

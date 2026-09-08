@@ -1,0 +1,87 @@
+MoonBit は子要素のリストと fluent なスタイル、プロパティ、イベントハンドラーで Go と同じネイティブコンポーネント群を提供します。サイドバーには全コンポーネントのリファレンスと macOS の SwiftUI ホストがあります。
+
+## 対話式ギャラリー
+
+[MoonBit コンポーネントのサンプル](https://github.com/egoist/quickgui/tree/main/examples/components-moonbit) には Go 版と同じ 43 個のデモがあり、サイドバーとライト／ダーク表示も揃えています。混合状態や読み取り専用のコントロール、アニメーション付きスイッチ、ピッカー、ネイティブメニュー、ダイアログ、5,000 行の仮想テーブル、子ノードを遅延読み込みするツリーを試せます。
+
+MoonBit とネイティブホストライブラリを用意したソースリポジトリで実行します。
+
+```sh
+bun --cwd examples/components-moonbit dev
+```
+
+`bun --cwd examples/components-moonbit check` は SDK とギャラリーのテストを実行します。`--native` を追加すると、全デモを両方の外観でネイティブホストに描画します。
+
+## プリミティブ
+
+| コンストラクター | 内容 |
+| --- | --- |
+| `div([...])` | 子要素のリストだけを受け取るコンテナー。スタイルやイベントは fluent メソッドで設定します。 |
+| `text(value)` | 静的またはリアクティブなテキスト。 |
+| `button(content)` | ネイティブ入力の動作を持つボタン。 |
+| `input()` | 値とイベントをバインドするテキスト入力。 |
+| `image(source)` / `svg(source)` | 画像または着色された SVG マスク。 |
+| `markdown(source)` | ネイティブ Markdown コンテンツ。 |
+
+## テーブルと可視行
+
+`table([]).columns(columns).row_count(rows).row_height(height)` は列定義と全行数をバインドします。`table_row([]).row_index(index)` と `table_cell([]).column(column_id)` を追加すると、コアがレイアウト、スクロール、キーボード選択、アクセシビリティを処理します。この小さなテーブルは全 3 行をマウントします。
+
+```moonbit
+///|
+fn small_table() -> @ui.Element {
+  let names = ["Ada", "Grace", "Linus"]
+  @ui.table([])
+  .columns([{ "id": "name", "track": "1fr" }])
+  .row_count(names.length())
+  .row_height(32)
+  .height(160)
+  .children(
+    names.mapi((index, name) => {
+      @ui.table_row([])
+      .row_index(index)
+      .children([@ui.table_cell([]).column("name").children([@ui.text(name)])])
+    }),
+  )
+}
+```
+
+大量のデータでは `.on_change(...)` を受け取り、`visibleRange` フィールドがあるときだけ保存します。その値を `@ui.visible_range(range, count)` に渡し、`children_keyed` で `[start, end)` だけをマウントします。終了インデックスは含まず、初期範囲は最大 40 行です。選択イベントでは `visibleRange` が省略されることがあるため、毎回リセットしないでください。
+
+`selectedRanges` の選択範囲には終了インデックスを含みます。制御された選択は `@protocol.SELECTION` でバインドします。[Quick Git のテーブル使用例](https://github.com/egoist/quickgui/tree/main/examples/quick-git-moonbit)では履歴と差分の行を仮想化しています。
+
+## サイズ変更可能なパネル
+
+```moonbit
+///|
+fn split_view() -> @ui.Element {
+  let (width, set_width) = @reactive.create_signal(260.0)
+  @ui.div([
+    @ui.text("Sidebar").resizable_panel(
+      () => width(),
+      value => set_width(value),
+      minimum=180,
+      maximum=500,
+    ),
+    @ui.div([@ui.text("Content")]).flex(1).min_width(0),
+  ])
+  .size_full()
+  .flex_row()
+}
+```
+
+コアがドラッグを追跡してパネルの形状を更新します。コールバックはアプリ状態や永続化のために幅を通知し、ポインター追跡には関与しません。
+
+## 複合パーツ
+
+`checkbox([])`、`tabs([])`、`dialog([])` などのルートを作成し、`root.slot(@ui.Indicator)` や `root.slot(@ui.Panel, value="settings")` でパーツを作ります。パーツはルートのスコープを自動的に共有し、アコーディオン項目の子パーツは値とインデックスも継承します。初期値には `.checked(false)` や `.active_value("overview")` を使い、制御状態には `.bind_checked(...)`、`.bind_active_value(...)` と変更コールバックを使います。ビルダーはすべて `Element` を返します。拡張では低水準の `.part(...)` も利用できます。
+
+```moonbit
+fn notifications() -> @ui.Element {
+  let (checked, set_checked) = @reactive.create_signal(false)
+  let box = @ui.checkbox([])
+    .checked(checked())
+    .on_checked_change(value => set_checked(value))
+  box.children([box.slot(@ui.Indicator)]).width(20).height(20)
+}
+```

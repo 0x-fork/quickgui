@@ -1,5 +1,6 @@
 import type { RawData, Results, ZBSearch } from 'zbsearch'
 import type { Locale } from '../i18n'
+import type { DocsFrontend } from './docs'
 import {
   DOCS_SEARCH_SCHEMA,
   type DocsSearchDocument,
@@ -16,15 +17,16 @@ interface LoadedSearchIndex {
   database: ZBSearch<typeof DOCS_SEARCH_SCHEMA>
 }
 
-const indexes = new Map<Locale, Promise<LoadedSearchIndex>>()
+const indexes = new Map<string, Promise<LoadedSearchIndex>>()
 
-async function loadDocsSearch(locale: Locale): Promise<LoadedSearchIndex> {
-  const cached = indexes.get(locale)
+async function loadDocsSearch(locale: Locale, frontend: DocsFrontend): Promise<LoadedSearchIndex> {
+  const key = `${frontend}:${locale}`
+  const cached = indexes.get(key)
   if (cached) return cached
 
   const pending = Promise.all([
     import('zbsearch'),
-    fetch(`/docs-search/${locale}.json`).then(async (response) => {
+    fetch(`/docs-search/${frontend}/${locale}.json`).then(async (response) => {
       if (!response.ok) {
         throw new Error(`Unable to load documentation search (${response.status})`)
       }
@@ -40,16 +42,16 @@ async function loadDocsSearch(locale: Locale): Promise<LoadedSearchIndex> {
       return { engine, database }
     })
     .catch((error: unknown) => {
-      indexes.delete(locale)
+      indexes.delete(key)
       throw error
     })
 
-  indexes.set(locale, pending)
+  indexes.set(key, pending)
   return pending
 }
 
-export function prefetchDocsSearch(locale: Locale): void {
-  void loadDocsSearch(locale).catch(() => undefined)
+export function prefetchDocsSearch(locale: Locale, frontend: DocsFrontend): void {
+  void loadDocsSearch(locale, frontend).catch(() => undefined)
 }
 
 function differsByAtMostOne(left: string, right: string): boolean {
@@ -81,13 +83,14 @@ function differsByAtMostOne(left: string, right: string): boolean {
 
 export async function searchDocs(
   locale: Locale,
+  frontend: DocsFrontend,
   query: string,
   limit = 10,
 ): Promise<DocsSearchHit[]> {
   const term = query.trim()
   if (!term) return []
 
-  const { engine, database } = await loadDocsSearch(locale)
+  const { engine, database } = await loadDocsSearch(locale, frontend)
   const common = {
     mode: 'fulltext' as const,
     term,

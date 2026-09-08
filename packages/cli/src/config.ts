@@ -145,15 +145,26 @@ export interface MacAppStoreConfig {
   entitlements?: string;
 }
 
-/** Go compilation and native shared-library options. */
+export type Frontend = "go" | "moonbit";
+
+export function parseFrontend(value: string): Frontend {
+  if (value === "go" || value === "moonbit") return value;
+  throw new CliError(`Unknown frontend ${JSON.stringify(value)}; expected go or moonbit`);
+}
+
+/** Application compilation and native shared-library options. */
 export interface NativeConfig {
   /** Use an existing Rust shared library instead of the installed native package. */
   libraryPath?: string;
   /** Optional Go build tags. */
   tags?: string[];
+  /** MoonBit extension directories, each containing quickgui.extension.json. */
+  extensions?: string[];
 }
 
 export interface QuickGuiConfig {
+  /** Application language. Existing projects default to Go. */
+  frontend?: Frontend;
   name: string;
   identifier: string;
   version?: string;
@@ -180,6 +191,7 @@ export interface QuickGuiConfig {
 }
 
 export interface ResolvedQuickGuiConfig {
+  frontend: Frontend;
   name: string;
   executableName: string;
   identifier: string;
@@ -188,7 +200,7 @@ export interface ResolvedQuickGuiConfig {
   entry: string;
   outDir: string;
   target?: QuickGuiTarget;
-  native: { libraryPath?: string; tags: string[] };
+  native: { libraryPath?: string; tags: string[]; extensions: string[] };
   resources: string[];
   fonts: string[];
   protocols: string[];
@@ -254,7 +266,11 @@ export function resolveConfig(
   }
   const version = optionalString(input.version, "version", 64) ?? "0.1.0";
   const buildVersion = optionalString(input.buildVersion, "buildVersion", 64) ?? version;
-  const entry = resolveRelative(projectRoot, optionalString(input.entry, "entry", 1_024) ?? ".");
+  const frontend = parseFrontend(optionalString(input.frontend, "frontend", 32) ?? "go");
+  const entry = resolveRelative(
+    projectRoot,
+    optionalString(input.entry, "entry", 1_024) ?? (frontend === "moonbit" ? "main" : "."),
+  );
   const outDir = resolveRelative(
     projectRoot,
     optionalString(input.outDir, "outDir", 1_024) ?? "dist",
@@ -275,6 +291,12 @@ export function resolveConfig(
   const documentTypes = resolveDocumentTypes(input.documentTypes);
   const updates = resolveUpdates(input.updates, projectRoot);
   const native = objectOrEmpty(input.native, "native");
+  if (frontend === "go" && native.extensions !== undefined)
+    throw new CliError(
+      "native.extensions is for MoonBit; Go extensions are discovered from imports",
+    );
+  if (frontend === "moonbit" && native.tags !== undefined)
+    throw new CliError("native.tags contains Go build tags and cannot be used with MoonBit");
   const linuxIcon = optionalString(linux.icon, "linux.icon", 1_024);
   const linuxMaintainer = optionalString(linux.maintainer, "linux.maintainer", 255);
   const linuxComment = optionalString(linux.comment, "linux.comment", 512);
@@ -287,6 +309,7 @@ export function resolveConfig(
   const windowsIcon = optionalString(windows.icon, "windows.icon", 1_024);
 
   return {
+    frontend,
     name,
     executableName: executableName(name),
     identifier,
@@ -300,6 +323,9 @@ export function resolveConfig(
         ? { libraryPath: resolveRelative(projectRoot, String(native.libraryPath)) }
         : {}),
       tags: stringArray(native.tags, "native.tags"),
+      extensions: stringArray(native.extensions, "native.extensions").map((path) =>
+        resolveRelative(projectRoot, path),
+      ),
     },
     resources,
     fonts,

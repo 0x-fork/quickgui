@@ -1,0 +1,58 @@
+A MoonBit app has a module, an executable package, and a QuickGUI configuration. Bun runs development tooling; the packaged app is a native executable.
+
+## Generated files
+
+```text
+my-app/
+  main/
+    main.mbt
+    moon.pkg
+  moon.mod
+  quickgui.toml
+  package.json
+```
+
+`moon.mod` declares the application module and SDK dependency. `main/moon.pkg` imports the packages used by the executable:
+
+```moonbit
+import {
+  "egoist/quickgui/ui",
+  "egoist/quickgui/native",
+  "egoist/quickgui/reactive",
+}
+
+pkgtype(kind: "executable")
+```
+
+## Local development
+
+Until the SDK is published, create `moon.work` in a parent directory containing both your app and the QuickGUI checkout. Paths are relative to that workspace:
+
+```toml
+members = ["quickgui/moonbit", "my-app"]
+```
+
+From `quickgui`, run `bun packages/cli/src/cli.ts dev --project ../my-app`. This uses the local CLI without installing a published package.
+
+## Configuration
+
+```toml
+name = "My App"
+identifier = "com.example.myapp"
+frontend = "moonbit"
+entry = "main"
+
+[native]
+extensions = []
+```
+
+`frontend` selects MoonBit; omitting it selects Go. `entry` names the executable package directory. Add extension directories containing `quickgui.extension.json` to `native.extensions`. `quickgui build` packages the executable, selected native libraries, fonts, and configured resources. `.quickgui` holds development output and caches; do not commit it.
+
+## Packages
+
+| Package | Purpose |
+| --- | --- |
+| `egoist/quickgui/ui` | Fluent elements, styles, bindings, lists, tables, and splitters. |
+| `egoist/quickgui/reactive` | Signals, memos, effects, batching, and cleanup. |
+| `egoist/quickgui/native` | Windows, events, dialogs, menus, services, and extensions. |
+| `egoist/quickgui/protocol` | Core property constants and mutation value types. |

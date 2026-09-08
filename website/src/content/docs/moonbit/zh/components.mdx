@@ -1,0 +1,87 @@
+MoonBit 使用子节点列表与链式样式、属性和事件处理器提供与 Go 相同的原生组件系列。侧栏包含完整的组件参考和 macOS SwiftUI 托管接口。
+
+## 交互式组件示例
+
+[MoonBit 组件示例](https://github.com/egoist/quickgui/tree/main/examples/components-moonbit) 包含 Go 示例中的全部 43 个演示，并采用相同的侧栏和浅色／深色外观。可以体验混合状态和只读控件、带动画的开关、选择器、原生菜单、对话框、5,000 行虚拟表格以及按需加载的树节点。
+
+在已安装 MoonBit 并构建原生宿主库的源码仓库中运行：
+
+```sh
+bun --cwd examples/components-moonbit dev
+```
+
+运行 `bun --cwd examples/components-moonbit check` 执行 SDK 和示例测试；加上 `--native` 可通过原生宿主渲染每个演示的两种外观。
+
+## 基础组件
+
+| 构造函数 | 内容 |
+| --- | --- |
+| `div([...])` | 只接收子节点列表的容器；样式和事件使用链式方法。 |
+| `text(value)` | 静态或响应式文本。 |
+| `button(content)` | 具有原生输入行为的按钮。 |
+| `input()` | 绑定值和事件的文本输入框。 |
+| `image(source)` / `svg(source)` | 图片或着色 SVG 蒙版。 |
+| `markdown(source)` | 原生 Markdown 内容。 |
+
+## 表格与可见行
+
+`table([]).columns(columns).row_count(rows).row_height(height)` 绑定列定义与完整行数。添加 `table_row([]).row_index(index)` 和 `table_cell([]).column(column_id)` 部件，核心负责布局、滚动、键盘选择和无障碍。下面的小表格挂载全部三行：
+
+```moonbit
+///|
+fn small_table() -> @ui.Element {
+  let names = ["Ada", "Grace", "Linus"]
+  @ui.table([])
+  .columns([{ "id": "name", "track": "1fr" }])
+  .row_count(names.length())
+  .row_height(32)
+  .height(160)
+  .children(
+    names.mapi((index, name) => {
+      @ui.table_row([])
+      .row_index(index)
+      .children([@ui.table_cell([]).column("name").children([@ui.text(name)])])
+    }),
+  )
+}
+```
+
+大量数据时，监听 `.on_change(...)`，只在事件包含 `visibleRange` 时保存该字段。将其传给 `@ui.visible_range(range, count)`，通过 `children_keyed` 仅挂载 `[start, end)`。结束索引不包含在范围内，初始范围最多 40 行。选择事件可能省略 `visibleRange`，不要在每次事件中重置范围。
+
+`selectedRanges` 报告的选择范围包含结束索引。受控选择可绑定 `@protocol.SELECTION`。[Quick Git 的表格用法](https://github.com/egoist/quickgui/tree/main/examples/quick-git-moonbit)展示了虚拟化历史和差异行。
+
+## 可调整面板
+
+```moonbit
+///|
+fn split_view() -> @ui.Element {
+  let (width, set_width) = @reactive.create_signal(260.0)
+  @ui.div([
+    @ui.text("Sidebar").resizable_panel(
+      () => width(),
+      value => set_width(value),
+      minimum=180,
+      maximum=500,
+    ),
+    @ui.div([@ui.text("Content")]).flex(1).min_width(0),
+  ])
+  .size_full()
+  .flex_row()
+}
+```
+
+核心跟踪拖动并更新面板几何。回调报告宽度以更新应用状态或持久化，不参与指针跟踪。
+
+## 复合部件
+
+创建 `checkbox([])`、`tabs([])` 或 `dialog([])` 根元素，然后使用 `root.slot(@ui.Indicator)` 或 `root.slot(@ui.Panel, value="settings")` 创建部件。部件自动共享根作用域，手风琴条目的子部件还会继承条目值和索引。通过 `.checked(false)` 或 `.active_value("overview")` 设置初始状态；受控状态使用 `.bind_checked(...)`、`.bind_active_value(...)` 和变更回调。所有构建器都返回 `Element`。扩展仍可使用底层 `.part(...)` 接口。
+
+```moonbit
+fn notifications() -> @ui.Element {
+  let (checked, set_checked) = @reactive.create_signal(false)
+  let box = @ui.checkbox([])
+    .checked(checked())
+    .on_checked_change(value => set_checked(value))
+  box.children([box.slot(@ui.Indicator)]).width(20).height(20)
+}
+```

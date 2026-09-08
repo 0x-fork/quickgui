@@ -1,0 +1,60 @@
+操作、閉じる、スワイプに対応した、時間制御される積み重ね通知を表示します。
+
+## インポート
+
+`moon.pkg` に次のパッケージを追加します。
+
+```moonbit
+import {
+  "egoist/quickgui/ui",
+  "egoist/quickgui/reactive",
+}
+```
+
+## 使い方
+
+```moonbit
+fn component_example() -> @ui.Element {
+  let viewport = @ui.toast_viewport([])
+    .toasts([{ "id": "saved", "title": "Saved", "timeout": 5000 }])
+    .timeout(5000)
+  let toast = viewport.slot(@ui.Item, value="saved")
+  viewport.children([
+    toast
+    .padding(16)
+    .children([
+      toast.slot(@ui.Title).label("Saved"),
+      toast.slot(@ui.Close).label("Dismiss"),
+    ]),
+  ])
+}
+```
+
+ネイティブコアが操作、レイアウト、アクセシビリティ、アニメーションを管理します。パーツに既定の見た目はないため、サイズ、色、間隔を設定してください。
+
+## 構成
+
+ルートまたは項目の `.slot(...)` からパーツを作成します。パーツはコンポーネントのスコープと項目の識別子を継承します。すべて `Element` を返すため、共通の fluent API でスタイルと子要素を設定できます。
+
+- `root.slot(@ui.Portal)`
+- `root.slot(@ui.Positioner)`
+- `root.slot(@ui.Content)`
+- `root.slot(@ui.Title)`
+- `root.slot(@ui.Description)`
+- `root.slot(@ui.Action)`
+- `root.slot(@ui.Close)`
+- `root.slot(@ui.Item)`
+
+## 主なプロパティ
+
+fluent プロパティメソッドでシグナルの getter を直接読みます。QuickGUI CLI が式を制御用バインディングに変換します。変更コールバックで状態を書き込み、リテラルは内部状態の初期値に使います。低レベルの組み立てには明示的な `bind_` メソッドも使えます。
+
+| メソッド | 用途 |
+| --- | --- |
+| `toasts(...)` | ビューポートが描画する、宣言済み Toast キュー全体です。 |
+| `timeout(...)` | 継承する自動消去時間、またはウォームアップ済み Provider のタイムアウトです。 |
+| `limit(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (Limit) |
+| `swipe_direction(...)` | スワイプでサーフェスを閉じる、または移動する方向の端です。 |
+| `stack_expanded(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (StackExpanded) |
+| `on_change(handler)` | ネイティブコアが通知するコンポーネントの状態を受け取ります。 |
+| `style(...), [children]` | レイアウト、文字、色、操作状態、子要素の構成。 |

@@ -1,0 +1,36 @@
+A general-purpose retained container for layout, paint, pointer input, and accessibility.
+
+## Import
+
+Add these package imports to `moon.pkg`:
+
+```moonbit
+import {
+  "egoist/quickgui/ui",
+  "egoist/quickgui/reactive",
+}
+```
+
+## Usage
+
+```moonbit
+fn component_example() -> @ui.Element {
+  @ui.div([@ui.text("Hello")]).size_full().flex_col().gap(12).padding(24)
+}
+```
+
+The native core owns interaction, layout, accessibility and animation. These parts are unstyled: set sizes, colors and spacing for your application.
+
+## Key props
+
+The native core owns interaction, layout, accessibility and animation. These parts are unstyled: set sizes, colors and spacing for your application.
+
+| Method | Purpose |
+| --- | --- |
+| `div(...)` | Native component configuration; `bind_` accepts a reactive accessor. (Div) |
+| `text(...)` | Native component configuration; `bind_` accepts a reactive accessor. (Text) |
+| `size_full(...)` | Native component configuration; `bind_` accepts a reactive accessor. (SizeFull) |
+| `flex_col(...)` | Native component configuration; `bind_` accepts a reactive accessor. (FlexCol) |
+| `gap(...)` | Native component configuration; `bind_` accepts a reactive accessor. (Gap) |
+| `padding(...)` | Native component configuration; `bind_` accepts a reactive accessor. (Padding) |
+| `style(...), [children]` | Layout, typography, colors, interaction states and child composition. |

@@ -52,15 +52,37 @@ export async function runCli(argv: string[]): Promise<number> {
       return await runDev(command);
     case "build":
       return await runBuild(command);
+    case "check":
+    case "test": {
+      const project = resolve(command.project);
+      if (
+        !existsSync(resolve(project, "moon.mod")) &&
+        !existsSync(resolve(project, "moon.mod.json"))
+      )
+        throw new CliError(
+          `quickgui ${command.command} currently supports MoonBit projects; use go test for Go`,
+        );
+      const { runMoonbit } = await import("./moonbit-build.ts");
+      return runMoonbit(project, [command.command], command.release ? "production" : "development");
+    }
     case "fmt": {
+      const project = resolve(command.project);
+      const hasConfig = ["quickgui.toml", "quickgui.config.ts"].some((file) =>
+        existsSync(resolve(project, file)),
+      );
+      const moonbit = hasConfig
+        ? (await loadConfig(project)).frontend === "moonbit"
+        : existsSync(resolve(project, "moon.mod")) || existsSync(resolve(project, "moon.mod.json"));
       const child = Bun.spawn(
-        [
-          "go",
-          "run",
-          "github.com/egoist/quickgui/go/cmd/quickguifmt",
-          command.check ? "-check" : "-w",
-          ".",
-        ],
+        moonbit
+          ? ["moon", "fmt", ...(command.check ? ["--check"] : [])]
+          : [
+              "go",
+              "run",
+              "github.com/egoist/quickgui/go/cmd/quickguifmt",
+              command.check ? "-check" : "-w",
+              ".",
+            ],
         {
           cwd: resolve(command.project),
           env: { ...process.env, CGO_ENABLED: "0" },
@@ -158,11 +180,11 @@ function helpText(topic?: HelpTopic): string {
   if (topic === "init-extension") {
     return `Usage: quickgui init-extension [directory] [options]
 
-Create an extension with a runnable Go demo. Zig and Rust templates include a
+Create an extension with a runnable Go demo. Zig, Rust, and MoonBit templates include a
 standalone native service library, a Go wrapper, and Bun build scripts.
 
 Options:
-  --type <go|zig|rust>        Extension language (default: go)
+  --type <go|zig|rust|moonbit> Extension language (default: go)
   --name <name>              Extension name (default: directory name)
   --module <path>            Go module path (default: example.com/<name>)
   --npm-package <name>       Native artifact package (default: <name>-native)
@@ -187,6 +209,7 @@ Options:
 Create a QuickGUI project compiled to native code.
 
 Options:
+  --frontend <go|moonbit>    Application language (default: go)
   --name <name>              Application display name
   --identifier <id>          Reverse-DNS bundle identifier
   --no-install               Do not run bun install
@@ -228,14 +251,16 @@ Options:
   if (topic === "fmt") {
     return `Usage: quickgui fmt [options]
 
-Format Go source using the project's QuickGUI SDK formatter. Long UI calls,
-multiline declarations, and callback arguments get consistent line breaks;
-gofmt handles indentation and spacing. Requires Go and the SDK in go.mod.
+Format Go with the QuickGUI SDK formatter or MoonBit with moon fmt.
+The frontend is selected from the project's config.
 
 Options:
-  --project <directory>      Go project directory (default: .)
+  --project <directory>      Project directory (default: .)
   --check                    Report unformatted files without writing
   -h, --help                 Show this help`;
+  }
+  if (topic === "check" || topic === "test") {
+    return `Usage: quickgui ${topic} [options]\n\n${topic === "check" ? "Type-check" : "Test"} MoonBit using the same reactive view compiler as dev and build.\n\nOptions:\n  --project <directory>      MoonBit project directory (default: .)\n  --release                  Use the release profile\n  -h, --help                 Show this help`;
   }
   return `QuickGUI CLI ${CLI_VERSION}
 
@@ -243,10 +268,12 @@ Usage: quickgui <command> [options]
 
 Commands:
   init [directory]           Create a new project
-  init-extension [directory] Create a Go, Zig, or Rust extension
+  init-extension [directory] Create a Go, Zig, Rust, or MoonBit extension
   dev                        Run a native app with source reload
   build                      Package a production application
-  fmt                        Format Go UI declarations
+  fmt                        Format Go or MoonBit source
+  check                      Type-check compiled MoonBit views
+  test                       Test compiled MoonBit views
   keygen                     Create a Minisign update signing key pair
 
 Run \`quickgui help <command>\` for command-specific help.`;

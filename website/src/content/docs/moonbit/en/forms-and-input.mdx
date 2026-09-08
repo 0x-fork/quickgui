@@ -1,0 +1,35 @@
+Keep editable values in signals and write user changes back through event handlers. The native input keeps selection, focus, and text editing behavior.
+
+## Controlled input
+
+```moonbit
+///|
+fn name_form() -> @ui.Element {
+  let (name, set_name) = @reactive.create_signal("")
+  let (saved, set_saved) = @reactive.create_signal("")
+  let submit = () => set_saved(name())
+  @ui.div([
+    @ui.text("Name"),
+    @ui.input()
+    .on_input(value => set_name(value))
+    .on_submit(_ => submit())
+    .value(name()),
+    @ui.button("Save").on_click(submit).disabled(name() == ""),
+    @ui.text("Saved: \{saved()}"),
+  ])
+  .flex_col()
+  .gap(12)
+}
+```
+
+`on_input` receives the updated string. `on_submit` receives the submitted string. Use `.focus()` on a retained input handle when moving focus programmatically.
+
+## Disabled and read-only
+
+`.bind_disabled(() => disabled.get())` changes actual native interaction state. A dimmed style alone does not disable a control. Use `.property(@protocol.READ_ONLY, @protocol.Boolean(true))` for read-only input, and `.property(@protocol.PLACEHOLDER, @protocol.Text("Name"))` for a placeholder. Import `egoist/quickgui/protocol` for these constants.
+
+Use `bind_style` or native state styles for appearance, and the corresponding property for behavior.
+
+## Other controls
+
+Use [Checkbox](/docs/moonbit/components/checkbox), [Switch](/docs/moonbit/components/switch), [Select](/docs/moonbit/components/select) and the other control pages in the sidebar. Their helpers wire native roles, values and scope. Read-only and disabled controls suppress default changes; `Event.prevent_default()` can cancel an application event without removing component behavior.

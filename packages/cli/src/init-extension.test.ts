@@ -24,7 +24,7 @@ describe("init-extension", () => {
       type: "go",
       install: true,
     });
-    for (const type of ["zig", "rust"] as const) {
+    for (const type of ["zig", "rust", "moonbit"] as const) {
       expect(
         parseCliArgs([
           "init-extension",
@@ -70,7 +70,7 @@ describe("init-extension", () => {
       expect(() => parseCliArgs(["init-extension", ...args])).toThrow();
   });
 
-  for (const type of ["go", "zig", "rust"] as const) {
+  for (const type of ["go", "zig", "rust", "moonbit"] as const) {
     test(`creates a usable ${type} project with a configured demo`, async () => {
       const directory = destination("My Extension");
       await initExtension({
@@ -125,7 +125,7 @@ describe("init-extension", () => {
         );
       }
       for (const filename of readdirSync(directory, { recursive: true }) as string[]) {
-        if (/\.(go|ts|toml|json|md|rs|zig)$/.test(filename))
+        if (/\.(go|ts|toml|json|md|rs|zig|mbt|mod|pkg|work|c|h)$/.test(filename))
           expect(readFileSync(join(directory, filename), "utf8")).not.toMatch(/\{\{[A-Z_]+\}\}/);
         expect(filename.endsWith(".mjs")).toBe(false);
       }
@@ -185,13 +185,32 @@ describe("init-extension", () => {
     }
   });
 
-  test("ships the canonical standalone C ABI for Zig", () => {
-    expect(
-      readFileSync(
-        new URL("../templates/extension/zig/native/quickgui_extension.h", import.meta.url),
-        "utf8",
-      ),
-    ).toBe(readFileSync(new URL("../../../include/quickgui_extension.h", import.meta.url), "utf8"));
+  for (const type of ["zig", "moonbit"]) {
+    test(`ships the canonical standalone C ABI for ${type}`, () => {
+      expect(
+        readFileSync(
+          new URL(`../templates/extension/${type}/native/quickgui_extension.h`, import.meta.url),
+          "utf8",
+        ),
+      ).toBe(
+        readFileSync(new URL("../../../include/quickgui_extension.h", import.meta.url), "utf8"),
+      );
+    });
+  }
+
+  test("MoonBit scaffolds an isolated provider module with service logic and Bun tooling", async () => {
+    const directory = destination("moon-provider");
+    await initExtension({ directory, type: "moonbit", install: false });
+    expect(readFileSync(join(directory, "native/moon.mod"), "utf8")).toContain(
+      'name = "example/moon-provider-native"',
+    );
+    // A parent app's Moon workspace must not change the provider's dependency set.
+    expect(readFileSync(join(directory, "native/moon.work"), "utf8")).toMatch(
+      /members = \[\s*"\."/,
+    );
+    expect(readFileSync(join(directory, "native/extension.mbt"), "utf8")).toContain("fn handle(");
+    expect(existsSync(join(directory, "native/extension_wbtest.mbt"))).toBe(true);
+    expect(existsSync(join(directory, "scripts/provider.ts"))).toBe(true);
   });
 
   test("the real CLI creates a project without invoking installers", async () => {

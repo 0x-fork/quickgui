@@ -25,6 +25,26 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
+  moonbit:
+    name: MoonBit frontend
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - run: bun scripts/setup-moonbit.ts
+      - run: bun install --frozen-lockfile
+      - run: bun scripts/check-moonbit.ts
+      - name: Check MoonBit Quick Git and its independent I/O extension
+        run: bun examples/quick-git-moonbit/check.ts
+
   go-and-cli:
     name: Go and TypeScript CLI
     runs-on: ubuntu-latest
@@ -93,6 +113,8 @@ jobs:
         run: bash -n scripts/*.sh
       - name: Run all tests
         run: scripts/with-macos-ghostty-zig.sh cargo test --all-targets --all-features --locked
+      - name: Test native font rasterization and cache reuse
+        run: cargo test -p quickgui-cosmic-text --lib --locked
       - name: Test dynamic host and standalone extension backends
         run: |
           scripts/with-macos-ghostty-zig.sh cargo test -p quickgui-host -p quickgui-terminal -p quickgui-updater --lib --locked
@@ -167,4 +189,4 @@ jobs:
         run: cargo check --all-targets --all-features --locked
 
       - name: Test optional updater and installer helper
-        run: cargo test -p quickgui-updater --locked
+        run: cargo test -p quickgui-updater -p quickgui-cosmic-text --locked

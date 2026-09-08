@@ -469,11 +469,11 @@ fn create_overlay_surface(
 }
 
 fn preferred_surface_format(formats: &[TextureFormat]) -> Option<TextureFormat> {
-    formats
-        .iter()
-        .copied()
-        .find(TextureFormat::is_srgb)
-        .or_else(|| formats.first().copied())
+    // Raster masks and premultiplied UI colors blend in encoded sRGB, matching CoreText/GPUI.
+    // An sRGB attachment would linearize the destination and wash out dark glyph edges.
+    [TextureFormat::Bgra8Unorm, TextureFormat::Rgba8Unorm]
+        .into_iter()
+        .find(|format| formats.contains(format))
 }
 
 fn opaque_surface_alpha_mode(modes: &[CompositeAlphaMode]) -> Option<CompositeAlphaMode> {

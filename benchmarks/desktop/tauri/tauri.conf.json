@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Benchmark Tauri",
+  "version": "0.1.0",
+  "identifier": "dev.quickgui.benchmark.tauri",
+  "build": { "frontendDist": "../../../target/desktop-benchmarks/web" },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [{ "title": "Loading issue tracker", "width": 1100, "height": 720 }]
+  },
+  "bundle": { "active": true, "targets": ["app"], "icon": [] }
+}

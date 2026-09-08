@@ -1,0 +1,44 @@
+A controlled native SwiftUI on/off switch.
+
+## Import
+
+Add these package imports to `moon.pkg`:
+
+```moonbit
+import {
+  "egoist/quickgui/ui",
+  "egoist/quickgui/reactive",
+}
+```
+
+## Usage
+
+```moonbit
+fn component_example() -> @ui.Element {
+  let (checked, set_checked) = @reactive.create_signal(false)
+  @ui.swift_ui_host([
+    @ui.swift_ui_toggle()
+    .checked(checked())
+    .on_bool_input(next => set_checked(next))
+    .label("Notifications"),
+  ])
+}
+```
+
+SwiftUI controls require macOS and a `swift_ui_host([])` ancestor. Use `label(...)` for a native control label, `value(...)` for its value, and `swift_ui_modifiers(...)` for native SwiftUI modifiers.
+
+## Key props
+
+SwiftUI controls require macOS and a `swift_ui_host([])` ancestor. Use `label(...)` for a native control label, `value(...)` for its value, and `swift_ui_modifiers(...)` for native SwiftUI modifiers.
+
+| Method | Purpose |
+| --- | --- |
+| `signal(...)` | Native component configuration; `bind_` accepts a reactive accessor. (Signal) |
+| `swift_ui_host(...)` | Native component configuration; `bind_` accepts a reactive accessor. (SwiftUiHost) |
+| `swift_ui_toggle(...)` | Native component configuration; `bind_` accepts a reactive accessor. (SwiftUiToggle) |
+| `bind_checked(...)` | Native component configuration; `bind_` accepts a reactive accessor. (Checked) |
+| `get(...)` | Native component configuration; `bind_` accepts a reactive accessor. (Get) |
+| `on_bool_input(...)` | Reports the value accepted by the native SwiftUI toggle. |
+| `set(...)` | Native component configuration; `bind_` accepts a reactive accessor. (Set) |
+| `label(...)` | Visible native SwiftUI control label. |
+| `style(...), [children]` | Layout, typography, colors, interaction states and child composition. |

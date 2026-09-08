@@ -1,0 +1,85 @@
+編集可能なテキスト、絞り込み、任意のチップ、ネイティブの候補表示を組み合わせます。
+
+## インポート
+
+`moon.pkg` に次のパッケージを追加します。
+
+```moonbit
+import {
+  "egoist/quickgui/ui",
+  "egoist/quickgui/reactive",
+}
+```
+
+## 使い方
+
+```moonbit
+fn component_example() -> @ui.Element {
+  @ui.combobox([])
+  .items([
+    { "value": "go", "label": "Go" },
+    { "value": "moonbit", "label": "MoonBit" },
+  ])
+  .filter_mode("fuzzy")
+  .placeholder("Choose a language")
+  .width(220)
+}
+```
+
+ネイティブコアが操作、レイアウト、アクセシビリティ、アニメーションを管理します。パーツに既定の見た目はないため、サイズ、色、間隔を設定してください。
+
+## 構成
+
+ルートまたは項目の `.slot(...)` からパーツを作成します。パーツはコンポーネントのスコープと項目の識別子を継承します。すべて `Element` を返すため、共通の fluent API でスタイルと子要素を設定できます。
+
+- `root.slot(@ui.Label)`
+- `root.slot(@ui.Value)`
+- `root.slot(@ui.Icon)`
+- `root.slot(@ui.InputGroup)`
+- `root.slot(@ui.Clear)`
+- `root.slot(@ui.Trigger)`
+- `root.slot(@ui.Chips)`
+- `root.slot(@ui.Chip)`
+- `root.slot(@ui.ChipRemove)`
+- `root.slot(@ui.Backdrop)`
+- `root.slot(@ui.Portal)`
+- `root.slot(@ui.Positioner)`
+- `root.slot(@ui.Popup)`
+- `root.slot(@ui.Arrow)`
+- `root.slot(@ui.Status)`
+- `root.slot(@ui.Empty)`
+- `root.slot(@ui.List)`
+- `root.slot(@ui.Row)`
+- `root.slot(@ui.Item)`
+- `root.slot(@ui.ItemIndicator)`
+- `root.slot(@ui.Group)`
+- `root.slot(@ui.GroupLabel)`
+- `root.slot(@ui.Collection)`
+- `root.slot(@ui.Separator)`
+
+## 主なプロパティ
+
+fluent プロパティメソッドでシグナルの getter を直接読みます。QuickGUI CLI が式を制御用バインディングに変換します。変更コールバックで状態を書き込み、リテラルは内部状態の初期値に使います。低レベルの組み立てには明示的な `bind_` メソッドも使えます。
+
+| メソッド | 用途 |
+| --- | --- |
+| `disabled(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (Disabled) |
+| `read_only(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (ReadOnly) |
+| `required(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (Required) |
+| `active_value(...)` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `values(...)` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `items(...)` | 選択肢やキーボードナビゲーションに使う、上限付きの宣言モデルです。 |
+| `multiple(...)` | 複数の値を選択または開けるようにします。 |
+| `orientation(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (Orientation) |
+| `loop_focus(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (LoopFocus) |
+| `input_value(...)` | Combobox または Autocomplete が使う、編集可能な検索テキストです。 |
+| `filter_mode(...)` | コアが管理する、部分一致、前方一致、あいまい一致、または無効の絞り込みです。 |
+| `options(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (Options) |
+| `appearance(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (Appearance) |
+| `auto_highlight(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (AutoHighlight) |
+| `open_on_input_click(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (OpenOnInputClick) |
+| `highlight_item_on_hover(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (HighlightItemOnHover) |
+| `align_item_with_trigger(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (AlignItemWithTrigger) |
+| `modal(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (Modal) |
+| `on_change(handler)` | ネイティブコアが通知するコンポーネントの状態を受け取ります。 |
+| `style(...), [children]` | レイアウト、文字、色、操作状態、子要素の構成。 |

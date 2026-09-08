@@ -15,6 +15,7 @@ struct VertexOutput {
     @location(1) uv: vec2<f32>,
     @location(2) @interpolate(flat) content_type: u32,
     @location(3) @interpolate(flat) opacity: f32,
+    @location(4) @interpolate(flat) color_mode: u32,
 };
 
 struct Params {
@@ -73,9 +74,10 @@ fn vs_main(in_vert: VertexInput) -> VertexOutput {
 
     let content_type = in_vert.content_type_with_srgb & 0xffffu;
     let srgb = (in_vert.content_type_with_srgb & 0xffff0000u) >> 16u;
+    vert_output.color_mode = srgb;
 
     switch srgb {
-        case 0u: {
+        case 0u, 2u: {
             vert_output.color = vec4<f32>(
                 f32((color & 0x00ff0000u) >> 16u) / 255.0,
                 f32((color & 0x0000ff00u) >> 8u) / 255.0,
@@ -123,10 +125,14 @@ fn fs_main(in_frag: VertexOutput) -> @location(0) vec4<f32> {
             return vec4<f32>(sampled.rgb, sampled.a * in_frag.opacity);
         }
         case 1u: {
+            var coverage = textureSampleLevel(mask_atlas_texture, atlas_sampler, in_frag.uv, 0.0).x;
+            if in_frag.color_mode == 2u {
+                coverage = platform_coverage(coverage, in_frag.color.rgb);
+            }
             return vec4<f32>(
                 in_frag.color.rgb,
                 in_frag.color.a
-                    * textureSampleLevel(mask_atlas_texture, atlas_sampler, in_frag.uv, 0.0).x
+                    * coverage
                     * in_frag.opacity,
             );
         }
@@ -134,4 +140,16 @@ fn fs_main(in_frag: VertexOutput) -> @location(0) vec4<f32> {
             return vec4<f32>(0.0);
         }
     }
+}
+
+// DirectWrite's correction polynomial, as used by GPUI's Windows/Linux renderer.
+// Formula and gamma 1.8 coefficients adapted from Microsoft Terminal's dwrite.hlsl/dwrite.cpp.
+// Copyright (c) Microsoft Corporation. Licensed under the MIT license.
+fn platform_coverage(alpha: f32, color: vec3<f32>) -> f32 {
+    let brightness = dot(color, vec3<f32>(0.30, 0.59, 0.11));
+    let contrast = clamp(4.0 * (0.75 - brightness), 0.0, 1.0);
+    let a = alpha * (contrast + 1.0) / (alpha * contrast + 1.0);
+    let g = vec4<f32>(0.1469, -0.8911, 1.4644, -0.3234)
+        * vec4<f32>(65536.0 / 65025.0, 256.0 / 255.0, 65536.0 / 65025.0, 256.0 / 255.0);
+    return clamp(a + a * (1.0 - a) * ((g.x * brightness + g.y) * a + g.z * brightness + g.w), 0.0, 1.0);
 }

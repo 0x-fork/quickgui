@@ -1,13 +1,19 @@
-import { useTranslation } from 'react-i18next'
-import type { HighlightedSnippets } from '../../lib/snippets'
-import { CodeBlock } from '../code-block'
+import { useTranslation } from "react-i18next";
+import type { HighlightedSnippets } from "../../lib/snippets";
+import { CodeBlock } from "../code-block";
+import type { DocsFrontend } from "../../lib/docs";
+import { FrontendPicker } from "../frontend-picker";
 
 export function SwiftUi({
   highlighted,
+  frontend,
+  onFrontendChange,
 }: {
-  highlighted: HighlightedSnippets
+  highlighted: HighlightedSnippets;
+  frontend: DocsFrontend;
+  onFrontendChange: (frontend: DocsFrontend) => void;
 }) {
-  const { t } = useTranslation()
+  const { t } = useTranslation();
 
   return (
     <section id="swift-ui" className="border-b border-border">
@@ -18,29 +24,23 @@ export function SwiftUi({
             Native SwiftUI · macOS
           </div>
           <h2 className="mt-6 text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
-            {t('swiftUi.title')}
+            {t("swiftUi.title")}
           </h2>
           <p className="mt-4 max-w-lg text-base leading-relaxed text-muted-foreground">
-            {t('swiftUi.lead')}
+            {t("swiftUi.lead")}
           </p>
         </div>
 
         <div className="min-w-0 bg-card-2 p-6 sm:p-12">
           <div className="overflow-hidden border border-border bg-background">
-            <div className="flex items-center justify-between border-b border-border bg-card-2 px-5 py-2.5">
-              <span className="font-mono text-xs">swiftui.go</span>
-              <span className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
-                <span
-                  className="i-simple-icons-go size-4"
-                  aria-hidden
-                />
-                Go · QuickGUI
-              </span>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card-2 px-5 py-2.5">
+              <span className="font-mono text-xs">swiftui.{frontend === "go" ? "go" : "mbt"}</span>
+              <FrontendPicker value={frontend} onChange={onFrontendChange} />
             </div>
-            <CodeBlock html={highlighted.swiftUi} />
+            <CodeBlock html={highlighted[frontend === "go" ? "swiftUi" : "moonbitSwiftUi"]} />
           </div>
         </div>
       </div>
     </section>
-  )
+  );
 }

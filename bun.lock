@@ -29,6 +29,12 @@
         "@quickgui/cli": "workspace:*",
       },
     },
+    "examples/components-moonbit": {
+      "name": "quickgui-components-moonbit-example",
+      "devDependencies": {
+        "@quickgui/cli": "workspace:*",
+      },
+    },
     "examples/counter": {
       "name": "quickgui-counter-example",
       "devDependencies": {
@@ -47,6 +53,12 @@
         "@quickgui/cli": "workspace:*",
       },
     },
+    "examples/moonbit-counter": {
+      "name": "quickgui-moonbit-counter",
+      "devDependencies": {
+        "@quickgui/cli": "workspace:*",
+      },
+    },
     "examples/native-extension": {
       "name": "quickgui-native-extension-example",
       "devDependencies": {
@@ -61,6 +73,12 @@
     },
     "examples/quick-git": {
       "name": "quick-git",
+      "devDependencies": {
+        "@quickgui/cli": "workspace:*",
+      },
+    },
+    "examples/quick-git-moonbit": {
+      "name": "quickgui-example-quick-git-moonbit",
       "devDependencies": {
         "@quickgui/cli": "workspace:*",
       },
@@ -109,6 +127,7 @@
       },
       "dependencies": {
         "@quickgui/native": "workspace:*",
+        "web-tree-sitter": "0.27.0",
       },
     },
     "packages/native": {
@@ -1096,9 +1115,15 @@
 
     "quickgui-components-example": ["quickgui-components-example@workspace:examples/components"],
 
+    "quickgui-components-moonbit-example": ["quickgui-components-moonbit-example@workspace:examples/components-moonbit"],
+
     "quickgui-counter-example": ["quickgui-counter-example@workspace:examples/counter"],
 
+    "quickgui-example-quick-git-moonbit": ["quickgui-example-quick-git-moonbit@workspace:examples/quick-git-moonbit"],
+
     "quickgui-file-dialog-example": ["quickgui-file-dialog-example@workspace:examples/file-dialog"],
+
+    "quickgui-moonbit-counter": ["quickgui-moonbit-counter@workspace:examples/moonbit-counter"],
 
     "quickgui-native-extension-example": ["quickgui-native-extension-example@workspace:examples/native-extension"],
 
@@ -1247,6 +1272,8 @@
     "vfile-message": ["vfile-message@4.0.3", "", { "dependencies": { "@types/unist": "^3.0.0", "unist-util-stringify-position": "^4.0.0" } }, "sha512-QTHzsGd1EhbZs4AsQ20JX1rC3cOlt/IWJruk893DfLRr57lcnOeMaWG4K0JrRta4mIJZKth2Au3mM3u03/JWKw=="],
 
     "vite": ["vite@8.2.2", "", { "dependencies": { "lightningcss": "^1.33.0", "picomatch": "^4.0.5", "postcss": "^8.5.26", "rolldown": "~1.2.4", "tinyglobby": "^0.2.17" }, "optionalDependencies": { "fsevents": "~2.3.3" }, "peerDependencies": { "@types/node": "^20.19.0 || >=22.12.0", "@vitejs/devtools": "^0.4.0 || ^0.5.0", "esbuild": "^0.27.0 || ^0.28.0", "jiti": ">=1.21.0", "less": "^4.0.0", "sass": "^1.70.0", "sass-embedded": "^1.70.0", "stylus": ">=0.54.8", "sugarss": "^5.0.0", "terser": "^5.16.0", "tsx": "^4.8.1", "yaml": "^2.4.2" }, "optionalPeers": ["@types/node", "@vitejs/devtools", "esbuild", "jiti", "less", "sass", "sass-embedded", "stylus", "sugarss", "terser", "tsx", "yaml"], "bin": { "vite": "bin/vite.js" } }, "sha512-cFKLV/PRgAUlIRm5WjMjJ86jrftzpqcgH+Us+DS8mI3CDNiH30Whrz8uHL3+MOLPAgqbMBAqWdAHAphOAM+z/Q=="],
+
+    "web-tree-sitter": ["web-tree-sitter@0.27.0", "", {}, "sha512-XK08gj6RwTMQatAG7uVRP8MunqotL/XC19vHgkSPKmELgbGPBj4ECvB8haHOUnyj6ls2B8t42UTro14zxGgAHg=="],
 
     "website": ["website@workspace:website"],
 

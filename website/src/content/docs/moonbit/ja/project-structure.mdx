@@ -1,0 +1,58 @@
+MoonBit アプリにはモジュール、実行可能パッケージ、QuickGUI 設定があります。Bun は開発ツールを実行し、完成したアプリはネイティブ実行ファイルになります。
+
+## 生成されるファイル
+
+```text
+my-app/
+  main/
+    main.mbt
+    moon.pkg
+  moon.mod
+  quickgui.toml
+  package.json
+```
+
+`moon.mod` はアプリのモジュールと SDK 依存を宣言します。`main/moon.pkg` は実行ファイルで使うパッケージをインポートします。
+
+```moonbit
+import {
+  "egoist/quickgui/ui",
+  "egoist/quickgui/native",
+  "egoist/quickgui/reactive",
+}
+
+pkgtype(kind: "executable")
+```
+
+## ローカル開発
+
+SDK が公開されるまでは、アプリと QuickGUI チェックアウトの共通の親ディレクトリに `moon.work` を作ります。パスはワークスペースからの相対パスです。
+
+```toml
+members = ["quickgui/moonbit", "my-app"]
+```
+
+`quickgui` から `bun packages/cli/src/cli.ts dev --project ../my-app` を実行すると、公開パッケージを使わずローカル CLI を利用できます。
+
+## 設定
+
+```toml
+name = "My App"
+identifier = "com.example.myapp"
+frontend = "moonbit"
+entry = "main"
+
+[native]
+extensions = []
+```
+
+`frontend` は MoonBit を選び、省略すると Go になります。`entry` は実行可能パッケージのディレクトリです。`quickgui.extension.json` を含む拡張ディレクトリを `native.extensions` に追加します。`quickgui build` は実行ファイル、選択したネイティブライブラリ、フォント、設定したリソースをパッケージ化します。`.quickgui` は開発出力とキャッシュ用なのでコミットしないでください。
+
+## パッケージ
+
+| パッケージ | 用途 |
+| --- | --- |
+| `egoist/quickgui/ui` | fluent 要素、スタイル、バインディング、リスト、テーブル、スプリッター。 |
+| `egoist/quickgui/reactive` | シグナル、メモ、副作用、バッチ処理、クリーンアップ。 |
+| `egoist/quickgui/native` | ウィンドウ、イベント、ダイアログ、メニュー、サービス、拡張。 |
+| `egoist/quickgui/protocol` | コアのプロパティ定数と変更値の型。 |

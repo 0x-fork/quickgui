@@ -40,7 +40,9 @@ typedef struct QuickGuiServiceSink {
 
 /* Copy any borrowed inputs retained after returning. Enqueue slow work; never block on UI,
  * network, or worker completion. shutdown cancels sessions without waiting.
- * QuickGUI calls from its UI goroutine; workers may emit/release from any thread.
+ * invoke runs on the frontend UI worker; shutdown may run on the native main thread
+ * concurrently with a final invoke. Serialize provider state without waiting on that
+ * thread. Workers may emit/release from any thread.
  * A start request's ID identifies its session and its retained event sink. */
 typedef struct QuickGuiServiceApi {
     void (*invoke)(uint32_t request, QuickGuiBytes method, QuickGuiBytes params,

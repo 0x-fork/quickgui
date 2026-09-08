@@ -1,0 +1,40 @@
+原生 SwiftUI 按钮，支持文本、SF Symbol、语义角色和按下处理。
+
+## 导入
+
+在 `moon.pkg` 中添加以下包：
+
+```moonbit
+import {
+  "egoist/quickgui/ui",
+  "egoist/quickgui/reactive",
+}
+```
+
+## 用法
+
+```moonbit
+fn component_example() -> @ui.Element {
+  @ui.swift_ui_host([
+    @ui.swift_ui_button()
+    .value("Save")
+    .swift_ui_system_image("square.and.arrow.down")
+    .on_click(() => println("Saved")),
+  ])
+}
+```
+
+SwiftUI 控件仅支持 macOS，并且必须位于 `swift_ui_host([])` 中。使用 `label(...)` 设置原生标签，`value(...)` 设置值，`swift_ui_modifiers(...)` 设置 SwiftUI 修饰符。
+
+## 主要属性
+
+SwiftUI 控件仅支持 macOS，并且必须位于 `swift_ui_host([])` 中。使用 `label(...)` 设置原生标签，`value(...)` 设置值，`swift_ui_modifiers(...)` 设置 SwiftUI 修饰符。
+
+| 方法 | 用途 |
+| --- | --- |
+| `swift_ui_host(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (SwiftUiHost) |
+| `swift_ui_button(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (SwiftUiButton) |
+| `value(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Value) |
+| `swift_ui_system_image(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (SwiftUiSystemImage) |
+| `on_click(...)` | 原生 SwiftUI 按钮激活时运行。 |
+| `style(...), [children]` | 布局、字体、颜色、交互状态和子元素组合。 |

@@ -1,0 +1,13 @@
+Package the optional updater service for a MoonBit application.
+
+## Configuration
+
+Configure `[updates]` in `quickgui.toml` with your public key and download base URL. The TypeScript CLI creates appcast metadata and signed packages for both frontends.
+
+## Native extension
+
+Select the updater extension directory under `[native].extensions`. The CLI reads `quickgui.extension.json` inside it and packages the provider; MoonBit does not inspect Go imports. macOS uses Sparkle, and the other platforms use the compatible native updater service. Service wrappers use the same extension ABI described in [Authoring Extensions](/docs/moonbit/extensions).
+
+## Release artifacts
+
+Use `quickgui keygen --sparkle` to create signing keys and keep the private key outside the repository. Build with `quickgui build`, then publish the generated appcast and signed release archive at the configured download location.

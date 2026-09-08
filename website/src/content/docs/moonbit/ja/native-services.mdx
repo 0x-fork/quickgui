@@ -1,0 +1,19 @@
+`@native.run` を一度呼び、起動コールバックでウィンドウを作り、アプリサービスを登録します。結果とイベントは MoonBit の UI スレッドで実行されます。
+
+## ウィンドウのライフタイム
+
+`@ui.window(component, options=...)` でウィンドウを作り、各ウィンドウは独立したツリーを所有します。`@native.current_window()` はコンポーネントの構築中かウィンドウのコールバック内で有効です。ハンドルを取得して、後で `.close()` や `.focus()` を呼べます。
+
+作成は非同期です。ネイティブの形状や状態を問い合わせる前に `window-ready-to-show` を待ちます。`show: false` で非表示のウィンドウを準備できます。設定は `title`、`width`、`height`、`background`、`titleBarStyle`、`trafficLightX`、`trafficLightY` などのネイティブ JSON スキーマを使います。
+
+## コマンドとサービス
+
+`@native.command(json, callback)` はプラットフォームコマンド、`@native.invoke(operation, params, callback)` は非同期ネイティブサービスを呼びます。どちらのコールバックも `Result[Json, String]` を受け取ります。結果が必要な操作に使ってください。`@native.call` はコアが許可する同期 CPU 処理のみに制限されています。
+
+コールバックは登録時の所有者に属します。開始元の行やダイアログが消えても処理を継続するには、`window.with_owner(() => { ... })` 内で登録します。そのウィンドウを閉じるとコールバックも破棄されます。
+
+## イベントとファイル監視
+
+`@native.on_event(kind, listener)` は現在のウィンドウのコンテキストで購読します。`@native.subscribe` は解除関数も返します。アプリ全体のイベントには `window=0` を使います。`@native.watch_files(paths, changed, ready)` は OS のファイル通知を使い、停止関数を返します。購読は所有者とともに解除されます。
+
+継続的な拡張イベントは `extension-event` を使い、`event.target` を開いたセッションに絞ります。[拡張の作成](/docs/moonbit/extensions)を参照してください。

@@ -196,6 +196,7 @@ async function buildMacApp(
     if (generatedIcns) iconFile = "AppIcon.icns";
   }
   const reservedResources = new Set<string>([
+    ...(config.frontend === "moonbit" ? ["quickgui-moonbit.json"] : []),
     ...(iconFile ? [iconFile] : []),
     ...(fonts.length > 0 ? ["fonts"] : []),
   ]);
@@ -601,7 +602,9 @@ function validateInputs(
   platform: "darwin" | "linux" | "windows",
 ): void {
   if (!existsSync(config.entry)) {
-    throw new CliError(`Go application package not found: ${config.entry}`);
+    throw new CliError(
+      `${config.frontend === "moonbit" ? "MoonBit" : "Go"} application package not found: ${config.entry}`,
+    );
   }
   for (const resource of config.resources) {
     if (!existsSync(resource)) throw new CliError(`Resource not found: ${resource}`);

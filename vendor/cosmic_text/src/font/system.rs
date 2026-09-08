@@ -138,6 +138,7 @@ pub struct FontSystem {
 
     /// Cache for loaded fonts from the database.
     font_cache: HashMap<(fontdb::ID, fontdb::Weight), Option<Arc<Font>>>,
+    optical_font_cache: HashMap<(fontdb::ID, fontdb::Weight, u32), Option<Arc<Font>>>,
 
     /// Sorted unique ID's of all Monospace fonts in DB
     monospace_font_ids: Vec<fontdb::ID>,
@@ -261,6 +262,7 @@ impl FontSystem {
             monospace_font_ids,
             per_script_monospace_font_ids,
             font_cache: HashMap::default(),
+            optical_font_cache: HashMap::default(),
             font_matches_cache: HashMap::default(),
             font_codepoint_support_info_cache: HashMap::default(),
             monospace_fallbacks_buffer: BTreeSet::default(),
@@ -318,6 +320,31 @@ impl FontSystem {
                 }
             })
             .clone()
+    }
+
+    /// Reuse size-specific font instances only for fonts with optical outlines or tracking.
+    pub fn get_font_with_optical_size(
+        &mut self,
+        id: fontdb::ID,
+        weight: fontdb::Weight,
+        optical_size_bits: u32,
+    ) -> Option<Arc<Font>> {
+        let font = self.get_font(id, weight)?;
+        let size = f32::from_bits(optical_size_bits);
+        if !font.supports_optical_size || !size.is_finite() || size <= 0.0 {
+            return Some(font);
+        }
+        let key = (id, weight, optical_size_bits);
+        if let Some(font) = self.optical_font_cache.get(&key) {
+            return font.clone();
+        }
+        // Animated font sizes must not retain one parsed font instance per animation frame.
+        if self.optical_font_cache.len() >= 128 {
+            self.optical_font_cache.clear();
+        }
+        let font = Font::new_with_optical_size(&self.db, id, weight, Some(size)).map(Arc::new);
+        self.optical_font_cache.insert(key, font.clone());
+        font
     }
 
     pub fn is_monospace(&self, id: fontdb::ID) -> bool {

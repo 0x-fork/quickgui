@@ -1,0 +1,35 @@
+将可编辑值保存在信号中，并通过事件处理写回用户修改。原生输入框保留选择、焦点与文本编辑行为。
+
+## 受控输入
+
+```moonbit
+///|
+fn name_form() -> @ui.Element {
+  let (name, set_name) = @reactive.create_signal("")
+  let (saved, set_saved) = @reactive.create_signal("")
+  let submit = () => set_saved(name())
+  @ui.div([
+    @ui.text("Name"),
+    @ui.input()
+    .on_input(value => set_name(value))
+    .on_submit(_ => submit())
+    .value(name()),
+    @ui.button("Save").on_click(submit).disabled(name() == ""),
+    @ui.text("Saved: \{saved()}"),
+  ])
+  .flex_col()
+  .gap(12)
+}
+```
+
+`on_input` 接收更新后的字符串，`on_submit` 接收提交的字符串。程序化移动焦点时，在保留的输入框句柄上调用 `.focus()`。
+
+## 禁用与只读
+
+`.bind_disabled(() => disabled.get())` 修改真正的原生交互状态，仅降低透明度不会禁用控件。输入框只读使用 `.property(@protocol.READ_ONLY, @protocol.Boolean(true))`；占位提示使用 `.property(@protocol.PLACEHOLDER, @protocol.Text("Name"))`。这些常量需导入 `egoist/quickgui/protocol`。
+
+外观使用 `bind_style` 或原生状态样式，行为使用相应属性。
+
+## 其他控件
+
+使用[复选框](/docs/moonbit/components/checkbox)、[开关](/docs/moonbit/components/switch)、[选择器](/docs/moonbit/components/select)和侧栏中的其他控件。辅助方法会连接原生角色、值和作用域。只读和禁用控件不会执行默认状态更新；`Event.prevent_default()` 可以取消事件的默认行为。

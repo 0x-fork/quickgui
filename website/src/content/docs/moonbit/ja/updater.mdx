@@ -1,0 +1,13 @@
+MoonBit アプリ向けに任意の更新サービスをパッケージ化します。
+
+## 設定
+
+`quickgui.toml` の `[updates]` に公開鍵とダウンロード先を設定します。TypeScript CLI が両フロントエンド向けの appcast メタデータと署名済みパッケージを生成します。
+
+## ネイティブ拡張
+
+`[native].extensions` で updater 拡張のディレクトリを選択します。CLI はその中の `quickgui.extension.json` を読み取り、プロバイダーをパッケージ化します。MoonBit は Go の import を解析しません。macOS は Sparkle、他のプラットフォームは互換のネイティブ更新サービスを使います。[拡張の作成](/docs/moonbit/extensions)と同じ ABI から呼び出します。
+
+## リリース成果物
+
+`quickgui keygen --sparkle` で署名鍵を作成し、秘密鍵をリポジトリの外に保管します。`quickgui build` の生成物である appcast と署名済みアーカイブを、設定したダウンロード先に公開します。

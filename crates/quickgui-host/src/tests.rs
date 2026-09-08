@@ -8600,6 +8600,128 @@ fn a_declared_splitter_handle_follows_a_captured_pointer_drag() {
 }
 
 #[test]
+fn a_single_declared_splitter_pane_resizes_inside_an_ordinary_flex_row() {
+    let mut tree = NativeTree::default();
+    let mut outer = NativeNode::new(NodeTag::View);
+    outer.parent = Some(ROOT_NODE);
+    outer.set_property(
+        property::DISPLAY,
+        Some(PropertyValue::String("flex".into())),
+    );
+    outer.set_property(property::WIDTH, Some(PropertyValue::Number(900.0)));
+    outer.set_property(property::HEIGHT, Some(PropertyValue::Number(100.0)));
+    insert_component_node(&mut tree, 440, ROOT_NODE, outer);
+
+    let mut root = component_part_node(
+        NodeTag::View,
+        440,
+        "splitter",
+        &[
+            (property::SCOPE, "single-pane"),
+            (property::VALUES, "[300,350]"),
+            (property::ITEMS, r#"[{"min":220},{}]"#),
+        ],
+        &[(property::COMPONENT_CHANGE_LISTENER, true)],
+    );
+    root.set_property(property::WIDTH, None);
+    root.set_property(property::HEIGHT, None);
+    root.set_property(property::FLEX_SHRINK, Some(PropertyValue::Number(0.0)));
+    insert_component_node(&mut tree, 441, 440, root);
+    let mut pane = component_part_node(
+        NodeTag::View,
+        441,
+        "splitter-pane",
+        &[(property::SCOPE, "single-pane")],
+        &[],
+    );
+    pane.set_property(property::WIDTH, None);
+    pane.set_property(property::HEIGHT, None);
+    pane.set_property(property::FLEX_GROW, Some(PropertyValue::Number(1.0)));
+    pane.set_property(property::FLEX_BASIS, Some(PropertyValue::Number(0.0)));
+    pane.set_property(
+        property::BACKGROUND_COLOR,
+        Some(PropertyValue::Color(0xff0000c8)),
+    );
+    pane.set_property(property::ITEM_INDEX, Some(PropertyValue::Number(0.0)));
+    insert_component_node(&mut tree, 442, 441, pane);
+    // A real sidebar/history qualifies for retained subtree paint caching.
+    for id in 1000..1040 {
+        let mut child = NativeNode::new(NodeTag::View);
+        child.parent = Some(442);
+        child.set_property(property::WIDTH, Some(PropertyValue::Number(1.0)));
+        child.set_property(property::HEIGHT, Some(PropertyValue::Number(1.0)));
+        insert_component_node(&mut tree, id, 442, child);
+    }
+    let mut handle = component_part_node(
+        NodeTag::View,
+        441,
+        "splitter-handle",
+        &[(property::SCOPE, "single-pane")],
+        &[],
+    );
+    handle.set_property(property::WIDTH, Some(PropertyValue::Number(1.0)));
+    handle.set_property(property::HEIGHT, None);
+    handle.set_property(property::ITEM_INDEX, Some(PropertyValue::Number(0.0)));
+    insert_component_node(&mut tree, 443, 441, handle);
+    let mut content = NativeNode::new(NodeTag::View);
+    content.parent = Some(440);
+    content.set_property(property::FLEX_GROW, Some(PropertyValue::Number(1.0)));
+    content.set_property(property::FLEX_BASIS, Some(PropertyValue::Number(0.0)));
+    content.set_property(
+        property::BACKGROUND_COLOR,
+        Some(PropertyValue::Color(0xffc80000)),
+    );
+    insert_component_node(&mut tree, 444, 440, content);
+
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let view = component_part_view(13, tree, Rc::clone(&events));
+    let (mut cx, view) = quickgui::TestAppContext::from_application(
+        component_application(),
+        quickgui::WindowOptions::default(),
+        view,
+    )
+    .unwrap();
+    let window = view.window_handle();
+    cx.run_until_idle().unwrap();
+    let state = SplitterState::new(SplitterOrientation::Horizontal, &[300.0, 350.0]);
+    let splitter = Splitter::new("single-pane", &state);
+    let bounds = cx.element_bounds(window, splitter.handle_id(0)).unwrap();
+    assert!((bounds.x - 300.0).abs() < 0.5, "initial {bounds:?}");
+    cx.focus(window, splitter.handle_id(0)).unwrap();
+    cx.simulate_keystrokes(window, "right right").unwrap();
+    cx.run_until_idle().unwrap();
+    let keyboard_bounds = cx.element_bounds(window, splitter.handle_id(0)).unwrap();
+    assert!(
+        (keyboard_bounds.x - 332.0).abs() < 0.5,
+        "keyboard {keyboard_bounds:?}"
+    );
+    #[cfg(target_os = "macos")]
+    assert_eq!(
+        cx.capture_screenshot(window).unwrap().pixel(640, 100),
+        Some([200, 0, 0, 255])
+    );
+    cx.simulate_keystrokes(window, "left left").unwrap();
+    cx.run_until_idle().unwrap();
+    #[cfg(target_os = "macos")]
+    assert_eq!(
+        cx.capture_screenshot(window).unwrap().pixel(640, 100),
+        Some([0, 0, 200, 255])
+    );
+    let from = quickgui::Point::new(bounds.x + 0.5, bounds.y + 30.0);
+    let to = quickgui::Point::new(from.x + 40.0, from.y);
+    drag_captured_element(&mut cx, window, splitter.handle_id(0), from, to);
+    let changed = component_change(&events, 441);
+    assert_eq!(changed["sizes"], serde_json::json!([340.0, 310.0]));
+    let bounds = cx.element_bounds(window, splitter.handle_id(0)).unwrap();
+    assert!((bounds.x - 340.0).abs() < 0.5, "resized {bounds:?}");
+    #[cfg(target_os = "macos")]
+    assert_eq!(
+        cx.capture_screenshot(window).unwrap().pixel(640, 100),
+        Some([200, 0, 0, 255])
+    );
+}
+
+#[test]
 fn a_declared_scroll_area_measures_its_geometry_and_the_thumb_follows_a_drag() {
     let root_id = 450;
     let viewport_id = 451;

@@ -1,0 +1,55 @@
+1 つ以上の展開セクションと、そのキーボードフォーカスを管理します。
+
+## インポート
+
+`moon.pkg` に次のパッケージを追加します。
+
+```moonbit
+import {
+  "egoist/quickgui/ui",
+  "egoist/quickgui/reactive",
+}
+```
+
+## 使い方
+
+```moonbit
+fn component_example() -> @ui.Element {
+  let accordion = @ui.accordion([]).multiple(true)
+  let item = accordion.slot(@ui.Item, value="details", index=0)
+  accordion.children([
+    item
+    .flex_col()
+    .children([
+      item.slot(@ui.Header).children([item.slot(@ui.Trigger).label("Details")]),
+      item.slot(@ui.Panel).children([@ui.text("Expanded content")]),
+    ]),
+  ])
+}
+```
+
+ネイティブコアが操作、レイアウト、アクセシビリティ、アニメーションを管理します。パーツに既定の見た目はないため、サイズ、色、間隔を設定してください。
+
+## 構成
+
+ルートまたは項目の `.slot(...)` からパーツを作成します。パーツはコンポーネントのスコープと項目の識別子を継承します。すべて `Element` を返すため、共通の fluent API でスタイルと子要素を設定できます。
+
+- `root.slot(@ui.Item)`
+- `root.slot(@ui.Header)`
+- `root.slot(@ui.Trigger)`
+- `root.slot(@ui.Panel)`
+
+## 主なプロパティ
+
+fluent プロパティメソッドでシグナルの getter を直接読みます。QuickGUI CLI が式を制御用バインディングに変換します。変更コールバックで状態を書き込み、リテラルは内部状態の初期値に使います。低レベルの組み立てには明示的な `bind_` メソッドも使えます。
+
+| メソッド | 用途 |
+| --- | --- |
+| `values(...)` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `multiple(...)` | 複数の値を選択または開けるようにします。 |
+| `disabled(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (Disabled) |
+| `keep_mounted(...)` | 非アクティブな内容をマウントしたまま、表示を無効にします。 |
+| `heading_level(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (HeadingLevel) |
+| `open(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (Open) |
+| `on_change(handler)` | ネイティブコアが通知するコンポーネントの状態を受け取ります。 |
+| `style(...), [children]` | レイアウト、文字、色、操作状態、子要素の構成。 |

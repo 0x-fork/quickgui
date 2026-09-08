@@ -13,6 +13,8 @@ bitflags::bitflags! {
         const PIXEL_FONT = 4;
         /// Apply subtle optical stem thickening without selecting a heavier font face
         const FONT_THICKEN = 8;
+        /// Use the platform rasterizer for native UI glyphs where available.
+        const NATIVE_RASTERIZATION = 16;
     }
 }
 
@@ -25,6 +27,10 @@ pub struct CacheKey {
     pub glyph_id: u16,
     /// `f32` bits of font size
     pub font_size_bits: u32,
+    /// Logical optical size, independent of rasterization scale.
+    pub optical_size_bits: u32,
+    /// Native grayscale smoothing level (0–4), selected from the foreground color.
+    pub dilation: u8,
     /// Binning of fractional X offset
     pub x_bin: SubpixelBin,
     /// Binning of fractional Y offset
@@ -51,6 +57,8 @@ impl CacheKey {
                 font_id,
                 glyph_id,
                 font_size_bits: font_size.to_bits(),
+                optical_size_bits: 0,
+                dilation: 0,
                 x_bin,
                 y_bin,
                 flags,
@@ -59,6 +67,17 @@ impl CacheKey {
             x,
             y,
         )
+    }
+
+    /// Include the platform's color-dependent font smoothing in the atlas identity.
+    #[allow(unused_mut)] // Only macOS varies its native masks by foreground color.
+    pub fn with_color(mut self, color: crate::Color) -> Self {
+        #[cfg(all(target_os = "macos", feature = "swash", feature = "std"))]
+        if self.flags.contains(CacheKeyFlags::NATIVE_RASTERIZATION) {
+            self.dilation = crate::macos::dilation_for_color(color);
+        }
+        let _ = color;
+        self
     }
 }
 

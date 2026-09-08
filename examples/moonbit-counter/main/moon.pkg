@@ -1,0 +1,7 @@
+import {
+  "egoist/quickgui/ui",
+  "egoist/quickgui/native",
+  "egoist/quickgui/reactive",
+}
+
+pkgtype(kind: "executable")

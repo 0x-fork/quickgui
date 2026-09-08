@@ -1,0 +1,26 @@
+Compose SwiftUI and QuickGUI subtrees with explicit host boundaries.
+
+## Host boundaries
+
+Place native controls inside `swift_ui_host([])`. Keep ordinary QuickGUI layout outside this host unless it is explicitly reverse-hosted.
+
+```moonbit
+///|
+fn embedded_content() -> @ui.Element {
+  @ui.swift_ui_host([
+    @ui.swift_ui_quickgui_host_view(() => {
+      @ui.div([@ui.text("QuickGUI content")]).padding(16)
+    })
+    .width(320)
+    .height(120),
+  ])
+}
+```
+
+## Reverse hosting
+
+Use `swift_ui_quickgui_host_view(render, width=..., height=...)` to build a QuickGUI subtree inside SwiftUI. The callback creates nodes in the embedded view’s own window.
+
+## Lifetime
+
+The host creates the embedded surface after its owner window is mounted and closes it when the host is removed. Never move existing nodes between windows.

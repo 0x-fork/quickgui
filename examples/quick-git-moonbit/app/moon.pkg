@@ -1,0 +1,11 @@
+import {
+  "egoist/quickgui/ui",
+  "egoist/quickgui/native",
+  "egoist/quickgui/reactive",
+  "egoist/quickgui/protocol",
+  "quickgui/quick-git-moonbit/git",
+  "quickgui/quick-git-moonbit/io",
+  "moonbitlang/core/json",
+  "moonbitlang/core/ref",
+  "moonbitlang/core/string",
+}

@@ -121,6 +121,11 @@ mod font;
 pub use self::layout::*;
 mod layout;
 
+#[cfg(all(target_os = "macos", feature = "swash", feature = "std"))]
+mod macos;
+#[cfg(all(target_os = "windows", feature = "swash", feature = "std"))]
+mod windows;
+
 pub use self::line_ending::*;
 mod line_ending;
 

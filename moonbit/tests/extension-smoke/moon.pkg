@@ -1,0 +1,6 @@
+import {
+  "egoist/quickgui/native",
+  "moonbitlang/core/ref",
+}
+
+pkgtype(kind: "executable")

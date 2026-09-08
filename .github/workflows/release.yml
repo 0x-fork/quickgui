@@ -103,6 +103,8 @@ jobs:
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
         with:
           version: 0.16.0
+      - name: Install MoonBit for extension templates
+        run: bun scripts/setup-moonbit.ts
       - name: Verify extension project templates from the packed CLI
         run: bun scripts/check-extension-templates.ts
       - name: Restore Zig for existing native release tooling

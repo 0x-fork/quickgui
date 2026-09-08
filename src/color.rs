@@ -86,6 +86,15 @@ impl Color {
         [self.r, self.g, self.b, self.a]
     }
 
+    pub(crate) fn premultiplied_srgba(self) -> [f32; 4] {
+        [
+            linear_to_srgb(self.r) * self.a,
+            linear_to_srgb(self.g) * self.a,
+            linear_to_srgb(self.b) * self.a,
+            self.a,
+        ]
+    }
+
     pub(crate) fn to_srgba8(self) -> [u8; 4] {
         [
             (linear_to_srgb(self.r) * 255.0).round() as u8,

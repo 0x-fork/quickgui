@@ -569,7 +569,7 @@ const translations: Record<
 }
 
 const websiteRoot = resolve(import.meta.dir, '..')
-const componentRoot = resolve(websiteRoot, 'src/content/docs/components')
+const componentRoot = resolve(websiteRoot, 'src/content/docs/go/components')
 const locales = ['zh', 'ja'] as const
 
 function translateSource(

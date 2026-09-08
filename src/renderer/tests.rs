@@ -103,7 +103,7 @@ fn compositing_planes_keep_distinct_uniforms_in_one_submission() {
     ))
     .unwrap();
     let (device, queue) = renderer.gpu();
-    let format = TextureFormat::Rgba8UnormSrgb;
+    let format = TextureFormat::Rgba8Unorm;
     let size = Size::new(64.0, 64.0);
     let mut scene = Scene::new();
     for (plane, angle, color, blur) in [
@@ -461,10 +461,10 @@ fn macos_opentype_bytes_register_in_the_application_font_database() {
 }
 
 #[test]
-fn surface_format_prefers_srgb() {
+fn surface_format_uses_encoded_ui_blending() {
     assert_eq!(
         preferred_surface_format(&[TextureFormat::Rgba8Unorm, TextureFormat::Bgra8UnormSrgb]),
-        Some(TextureFormat::Bgra8UnormSrgb)
+        Some(TextureFormat::Rgba8Unorm)
     );
 }
 
@@ -544,7 +544,8 @@ fn offscreen_gpu_pipelines_apply_one_shared_subtree_opacity() {
         .unwrap();
     let samples = [8, 24, 40, 56, 72].map(|x| snapshot.pixel(x, 8).unwrap());
     for sample in samples {
-        assert!(sample[0] > 170 && sample[0] < 205, "{sample:?}");
+        // UI source-over is evaluated in encoded sRGB: white at 50% over black is 128.
+        assert!(sample[0].abs_diff(128) <= 2, "{sample:?}");
         assert_eq!(sample[0], sample[1]);
         assert_eq!(sample[1], sample[2]);
         assert_eq!(sample[3], 255);
@@ -1755,6 +1756,334 @@ fn background_color_only_changes_reuse_the_shaped_highlight_key() {
 
 #[cfg(target_os = "macos")]
 #[test]
+fn ui_text_edges_use_srgb_blending_and_preserve_opacity() {
+    let fonts = Rc::new(RefCell::new(fixture_font_system()));
+    let mut renderer = pollster::block_on(OffscreenRenderer::new(
+        PerformanceProfile::Balanced,
+        fonts.clone(),
+    ))
+    .unwrap();
+    for scale in [1.0, 2.0] {
+        for (ink, backdrop) in [(0u8, 255u8), (32, 255), (255, 0)] {
+            let style =
+                TextStyle::new(20.0, Color::rgb8(ink, ink, ink)).family(FontFamily::named("Inter"));
+            let bounds = Rect::new(8.0, 8.0, 48.0, 48.0);
+            let (mask, left, top) = {
+                let mut fonts = fonts.borrow_mut();
+                let mut buffer = Buffer::new(&mut fonts, Metrics::new(20.0 * scale, 27.0 * scale));
+                configure_text_buffer(
+                    &mut buffer,
+                    &mut fonts,
+                    "M",
+                    &style,
+                    None,
+                    Some(48.0),
+                    scale,
+                );
+                let run = buffer.layout_runs().next().unwrap();
+                let physical = run.glyphs[0].physical((8.0 * scale, 8.0 * scale), 1.0);
+                let mask = SwashCache::new()
+                    .get_image_uncached(
+                        &mut fonts,
+                        physical
+                            .cache_key
+                            .with_color(glyphon::Color::rgb(ink, ink, ink)),
+                    )
+                    .unwrap();
+                let left = physical.x + mask.placement.left;
+                let top = run.line_y.round() as i32 + physical.y - mask.placement.top;
+                (mask, left, top)
+            };
+            for opacity in [1.0, 0.5] {
+                let mut scene = Scene::new();
+                scene.clear(Color::rgb8(backdrop, backdrop, backdrop));
+                scene.multiply_opacity(opacity);
+                scene.push_text(TextRun::new(
+                    TextId::new(1),
+                    Arc::from("M"),
+                    bounds,
+                    style.clone(),
+                ));
+                scene.finish();
+                let snapshot = renderer
+                    .render_to_snapshot(&scene, Size::new(64.0, 64.0), scale)
+                    .unwrap();
+                let mut edges = 0;
+                for (index, alpha) in mask.data.iter().copied().enumerate() {
+                    if !(25..230).contains(&alpha) {
+                        continue;
+                    }
+                    let x = left + (index % mask.placement.width as usize) as i32;
+                    let y = top + (index / mask.placement.width as usize) as i32;
+                    let pixel = snapshot.pixel(x as u32, y as u32).unwrap();
+                    let coverage = f32::from(alpha) / 255.0;
+                    let backdrop = f32::from(backdrop) / 255.0;
+                    let desired = backdrop + (f32::from(ink) / 255.0 - backdrop) * coverage;
+                    let expected =
+                        ((desired * opacity + backdrop * (1.0 - opacity)) * 255.0).round() as u8;
+                    assert!(
+                        pixel[0].abs_diff(expected) <= 3,
+                        "scale={scale}, ink={ink}, opacity={opacity}, coverage={coverage}, pixel={pixel:?}, expected={expected}"
+                    );
+                    assert_eq!(pixel[0], pixel[1]);
+                    assert_eq!(pixel[1], pixel[2]);
+                    assert_eq!(pixel[3], 255);
+                    edges += 1;
+                }
+                assert!(edges > 10, "the test must cover antialiased glyph edges");
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn macos_default_ui_font_uses_the_system_family() {
+    let mut font_system = create_font_system();
+    for weight in [
+        glyphon::Weight::NORMAL,
+        glyphon::Weight::MEDIUM,
+        glyphon::Weight::BOLD,
+    ] {
+        let style = TextStyle::new(14.0, Color::BLACK).weight(weight);
+        let mut buffer = Buffer::new(&mut font_system, Metrics::new(28.0, 38.0));
+        configure_text_buffer(
+            &mut buffer,
+            &mut font_system,
+            "Keep offline changes",
+            &style,
+            None,
+            None,
+            2.0,
+        );
+        let glyph = &buffer.layout_runs().next().unwrap().glyphs[0];
+        let face = font_system.db().face(glyph.font_id).unwrap();
+        assert_eq!(glyph.font_weight, weight);
+        assert!(face.families.iter().any(|(name, _)| name == ".SF NS"));
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn macos_default_ui_text_matches_system_font_metrics_at_each_logical_size() {
+    use core_foundation::{
+        attributed_string::CFMutableAttributedString,
+        base::{CFRange, CFType, CFTypeRef, TCFType},
+        dictionary::CFDictionary,
+        number::CFNumber,
+        string::{CFString, CFStringRef},
+    };
+
+    #[link(name = "CoreText", kind = "framework")]
+    unsafe extern "C" {
+        static kCTFontAttributeName: CFStringRef;
+        static kCTFontVariationAttribute: CFStringRef;
+        fn CTFontCreateUIFontForLanguage(kind: u32, size: f64, language: CFStringRef) -> CFTypeRef;
+        fn CTFontDescriptorCreateWithAttributes(attributes: CFTypeRef) -> CFTypeRef;
+        fn CTFontCreateCopyWithAttributes(
+            font: CFTypeRef,
+            size: f64,
+            matrix: *const (),
+            descriptor: CFTypeRef,
+        ) -> CFTypeRef;
+        fn CTLineCreateWithAttributedString(text: CFTypeRef) -> CFTypeRef;
+        fn CTLineGetTypographicBounds(
+            line: CFTypeRef,
+            ascent: *mut f64,
+            descent: *mut f64,
+            leading: *mut f64,
+        ) -> f64;
+    }
+
+    let mut font_system = create_font_system();
+    for size in [10.0, 12.0, 14.0, 18.0, 21.0, 24.0] {
+        for weight in [400, 500, 700] {
+            // Chromium resolves system-ui through this CoreText font and sets the CSS weight
+            // directly on wght. Compare real platform metrics, not a duplicate of our shaper.
+            let font = unsafe {
+                let base = CFType::wrap_under_create_rule(CTFontCreateUIFontForLanguage(
+                    2,
+                    size,
+                    std::ptr::null(),
+                ));
+                let variations = CFDictionary::from_CFType_pairs(&[(
+                    CFNumber::from(0x77676874_i32),
+                    CFNumber::from(weight),
+                )]);
+                let attrs = CFDictionary::from_CFType_pairs(&[(
+                    CFString::wrap_under_get_rule(kCTFontVariationAttribute),
+                    variations.as_CFType(),
+                )]);
+                let descriptor = CFType::wrap_under_create_rule(
+                    CTFontDescriptorCreateWithAttributes(attrs.as_CFTypeRef()),
+                );
+                CFType::wrap_under_create_rule(CTFontCreateCopyWithAttributes(
+                    base.as_CFTypeRef(),
+                    size,
+                    std::ptr::null(),
+                    descriptor.as_CFTypeRef(),
+                ))
+            };
+            for text in [
+                "Open",
+                "Completed",
+                "Keep offline changes when reconnecting",
+                "office AV 0123456789",
+            ] {
+                let mut reference = CFMutableAttributedString::new();
+                reference.replace_str(&CFString::new(text), CFRange::init(0, 0));
+                reference.set_attribute(
+                    CFRange::init(0, reference.char_len()),
+                    unsafe { kCTFontAttributeName },
+                    &font,
+                );
+                let expected = unsafe {
+                    let line = CFType::wrap_under_create_rule(CTLineCreateWithAttributedString(
+                        reference.as_CFTypeRef(),
+                    ));
+                    CTLineGetTypographicBounds(
+                        line.as_CFTypeRef(),
+                        std::ptr::null_mut(),
+                        std::ptr::null_mut(),
+                        std::ptr::null_mut(),
+                    ) as f32
+                };
+                for scale in [1.0, 2.0] {
+                    let style = TextStyle::new(size as f32, Color::BLACK)
+                        .weight(glyphon::Weight(weight as u16));
+                    let mut buffer = Buffer::new(
+                        &mut font_system,
+                        Metrics::new(style.font_size, style.line_height),
+                    );
+                    configure_text_buffer(
+                        &mut buffer,
+                        &mut font_system,
+                        text,
+                        &style,
+                        None,
+                        None,
+                        scale,
+                    );
+                    let run = buffer.layout_runs().next().unwrap();
+                    let actual = run.line_w / scale;
+                    assert!(
+                        (actual - expected).abs() < 0.3,
+                        "{text:?}, size={size}, weight={weight}, scale={scale}: QuickGUI={actual}, CoreText={expected}"
+                    );
+                    let key = run.glyphs[0].physical((0.0, 0.0), 1.0).cache_key;
+                    assert_eq!(key.optical_size_bits, (size as f32).to_bits());
+                }
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+#[ignore = "run bun scripts/compare-text-rendering.ts to generate actual Electron references"]
+fn capture_text_rendering_comparison() {
+    #[derive(serde::Deserialize)]
+    struct Case {
+        text: String,
+        size: f32,
+        weight: u16,
+        ink: String,
+        background: String,
+        opacity: f32,
+    }
+    let directory = std::path::PathBuf::from(
+        std::env::var_os("QUICKGUI_TEXT_REFERENCE_DIR").expect("reference directory"),
+    );
+    let cases: Vec<Case> =
+        serde_json::from_slice(&std::fs::read(directory.join("cases.json")).unwrap()).unwrap();
+    let fonts = create_shared_font_system(&Assets::default(), &[]).unwrap();
+    let mut renderer =
+        pollster::block_on(OffscreenRenderer::new(PerformanceProfile::Balanced, fonts)).unwrap();
+    let color = |hex: &str| {
+        Color::rgb8(
+            u8::from_str_radix(&hex[1..3], 16).unwrap(),
+            u8::from_str_radix(&hex[3..5], 16).unwrap(),
+            u8::from_str_radix(&hex[5..7], 16).unwrap(),
+        )
+    };
+    // Diagnostic: CoreText/GPUI and Chromium deliberately differ in colored-mask treatment.
+    // Production regressions above validate native masks and exact UI blending independently.
+    let mut comparisons = Vec::new();
+    for scale in [2.0] {
+        let mut scene = Scene::new();
+        for (index, case) in cases.iter().enumerate() {
+            scene.push_quad(Quad::new(
+                Rect::new(0.0, index as f32 * 64.0, 640.0, 64.0),
+                color(&case.background),
+            ));
+            let style = TextStyle::new(case.size, color(&case.ink))
+                .weight(glyphon::Weight(case.weight))
+                .line_height(32.0)
+                .wrap(TextWrap::None);
+            let opacity = scene.multiply_opacity(case.opacity);
+            scene.push_text(TextRun::new(
+                TextId::new(index as u64 + 1),
+                Arc::from(case.text.as_str()),
+                Rect::new(16.0, index as f32 * 64.0 + 16.0, 608.0, 32.0),
+                style,
+            ));
+            scene.restore_opacity(opacity);
+        }
+        scene.finish();
+        let actual = renderer
+            .render_to_snapshot(&scene, Size::new(640.0, 640.0), scale)
+            .unwrap();
+        actual
+            .write_png(directory.join(format!("quickgui-{scale}.png")))
+            .unwrap();
+        let expected =
+            crate::VisualSnapshot::open_png(directory.join(format!("electron-{scale}.png")))
+                .unwrap();
+        assert_eq!(
+            (actual.width(), actual.height()),
+            (expected.width(), expected.height())
+        );
+        for (index, case) in cases.iter().enumerate() {
+            let background = color(&case.background).to_srgba8();
+            let ink = color(&case.ink).to_srgba8();
+            let vector: [f64; 3] =
+                std::array::from_fn(|i| f64::from(ink[i]) - f64::from(background[i]));
+            let magnitude = vector.iter().map(|v| v * v).sum::<f64>();
+            let coverage = |image: &crate::VisualSnapshot| {
+                let mut sum = 0.0;
+                for y in
+                    (index as f32 * 64.0 * scale) as u32..((index + 1) as f32 * 64.0 * scale) as u32
+                {
+                    for x in 0..image.width() {
+                        let pixel = image.pixel(x, y).unwrap();
+                        let value = (0..3)
+                            .map(|i| (f64::from(pixel[i]) - f64::from(background[i])) * vector[i])
+                            .sum::<f64>()
+                            / magnitude;
+                        sum += value.clamp(0.0, 1.0);
+                    }
+                }
+                sum
+            };
+            let native = coverage(&actual);
+            let web = coverage(&expected);
+            let difference = (native / web - 1.0) * 100.0;
+            eprintln!(
+                "scale={scale} case={index} size={} weight={} ink={}: stroke coverage {difference:+.2}% (QuickGUI={native:.1}, Electron={web:.1})",
+                case.size, case.weight, case.ink
+            );
+            comparisons.push(serde_json::json!({"scale":scale,"case":index,"size":case.size,"weight":case.weight,"ink":case.ink,"coverageDifferencePercent":difference}));
+        }
+    }
+    std::fs::write(
+        directory.join("comparison.json"),
+        serde_json::to_vec_pretty(&comparisons).unwrap(),
+    )
+    .unwrap();
+}
+
+#[cfg(target_os = "macos")]
+#[test]
 fn macos_font_fallback_excludes_the_unscalable_gb18030_bitmap_face() {
     let font_system = create_font_system();
     assert!(
@@ -2655,4 +2984,33 @@ fn transparent_present_re_premultiplies_into_the_compositor_encoding() {
     assert_eq!(pixels[3], 128);
     assert_eq!(&pixels[4..8], &[128, 128, 128, 255]);
     assert_eq!(&pixels[8..12], &[0, 0, 0, 0]);
+}
+
+#[test]
+fn ui_target_premultiplies_transparent_backgrounds_in_srgb() {
+    let font_system = create_shared_font_system(&Assets::default(), &[]).unwrap();
+    let mut renderer = pollster::block_on(OffscreenRenderer::new(
+        PerformanceProfile::Balanced,
+        font_system,
+    ))
+    .unwrap();
+    let color = Color::rgba8(128, 192, 240, 128);
+    let mut cleared = Scene::new();
+    cleared.clear(color);
+    cleared.finish();
+    let mut painted = Scene::new();
+    painted.clear(Color::TRANSPARENT);
+    painted.push_quad(Quad::new(Rect::new(0.0, 0.0, 8.0, 8.0), color));
+    painted.finish();
+    let clear = renderer
+        .render_to_snapshot(&cleared, Size::new(8.0, 8.0), 1.0)
+        .unwrap();
+    let paint = renderer
+        .render_to_snapshot(&painted, Size::new(8.0, 8.0), 1.0)
+        .unwrap();
+    for pixel in [clear.pixel(4, 4).unwrap(), paint.pixel(4, 4).unwrap()] {
+        for (actual, expected) in pixel.into_iter().zip([64_u8, 96, 120, 128]) {
+            assert!(actual.abs_diff(expected) <= 1, "{pixel:?}");
+        }
+    }
 }

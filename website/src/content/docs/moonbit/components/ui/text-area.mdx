@@ -1,0 +1,38 @@
+The multiline text-editing primitive, with the same controlled value contract as Input.
+
+## Import
+
+Add these package imports to `moon.pkg`:
+
+```moonbit
+import {
+  "egoist/quickgui/ui",
+  "egoist/quickgui/reactive",
+}
+```
+
+## Usage
+
+```moonbit
+fn component_example() -> @ui.Element {
+  let (value, set_value) = @reactive.create_signal("")
+  @ui.text_area().on_input(next => set_value(next)).value(value()).height(120)
+}
+```
+
+The native core owns interaction, layout, accessibility and animation. These parts are unstyled: set sizes, colors and spacing for your application.
+
+## Key props
+
+The native core owns interaction, layout, accessibility and animation. These parts are unstyled: set sizes, colors and spacing for your application.
+
+| Method | Purpose |
+| --- | --- |
+| `signal(...)` | Native component configuration; `bind_` accepts a reactive accessor. (Signal) |
+| `text_area(...)` | Native component configuration; `bind_` accepts a reactive accessor. (TextArea) |
+| `on_input(...)` | Reports native editing input. |
+| `set(...)` | Native component configuration; `bind_` accepts a reactive accessor. (Set) |
+| `bind_value(...)` | Controlled value. The precise value type follows this component’s contract. |
+| `get(...)` | Native component configuration; `bind_` accepts a reactive accessor. (Get) |
+| `height(...)` | Native component configuration; `bind_` accepts a reactive accessor. (Height) |
+| `style(...), [children]` | Layout, typography, colors, interaction states and child composition. |

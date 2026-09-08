@@ -1,0 +1,61 @@
+将 QuickGUI 核心路由投影到 QuickGUI UI，支持嵌套布局和容量受限的内存历史。
+
+## 导入
+
+在 `moon.pkg` 中添加以下包：
+
+```moonbit
+import {
+  "egoist/quickgui/ui",
+  "egoist/quickgui/reactive",
+}
+```
+
+## 用法
+
+```moonbit
+fn component_example() -> @ui.Element {
+  let router = @ui.router([
+    @ui.layout(
+      (router, outlet) => {
+        @ui.div([
+          router.link("/", "Home"),
+          router.link("/settings", "Settings"),
+          outlet(),
+        ]).flex_col()
+      },
+      [
+        @ui.route("/", _ => @ui.text("Home")),
+        @ui.route("/settings", _ => @ui.text("Settings")),
+      ],
+    ),
+  ])
+  router.outlet()
+}
+```
+
+原生核心负责交互、布局、无障碍和动画。这些部件不预设视觉样式，请按应用需要设置尺寸、颜色和间距。
+
+## 结构
+
+原生核心负责交互、布局、无障碍和动画。这些部件不预设视觉样式，请按应用需要设置尺寸、颜色和间距。
+
+
+
+`router(...).outlet()`
+
+## 主要属性
+
+原生核心负责交互、布局、无障碍和动画。这些部件不预设视觉样式，请按应用需要设置尺寸、颜色和间距。
+
+| 方法 | 用途 |
+| --- | --- |
+| `router(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Router) |
+| `layout(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Layout) |
+| `div(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Div) |
+| `link(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Link) |
+| `flex_col(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (FlexCol) |
+| `route(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Route) |
+| `text(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Text) |
+| `outlet(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Outlet) |
+| `style(...), [children]` | 布局、字体、颜色、交互状态和子元素组合。 |

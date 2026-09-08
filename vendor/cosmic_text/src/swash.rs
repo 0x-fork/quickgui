@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+#[cfg(all(target_os = "macos", feature = "std"))]
+use crate::macos::Rasterizer as NativeRasterizer;
+#[cfg(all(target_os = "windows", feature = "std"))]
+use crate::windows::Rasterizer as NativeRasterizer;
+
 #[cfg(not(feature = "std"))]
 use alloc::boxed::Box;
 use core::fmt;
@@ -115,28 +120,23 @@ fn swash_image(
     context: &mut ScaleContext,
     cache_key: CacheKey,
 ) -> Option<SwashImage> {
-    let Some(font) = font_system.get_font(cache_key.font_id, cache_key.font_weight) else {
+    let Some(font) = font_system.get_font_with_optical_size(
+        cache_key.font_id,
+        cache_key.font_weight,
+        cache_key.optical_size_bits,
+    ) else {
         log::warn!("did not find font {:?}", cache_key.font_id);
         return None;
     };
 
-    let variable_width = font
-        .as_swash()
-        .variations()
-        .find_by_tag(swash::Tag::from_be_bytes(*b"wght"));
-
-    // Build the scaler
+    // Shape and rasterize the exact same variation coordinates. The optical size
+    // is logical; the raster size includes the display scale.
     let mut scaler = context
         .builder(font.as_swash())
         .size(f32::from_bits(cache_key.font_size_bits))
-        .hint(!cache_key.flags.contains(CacheKeyFlags::DISABLE_HINTING));
-    if let Some(variation) = variable_width {
-        scaler = scaler.normalized_coords(font.as_swash().variations().normalized_coords([(
-            swash::Tag::from_be_bytes(*b"wght"),
-            f32::from(cache_key.font_weight.0).clamp(variation.min_value(), variation.max_value()),
-        )]));
-    }
-    let mut scaler = scaler.build();
+        .hint(!cache_key.flags.contains(CacheKeyFlags::DISABLE_HINTING))
+        .normalized_coords(font.normalized_coords())
+        .build();
 
     // Compute the fractional offset-- you'll likely want to quantize this
     // in a real renderer
@@ -189,28 +189,23 @@ fn swash_outline_commands(
 ) -> Option<Box<[swash::zeno::Command]>> {
     use swash::zeno::PathData as _;
 
-    let Some(font) = font_system.get_font(cache_key.font_id, cache_key.font_weight) else {
+    let Some(font) = font_system.get_font_with_optical_size(
+        cache_key.font_id,
+        cache_key.font_weight,
+        cache_key.optical_size_bits,
+    ) else {
         log::warn!("did not find font {:?}", cache_key.font_id);
         return None;
     };
 
-    let variable_width = font
-        .as_swash()
-        .variations()
-        .find_by_tag(swash::Tag::from_be_bytes(*b"wght"));
-
-    // Build the scaler
+    // Shape and rasterize the exact same variation coordinates. The optical size
+    // is logical; the raster size includes the display scale.
     let mut scaler = context
         .builder(font.as_swash())
         .size(f32::from_bits(cache_key.font_size_bits))
-        .hint(!cache_key.flags.contains(CacheKeyFlags::DISABLE_HINTING));
-    if let Some(variation) = variable_width {
-        scaler = scaler.normalized_coords(font.as_swash().variations().normalized_coords([(
-            swash::Tag::from_be_bytes(*b"wght"),
-            f32::from(cache_key.font_weight.0).clamp(variation.min_value(), variation.max_value()),
-        )]));
-    }
-    let mut scaler = scaler.build();
+        .hint(!cache_key.flags.contains(CacheKeyFlags::DISABLE_HINTING))
+        .normalized_coords(font.normalized_coords())
+        .build();
 
     // Scale the outline
     let mut outline = scaler
@@ -233,6 +228,8 @@ fn swash_outline_commands(
 /// Cache for rasterizing with the swash scaler
 pub struct SwashCache {
     context: ScaleContext,
+    #[cfg(all(any(target_os = "macos", target_os = "windows"), feature = "std"))]
+    native: NativeRasterizer,
     pub image_cache: HashMap<CacheKey, Option<SwashImage>>,
     pub outline_command_cache: HashMap<CacheKey, Option<Box<[swash::zeno::Command]>>>,
 }
@@ -248,6 +245,8 @@ impl SwashCache {
     pub fn new() -> Self {
         Self {
             context: ScaleContext::new(),
+            #[cfg(all(any(target_os = "macos", target_os = "windows"), feature = "std"))]
+            native: NativeRasterizer::default(),
             image_cache: HashMap::default(),
             outline_command_cache: HashMap::default(),
         }
@@ -259,6 +258,10 @@ impl SwashCache {
         font_system: &mut FontSystem,
         cache_key: CacheKey,
     ) -> Option<SwashImage> {
+        #[cfg(all(any(target_os = "macos", target_os = "windows"), feature = "std"))]
+        if let Some(image) = self.native.image(font_system, cache_key) {
+            return Some(image);
+        }
         swash_image(font_system, &mut self.context, cache_key)
     }
 
@@ -268,9 +271,16 @@ impl SwashCache {
         font_system: &mut FontSystem,
         cache_key: CacheKey,
     ) -> &Option<SwashImage> {
-        self.image_cache
-            .entry(cache_key)
-            .or_insert_with(|| swash_image(font_system, &mut self.context, cache_key))
+        let context = &mut self.context;
+        #[cfg(all(any(target_os = "macos", target_os = "windows"), feature = "std"))]
+        let native = &mut self.native;
+        self.image_cache.entry(cache_key).or_insert_with(|| {
+            #[cfg(all(any(target_os = "macos", target_os = "windows"), feature = "std"))]
+            if let Some(image) = native.image(font_system, cache_key) {
+                return Some(image);
+            }
+            swash_image(font_system, context, cache_key)
+        })
     }
 
     /// Creates outline commands
@@ -302,7 +312,7 @@ impl SwashCache {
         base: Color,
         mut f: F,
     ) {
-        if let Some(image) = self.get_image(font_system, cache_key) {
+        if let Some(image) = self.get_image(font_system, cache_key.with_color(base)) {
             let x = image.placement.left;
             let y = -image.placement.top;
 

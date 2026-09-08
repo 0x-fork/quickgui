@@ -1,0 +1,39 @@
+无需加载外部 SVG 资源即可渲染完整的内联 SVG 文档。
+
+## 导入
+
+在 `moon.pkg` 中添加以下包：
+
+```moonbit
+import {
+  "egoist/quickgui/ui",
+  "egoist/quickgui/reactive",
+}
+```
+
+## 用法
+
+```moonbit
+fn component_example() -> @ui.Element {
+  @ui.svg(
+    "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><path d=\"M4 12h16M12 4v16\" stroke=\"black\" stroke-width=\"2\"/></svg>",
+  )
+  .width(20)
+  .height(20)
+  .text_color(@ui.rgb8(48, 120, 220))
+}
+```
+
+原生核心负责交互、布局、无障碍和动画。这些部件不预设视觉样式，请按应用需要设置尺寸、颜色和间距。
+
+## 主要属性
+
+原生核心负责交互、布局、无障碍和动画。这些部件不预设视觉样式，请按应用需要设置尺寸、颜色和间距。
+
+| 方法 | 用途 |
+| --- | --- |
+| `svg(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Svg) |
+| `width(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Width) |
+| `height(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Height) |
+| `text_color(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (TextColor) |
+| `style(...), [children]` | 布局、字体、颜色、交互状态和子元素组合。 |

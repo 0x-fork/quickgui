@@ -1,0 +1,26 @@
+在明确的宿主边界内组合 SwiftUI 和 QuickGUI 子树。
+
+## 宿主边界
+
+将原生控件放在 `swift_ui_host([])` 中。普通 QuickGUI 布局应位于宿主外，或通过明确的反向托管接口添加。
+
+```moonbit
+///|
+fn embedded_content() -> @ui.Element {
+  @ui.swift_ui_host([
+    @ui.swift_ui_quickgui_host_view(() => {
+      @ui.div([@ui.text("QuickGUI content")]).padding(16)
+    })
+    .width(320)
+    .height(120),
+  ])
+}
+```
+
+## 反向托管
+
+通过 `swift_ui_quickgui_host_view(render, width=..., height=...)` 在 SwiftUI 内创建 QuickGUI 子树。回调在嵌入视图自己的窗口中创建节点。
+
+## 生命周期
+
+宿主在所属窗口挂载后创建嵌入视图，并在宿主移除时关闭。不要跨窗口移动已有节点。

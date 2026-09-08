@@ -1,0 +1,53 @@
+要素のメソッドと `@ui.style()` は同じネイティブスタイルのプロパティを使います。数値の寸法はピクセル、文字列はパーセントやネイティブのキーワードを指定します。
+
+## fluent レイアウト
+
+```moonbit
+fn card() -> @ui.Element {
+  @ui.div([@ui.text("A retained card").font_size(24).font_weight(600)])
+  .flex_col()
+  .width(420)
+  .max_width("100%")
+  .padding(24)
+  .gap(12)
+  .border_radius(12)
+  .bg(@ui.rgb8(17, 24, 39))
+  .text_color(@ui.rgb8(226, 232, 240))
+}
+```
+
+一般的な配置には `.flex_row()`、`.flex_col()`、`.items_center()`、`.justify_center()` を使います。`.flex(1)` は grow、shrink、ゼロの basis を設定します。スクロールする flex の子には `.min_height(0)` を指定し、親のサイズを制限します。
+
+## マージとリアクティブなスタイル
+
+`.style(base).style(overrides)` は順番に宣言をマージし、後のプロパティが優先されます。スタイルビルダーの `.merge(other)` も同様です。適用時にスナップショットを取るため、その後ビルダーを変更してもマウント済みの要素は更新されません。
+
+```moonbit
+///|
+fn selectable() -> @ui.Element {
+  let (selected, set_selected) = @reactive.create_signal(false)
+  @ui.button("Select")
+  .on_click(() => set_selected(!selected()))
+  .style(
+    @ui.style()
+    .padding(12)
+    .bg(@ui.rgb8(51, 65, 85))
+    .text_color(@ui.rgb8(255, 255, 255))
+    .when(selected(), s => s.bg(@ui.rgb8(37, 99, 235))),
+  )
+}
+```
+
+コンパイラーは `.style(...)` と fluent メソッド内の getter をバインドします。更新のたびに後の宣言が優先され、消えた宣言は解除されるか前の値へ戻ります。操作状態のコールバックも getter を読めます。適用済みビルダーの変更はスナップショットの変更なので、動的スタイルはシグナルから導出してください。
+
+## 操作状態
+
+ポインターとフォーカスの状態には `.hover(s => ...)`、`.active(s => ...)`、`.focus_style(s => ...)` を使います。`.selected_style` は複合パーツの選択状態を指定します。これらの状態はネイティブコアが解決します。ドロップ先のドラッグ中の外観には、`bind_json` と `@protocol.DRAG_OVER_STYLE` でスタイルの `.json()` を返します。ノードをドロップ先として設定する必要もあり、スタイルだけでドロップ動作は有効になりません。プロトコル定数を使う場合は `egoist/quickgui/protocol` をインポートします。
+
+基本スタイルに[トランジション](/docs/moonbit/animations)を設定すると状態の変化をアニメーションにできます。
+
+## 色と SVG
+
+`@ui.rgb8(r, g, b)` または `@ui.rgba8(r, g, b, a)` を使い、各成分は 0〜255 で指定します。ウィンドウ設定ではこれらの色を JSON 値として使えます。整数の場合は `0xAABBGGRR` 形式で、`0` は透明です。ウィンドウの `background` に CSS 色文字列を渡さないでください。
+
+`@ui.svg(source)` は `.text_color(...)` で着色するマスクになります。複数色のグラフは Quick Git のように、色ごとに SVG レイヤーを分けてください。

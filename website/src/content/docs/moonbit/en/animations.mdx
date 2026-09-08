@@ -1,0 +1,33 @@
+Transitions interpolate native style changes on an existing element. Declare a target and timing; the core advances the frames and stops requesting them when complete.
+
+## Hover transitions
+
+```moonbit
+fn animated_button() -> @ui.Element {
+  @ui.button("Hover me")
+  .padding(12)
+  .bg(@ui.rgb8(51, 65, 85))
+  .text_color(@ui.rgb8(255, 255, 255))
+  .opacity(0.8)
+  .transition_duration(160)
+  .transition_property("background-color,opacity")
+  .transition_easing("ease-out")
+  .hover(s => s.bg(@ui.rgb8(37, 99, 235)).opacity(1))
+}
+```
+
+Put timing on the base element so both entering and leaving a state animate. A signal-driven `bind_style` target uses the same transition. Changing a target mid-transition starts from the current visible value.
+
+## Timing
+
+Durations are milliseconds, bounded to 0–10 seconds. `.transition_easing(...)` accepts `linear`, `ease`, `ease-in`, `ease-out`, or `ease-in-out`. `.transition_max_fps(30)` optionally caps the frame rate; omit it to follow presentation. One element has one duration, easing, and frame-rate cap for its selected properties. Delays and custom cubic Bézier curves are not supported.
+
+## Supported properties
+
+Transition `background-color`, `border-color`, `border-width`, `border-radius`, `color`, `opacity`, `box-shadow`, and `transform`. `all` selects these paint properties. Width, height, padding, gradients, and other layout changes do not interpolate. Use a transform for a sliding thumb instead of animating its layout position.
+
+For an animated image, use `@ui.image(path)` with a GIF or WebP. The native decoder retains frames and repeat policy; no signal timer is needed.
+
+## Lifetime and reduced motion
+
+Initial styles apply directly. Keep an element mounted to animate a target change; `child_if` removes a branch immediately and does not wait for an exit fade. Zero opacity still occupies layout and accepts input. Transitions respect the system Reduce Motion preference. Hidden or occluded windows pause local transitions.

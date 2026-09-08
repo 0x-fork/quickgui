@@ -1,0 +1,7 @@
+name = "QuickGUI Components · MoonBit"
+identifier = "dev.quickgui.components-moonbit"
+frontend = "moonbit"
+entry = "main"
+
+[macos]
+dmgTitle = "Components MoonBit"

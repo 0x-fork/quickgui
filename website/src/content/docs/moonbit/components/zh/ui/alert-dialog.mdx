@@ -1,0 +1,82 @@
+专注确认操作的对话框变体，默认采用更严格的背景点击关闭策略。
+
+## 导入
+
+在 `moon.pkg` 中添加以下包：
+
+```moonbit
+import {
+  "egoist/quickgui/ui",
+  "egoist/quickgui/reactive",
+}
+```
+
+## 用法
+
+```moonbit
+fn component_example() -> @ui.Element {
+  let dialog = @ui.alert_dialog([])
+  dialog.children([
+    dialog.slot(@ui.Trigger).label("Open dialog"),
+    dialog
+    .slot(@ui.Portal)
+    .children([
+      dialog.slot(@ui.Backdrop),
+      dialog
+      .slot(@ui.Popup)
+      .padding(24)
+      .flex_col()
+      .gap(12)
+      .children([
+        dialog.slot(@ui.Title).label("Confirm action"),
+        dialog.slot(@ui.Description).label("Review before continuing."),
+        dialog.slot(@ui.Close).label("Close"),
+      ]),
+    ]),
+  ])
+}
+```
+
+原生核心负责交互、布局、无障碍和动画。这些部件不预设视觉样式，请按应用需要设置尺寸、颜色和间距。
+
+## 结构
+
+通过根元素或条目的 `.slot(...)` 创建部件。部件继承组件作用域和条目标识。每次调用都返回 `Element`，可继续使用相同的链式样式和子元素方法。
+
+- `root.slot(@ui.Trigger)`
+- `root.slot(@ui.Backdrop)`
+- `root.slot(@ui.Viewport)`
+- `root.slot(@ui.Popup)`
+- `root.slot(@ui.Title)`
+- `root.slot(@ui.Description)`
+- `root.slot(@ui.Close)`
+- `root.slot(@ui.Portal)`
+
+## 主要属性
+
+在链式属性方法中直接读取信号访问器，QuickGUI CLI 会为表达式创建受控绑定。通过变更回调写入状态；字面量属性初始化组件内部状态。底层组合仍可使用显式 `bind_` 方法。
+
+| 方法 | 用途 |
+| --- | --- |
+| `open(...)` | 受控的打开状态。 |
+| `disabled(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Disabled) |
+| `side(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Side) |
+| `align(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Align) |
+| `side_offset(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (SideOffset) |
+| `align_offset(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (AlignOffset) |
+| `collision_padding(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (CollisionPadding) |
+| `sticky(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Sticky) |
+| `anchor_target(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (AnchorTarget) |
+| `anchor_point(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (AnchorPoint) |
+| `modal(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Modal) |
+| `open_on_hover(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (OpenOnHover) |
+| `delay(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Delay) |
+| `close_delay(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (CloseDelay) |
+| `enter_duration(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (EnterDuration) |
+| `exit_duration(...)` | 在精确的退出过渡时长内保持关闭中的内容已挂载。 |
+| `dismiss_on_escape(...)` | 允许按 Escape 键关闭界面。 |
+| `dismiss_on_pointer_outside(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (DismissOnPointerOutside) |
+| `keep_mounted(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (KeepMounted) |
+| `variant(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Variant) |
+| `on_change(handler)` | 接收原生核心报告的组件语义状态。 |
+| `style(...), [children]` | 布局、字体、颜色、交互状态和子元素组合。 |

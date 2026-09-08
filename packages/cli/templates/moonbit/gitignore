@@ -1,0 +1,6 @@
+node_modules/
+.quickgui/
+dist/
+_build/
+.mooncakes/
+.repos/

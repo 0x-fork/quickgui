@@ -1,0 +1,52 @@
+Presents QuickGUI content in a separate native child window that can extend beyond its owner.
+
+## Import
+
+Add these package imports to `moon.pkg`:
+
+```moonbit
+import {
+  "egoist/quickgui/ui",
+  "egoist/quickgui/reactive",
+}
+```
+
+## Usage
+
+```moonbit
+fn component_example() -> @ui.Element {
+  @ui.system_popover([])
+  .label("Open details")
+  .system_content(
+    () => @ui.div([@ui.text("Native child window")]).padding(16),
+    options={
+      "width": 260,
+      "height": 120,
+      "popoverPlacement": "bottom-start",
+      "popoverDismissOnEscape": true,
+      "popoverDismissOnPointerOutside": true,
+    },
+  )
+}
+```
+
+The native core owns interaction, layout, accessibility and animation. These parts are unstyled: set sizes, colors and spacing for your application.
+
+## Anatomy
+
+The native core owns interaction, layout, accessibility and animation. These parts are unstyled: set sizes, colors and spacing for your application.
+
+
+
+`system_popover([]).system_content(...)`
+
+## Key props
+
+Read signal getters directly in fluent property setters. The QuickGUI CLI creates controlled bindings for those expressions. Use change callbacks to write state; literal properties initialize component-owned state. Explicit `bind_` methods remain available for lower-level composition.
+
+| Method | Purpose |
+| --- | --- |
+| `open(...)` | Controlled open state. |
+| `disabled(...)` | Native component configuration; `bind_` accepts a reactive accessor. (Disabled) |
+| `on_change(handler)` | Receives semantic component state reported by the native core. |
+| `style(...), [children]` | Layout, typography, colors, interaction states and child composition. |

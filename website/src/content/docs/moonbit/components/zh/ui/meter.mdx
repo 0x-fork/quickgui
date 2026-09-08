@@ -1,0 +1,62 @@
+显示已知范围内的标量测量值，并带有语义化的低值、高值和最佳区间。
+
+## 导入
+
+在 `moon.pkg` 中添加以下包：
+
+```moonbit
+import {
+  "egoist/quickgui/ui",
+  "egoist/quickgui/reactive",
+}
+```
+
+## 用法
+
+```moonbit
+fn component_example() -> @ui.Element {
+  let meter = @ui.meter([])
+    .values([72])
+    .minimum(0)
+    .maximum(100)
+    .low(20)
+    .high(80)
+    .optimum(60)
+  meter
+  .children([
+    meter
+    .slot(@ui.Track)
+    .children([meter.slot(@ui.Indicator).bg(@ui.rgb8(30, 150, 90))])
+    .height(8),
+  ])
+  .width(240)
+}
+```
+
+原生核心负责交互、布局、无障碍和动画。这些部件不预设视觉样式，请按应用需要设置尺寸、颜色和间距。
+
+## 结构
+
+通过根元素或条目的 `.slot(...)` 创建部件。部件继承组件作用域和条目标识。每次调用都返回 `Element`，可继续使用相同的链式样式和子元素方法。
+
+- `root.slot(@ui.Track)`
+- `root.slot(@ui.Indicator)`
+- `root.slot(@ui.Label)`
+- `root.slot(@ui.Value)`
+
+## 主要属性
+
+在链式属性方法中直接读取信号访问器，QuickGUI CLI 会为表达式创建受控绑定。通过变更回调写入状态；字面量属性初始化组件内部状态。底层组合仍可使用显式 `bind_` 方法。
+
+| 方法 | 用途 |
+| --- | --- |
+| `values(...)` | 受控值，具体类型取决于该组件的约定。 |
+| `minimum(...)` | 可接受的最小值。 |
+| `maximum(...)` | 可接受的最大值。 |
+| `low(...)` | 仪表低值区间的上界。 |
+| `high(...)` | 仪表高值区间的下界。 |
+| `optimum(...)` | 仪表值的理想点或区间。 |
+| `value_text(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (ValueText) |
+| `format(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Format) |
+| `on_change(handler)` | 接收原生核心报告的组件语义状态。 |
+| `style(...), [children]` | 布局、字体、颜色、交互状态和子元素组合。 |

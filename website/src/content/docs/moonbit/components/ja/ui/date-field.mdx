@@ -1,0 +1,52 @@
+ロケールに応じた日付パーツを持つ、キーボード編集可能な分割日付フィールドです。
+
+## インポート
+
+`moon.pkg` に次のパッケージを追加します。
+
+```moonbit
+import {
+  "egoist/quickgui/ui",
+  "egoist/quickgui/reactive",
+}
+```
+
+## 使い方
+
+```moonbit
+fn component_example() -> @ui.Element {
+  let field = @ui.date_field([]).civil_value("2026-09-08")
+  field
+  .flex_row()
+  .gap(4)
+  .children([
+    field.slot(@ui.Segment, value="year"),
+    field.slot(@ui.Segment, value="month"),
+    field.slot(@ui.Segment, value="day"),
+  ])
+}
+```
+
+ネイティブコアが操作、レイアウト、アクセシビリティ、アニメーションを管理します。パーツに既定の見た目はないため、サイズ、色、間隔を設定してください。
+
+## 構成
+
+ルートまたは項目の `.slot(...)` からパーツを作成します。パーツはコンポーネントのスコープと項目の識別子を継承します。すべて `Element` を返すため、共通の fluent API でスタイルと子要素を設定できます。
+
+- `root.slot(@ui.Segment)`
+
+## 主なプロパティ
+
+fluent プロパティメソッドでシグナルの getter を直接読みます。QuickGUI CLI が式を制御用バインディングに変換します。変更コールバックで状態を書き込み、リテラルは内部状態の初期値に使います。低レベルの組み立てには明示的な `bind_` メソッドも使えます。
+
+| メソッド | 用途 |
+| --- | --- |
+| `disabled(...)` | 操作を無効にし、無効状態を公開します。 |
+| `read_only(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (ReadOnly) |
+| `required(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (Required) |
+| `civil_value(...)` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `civil_minimum(...)` | 受け入れる最小値です。 |
+| `civil_maximum(...)` | 受け入れる最大値です。 |
+| `segment_order(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (SegmentOrder) |
+| `on_change(handler)` | ネイティブコアが通知するコンポーネントの状態を受け取ります。 |
+| `style(...), [children]` | レイアウト、文字、色、操作状態、子要素の構成。 |

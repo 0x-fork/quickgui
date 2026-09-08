@@ -7,6 +7,7 @@
 	},
 	"scripts": {
 		"docs:index": "bun ./scripts/build-docs-search-index.ts",
+		"docs:check": "bun run docs:index && bun test ./tests/docs.test.ts",
 		"docs:translate": "bun ./scripts/generate-doc-translations.ts",
 		"dev": "bun run docs:index && react-router dev --port 3000",
 		"build": "bun run docs:index && react-router build",

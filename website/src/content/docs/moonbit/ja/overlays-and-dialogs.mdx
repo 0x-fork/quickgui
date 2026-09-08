@@ -1,0 +1,62 @@
+コンポーネントの構築時に現在のウィンドウを取得します。ウィンドウのメソッドで OS のダイアログやポップアップメニューを表示し、非同期で結果を受け取ります。
+
+## ディレクトリを選択
+
+```moonbit
+///|
+fn folder_picker() -> @ui.Element {
+  let window = @native.current_window()
+  let (selected, set_selected) = @reactive.create_signal("No folder selected")
+  @ui.div([
+    @ui.button("Open folder").on_click(() => {
+      window.dialog(
+        1,
+        { "title": "Open folder", "files": false, "directories": true },
+        result => {
+          match result {
+            Ok([String(path), ..]) => set_selected(path)
+            Ok(_) => ()
+            Err(error) => set_selected(error)
+          }
+        },
+      )
+    }),
+    @ui.text(selected()),
+  ])
+  .flex_col()
+  .gap(12)
+}
+```
+
+ダイアログの種類は `0` がアラート、`1` がパスを開く操作、`2` が保存です。開く・保存の結果はパス配列で、空の選択はキャンセルです。アラートは選択したボタンの識別子を返します。UI スレッドをブロックせず `Result` を処理してください。
+
+## ポップアップとコンテキストメニュー
+
+```moonbit
+///|
+fn menu_button() -> @ui.Element {
+  let window = @native.current_window()
+  let (status, set_status) = @reactive.create_signal("Ready")
+  let open = () => {
+    window.popup_menu([
+      @native.menu_action("Refresh", () => set_status("Refreshed")),
+      @native.MenuItem::Separator,
+      @native.menu_action("Close window", () => window.close()),
+    ])
+  }
+  @ui.div([
+    @ui.button("Actions").on_click(open).on_context_menu(open),
+    @ui.text(status()),
+  ])
+  .flex_col()
+  .gap(8)
+}
+```
+
+`popup_menu` はメニューが閉じるまでアクションのコールバックを保持します。入れ子の項目には `submenu`、標準プラットフォーム操作には `menu_role` を使います。イベントハンドラーとメニュー項目は登録時の所有者を保持します。
+
+## アプリケーションメニューとオーバーレイ
+
+アプリ起動コールバック内で `@native.set_application_menu(items)` を呼ぶと、アプリ全体のメニューを設定できます。ウィンドウの閉じる・隠す・最小化などにはプラットフォームのロールを使います。
+
+[Dialog](/docs/moonbit/components/dialog)、[Popover](/docs/moonbit/components/popover)、[SystemPopover](/docs/moonbit/components/system-popover)、[Tooltip](/docs/moonbit/components/tooltip)を使うと、ネイティブのフォーカス、閉じる動作、ライフサイクルが利用できます。コアがパーツを保持し、トランジションの完了を管理します。モデル駆動の `popover_menu([])` では `.when_open(...)` で開いている間だけポップアップをマウントします。

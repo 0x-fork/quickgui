@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 2,
+  "measuredAt": "2026-09-08T12:46:01.735Z",
+  "platform": "macOS arm64",
+  "workload": {
+    "id": "issue-tracker-v1",
+    "width": 1100,
+    "height": 720,
+    "records": 1000,
+    "pageSize": 100,
+    "readyTitle": "Issue tracker — ready",
+    "datasetSha256": "86dad8e3deb19239384b164f42eeca81d5aaaac0d017ad0fc55c7d6d64f0e546"
+  },
+  "machine": {
+    "chip": "Apple M5",
+    "model": "Mac17,3",
+    "memoryBytes": 34359738368,
+    "osVersion": "27.0",
+    "osBuild": "26A5425a"
+  },
+  "toolchain": {
+    "go": "go version go1.27.1 darwin/arm64",
+    "moonbit": "moon 0.1.20260827 (d0aaa07 2026-08-27) ~/dev/quickgui/target/moonbit-toolchain/bin/moon\nmoonc v0.10.11+6ff76a5f9 (2026-08-28) ~/dev/quickgui/target/moonbit-toolchain/bin/moonc\nmoonrun 0.1.20260827 (d0aaa07 2026-08-27) ~/dev/quickgui/target/moonbit-toolchain/bin/moonrun\n\nFeature flags enabled: rr_moon_mod,rr_moon_pkg",
+    "rust": "rustc 1.96.0 (ac68faa20 2026-05-25)",
+    "bun": "1.4.2",
+    "quickguiRevision": "992cda95eb6e85ef5a3969d4aaa6e4d71d420708",
+    "quickguiWorkingTreeDirty": true
+  },
+  "methodology": {
+    "workload": "A 1100 × 720 issue tracker with 1,000 identical records, three sidebar filters, search, 100 retained rows per page, pagination, issue details, editable notes, and completion actions. Idle on the first page with the first issue selected. Edits stay in memory for the session; no network or database service.",
+    "build": "Production builds; no optional plugins. Go uses the CLI release build; MoonBit uses its C release backend. Tauri uses the default Cargo release profile; Electron is packaged with ASAR.",
+    "memory": "Sum of proc_pid_rusage physical footprints for the main app, bundled helper executables, and coalition-associated WebKit WebContent/GPU/Networking processes. AutoFill/SafariPlatformSupport and other macOS services are recorded but excluded. Includes compressed memory; this is not JavaScript heap size or RSS. Charts use decimal MB (1,000,000 bytes), as in Activity Monitor.",
+    "bundle": "Uncompressed .app file bytes, including bundled libraries/frameworks. Symlinks counted once; OS-provided frameworks such as WebKit are excluded. This is not installer/download size.",
+    "aggregation": "Wait at least 30 seconds after readiness, then require 15 seconds with app/renderer CPU at most 1% of one core, unchanged process membership, and memory spread at most 1 MB or 1% for both main process and framework helpers. Take ten further one-second samples, requiring continued stability; activity restarts the idle observation within the same 180-second deadline. Median per launch, then median of three launch medians; whiskers show the launch-median range. No forced GC, cache purge, or memory-pressure injection.",
+    "readiness": "Wait for a visible issue tracker before observing idle CPU/memory. Capture screenshots only after memory samples, to avoid capture-induced allocations. Tauri and Electron validate the 1,000-record dataset, 100 mounted rows, selected details, input controls, and 1100 × 720 viewport after two animation frames. Web content failures, load failures, or missing renderer processes fail the run.",
+    "scope": "Local measurements on this machine and OS; these values do not predict every app, workload, or platform.",
+    "runs": 3,
+    "warmupMs": 30000,
+    "samplesPerRun": 10,
+    "intervalMs": 1000,
+    "idlePolicy": {
+      "minimumWaitMs": 30000,
+      "stableWindowMs": 15000,
+      "maximumWaitMs": 180000,
+      "intervalMs": 1000,
+      "samplesPerRun": 10,
+      "maximumCpuPercent": 1,
+      "maximumMemorySpreadBytes": 1000000,
+      "maximumMemorySpreadRatio": 0.01
+    }
+  },
+  "results": [
+    {
+      "id": "quickgui-go",
+      "name": "QuickGUI Go",
+      "version": "0.1.3",
+      "bundleBytes": 25891868,
+      "executableSha256": "19c9988dd53ba9078f79d5f3889a5f8860a6f8474144b8cc652fac04ec308ce7",
+      "memoryBytes": 83051744,
+      "memoryMinBytes": 81888504,
+      "memoryMaxBytes": 83215608,
+      "mainProcessMemoryBytes": 83051744,
+      "frameworkHelperMemoryBytes": 0
+    },
+    {
+      "id": "quickgui-moonbit",
+      "name": "QuickGUI MoonBit",
+      "version": "0.1.3",
+      "bundleBytes": 23860688,
+      "executableSha256": "ce62a7000f9fa37a333cf471108d4f61e7a6a170477f541d9cc1d5d4dfcbf4ef",
+      "memoryBytes": 80889128,
+      "memoryMinBytes": 80872720,
+      "memoryMaxBytes": 81085736,
+      "mainProcessMemoryBytes": 80889128,
+      "frameworkHelperMemoryBytes": 0
+    },
+    {
+      "id": "tauri",
+      "name": "Tauri",
+      "version": "2.11.5",
+      "bundleBytes": 8325642,
+      "executableSha256": "1a9de0f40699c9e9c49eda7a3f95d7dc6d5f224ae0358019d1351db836c4c6af",
+      "memoryBytes": 101731616,
+      "memoryMinBytes": 101518552,
+      "memoryMaxBytes": 101928272,
+      "mainProcessMemoryBytes": 34129024,
+      "frameworkHelperMemoryBytes": 67668128
+    },
+    {
+      "id": "electron",
+      "name": "Electron",
+      "version": "44.2.0",
+      "bundleBytes": 300779043,
+      "executableSha256": "d3762bdff983315f18c07c3754175c4aa5b49d80977e1c33eb226b8189b447ed",
+      "memoryBytes": 136107192,
+      "memoryMinBytes": 132142336,
+      "memoryMaxBytes": 136680584,
+      "mainProcessMemoryBytes": 44418776,
+      "frameworkHelperMemoryBytes": 91688416
+    }
+  ]
+}

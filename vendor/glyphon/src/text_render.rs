@@ -291,6 +291,7 @@ impl TextRenderer {
                         Some(some) => some,
                         None => text_area.default_color,
                     };
+                    let cache_key = physical_glyph.cache_key.with_color(color);
                     if let Some(glyph_to_render) = prepare_glyph(
                         &state,
                         &mut system,
@@ -300,7 +301,7 @@ impl TextRenderer {
                             line_y: run.line_y,
                             color,
                             metadata: glyph.metadata,
-                            cache_key: GlyphonCacheKey::Text(physical_glyph.cache_key),
+                            cache_key: GlyphonCacheKey::Text(cache_key),
                             scale_factor: text_area.scale,
                             opacity: text_area.opacity,
                         },
@@ -308,7 +309,7 @@ impl TextRenderer {
                         |system, _rasterize_custom_glyph| -> Option<GetGlyphImageResult> {
                             let image = system
                                 .cache
-                                .get_image_uncached(system.font_system, physical_glyph.cache_key)?;
+                                .get_image_uncached(system.font_system, cache_key)?;
 
                             let content_type = match image.content {
                                 SwashContent::Color => ContentType::Color,
@@ -444,6 +445,7 @@ fn changed_vertex_bytes(previous: &[u8], current: &[u8]) -> std::ops::Range<usiz
 enum TextColorConversion {
     None = 0,
     ConvertToLinear = 1,
+    PlatformCoverage = 2,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -701,6 +703,10 @@ where
             match system.atlas.color_mode {
                 ColorMode::Accurate => TextColorConversion::ConvertToLinear,
                 ColorMode::Web => TextColorConversion::None,
+                ColorMode::Platform if matches!(metadata.cache_key, GlyphonCacheKey::Text(_)) => {
+                    TextColorConversion::PlatformCoverage
+                }
+                ColorMode::Platform => TextColorConversion::None,
             } as u16,
         ],
         depth,

@@ -95,6 +95,31 @@ test("discovery retains TypeScript support and gives TOML precedence", async () 
   expect((await loadConfig(root, "quickgui.config.ts")).name).toBe("TS App");
 });
 
+test("TOML and TypeScript resolve MoonBit extension directories from the project", async () => {
+  const root = project();
+  const extensions = ["vendor/my-service", join(root, "vendor/another-service")];
+  writeFileSync(
+    join(root, "quickgui.toml"),
+    minimal + `frontend = "moonbit"\n[native]\nextensions = ${JSON.stringify(extensions)}\n`,
+  );
+  writeFileSync(
+    join(root, "quickgui.config.ts"),
+    `export default ${JSON.stringify({
+      name: "MoonBit App",
+      identifier: "com.example.moonbit",
+      frontend: "moonbit",
+      native: { extensions },
+    })}`,
+  );
+  for (const path of ["quickgui.toml", "quickgui.config.ts"]) {
+    const config = await loadConfig(root, path);
+    expect(config.native.extensions).toEqual([
+      join(root, "vendor/my-service"),
+      join(root, "vendor/another-service"),
+    ]);
+  }
+});
+
 test("explicit relative and absolute TOML paths resolve resources from the project", async () => {
   const root = project();
   mkdirSync(join(root, "config"));

@@ -30,7 +30,12 @@ impl TextSystem {
         let swash_cache = SwashCache::new();
         let cache = shared_cache.cloned().unwrap_or_else(|| Cache::new(device));
         let viewport = Viewport::new(device, &cache);
-        let mut atlas = TextAtlas::new(device, queue, &cache, format);
+        let color_mode = if cfg!(any(target_os = "windows", target_os = "linux")) {
+            glyphon::ColorMode::Platform
+        } else {
+            glyphon::ColorMode::Web
+        };
+        let mut atlas = TextAtlas::with_color_mode(device, queue, &cache, format, color_mode);
         let renderer = TextRenderer::new(&mut atlas, device, MultisampleState::default(), None);
         Self {
             font_system,

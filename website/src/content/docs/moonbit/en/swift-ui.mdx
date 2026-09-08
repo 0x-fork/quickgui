@@ -1,0 +1,25 @@
+Host native macOS controls from MoonBit.
+
+## Host a control
+
+Create SwiftUI controls under `@ui.swift_ui_host([])`. They require macOS. The sidebar lists every supported SwiftUI control.
+
+```moonbit
+fn native_toggle() -> @ui.Element {
+  let (enabled, set_enabled) = @reactive.create_signal(false)
+  @ui.swift_ui_host([
+    @ui.swift_ui_toggle()
+    .checked(enabled())
+    .on_bool_input(value => set_enabled(value))
+    .label("Notifications"),
+  ])
+}
+```
+
+## Controlled values
+
+Bind a signal with `.bind_value(...)`, `.bind_checked(...)` or `.bind_number(...)`. Use `.on_input(...)`, `.on_bool_input(...)` or `.on_number_input(...)` to update it.
+
+## Native modifiers
+
+QuickGUI styles apply to the host. Use `.swift_ui_modifiers(...)` on a native control to forward the core modifier JSON schema. Labels use `.label(...)`.

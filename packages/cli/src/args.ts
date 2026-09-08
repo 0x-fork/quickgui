@@ -1,16 +1,27 @@
 import { CliError } from "./error.ts";
+import { parseFrontend, type Frontend } from "./config.ts";
 import { parseExtensionType, type InitExtensionOptions } from "./init-extension.ts";
 import { parseTarget, type QuickGuiTarget } from "./targets.ts";
 
-export type HelpTopic = "init" | "init-extension" | "dev" | "build" | "keygen" | "fmt";
+export type HelpTopic =
+  | "init"
+  | "init-extension"
+  | "dev"
+  | "build"
+  | "keygen"
+  | "fmt"
+  | "check"
+  | "test";
 
 export type ParsedCliCommand =
   | { command: "help"; topic?: HelpTopic }
   | { command: "version" }
   | { command: "fmt"; project: string; check: boolean }
+  | { command: "check" | "test"; project: string; release: boolean }
   | ({ command: "init-extension" } & InitExtensionOptions)
   | {
       command: "init";
+      frontend?: Frontend;
       directory: string;
       install: boolean;
       name?: string;
@@ -63,10 +74,21 @@ export function parseCliArgs(argv: string[]): ParsedCliCommand {
 
   const command = argv[0];
   const rest = argv.slice(1);
-  const helpTopics: readonly string[] = ["init", "init-extension", "dev", "build", "keygen", "fmt"];
+  const helpTopics: readonly string[] = [
+    "init",
+    "init-extension",
+    "dev",
+    "build",
+    "keygen",
+    "fmt",
+    "check",
+    "test",
+  ];
   if (command === "help") {
     if (rest.length > 1 || (rest[0] && !helpTopics.includes(rest[0]))) {
-      throw new CliError("Usage: quickgui help [init|init-extension|dev|build|keygen|fmt]");
+      throw new CliError(
+        "Usage: quickgui help [init|init-extension|dev|build|keygen|fmt|check|test]",
+      );
     }
     return rest[0] ? { command: "help", topic: rest[0] as HelpTopic } : { command: "help" };
   }
@@ -74,6 +96,19 @@ export function parseCliArgs(argv: string[]): ParsedCliCommand {
     if (command !== undefined && helpTopics.includes(command)) {
       return { command: "help", topic: command as HelpTopic };
     }
+  }
+
+  if (command === "check" || command === "test") {
+    const parsed = parseOptions(rest, {
+      "--project": { key: "project", value: true },
+      "--release": { key: "release", value: false },
+    });
+    rejectPositionals(parsed, `quickgui ${command}`);
+    return {
+      command,
+      project: stringOption(parsed, "project") ?? ".",
+      release: parsed.values.has("release"),
+    };
   }
 
   if (command === "fmt") {
@@ -98,13 +133,13 @@ export function parseCliArgs(argv: string[]): ParsedCliCommand {
       "--no-install": { key: "noInstall", value: false },
     });
     if (parsed.positionals.length > 1)
-      throw new CliError("Usage: quickgui init-extension [directory] [--type go|zig|rust]");
+      throw new CliError("Usage: quickgui init-extension [directory] [--type go|zig|rust|moonbit]");
     const type = parseExtensionType(stringOption(parsed, "type") ?? "go");
     const name = stringOption(parsed, "name");
     const module = stringOption(parsed, "module");
     const npmPackage = stringOption(parsed, "npmPackage");
     if (type === "go" && npmPackage !== undefined)
-      throw new CliError("--npm-package is only used by Zig and Rust extensions");
+      throw new CliError("--npm-package is only used by Zig, Rust, and MoonBit extensions");
     return {
       command: "init-extension",
       directory: parsed.positionals[0] ?? "quickgui-extension",
@@ -118,6 +153,7 @@ export function parseCliArgs(argv: string[]): ParsedCliCommand {
 
   if (command === "init") {
     const parsed = parseOptions(rest, {
+      "--frontend": { key: "frontend", value: true },
       "--name": { key: "name", value: true },
       "--identifier": { key: "identifier", value: true },
       "--no-install": { key: "noInstall", value: false },
@@ -125,8 +161,10 @@ export function parseCliArgs(argv: string[]): ParsedCliCommand {
     if (parsed.positionals.length > 1) throw new CliError("Usage: quickgui init [directory]");
     const name = stringOption(parsed, "name");
     const identifier = stringOption(parsed, "identifier");
+    const frontend = stringOption(parsed, "frontend");
     return {
       command: "init",
+      ...(frontend ? { frontend: parseFrontend(frontend) } : {}),
       directory: parsed.positionals[0] ?? "quickgui-app",
       install: !parsed.values.has("noInstall"),
       ...(name ? { name } : {}),

@@ -1,0 +1,38 @@
+多行文本编辑基础组件，受控值约定与 Input 相同。
+
+## 导入
+
+在 `moon.pkg` 中添加以下包：
+
+```moonbit
+import {
+  "egoist/quickgui/ui",
+  "egoist/quickgui/reactive",
+}
+```
+
+## 用法
+
+```moonbit
+fn component_example() -> @ui.Element {
+  let (value, set_value) = @reactive.create_signal("")
+  @ui.text_area().on_input(next => set_value(next)).value(value()).height(120)
+}
+```
+
+原生核心负责交互、布局、无障碍和动画。这些部件不预设视觉样式，请按应用需要设置尺寸、颜色和间距。
+
+## 主要属性
+
+原生核心负责交互、布局、无障碍和动画。这些部件不预设视觉样式，请按应用需要设置尺寸、颜色和间距。
+
+| 方法 | 用途 |
+| --- | --- |
+| `signal(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Signal) |
+| `text_area(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (TextArea) |
+| `on_input(...)` | 报告原生编辑输入。 |
+| `set(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Set) |
+| `bind_value(...)` | 受控值，具体类型取决于该组件的约定。 |
+| `get(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Get) |
+| `height(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Height) |
+| `style(...), [children]` | 布局、字体、颜色、交互状态和子元素组合。 |

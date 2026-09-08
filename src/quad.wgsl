@@ -402,8 +402,7 @@ fn dash_coverage(
     return 1.0 - smoothstep(-antialias, antialias, distance);
 }
 
-@fragment
-fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
+fn quickgui_shade_linear(input: VertexOutput) -> vec4<f32> {
     let logical_position = input.logical_position;
     if logical_position.x < input.clip.x || logical_position.y < input.clip.y ||
        logical_position.x >= input.clip.z || logical_position.y >= input.clip.w {
@@ -597,4 +596,19 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let inset_coverage = geometry_coverage * (1.0 - subject_coverage);
     let alpha = input.primary.a * inset_coverage;
     return vec4<f32>(input.primary.rgb * alpha, alpha);
+}
+
+// Public paint colors stay linear; UI targets blend encoded sRGB, as native UI toolkits do.
+fn quickgui_encode_component(v: f32) -> f32 {
+    if v <= 0.0031308 { return 12.92 * v; }
+    return 1.055 * pow(max(v, 0.0), 1.0 / 2.4) - 0.055;
+}
+fn quickgui_encode_output(color: vec4<f32>) -> vec4<f32> {
+    if color.a <= 0.0 { return vec4<f32>(0.0); }
+    let straight = color.rgb / color.a;
+    return vec4<f32>(vec3<f32>(quickgui_encode_component(straight.r), quickgui_encode_component(straight.g), quickgui_encode_component(straight.b)) * color.a, color.a);
+}
+@fragment
+fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
+    return quickgui_encode_output(quickgui_shade_linear(input));
 }

@@ -1,0 +1,19 @@
+只调用一次 `@native.run`，在其启动回调中创建窗口并注册应用服务。结果和事件在 MoonBit UI 线程执行。
+
+## 窗口生命周期
+
+使用 `@ui.window(component, options=...)` 创建窗口，每个窗口拥有独立树。`@native.current_window()` 在构建组件或处理窗口回调时有效。捕获句柄后可稍后调用 `.close()` 或 `.focus()`。
+
+创建过程是异步的。查询原生几何或状态前，等待 `window-ready-to-show`。可用 `show: false` 准备隐藏窗口。选项使用原生 JSON 格式，包括 `title`、`width`、`height`、`background`、`titleBarStyle`、`trafficLightX` 和 `trafficLightY`。
+
+## 命令与服务
+
+`@native.command(json, callback)` 发送平台命令，`@native.invoke(operation, params, callback)` 调用异步原生服务。两者的回调都接收 `Result[Json, String]`，适用于需要结果的操作。`@native.call` 仅允许核心同步 CPU 服务白名单。
+
+回调属于注册时的所有者。若操作需要在启动它的行或对话框销毁后继续，应在 `window.with_owner(() => { ... })` 内注册。关闭窗口仍会释放回调。
+
+## 事件与文件监听
+
+`@native.on_event(kind, listener)` 在当前窗口上下文中订阅，`@native.subscribe` 还返回取消函数。应用级事件使用 `window=0`。`@native.watch_files(paths, changed, ready)` 使用操作系统文件通知并返回停止函数。这些订阅随所有者清理。
+
+持久扩展事件使用 `extension-event`，需要将 `event.target` 过滤到已打开的会话。参见[编写扩展](/docs/moonbit/extensions)。

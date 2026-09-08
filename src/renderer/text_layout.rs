@@ -4,6 +4,15 @@ pub(super) fn create_font_system() -> FontSystem {
     #[cfg(target_os = "macos")]
     {
         let mut font_system = FontSystem::new();
+        // Match the web's system-ui default even when Open Sans happens to be installed.
+        // FontDB otherwise uses Open Sans for generic sans-serif on every platform.
+        if font_system
+            .db()
+            .faces()
+            .any(|face| face.families.iter().any(|(name, _)| name == ".SF NS"))
+        {
+            font_system.db_mut().set_sans_serif_family(".SF NS");
+        }
         // NISC18030.ttf advertises `GB18030 Bitmap` as a monospaced CJK face, but its
         // non-scalable metrics produce infinite advances in Cosmic Text and Swash cannot
         // rasterize its glyphs. Cosmic Text otherwise ranks it ahead of the scalable macOS CJK
@@ -1005,17 +1014,20 @@ pub(super) fn configure_text_buffer(
     let mut attrs = Attrs::new()
         .family(glyph_family(&style.family))
         .weight(style.weight)
+        .optical_size(style.font_size)
         .style(style.font_style)
         .font_features(style.features.cosmic());
     let mut flags = CacheKeyFlags::empty();
     if style.font_thicken {
         flags |= CacheKeyFlags::FONT_THICKEN;
     }
-    // Apple platforms rasterize unhinted outlines and never snap stems to the pixel grid. Hinted
-    // glyphs next to native controls read as heavier, "shadowed" text, so macOS text matches the
-    // platform: designed stem weights, anti-aliased at their true positions.
+    // Keep native rasterization separate from shaping: platform glyphs retain the exact font,
+    // variations and subpixel positions selected by the shared layout engine.
     if cfg!(target_os = "macos") {
-        flags |= CacheKeyFlags::DISABLE_HINTING;
+        flags |= CacheKeyFlags::DISABLE_HINTING | CacheKeyFlags::NATIVE_RASTERIZATION;
+    }
+    if cfg!(target_os = "windows") {
+        flags |= CacheKeyFlags::NATIVE_RASTERIZATION;
     }
     if !flags.is_empty() {
         attrs = attrs.cache_key_flags(flags);

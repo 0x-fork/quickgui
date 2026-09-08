@@ -1,0 +1,35 @@
+編集可能な値はシグナルに保存し、イベントハンドラーで変更を書き戻します。選択、フォーカス、テキスト編集の動作はネイティブ入力が保持します。
+
+## 制御された入力
+
+```moonbit
+///|
+fn name_form() -> @ui.Element {
+  let (name, set_name) = @reactive.create_signal("")
+  let (saved, set_saved) = @reactive.create_signal("")
+  let submit = () => set_saved(name())
+  @ui.div([
+    @ui.text("Name"),
+    @ui.input()
+    .on_input(value => set_name(value))
+    .on_submit(_ => submit())
+    .value(name()),
+    @ui.button("Save").on_click(submit).disabled(name() == ""),
+    @ui.text("Saved: \{saved()}"),
+  ])
+  .flex_col()
+  .gap(12)
+}
+```
+
+`on_input` は更新後の文字列、`on_submit` は送信された文字列を受け取ります。プログラムからフォーカスを移すには保持した入力ハンドルで `.focus()` を呼びます。
+
+## 無効と読み取り専用
+
+`.bind_disabled(() => disabled.get())` は実際のネイティブ操作状態を変えます。薄く表示するだけでは無効になりません。読み取り専用には `.property(@protocol.READ_ONLY, @protocol.Boolean(true))`、プレースホルダーには `.property(@protocol.PLACEHOLDER, @protocol.Text("Name"))` を使います。定数を使うには `egoist/quickgui/protocol` をインポートします。
+
+外観は `bind_style` またはネイティブの状態スタイルで、動作は対応するプロパティで設定します。
+
+## その他のコントロール
+
+[Checkbox](/docs/moonbit/components/checkbox)、[Switch](/docs/moonbit/components/switch)、[Select](/docs/moonbit/components/select)など、サイドバーの各コントロールを使用してください。ヘルパーがネイティブの役割、値、スコープを接続します。読み取り専用または無効なコントロールでは既定の変更を抑止します。`Event.prevent_default()` でイベントの既定動作をキャンセルできます。

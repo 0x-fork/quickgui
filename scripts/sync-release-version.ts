@@ -233,6 +233,38 @@ for (const packageName of ["cli"]) {
   );
 }
 
+edit("packages/cli/templates/moonbit/package.json", (contents) =>
+  replaceMatches(
+    "packages/cli/templates/moonbit/package.json",
+    contents,
+    /("@quickgui\/cli": "\^)[^"]+(")/,
+    (_match, prefix, suffix) => `${prefix}${version}${suffix}`,
+  ),
+);
+edit("moonbit/moon.mod", (contents) =>
+  replaceMatches(
+    "moonbit/moon.mod",
+    contents,
+    /^version = "[^"]+"$/m,
+    () => `version = "${version}"`,
+  ),
+);
+for (const path of [
+  "examples/moonbit-counter/moon.mod",
+  "examples/quick-git-moonbit/moon.mod",
+  "examples/components-moonbit/moon.mod",
+  "packages/cli/templates/moonbit/moon.mod",
+]) {
+  edit(path, (contents) =>
+    replaceMatches(
+      path,
+      contents,
+      /("egoist\/quickgui@)[^"]+(")/,
+      (_match, prefix, suffix) => `${prefix}${version}${suffix}`,
+    ),
+  );
+}
+
 edit("packages/cli/templates/native/go.mod", (contents) =>
   replaceMatches(
     "packages/cli/templates/native/go.mod",

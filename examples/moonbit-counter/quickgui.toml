@@ -1,0 +1,4 @@
+name = "MoonBit Counter"
+identifier = "dev.quickgui.moonbit-counter"
+frontend = "moonbit"
+entry = "main"

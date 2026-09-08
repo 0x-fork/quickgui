@@ -1,0 +1,11 @@
+{
+  "name": "quickgui-desktop-benchmarks",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@electron/packager": "20.3.0",
+    "@tauri-apps/cli": "2.11.4",
+    "electron": "44.2.0"
+  },
+  "trustedDependencies": ["electron"]
+}

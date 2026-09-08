@@ -7,3 +7,6 @@ native/.zig-cache/
 native/zig-out/
 native/build_info.zig
 native/src/build_info.rs
+native/_build/
+native/.mooncakes/
+artifacts/LICENSE-MoonBit

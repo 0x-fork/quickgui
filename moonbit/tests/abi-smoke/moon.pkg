@@ -1,0 +1,6 @@
+import {
+  "egoist/quickgui/native",
+  "egoist/quickgui/protocol",
+}
+
+pkgtype(kind: "executable")

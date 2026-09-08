@@ -3,7 +3,7 @@ import type { ComponentDoc } from './component-docs'
 import type {
   DocsOutlineItem,
   DocsPageMeta,
-  DocsSlug,
+  GoDocsSlug,
 } from './docs'
 
 type TranslatedLocale = Exclude<Locale, 'en'>
@@ -17,7 +17,7 @@ interface GuideTranslation {
 
 const GUIDE_TRANSLATIONS: Record<
   TranslatedLocale,
-  Record<DocsSlug, GuideTranslation>
+  Record<GoDocsSlug, GuideTranslation>
 > = {
   zh: {
     extensions: {
@@ -493,7 +493,10 @@ export function localizedDocsPage(
   locale: Locale,
 ): DocsPageMeta {
   if (locale === 'en') return page
-  return { ...page, ...GUIDE_TRANSLATIONS[locale][page.slug] }
+  const translation = page.frontend === 'moonbit'
+    ? page.translations?.[locale]
+    : GUIDE_TRANSLATIONS[locale][page.slug as GoDocsSlug]
+  return { ...page, ...translation }
 }
 
 export function localizedComponentDescription(

@@ -85,7 +85,7 @@ func openDetailsWindow() {
 }
 
 func Counter() {
-	count, setCount := ui.CreateSignal(0)
+	count, setCount := ui.CreateSignal(100)
 	ui.View(
 		func() {
 			ui.View(

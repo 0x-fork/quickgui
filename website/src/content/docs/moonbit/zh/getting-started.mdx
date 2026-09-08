@@ -1,0 +1,76 @@
+QuickGUI 的 MoonBit 前端使用子节点列表、链式属性与细粒度信号。组件创建保留的原生节点，状态变化只更新相关绑定。侧栏选择器也提供 Go 文档。
+
+## 环境要求
+
+- [MoonBit 工具链](https://www.moonbitlang.com/download/)（已测试 `moon 0.1.20260827` / `moonc v0.10.11`）
+- Bun 1.3 或更新版本
+- C 编译器；macOS 上安装 Xcode Command Line Tools
+
+请在目标操作系统和架构上构建。macOS 已验证原生运行，Linux 和 Windows 仍需运行与视觉验收。
+
+## 运行计数器
+
+CLI 和 MoonBit SDK 尚未发布。先使用 [QuickGUI 源码仓库](https://github.com/egoist/quickgui)，其中的 `moon.work` 会解析本地 SDK：
+
+```sh
+bun install
+bun packages/cli/src/cli.ts dev --project examples/moonbit-counter
+```
+
+创建新项目可运行 `bun packages/cli/src/cli.ts init ../my-app --frontend moonbit --no-install`，然后按照[项目结构](/docs/moonbit/project-structure)将生成的模块连接到本地源码。
+
+## 第一个窗口
+
+将代码放入 `main/main.mbt`，在 `main/moon.pkg` 中导入 `egoist/quickgui/ui`、`egoist/quickgui/native` 和 `egoist/quickgui/reactive`。所有组件都返回 `@ui.Element`。
+
+```moonbit
+///|
+fn counter() -> @ui.Element {
+  let (count, set_count) = @reactive.create_signal(0)
+  @ui.div([
+    @ui.text("Count: \{count()}").font_size(24),
+    @ui.button("Increment")
+    .on_click(() => set_count(count() + 1))
+    .px(16)
+    .py(8)
+    .border_radius(8)
+    .bg(@ui.rgb8(45, 105, 180))
+    .text_color(@ui.rgb8(255, 255, 255)),
+  ])
+  .size_full()
+  .flex_col()
+  .items_center()
+  .justify_center()
+  .gap(12)
+}
+
+///|
+fn main {
+  match
+    @native.run(() => {
+      ignore(
+        @ui.window(counter, options={
+          "title": "Counter",
+          "width": 620,
+          "height": 480,
+        }),
+      )
+    }) {
+    Ok(_) => ()
+    Err(error) => abort(error)
+  }
+}
+```
+
+## 构建与示例
+
+在源码仓库中格式化并打包示例：
+
+```sh
+bun packages/cli/src/cli.ts fmt --project examples/moonbit-counter
+bun packages/cli/src/cli.ts build --project examples/moonbit-counter
+```
+
+Apple Silicon macOS 和 x64 Linux/Windows 的开发构建使用快速原生后端，并复用 `.quickgui/moonbit` 中的桥接与运行时对象。发布构建及其他主机使用优化的 C 后端。开发时可设置 `MOONBIT_NEW_NATIVE=0` 来使用 C 后端。
+
+更完整的应用可运行 `bun --cwd examples/quick-git-moonbit dev`。[Quick Git](https://github.com/egoist/quickgui/tree/main/examples/quick-git-moonbit) 展示了多窗口、菜单、虚拟化差异、历史图和独立 I/O 扩展。

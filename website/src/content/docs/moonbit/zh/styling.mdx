@@ -1,0 +1,53 @@
+元素方法与 `@ui.style()` 使用相同的原生样式属性。数字尺寸表示像素，字符串支持百分比和原生关键字。
+
+## 链式布局
+
+```moonbit
+fn card() -> @ui.Element {
+  @ui.div([@ui.text("A retained card").font_size(24).font_weight(600)])
+  .flex_col()
+  .width(420)
+  .max_width("100%")
+  .padding(24)
+  .gap(12)
+  .border_radius(12)
+  .bg(@ui.rgb8(17, 24, 39))
+  .text_color(@ui.rgb8(226, 232, 240))
+}
+```
+
+常见布局可使用 `.flex_row()`、`.flex_col()`、`.items_center()` 和 `.justify_center()`。`.flex(1)` 设置伸展、收缩和零基础尺寸。可滚动的弹性子节点应设置 `.min_height(0)`，且父节点尺寸需要有界。
+
+## 合并与响应式样式
+
+`.style(base).style(overrides)` 按顺序合并声明，后面的同名属性优先。样式构建器的 `.merge(other)` 也如此。应用样式时会保存快照，之后修改构建器不会更新已挂载的元素。
+
+```moonbit
+///|
+fn selectable() -> @ui.Element {
+  let (selected, set_selected) = @reactive.create_signal(false)
+  @ui.button("Select")
+  .on_click(() => set_selected(!selected()))
+  .style(
+    @ui.style()
+    .padding(12)
+    .bg(@ui.rgb8(51, 65, 85))
+    .text_color(@ui.rgb8(255, 255, 255))
+    .when(selected(), s => s.bg(@ui.rgb8(37, 99, 235))),
+  )
+}
+```
+
+编译器会绑定 `.style(...)` 和链式方法中的访问器读取。每次更新都保留后声明属性的优先级；消失的声明会被清除，或回退到更早的声明。交互样式回调也可读取访问器。修改已应用的可复用构建器仍只改变快照，因此动态样式应从信号派生。
+
+## 交互状态
+
+原生指针与焦点状态使用 `.hover(s => ...)`、`.active(s => ...)` 和 `.focus_style(s => ...)`。`.selected_style` 用于复合部件的选中状态，状态由原生核心解析。放置目标的拖入外观可通过 `bind_json` 和 `@protocol.DRAG_OVER_STYLE` 返回样式的 `.json()`。同时需要将节点配置为放置目标，样式本身不会启用放置行为。使用协议常量时导入 `egoist/quickgui/protocol`。
+
+在基础样式上添加[过渡](/docs/moonbit/animations)即可为状态变化添加动画。
+
+## 颜色与 SVG
+
+使用 `@ui.rgb8(r, g, b)` 或 `@ui.rgba8(r, g, b, a)`，通道取值为 0–255。窗口选项接受颜色的 JSON 值；原始整数采用 `0xAABBGGRR`（`0` 表示透明）。不要将 CSS 颜色字符串传给窗口 `background`。
+
+`@ui.svg(source)` 生成由 `.text_color(...)` 着色的蒙版。多色图形可像 Quick Git 一样使用独立的着色 SVG 图层。

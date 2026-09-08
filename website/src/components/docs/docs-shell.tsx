@@ -1,11 +1,4 @@
-import {
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { Logo } from '../logo'
 import {
@@ -15,26 +8,19 @@ import {
   type ComponentDoc,
 } from '../../lib/component-docs'
 import {
-  DOCS_PAGES,
   docsPath,
+  findDocsPage,
+  isDocsFrontend,
+  switchDocsFrontend,
+  type DocsFrontend,
   type DocsOutlineItem,
   type DocsSlug,
 } from '../../lib/docs'
-import {
-  localizedComponentDescription,
-  localizedDocsPage,
-} from '../../lib/docs-locales'
-import {
-  localePath,
-  type Locale,
-} from '../../i18n'
+import { localizedComponentDescription, localizedDocsPage } from '../../lib/docs-locales'
+import { localePath, type Locale } from '../../i18n'
 import { site } from '../../lib/site'
 import { LanguageMenu } from '../language-menu'
-import {
-  prefetchDocsSearch,
-  searchDocs,
-  type DocsSearchHit,
-} from '../../lib/docs-search'
+import { prefetchDocsSearch, searchDocs, type DocsSearchHit } from '../../lib/docs-search'
 
 type DocsTheme = 'light' | 'dark'
 export type DocsArea = 'guide' | 'components' | 'swift-ui'
@@ -59,10 +45,7 @@ interface NavGroup {
   items: readonly NavItem[]
 }
 
-const sidebarScrollTop = {
-  desktop: 0,
-  mobile: 0,
-}
+const sidebarScrollTop = new Map<string, number>()
 
 const ui = {
   en: {
@@ -91,6 +74,7 @@ const ui = {
     next: 'Next page',
     skip: 'Skip to content',
     language: 'Language',
+    frontend: 'Frontend',
     theme: 'Switch to {{theme}} theme',
     light: 'light',
     dark: 'dark',
@@ -125,6 +109,7 @@ const ui = {
     next: '下一页',
     skip: '跳到正文',
     language: '语言',
+    frontend: '前端语言',
     theme: '切换到{{theme}}主题',
     light: '浅色',
     dark: '深色',
@@ -159,6 +144,7 @@ const ui = {
     next: '次のページ',
     skip: '本文へスキップ',
     language: '言語',
+    frontend: 'フロントエンド',
     theme: '{{theme}}テーマに切り替え',
     light: 'ライト',
     dark: 'ダーク',
@@ -173,28 +159,28 @@ function localize(locale: Locale, path: string): string {
   return locale === 'en' ? path : `/${locale}${path}`
 }
 
-function guideItem(slug: DocsSlug, locale: Locale): NavItem {
-  const source = DOCS_PAGES.find((candidate) => candidate.slug === slug)
+function guideItem(slug: DocsSlug, locale: Locale, frontend: DocsFrontend = 'go'): NavItem {
+  const source = findDocsPage(frontend, slug)
   if (!source) throw new Error(`Unknown docs page: ${slug}`)
   const page = localizedDocsPage(source, locale)
   return {
     title: page.title,
     description: page.description,
-    path: docsPath(page.slug),
+    path: docsPath(frontend, page.slug),
     terms: page.searchTerms.join(' '),
   }
 }
 
-function componentItem(component: ComponentDoc, locale: Locale): NavItem {
+function componentItem(component: ComponentDoc, locale: Locale, frontend: DocsFrontend): NavItem {
   return {
     title: component.name,
     description: localizedComponentDescription(component, locale),
-    path: componentDocsPath(component),
+    path: componentDocsPath(component, frontend),
     terms: `${component.section} ${component.parts.join(' ')} ${component.keyProps.join(' ')}`,
   }
 }
 
-function navGroups(locale: Locale): readonly NavGroup[] {
+function navGroups(locale: Locale, frontend: DocsFrontend): readonly NavGroup[] {
   const labels = ui[locale]
   const componentGroupTitles: Record<string, string> = {
     Primitives: labels.primitives,
@@ -208,43 +194,44 @@ function navGroups(locale: Locale): readonly NavGroup[] {
     {
       title: labels.introduction,
       items: [
-        guideItem('getting-started', locale),
-        guideItem('project-structure', locale),
-        guideItem('updater', locale),
-        guideItem('extensions', locale),
+        guideItem('getting-started', locale, frontend),
+        guideItem('project-structure', locale, frontend),
+        guideItem('updater', locale, frontend),
+        guideItem('extensions', locale, frontend),
       ],
     },
     {
       title: labels.ui,
       items: [
-        guideItem('ui', locale),
-        guideItem('styling', locale),
-        guideItem('animations', locale),
+        guideItem('ui', locale, frontend),
+        guideItem('styling', locale, frontend),
+        guideItem('animations', locale, frontend),
       ],
     },
     {
       title: labels.components,
       items: [
-        guideItem('components', locale),
-        guideItem('forms-and-input', locale),
-        guideItem('overlays-and-dialogs', locale),
+        guideItem('components', locale, frontend),
+        guideItem('forms-and-input', locale, frontend),
+        guideItem('overlays-and-dialogs', locale, frontend),
+        ...(frontend === 'moonbit' ? [guideItem('native-services', locale, frontend)] : []),
       ],
     },
     ...COMPONENT_NAV_GROUPS.map((group) => ({
       title: componentGroupTitles[group.title] ?? group.title,
-      items: group.items.map((component) => componentItem(component, locale)),
+      items: group.items.map((component) => componentItem(component, locale, frontend)),
     })),
     {
       title: labels.swiftUi,
       items: [
-        guideItem('swift-ui', locale),
-        guideItem('swift-ui-hosting', locale),
+        guideItem('swift-ui', locale, frontend),
+        guideItem('swift-ui-hosting', locale, frontend),
       ],
     },
     {
       title: labels.swiftComponents,
       items: SWIFT_UI_NAV_GROUP.items.map((component) =>
-        componentItem(component, locale),
+        componentItem(component, locale, frontend),
       ),
     },
   ]
@@ -253,26 +240,30 @@ function navGroups(locale: Locale): readonly NavGroup[] {
 function DocsSidebar({
   currentPath,
   locale,
+  frontend,
   mobile = false,
   onNavigate,
 }: {
   currentPath: string
   locale: Locale
+  frontend: DocsFrontend
   mobile?: boolean
   onNavigate?: () => void
 }) {
   const sidebarRef = useRef<HTMLElement>(null)
-  const scrollKey = mobile ? 'mobile' : 'desktop'
+  const navigate = useNavigate()
+  const pickerId = useId()
+  const scrollKey = `${frontend}:${mobile ? 'mobile' : 'desktop'}`
 
   useLayoutEffect(() => {
     if (sidebarRef.current) {
-      sidebarRef.current.scrollTop = sidebarScrollTop[scrollKey]
+      sidebarRef.current.scrollTop = sidebarScrollTop.get(scrollKey) ?? 0
     }
   }, [scrollKey])
 
   function rememberScrollPosition() {
     if (sidebarRef.current) {
-      sidebarScrollTop[scrollKey] = sidebarRef.current.scrollTop
+      sidebarScrollTop.set(scrollKey, sidebarRef.current.scrollTop)
     }
   }
 
@@ -283,8 +274,28 @@ function DocsSidebar({
       aria-label={mobile ? ui[locale].menu : undefined}
       onScroll={rememberScrollPosition}
     >
+      <div className="docs-frontend-picker">
+        <label htmlFor={pickerId}>{ui[locale].frontend}</label>
+        <div className="docs-frontend-select">
+          <select
+            id={pickerId}
+            value={frontend}
+            onChange={(event) => {
+              const next = event.target.value
+              if (!isDocsFrontend(next)) return
+              rememberScrollPosition()
+              onNavigate?.()
+              void navigate(localize(locale, switchDocsFrontend(currentPath, next)))
+            }}
+          >
+            <option value="go">Go</option>
+            <option value="moonbit">MoonBit</option>
+          </select>
+          <span className="i-lucide-chevrons-up-down" aria-hidden />
+        </div>
+      </div>
       <nav aria-label={ui[locale].menu}>
-        {navGroups(locale).map((group) => (
+        {navGroups(locale, frontend).map((group) => (
           <section className="docs-nav-group" key={group.title}>
             <h2>{group.title}</h2>
             <ul>
@@ -360,13 +371,15 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
   if (!terms.length) return text
   const pattern = new RegExp(`(${terms.map(escapeRegExp).join('|')})`, 'gi')
 
-  return text.split(pattern).map((part, index) =>
-    terms.some((term) => term.toLocaleLowerCase() === part.toLocaleLowerCase()) ? (
-      <mark key={`${part}-${index}`}>{part}</mark>
-    ) : (
-      part
-    ),
-  )
+  return text
+    .split(pattern)
+    .map((part, index) =>
+      terms.some((term) => term.toLocaleLowerCase() === part.toLocaleLowerCase()) ? (
+        <mark key={`${part}-${index}`}>{part}</mark>
+      ) : (
+        part
+      ),
+    )
 }
 
 function resultSnippet(hit: DocsSearchHit, query: string): string {
@@ -393,10 +406,12 @@ function resultSnippet(hit: DocsSearchHit, query: string): string {
 function SearchDialog({
   open,
   locale,
+  frontend,
   onClose,
 }: {
   open: boolean
   locale: Locale
+  frontend: DocsFrontend
   onClose: () => void
 }) {
   const [query, setQuery] = useState('')
@@ -418,7 +433,7 @@ function SearchDialog({
     setStatus('idle')
     setActiveIndex(0)
     document.body.style.overflow = 'hidden'
-    prefetchDocsSearch(locale)
+    prefetchDocsSearch(locale, frontend)
     const frame = requestAnimationFrame(() => inputRef.current?.focus())
 
     return () => {
@@ -426,7 +441,7 @@ function SearchDialog({
       document.body.style.overflow = previousOverflow
       previouslyFocused?.focus()
     }
-  }, [locale, open])
+  }, [locale, frontend, open])
 
   useEffect(() => {
     if (!open) return
@@ -441,7 +456,7 @@ function SearchDialog({
     let cancelled = false
     setStatus('loading')
     const timeout = window.setTimeout(() => {
-      void searchDocs(locale, term)
+      void searchDocs(locale, frontend, term)
         .then((hits) => {
           if (cancelled) return
           setResults(hits)
@@ -457,13 +472,11 @@ function SearchDialog({
       cancelled = true
       window.clearTimeout(timeout)
     }
-  }, [locale, open, query])
+  }, [locale, frontend, open, query])
 
   useEffect(() => {
     if (!open || !results[activeIndex]) return
-    document
-      .getElementById(`${resultsId}-${activeIndex}`)
-      ?.scrollIntoView({ block: 'nearest' })
+    document.getElementById(`${resultsId}-${activeIndex}`)?.scrollIntoView({ block: 'nearest' })
   }, [activeIndex, open, results, resultsId])
 
   if (!open) return null
@@ -524,9 +537,7 @@ function SearchDialog({
                 setActiveIndex((current) => (current + 1) % results.length)
               } else if (event.key === 'ArrowUp' && results.length) {
                 event.preventDefault()
-                setActiveIndex((current) =>
-                  current === 0 ? results.length - 1 : current - 1,
-                )
+                setActiveIndex((current) => (current === 0 ? results.length - 1 : current - 1))
               } else if (event.key === 'Home' && results.length) {
                 event.preventDefault()
                 setActiveIndex(0)
@@ -544,9 +555,7 @@ function SearchDialog({
             aria-autocomplete="list"
             aria-controls={resultsId}
             aria-expanded={results.length > 0}
-            aria-activedescendant={
-              results[activeIndex] ? `${resultsId}-${activeIndex}` : undefined
-            }
+            aria-activedescendant={results[activeIndex] ? `${resultsId}-${activeIndex}` : undefined}
           />
           <button type="button" onClick={onClose} aria-label={labels.closeSearch}>
             Esc
@@ -557,8 +566,8 @@ function SearchDialog({
             {status === 'loading'
               ? labels.searching
               : status === 'ready' && results.length
-                  ? labels.searchResults.replace('{{count}}', String(results.length))
-                  : ''}
+                ? labels.searchResults.replace('{{count}}', String(results.length))
+                : ''}
           </div>
 
           {status === 'idle' ? (
@@ -581,7 +590,11 @@ function SearchDialog({
           ) : null}
 
           {results.length ? (
-            <ul id={resultsId} role="listbox" aria-label={labels.searchResults.replace('{{count}}', String(results.length))}>
+            <ul
+              id={resultsId}
+              role="listbox"
+              aria-label={labels.searchResults.replace('{{count}}', String(results.length))}
+            >
               {results.map((result, index) => {
                 const title = result.document.section || result.document.pageTitle
                 const snippet = resultSnippet(result, query)
@@ -627,6 +640,7 @@ function DocsHeader({
   area,
   currentPath,
   locale,
+  frontend,
   theme,
   menuOpen,
   onMenuToggle,
@@ -637,6 +651,7 @@ function DocsHeader({
   area: DocsArea
   currentPath: string
   locale: Locale
+  frontend: DocsFrontend
   theme: DocsTheme
   menuOpen: boolean
   onMenuToggle: () => void
@@ -646,19 +661,15 @@ function DocsHeader({
 }) {
   const labels = ui[locale]
   const headerLinks = [
-    { label: labels.guide, href: '/docs', area: 'guide' },
-    { label: labels.components, href: '/docs/components', area: 'components' },
-    { label: labels.swiftUi, href: '/docs/swift-ui', area: 'swift-ui' },
+    { label: labels.guide, href: docsPath(frontend), area: 'guide' },
+    { label: labels.components, href: docsPath(frontend, 'components'), area: 'components' },
+    { label: labels.swiftUi, href: docsPath(frontend, 'swift-ui'), area: 'swift-ui' },
   ] as const
 
   return (
     <header className="docs-header">
       <div className="docs-frame docs-header-inner">
-        <a
-          href={localePath(locale)}
-          className="docs-brand"
-          aria-label={labels.home}
-        >
+        <a href={localePath(locale)} className="docs-brand" aria-label={labels.home}>
           <Logo />
           <span>{site.name}</span>
         </a>
@@ -704,9 +715,7 @@ function DocsHeader({
             )}
           >
             <span className="docs-theme-thumb" aria-hidden>
-              <span
-                className={theme === 'light' ? 'i-lucide-sun' : 'i-lucide-moon'}
-              />
+              <span className={theme === 'light' ? 'i-lucide-sun' : 'i-lucide-moon'} />
             </span>
           </button>
           <a
@@ -733,8 +742,16 @@ function DocsHeader({
   )
 }
 
-function DocsPager({ page, locale }: { page: DocsShellPage; locale: Locale }) {
-  const pages = navGroups(locale).flatMap((group) => group.items)
+function DocsPager({
+  page,
+  locale,
+  frontend,
+}: {
+  page: DocsShellPage
+  locale: Locale
+  frontend: DocsFrontend
+}) {
+  const pages = navGroups(locale, frontend).flatMap((group) => group.items)
   const index = pages.findIndex((candidate) => candidate.path === page.path)
   const previous = index > 0 ? pages[index - 1] : undefined
   const next = index >= 0 && index < pages.length - 1 ? pages[index + 1] : undefined
@@ -746,7 +763,9 @@ function DocsPager({ page, locale }: { page: DocsShellPage; locale: Locale }) {
           <small>{ui[locale].previous}</small>
           <span>{previous.title}</span>
         </a>
-      ) : <span />}
+      ) : (
+        <span />
+      )}
       {next ? (
         <a href={localize(locale, next.path)} className="docs-pager-next">
           <small>{ui[locale].next}</small>
@@ -760,10 +779,12 @@ function DocsPager({ page, locale }: { page: DocsShellPage; locale: Locale }) {
 export function DocsShell({
   page,
   locale,
+  frontend,
   children,
 }: {
   page: DocsShellPage
   locale: Locale
+  frontend: DocsFrontend
   children: ReactNode
 }) {
   const [theme, setTheme] = useState<DocsTheme>('light')
@@ -813,16 +834,19 @@ export function DocsShell({
 
   return (
     <div className="docs-root" data-theme={theme}>
-      <a className="docs-skip-link" href="#docs-content">{ui[locale].skip}</a>
+      <a className="docs-skip-link" href="#docs-content">
+        {ui[locale].skip}
+      </a>
       <DocsHeader
         area={page.area}
         currentPath={page.path}
         locale={locale}
+        frontend={frontend}
         theme={theme}
         menuOpen={mobilePanel === 'menu'}
-        onMenuToggle={() => setMobilePanel((current) => current === 'menu' ? null : 'menu')}
+        onMenuToggle={() => setMobilePanel((current) => (current === 'menu' ? null : 'menu'))}
         onSearch={() => setSearchOpen(true)}
-        onSearchPrepare={() => prefetchDocsSearch(locale)}
+        onSearchPrepare={() => prefetchDocsSearch(locale, frontend)}
         onThemeToggle={toggleTheme}
       />
 
@@ -830,7 +854,7 @@ export function DocsShell({
         <button
           type="button"
           aria-expanded={mobilePanel === 'menu'}
-          onClick={() => setMobilePanel((current) => current === 'menu' ? null : 'menu')}
+          onClick={() => setMobilePanel((current) => (current === 'menu' ? null : 'menu'))}
         >
           <span className="i-lucide-list-filter" aria-hidden />
           {ui[locale].menu}
@@ -838,7 +862,7 @@ export function DocsShell({
         <button
           type="button"
           aria-expanded={mobilePanel === 'outline'}
-          onClick={() => setMobilePanel((current) => current === 'outline' ? null : 'outline')}
+          onClick={() => setMobilePanel((current) => (current === 'outline' ? null : 'outline'))}
         >
           {ui[locale].onThisPage}
           <span
@@ -849,12 +873,12 @@ export function DocsShell({
       </div>
 
       <div className="docs-frame docs-layout">
-        <DocsSidebar currentPath={page.path} locale={locale} />
+        <DocsSidebar currentPath={page.path} locale={locale} frontend={frontend} />
         <div className="docs-content-column">
           <main id="docs-content" className="docs-article">
             <h1>{page.title}</h1>
             {children}
-            <DocsPager page={page} locale={locale} />
+            <DocsPager page={page} locale={locale} frontend={frontend} />
           </main>
         </div>
         <DocsOutline page={page} locale={locale} />
@@ -867,6 +891,7 @@ export function DocsShell({
               <DocsSidebar
                 currentPath={page.path}
                 locale={locale}
+                frontend={frontend}
                 mobile
                 onNavigate={() => setMobilePanel(null)}
               />
@@ -882,7 +907,12 @@ export function DocsShell({
         </div>
       ) : null}
 
-      <SearchDialog open={searchOpen} locale={locale} onClose={() => setSearchOpen(false)} />
+      <SearchDialog
+        open={searchOpen}
+        locale={locale}
+        frontend={frontend}
+        onClose={() => setSearchOpen(false)}
+      />
     </div>
   )
 }

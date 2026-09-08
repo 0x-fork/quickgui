@@ -1,0 +1,5 @@
+import {
+  "egoist/quickgui/ui",
+  "egoist/quickgui/native",
+  "egoist/quickgui/protocol",
+}

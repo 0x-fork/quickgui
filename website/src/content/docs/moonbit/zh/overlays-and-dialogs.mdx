@@ -1,0 +1,62 @@
+构建组件时捕获当前窗口。窗口方法显示操作系统对话框和弹出菜单，并异步返回结果。
+
+## 选择目录
+
+```moonbit
+///|
+fn folder_picker() -> @ui.Element {
+  let window = @native.current_window()
+  let (selected, set_selected) = @reactive.create_signal("No folder selected")
+  @ui.div([
+    @ui.button("Open folder").on_click(() => {
+      window.dialog(
+        1,
+        { "title": "Open folder", "files": false, "directories": true },
+        result => {
+          match result {
+            Ok([String(path), ..]) => set_selected(path)
+            Ok(_) => ()
+            Err(error) => set_selected(error)
+          }
+        },
+      )
+    }),
+    @ui.text(selected()),
+  ])
+  .flex_col()
+  .gap(12)
+}
+```
+
+对话框类型 `0` 是提示框，`1` 打开路径，`2` 保存路径。打开和保存结果包含路径数组，空选择表示取消。提示框返回所选按钮标识。应处理 `Result`，不要阻塞 UI 线程。
+
+## 弹出与上下文菜单
+
+```moonbit
+///|
+fn menu_button() -> @ui.Element {
+  let window = @native.current_window()
+  let (status, set_status) = @reactive.create_signal("Ready")
+  let open = () => {
+    window.popup_menu([
+      @native.menu_action("Refresh", () => set_status("Refreshed")),
+      @native.MenuItem::Separator,
+      @native.menu_action("Close window", () => window.close()),
+    ])
+  }
+  @ui.div([
+    @ui.button("Actions").on_click(open).on_context_menu(open),
+    @ui.text(status()),
+  ])
+  .flex_col()
+  .gap(8)
+}
+```
+
+`popup_menu` 保持操作回调存活直到菜单关闭。嵌套项使用 `submenu`，标准平台命令使用 `menu_role`。事件处理和菜单项保留注册时的所有者。
+
+## 应用菜单与浮层
+
+在应用启动回调中调用 `@native.set_application_menu(items)` 安装应用级菜单。关闭、隐藏和最小化窗口等命令应使用平台角色。
+
+使用[对话框](/docs/moonbit/components/dialog)、[浮层](/docs/moonbit/components/popover)、[系统浮层](/docs/moonbit/components/system-popover)和[工具提示](/docs/moonbit/components/tooltip)获得原生焦点、关闭和生命周期行为。部件保留在树中，过渡完成由核心管理。模型驱动的 `popover_menu([])` 使用 `.when_open(...)` 仅在打开时挂载弹出菜单。
