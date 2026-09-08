@@ -83,6 +83,8 @@ Effects and event callbacks execute on one UI worker thread. The native main thr
 
 ## Styling and native services
 
+Rust's layout conveniences are available on both `Element` and `Style`: `.grid_cols(3)`, `.col_span_full()`, `.flex_col_reverse()`, `.justify_between()`, `.p_4()`, `.mx_auto()`, and `.rounded_lg()`. The generator checks 325 helpers against Rust, including spacing and radius presets. `.flex()` selects flex display; use `.flex_1()` for grow 1, shrink 1, and a zero basis. Popup anchor stickiness uses `.anchor_sticky(value)`; `.sticky()` selects sticky positioning.
+
 Numeric dimensions are pixels; strings support native keywords and percentages. Colors use `rgb8` or `rgba8`. `.style(style)` merges with earlier declarations, with later values taking precedence. Styles snapshot when applied; later changes to a reusable builder do not update mounted nodes. `.bind_style(() => style)` owns its declared properties and clears properties omitted on the next run. Construct a complete merged style inside that callback when conditional styles need fallback values.
 
 ```moonbit

@@ -54,7 +54,7 @@ func TestNamedGroupRulesAccumulateAndTrackColorsWithoutRemounting(t *testing.T) 
 		enabled := reactive.NewSignal(true)
 		parent := View()
 		node := View(GroupHover(Opacity(.5)), When(enabled.Read, GroupHoverNamed("card", TextColor(color.Read))), "kept")
-		native.InsertNode(parent, node, nil)
+		native.InsertNode(parent.Node, node.Node, nil)
 		child := node.Children[0]
 		offset := len(parent.Pending.Body())
 		color.Write("#abcdef")
@@ -74,7 +74,7 @@ func TestNamedGroupRulesAccumulateAndTrackColorsWithoutRemounting(t *testing.T) 
 		if !bytes.Contains(parent.Pending.Body()[offset:], []byte(`"group":"card"`)) {
 			t.Fatal("conditional group rule was not restored")
 		}
-		native.RemoveNode(parent, node)
+		native.RemoveNode(parent.Node, node.Node)
 		if len(color.Observers) != 0 {
 			t.Fatal("removed group rule retained subscription")
 		}

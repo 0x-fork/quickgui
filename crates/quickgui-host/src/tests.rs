@@ -9475,3 +9475,122 @@ fn packaged_fonts_resolve_against_resources_and_preserve_absolute_paths() {
     assert_eq!(fonts[0].as_ref(), b"bundled font");
     assert_eq!(fonts[1].as_ref(), b"external font");
 }
+
+#[test]
+fn fluent_layout_presets_reach_native_geometry() {
+    let make_node = |parent, numbers: &[(u16, f32)], strings: &[(u16, &str)]| {
+        let mut node = NativeNode::new(NodeTag::View);
+        node.parent = Some(parent);
+        for &(code, value) in numbers {
+            node.set_property(code, Some(PropertyValue::Number(value)));
+        }
+        for &(code, value) in strings {
+            node.set_property(code, Some(PropertyValue::String(Arc::from(value))));
+        }
+        node
+    };
+    let mut tree = NativeTree::default();
+    let outer = make_node(
+        ROOT_NODE,
+        &[(property::WIDTH, 300.0), (property::HEIGHT, 220.0)],
+        &[
+            (property::DISPLAY, "flex"),
+            (property::FLEX_DIRECTION, "column"),
+        ],
+    );
+    tree.nodes.insert(799, outer);
+    tree.nodes.get_mut(&ROOT_NODE).unwrap().children.push(799);
+    let mut center = make_node(
+        799,
+        &[(property::WIDTH, 300.0), (property::HEIGHT, 100.0)],
+        &[(property::DISPLAY, "flex")],
+    );
+    center.children.push(801);
+    tree.nodes.insert(800, center);
+    tree.nodes.insert(
+        801,
+        make_node(
+            800,
+            &[(property::WIDTH, 40.0), (property::HEIGHT, 20.0)],
+            &[(property::MARGIN, "auto")],
+        ),
+    );
+    tree.nodes.get_mut(&799).unwrap().children.push(800);
+    for (id, width, template, first_width, second_width) in [
+        (
+            810,
+            100.0,
+            "repeat(2, minmax(min-content, 1fr))",
+            120.0,
+            20.0,
+        ),
+        (820, 300.0, "repeat(2, minmax(0, max-content))", 40.0, 80.0),
+    ] {
+        let mut grid = make_node(
+            799,
+            &[(property::WIDTH, width), (property::HEIGHT, 40.0)],
+            &[
+                (property::DISPLAY, "grid"),
+                (property::GRID_TEMPLATE_COLUMNS, template),
+            ],
+        );
+        grid.children.extend([id + 1, id + 2]);
+        tree.nodes.insert(id, grid);
+        for (child, width) in [(id + 1, first_width), (id + 2, second_width)] {
+            tree.nodes.insert(
+                child,
+                make_node(
+                    id,
+                    &[(property::WIDTH, width), (property::HEIGHT, 20.0)],
+                    &[],
+                ),
+            );
+        }
+        tree.nodes.get_mut(&799).unwrap().children.push(id);
+    }
+    let mut grid = make_node(
+        799,
+        &[(property::WIDTH, 300.0), (property::HEIGHT, 40.0)],
+        &[
+            (property::DISPLAY, "grid"),
+            (property::GRID_TEMPLATE_COLUMNS, "repeat(3, minmax(0, 1fr))"),
+        ],
+    );
+    grid.children.push(831);
+    tree.nodes.insert(830, grid);
+    tree.nodes.insert(
+        831,
+        make_node(
+            830,
+            &[(property::GRID_COLUMN_SPAN, 2.0), (property::HEIGHT, 20.0)],
+            &[],
+        ),
+    );
+    tree.nodes.get_mut(&799).unwrap().children.push(830);
+
+    let view = component_part_view(91, tree, Rc::new(RefCell::new(VecDeque::new())));
+    let (mut cx, view) = quickgui::TestAppContext::new(view).unwrap();
+    let window = view.window_handle();
+    let mut bounds = |id| cx.element_bounds(window, ElementId::new(id)).unwrap();
+    let parent = bounds(800);
+    let child = bounds(801);
+    assert_eq!(
+        child.x - parent.x,
+        130.0,
+        "parent={parent:?} child={child:?}"
+    );
+    assert_eq!(child.y - parent.y, 40.0);
+    assert_eq!(bounds(812).x - bounds(810).x, 120.0);
+    assert_eq!(bounds(822).x - bounds(820).x, 40.0);
+    assert_eq!(bounds(831).width, 200.0);
+    assert!(native_grid_tracks("none").is_empty());
+    assert_eq!(
+        native_text_overflow("ellipsis-start"),
+        Some(quickgui::TextOverflow::ellipsis_start())
+    );
+    assert_eq!(
+        native_text_overflow("ellipsis-middle"),
+        Some(quickgui::TextOverflow::ellipsis_middle())
+    );
+    assert_eq!(native_text_overflow("unsupported"), None);
+}

@@ -45,6 +45,7 @@ async function run(
   }
 }
 await run(["bun", "scripts/generate-moonbit.ts", "--check"]);
+await run(["bun", "scripts/generate-style-helpers.ts", "--check"]);
 await run(["bun", "scripts/generate-moonbit-components.ts", "--check"]);
 await run(["bun", "scripts/generate-moonbit-view-api.ts", "--check"]);
 await run(["bun", "scripts/check-moonbit-views.ts"]);

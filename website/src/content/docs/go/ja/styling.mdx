@@ -1,3 +1,13 @@
+Go のビューはプロパティ、イベント、スタイルをメソッドチェーンで設定します。Rust と共通のヘルパーとして `.P4()`、`.MxAuto()`、`.GridCols(3)`、`.ColSpanFull()`、`.RoundedLg()` などを使えます。`ui.Styles(...)` でプリセットを組み合わせることもできます。従来のコンストラクタ引数も利用できます。
+
+```go
+ui.View(ui.Text("hello"), ui.Input().Value("xxx")).
+	FlexCol().
+	PaddingLeft(20).
+	RoundedLg().
+	TextAlign("center")
+```
+
 `ui.BackgroundColor(...)` や `ui.PaddingLeft(...)` などのスタイルオプションを、子要素やイベントハンドラーと一緒に `ui.View`、`ui.Text` などのプリミティブへ直接渡します。
 
 ## スタイルオプション

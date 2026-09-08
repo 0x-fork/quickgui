@@ -360,6 +360,8 @@ const (
 	FocusWithinStyle               uint16 = 356
 	SelectedStyle                  uint16 = 357
 	Selected                       uint16 = 358
+	ScrollSnapX                    uint16 = 359
+	ScrollSnapY                    uint16 = 360
 )
 const (
 	TagView                  uint8 = 1

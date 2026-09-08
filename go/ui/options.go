@@ -5,9 +5,10 @@ import (
 )
 
 //go:generate go run ../internal/cmd/optionsgen
+//go:generate bun ../../scripts/generate-style-helpers.ts
 
-// Option configures a primitive. Pass style, property, and event options directly
-// to View, Text, Button, or another primitive, alongside its children.
+// Option configures a conditional fluent declaration or a legacy constructor.
+// Prefer Element methods for properties, events, and styles.
 type Option interface {
 	apply(*Props)
 }
@@ -34,8 +35,8 @@ func (option StyleOption) applyStyle(style *Style) { option(style) }
 // Styles composes reusable style options in declaration order. Later values
 // override the same property; interaction styles merge without mutating inputs.
 // Accessors remain unevaluated until the style is bound to a node.
-// Pass individual options directly to primitives; use Styles for shared styles
-// and the Style field of compound parts.
+// Use Element.Styles for inline styles; use Styles for shared values and the
+// Style field of compound parts.
 func Styles(options ...StyleDeclaration) Style {
 	var style Style
 	for _, option := range options {
@@ -81,37 +82,16 @@ func (option conditionalOption) apply(props *Props) {
 	}
 }
 
-func applyArguments(node *native.Node, arguments []any) {
-	dynamic := false
-	for _, argument := range arguments {
-		if _, ok := argument.(conditionalOption); ok {
-			dynamic = true
-			break
-		}
-	}
-	if !dynamic {
-		applyProps(node, resolveProps(arguments))
-		return
-	}
-	var props Props
-	node.BindProperties(func() {
-		props = resolveProps(arguments)
-		// Remove handlers that were declared only by an inactive condition.
-		for _, event := range primitiveListeners(props) {
-			if event.handler == nil {
-				for _, listener := range node.Listeners {
-					if listener.Type == event.kind {
-						native.SetEventListener(node, event.kind, nil)
-						break
-					}
+func clearOmittedListeners(node *native.Node, props Props) {
+	for _, event := range primitiveListeners(props) {
+		if event.handler == nil {
+			for _, listener := range node.Listeners {
+				if listener.Type == event.kind {
+					native.SetEventListener(node, event.kind, nil)
+					break
 				}
 			}
 		}
-		applyPropValues(node, props)
-	})
-	insertChildren(node, props.Children)
-	if props.Ref != nil {
-		props.Ref(node)
 	}
 }
 

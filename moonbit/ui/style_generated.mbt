@@ -28,13 +28,20 @@ pub fn[T : IntoValue] Style::flex_direction(self : Style, value : T) -> Style {
 }
 
 ///|
-pub fn[T : IntoValue] Element::flex_wrap(self : Element, value : T) -> Element {
+pub fn[T : IntoValue] Element::flex_wrap_mode(
+  self : Element,
+  value : T,
+) -> Element {
   self.property(@protocol.FLEX_WRAP, IntoValue::into_value(value))
 }
 
 ///|
-pub fn[T : IntoValue] Style::flex_wrap(self : Style, value : T) -> Style {
-  self.property(@protocol.FLEX_WRAP, "flexWrap", IntoValue::into_value(value))
+pub fn[T : IntoValue] Style::flex_wrap_mode(self : Style, value : T) -> Style {
+  self.property(
+    @protocol.FLEX_WRAP,
+    "flexWrapMode",
+    IntoValue::into_value(value),
+  )
 }
 
 ///|
@@ -1401,6 +1408,288 @@ pub fn[T : IntoValue] Style::aspect_ratio(self : Style, value : T) -> Style {
   self.property(
     @protocol.ASPECT_RATIO,
     "aspectRatio",
+    IntoValue::into_value(value),
+  )
+}
+
+///|
+pub fn[T : IntoValue] Element::direction(self : Element, value : T) -> Element {
+  self.property(@protocol.DIRECTION, IntoValue::into_value(value))
+}
+
+///|
+pub fn[T : IntoValue] Style::direction(self : Style, value : T) -> Style {
+  self.property(@protocol.DIRECTION, "direction", IntoValue::into_value(value))
+}
+
+///|
+pub fn[T : IntoValue] Element::padding_start(
+  self : Element,
+  value : T,
+) -> Element {
+  self.property(@protocol.PADDING_START, IntoValue::into_value(value))
+}
+
+///|
+pub fn[T : IntoValue] Style::padding_start(self : Style, value : T) -> Style {
+  self.property(
+    @protocol.PADDING_START,
+    "paddingStart",
+    IntoValue::into_value(value),
+  )
+}
+
+///|
+pub fn[T : IntoValue] Element::padding_end(
+  self : Element,
+  value : T,
+) -> Element {
+  self.property(@protocol.PADDING_END, IntoValue::into_value(value))
+}
+
+///|
+pub fn[T : IntoValue] Style::padding_end(self : Style, value : T) -> Style {
+  self.property(
+    @protocol.PADDING_END,
+    "paddingEnd",
+    IntoValue::into_value(value),
+  )
+}
+
+///|
+pub fn[T : IntoValue] Element::margin_start(
+  self : Element,
+  value : T,
+) -> Element {
+  self.property(@protocol.MARGIN_START, IntoValue::into_value(value))
+}
+
+///|
+pub fn[T : IntoValue] Style::margin_start(self : Style, value : T) -> Style {
+  self.property(
+    @protocol.MARGIN_START,
+    "marginStart",
+    IntoValue::into_value(value),
+  )
+}
+
+///|
+pub fn[T : IntoValue] Element::margin_end(self : Element, value : T) -> Element {
+  self.property(@protocol.MARGIN_END, IntoValue::into_value(value))
+}
+
+///|
+pub fn[T : IntoValue] Style::margin_end(self : Style, value : T) -> Style {
+  self.property(@protocol.MARGIN_END, "marginEnd", IntoValue::into_value(value))
+}
+
+///|
+pub fn[T : IntoValue] Element::border_start_width(
+  self : Element,
+  value : T,
+) -> Element {
+  self.property(@protocol.BORDER_START_WIDTH, IntoValue::into_value(value))
+}
+
+///|
+pub fn[T : IntoValue] Style::border_start_width(
+  self : Style,
+  value : T,
+) -> Style {
+  self.property(
+    @protocol.BORDER_START_WIDTH,
+    "borderStartWidth",
+    IntoValue::into_value(value),
+  )
+}
+
+///|
+pub fn[T : IntoValue] Element::border_end_width(
+  self : Element,
+  value : T,
+) -> Element {
+  self.property(@protocol.BORDER_END_WIDTH, IntoValue::into_value(value))
+}
+
+///|
+pub fn[T : IntoValue] Style::border_end_width(self : Style, value : T) -> Style {
+  self.property(
+    @protocol.BORDER_END_WIDTH,
+    "borderEndWidth",
+    IntoValue::into_value(value),
+  )
+}
+
+///|
+pub fn[T : IntoValue] Element::border_top_left_radius(
+  self : Element,
+  value : T,
+) -> Element {
+  self.property(@protocol.BORDER_TOP_LEFT_RADIUS, IntoValue::into_value(value))
+}
+
+///|
+pub fn[T : IntoValue] Style::border_top_left_radius(
+  self : Style,
+  value : T,
+) -> Style {
+  self.property(
+    @protocol.BORDER_TOP_LEFT_RADIUS,
+    "borderTopLeftRadius",
+    IntoValue::into_value(value),
+  )
+}
+
+///|
+pub fn[T : IntoValue] Element::border_top_right_radius(
+  self : Element,
+  value : T,
+) -> Element {
+  self.property(@protocol.BORDER_TOP_RIGHT_RADIUS, IntoValue::into_value(value))
+}
+
+///|
+pub fn[T : IntoValue] Style::border_top_right_radius(
+  self : Style,
+  value : T,
+) -> Style {
+  self.property(
+    @protocol.BORDER_TOP_RIGHT_RADIUS,
+    "borderTopRightRadius",
+    IntoValue::into_value(value),
+  )
+}
+
+///|
+pub fn[T : IntoValue] Element::border_bottom_left_radius(
+  self : Element,
+  value : T,
+) -> Element {
+  self.property(
+    @protocol.BORDER_BOTTOM_LEFT_RADIUS,
+    IntoValue::into_value(value),
+  )
+}
+
+///|
+pub fn[T : IntoValue] Style::border_bottom_left_radius(
+  self : Style,
+  value : T,
+) -> Style {
+  self.property(
+    @protocol.BORDER_BOTTOM_LEFT_RADIUS,
+    "borderBottomLeftRadius",
+    IntoValue::into_value(value),
+  )
+}
+
+///|
+pub fn[T : IntoValue] Element::border_bottom_right_radius(
+  self : Element,
+  value : T,
+) -> Element {
+  self.property(
+    @protocol.BORDER_BOTTOM_RIGHT_RADIUS,
+    IntoValue::into_value(value),
+  )
+}
+
+///|
+pub fn[T : IntoValue] Style::border_bottom_right_radius(
+  self : Style,
+  value : T,
+) -> Style {
+  self.property(
+    @protocol.BORDER_BOTTOM_RIGHT_RADIUS,
+    "borderBottomRightRadius",
+    IntoValue::into_value(value),
+  )
+}
+
+///|
+pub fn[T : IntoValue] Element::scroll_snap_type(
+  self : Element,
+  value : T,
+) -> Element {
+  self.property(@protocol.SCROLL_SNAP_TYPE, IntoValue::into_value(value))
+}
+
+///|
+pub fn[T : IntoValue] Style::scroll_snap_type(self : Style, value : T) -> Style {
+  self.property(
+    @protocol.SCROLL_SNAP_TYPE,
+    "scrollSnapType",
+    IntoValue::into_value(value),
+  )
+}
+
+///|
+pub fn[T : IntoValue] Element::scroll_snap_x(
+  self : Element,
+  value : T,
+) -> Element {
+  self.property(@protocol.SCROLL_SNAP_X, IntoValue::into_value(value))
+}
+
+///|
+pub fn[T : IntoValue] Style::scroll_snap_x(self : Style, value : T) -> Style {
+  self.property(
+    @protocol.SCROLL_SNAP_X,
+    "scrollSnapX",
+    IntoValue::into_value(value),
+  )
+}
+
+///|
+pub fn[T : IntoValue] Element::scroll_snap_y(
+  self : Element,
+  value : T,
+) -> Element {
+  self.property(@protocol.SCROLL_SNAP_Y, IntoValue::into_value(value))
+}
+
+///|
+pub fn[T : IntoValue] Style::scroll_snap_y(self : Style, value : T) -> Style {
+  self.property(
+    @protocol.SCROLL_SNAP_Y,
+    "scrollSnapY",
+    IntoValue::into_value(value),
+  )
+}
+
+///|
+pub fn[T : IntoValue] Element::scroll_snap_align(
+  self : Element,
+  value : T,
+) -> Element {
+  self.property(@protocol.SCROLL_SNAP_ALIGN, IntoValue::into_value(value))
+}
+
+///|
+pub fn[T : IntoValue] Style::scroll_snap_align(
+  self : Style,
+  value : T,
+) -> Style {
+  self.property(
+    @protocol.SCROLL_SNAP_ALIGN,
+    "scrollSnapAlign",
+    IntoValue::into_value(value),
+  )
+}
+
+///|
+pub fn[T : IntoValue] Element::scroll_snap_stop(
+  self : Element,
+  value : T,
+) -> Element {
+  self.property(@protocol.SCROLL_SNAP_STOP, IntoValue::into_value(value))
+}
+
+///|
+pub fn[T : IntoValue] Style::scroll_snap_stop(self : Style, value : T) -> Style {
+  self.property(
+    @protocol.SCROLL_SNAP_STOP,
+    "scrollSnapStop",
     IntoValue::into_value(value),
   )
 }

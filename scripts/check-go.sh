@@ -13,6 +13,7 @@ fi
 go -C go run ./cmd/quickguifmt -check . ../examples
 go -C go/protocol run ../internal/cmd/protocolgen -check
 go -C go/ui run ../internal/cmd/optionsgen -check
+bun scripts/generate-style-helpers.ts --check
 go -C go test ./...
 for module in examples/*/go.mod; do
   go -C "$(dirname "$module")" test ./...

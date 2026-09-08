@@ -136,7 +136,7 @@ fn welcome(s : Store) -> @ui.Element {
                 icon(s, "folder"),
                 label(s, () => @git.base(path.get())).font_weight(600),
                 label(s, () => @git.parent(path.get()), tone="muted")
-                .flex(1)
+                .flex_1()
                 .line_clamp(1),
               ])
               .flex_row()
@@ -182,7 +182,7 @@ fn sidebar_row(
   click : () -> Unit,
 ) -> @ui.Element {
   @ui.element(@protocol.TAG_BUTTON)
-  .children([label(s, title).flex(1).min_width(0).font_size(13).line_clamp(1)])
+  .children([label(s, title).flex_1().min_width(0).font_size(13).line_clamp(1)])
   .flex_row()
   .width("100%")
   .min_width(0)
@@ -237,7 +237,7 @@ fn sidebar_section(
     .children(
       [
         @ui.text(title)
-        .flex(1)
+        .flex_1()
         .min_width(0)
         .font_size(11)
         .font_weight(600)
@@ -259,7 +259,7 @@ fn sidebar_section(
     )
     .flex_row()
     .items_center()
-    .flex(1)
+    .flex_1()
     .min_width(0)
     .gap(6)
     .height(22)
@@ -319,7 +319,7 @@ fn repository_picker(s : Store) -> @ui.Element {
       .font_size(11)
       .line_clamp(1),
     ])
-    .flex(1)
+    .flex_1()
     .gap(1),
     icon(s, "chevron", tone="muted"),
   ])
@@ -382,7 +382,7 @@ fn sidebar(s : Store) -> @ui.Element {
         () => s.open_dialog("branch"),
       ),
     ])
-    .flex(1)
+    .flex_1()
     .overflow_y("auto")
     .gap(2)
     .padding_top(4)
@@ -501,7 +501,7 @@ fn toolbar(s : Store) -> @ui.Element {
       } else {
         []
       },
-      @ui.div([]).flex(1),
+      @ui.div([]).flex_1(),
       ..if s.busy.get() != "" {
         [
           row()

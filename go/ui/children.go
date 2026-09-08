@@ -67,6 +67,10 @@ func childNodes(children any) []*native.Node {
 	switch child := children.(type) {
 	case nil, bool:
 		return nil
+	case *Element:
+		if child != nil && child.Node != nil {
+			return []*native.Node{child.Node}
+		}
 	case *native.Node:
 		if child != nil {
 			return []*native.Node{child}
@@ -170,6 +174,14 @@ func childNodes(children any) []*native.Node {
 		for _, node := range child {
 			if node != nil {
 				nodes = append(nodes, node)
+			}
+		}
+		return nodes
+	case []*Element:
+		var nodes []*native.Node
+		for _, element := range child {
+			if element != nil && element.Node != nil {
+				nodes = append(nodes, element.Node)
 			}
 		}
 		return nodes

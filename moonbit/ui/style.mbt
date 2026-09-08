@@ -64,7 +64,17 @@ pub fn Element::style(self : Element, style : Style) -> Element {
 ///|
 /// The core's state-style declaration, for dynamically bound interaction styles.
 pub fn Style::json(self : Style) -> Json {
-  self.declaration.to_json()
+  // Layout resets stay in properties for style composition. Omitted state
+  // fields restore the base state; passing unknown null layout keys would make
+  // the native interaction-style decoder reject an otherwise valid preset.
+  let declaration : Map[String, Json] = Map([])
+  for key, value in self.declaration {
+    if value is Null {
+      continue
+    }
+    declaration[key] = value
+  }
+  declaration.to_json()
 }
 
 ///|
@@ -91,7 +101,7 @@ pub fn Element::bind_style(self : Element, read : () -> Style) -> Element {
 pub fn Element::hover(self : Element, build : (Style) -> Style) -> Element {
   self.property(
     @protocol.HOVER_STYLE,
-    @protocol.Text(build(style()).declaration.to_json().stringify()),
+    @protocol.Text(build(style()).json().stringify()),
   )
 }
 
@@ -99,7 +109,7 @@ pub fn Element::hover(self : Element, build : (Style) -> Style) -> Element {
 pub fn Element::active(self : Element, build : (Style) -> Style) -> Element {
   self.property(
     @protocol.ACTIVE_STYLE,
-    @protocol.Text(build(style()).declaration.to_json().stringify()),
+    @protocol.Text(build(style()).json().stringify()),
   )
 }
 
@@ -110,7 +120,7 @@ pub fn Element::focus_style(
 ) -> Element {
   self.property(
     @protocol.FOCUS_STYLE,
-    @protocol.Text(build(style()).declaration.to_json().stringify()),
+    @protocol.Text(build(style()).json().stringify()),
   )
 }
 

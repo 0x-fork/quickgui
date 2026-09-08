@@ -1,3 +1,13 @@
+Go views use fluent modifiers for properties, handlers, and styles. Rust layout conveniences include `.P4()`, `.MxAuto()`, `.GridCols(3)`, `.ColSpanFull()`, and `.RoundedLg()`. The same presets can be composed with `ui.Styles(...)`; legacy constructor options remain supported.
+
+```go
+ui.View(ui.Text("hello"), ui.Input().Value("xxx")).
+	FlexCol().
+	PaddingLeft(20).
+	RoundedLg().
+	TextAlign("center")
+```
+
 Pass style props such as `ui.BackgroundColor(...)` and `ui.PaddingLeft(...)` directly to `ui.View`, `ui.Text`, or another primitive, alongside its children and event handlers.
 
 ## Style props

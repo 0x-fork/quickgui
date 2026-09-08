@@ -37,7 +37,7 @@ func TestKeyedComponentsRetainMultipleRootsAndDisposeRemovedRows(t *testing.T) {
 		})
 		first := refs[1]
 		setItems([]item{{2, "second"}, {1, "first"}})
-		if got := blockText(root); !reflect.DeepEqual(got, []string{"before", "second", "0", "first", "1", "after"}) {
+		if got := blockText(root.Node); !reflect.DeepEqual(got, []string{"before", "second", "0", "first", "1", "after"}) {
 			t.Fatalf("row roots did not move together: %v", got)
 		}
 		if mounts != 2 || cleanups != 0 || refs[1] != first {
@@ -45,11 +45,11 @@ func TestKeyedComponentsRetainMultipleRootsAndDisposeRemovedRows(t *testing.T) {
 		}
 		setItems([]item{})
 		setItems([]item{})
-		if got := blockText(root); !reflect.DeepEqual(got, []string{"before", "empty", "add an item", "after"}) || cleanups != 2 || fallbackMounts != 1 {
+		if got := blockText(root.Node); !reflect.DeepEqual(got, []string{"before", "empty", "add an item", "after"}) || cleanups != 2 || fallbackMounts != 1 {
 			t.Fatalf("empty list did not retain its fallback: %v, cleanups=%d, mounts=%d", got, cleanups, fallbackMounts)
 		}
 		setItems([]item{{1, "again"}})
-		if got := blockText(root); !reflect.DeepEqual(got, []string{"before", "again", "0", "after"}) || fallbackCleanups != 1 {
+		if got := blockText(root.Node); !reflect.DeepEqual(got, []string{"before", "again", "0", "after"}) || fallbackCleanups != 1 {
 			t.Fatalf("fallback leaked into restored rows: %v, cleanups=%d", got, fallbackCleanups)
 		}
 		dispose()
@@ -73,7 +73,7 @@ func TestChildrenBlocksPreserveNestingAndFineGrainedUpdates(t *testing.T) {
 				mounts++
 				Text(Props{}, value)
 				Button(Props{}, "Increment")
-			})
+			}).Node
 			Text(Props{}, "after")
 		})
 		before := root.Pending.MutationCount()
@@ -103,15 +103,15 @@ func TestChildrenBlocksHandleLazyRegionsAndComponentHelpers(t *testing.T) {
 			})
 			Text(Props{}, "end")
 		})
-		if got := blockText(root); !reflect.DeepEqual(got, []string{"helper", "one", "two", "end"}) {
+		if got := blockText(root.Node); !reflect.DeepEqual(got, []string{"helper", "one", "two", "end"}) {
 			t.Fatal(got)
 		}
 		setVisible(false)
-		if got := blockText(root); !reflect.DeepEqual(got, []string{"helper", "end"}) {
+		if got := blockText(root.Node); !reflect.DeepEqual(got, []string{"helper", "end"}) {
 			t.Fatal(got)
 		}
 		setVisible(true)
-		if created != 2 || len(blockText(root)) != 4 {
+		if created != 2 || len(blockText(root.Node)) != 4 {
 			t.Fatal("lazy children were duplicated or failed to remount")
 		}
 		return struct{}{}
@@ -132,9 +132,9 @@ func TestCompoundChildrenInheritContextAndDisposeEffects(t *testing.T) {
 				Text(Props{}, "panel")
 			})
 		})
-		native.InsertNode(parent, root, nil)
+		native.InsertNode(parent.Node, root, nil)
 		setValue(1)
-		native.RemoveNode(parent, root)
+		native.RemoveNode(parent.Node, root)
 		setValue(2)
 		if effects != 2 || cleanups != 1 {
 			t.Fatalf("effects=%d cleanups=%d", effects, cleanups)
@@ -153,7 +153,7 @@ func TestChildrenBlockRestoresBuilderAfterPanic(t *testing.T) {
 		Child(prebuilt)
 		Child(Text(Props{}, "new"))
 	})
-	if len(root.Children) != 2 || root.Children[0] != prebuilt {
+	if len(root.Children) != 2 || root.Children[0] != prebuilt.Node {
 		t.Fatal("the builder leaked or declared a child twice")
 	}
 }
@@ -177,16 +177,16 @@ func TestDynamicViewSelectionPreservesChildBindings(t *testing.T) {
 			})
 		})
 		setValue("second")
-		if mounts != 1 || cleanups != 0 || !reflect.DeepEqual(blockText(root), []string{"second"}) {
+		if mounts != 1 || cleanups != 0 || !reflect.DeepEqual(blockText(root.Node), []string{"second"}) {
 			t.Fatal("a child signal remounted the selected component")
 		}
 		setSelected(true)
 		setValue("hidden update")
-		if mounts != 1 || cleanups != 1 || !reflect.DeepEqual(blockText(root), []string{"other view"}) {
+		if mounts != 1 || cleanups != 1 || !reflect.DeepEqual(blockText(root.Node), []string{"other view"}) {
 			t.Fatal("changing views did not dispose the previous component")
 		}
 		setSelected(false)
-		if mounts != 2 || !reflect.DeepEqual(blockText(root), []string{"hidden update"}) {
+		if mounts != 2 || !reflect.DeepEqual(blockText(root.Node), []string{"hidden update"}) {
 			t.Fatal("returning to a view did not mount it with current state")
 		}
 		dispose()
@@ -248,7 +248,7 @@ func checkScalarChild[T comparable](t *testing.T, initial, updated T, first, sec
 		}
 		setValue(updated)
 		if node.Children[0].Text != first || node.Children[1].Text != second || node.Children[2].Text != second {
-			t.Fatalf("%T: scalar/accessor/function children diverged: %v", initial, blockText(node))
+			t.Fatalf("%T: scalar/accessor/function children diverged: %v", initial, blockText(node.Node))
 		}
 		return struct{}{}
 	})
@@ -285,9 +285,9 @@ func BenchmarkCounterChildren(b *testing.B) {
 				count, setCount := CreateSignal(1000)
 				var node *native.Node
 				if formatted {
-					node = Text(func() string { return fmt.Sprintf("Count: %d", count()) })
+					node = Text(func() string { return fmt.Sprintf("Count: %d", count()) }).Node
 				} else {
-					node = Text("Count: ", count)
+					node = Text("Count: ", count).Node
 				}
 				b.ReportAllocs()
 				b.ResetTimer()

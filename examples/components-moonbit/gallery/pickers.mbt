@@ -108,7 +108,7 @@ fn combobox_demo(t : Theme) -> @ui.Element {
     .slot(@ui.Chips)
     .flex_row()
     .gap(6)
-    .flex_wrap("wrap")
+    .flex_wrap()
     .children_keyed(() => tags(), v => v, value => {
       let index = () => tags().search(value.get()).unwrap_or(0)
       let chip = many

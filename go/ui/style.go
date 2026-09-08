@@ -12,8 +12,8 @@ import (
 )
 
 // Style stores a composed style, including nested interaction states.
-// Use options such as BackgroundColor and PaddingLeft directly on primitives;
-// Styles builds a reusable value for shared styles and compound parts.
+// Element methods configure styles fluently. Styles builds reusable values
+// for shared styles and compound parts.
 type Style struct {
 	ObjectFit                string
 	WordWrap                 string
@@ -93,6 +93,8 @@ type Style struct {
 	MixBlendMode             string
 	Transition               any
 	ScrollSnapType           string
+	ScrollSnapX              string
+	ScrollSnapY              string
 	ScrollSnapAlign          string
 	ScrollSnapStop           string
 
@@ -175,6 +177,10 @@ func setLength(node *native.Node, code uint16, value any) {
 		return
 	}
 	if value == nil {
+		native.ClearProperty(node, code)
+		return
+	}
+	if _, clear := value.(clearStyleValue); clear {
 		native.ClearProperty(node, code)
 		return
 	}
@@ -495,6 +501,12 @@ func mergeStyle(target *Style, source Style) {
 	}
 	if source.ScrollSnapType != "" {
 		target.ScrollSnapType = source.ScrollSnapType
+	}
+	if source.ScrollSnapX != "" {
+		target.ScrollSnapX = source.ScrollSnapX
+	}
+	if source.ScrollSnapY != "" {
+		target.ScrollSnapY = source.ScrollSnapY
 	}
 	if source.ScrollSnapAlign != "" {
 		target.ScrollSnapAlign = source.ScrollSnapAlign
@@ -943,6 +955,12 @@ func applyStyle(node *native.Node, style Style) {
 
 	if style.ScrollSnapType != "" {
 		setString(node, protocol.ScrollSnapType, style.ScrollSnapType)
+	}
+	if style.ScrollSnapX != "" {
+		setString(node, protocol.ScrollSnapX, style.ScrollSnapX)
+	}
+	if style.ScrollSnapY != "" {
+		setString(node, protocol.ScrollSnapY, style.ScrollSnapY)
 	}
 	if style.ScrollSnapAlign != "" {
 		setString(node, protocol.ScrollSnapAlign, style.ScrollSnapAlign)

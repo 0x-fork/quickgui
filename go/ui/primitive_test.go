@@ -36,7 +36,7 @@ func TestEveryNativeEventHasAConditionalPrimitiveHandler(t *testing.T) {
 					reflect.ValueOf(props).Elem().FieldByName("On" + name).Set(reflect.ValueOf(handler))
 				})
 				node := View(When(enabled, option))
-				host := &native.NodeHost{Nodes: map[uint32]*native.Node{node.ID: node}}
+				host := &native.NodeHost{Nodes: map[uint32]*native.Node{node.ID: node.Node}}
 				native.DispatchEvent(host, i+1, node.ID, "payload", true)
 				setEnabled(false)
 				native.DispatchEvent(host, i+1, node.ID, "payload", true)
@@ -68,7 +68,7 @@ func TestConditionalHoverHandlerPreservesSharedListener(t *testing.T) {
 			t.Fatal("removing mouseleave disabled the shared native mouseenter subscription")
 		}
 		native.DispatchEvent(
-			&native.NodeHost{Nodes: map[uint32]*native.Node{node.ID: node}},
+			&native.NodeHost{Nodes: map[uint32]*native.Node{node.ID: node.Node}},
 			protocol.EventMouseEnter,
 			node.ID,
 			"",
@@ -124,7 +124,7 @@ func TestInputEventDetailsKeepNativeCoordinatesAndModifiers(t *testing.T) {
 		OnFilesDropped(func(event *native.Event) { drop = DropFromEvent(event) }),
 		OnWheel(func(event *native.Event) { wheel = WheelFromEvent(event) }),
 	)
-	host := &native.NodeHost{Nodes: map[uint32]*native.Node{node.ID: node}}
+	host := &native.NodeHost{Nodes: map[uint32]*native.Node{node.ID: node.Node}}
 	native.DispatchEvent(
 		host,
 		protocol.EventKeyDown,

@@ -16,7 +16,7 @@ fn card() -> @ui.Element {
 }
 ```
 
-常见布局可使用 `.flex_row()`、`.flex_col()`、`.items_center()` 和 `.justify_center()`。`.flex(1)` 设置伸展、收缩和零基础尺寸。可滚动的弹性子节点应设置 `.min_height(0)`，且父节点尺寸需要有界。
+常见布局可使用 `.flex_row()`、`.flex_col()`、`.items_center()` 和 `.justify_center()`。`.flex_1()` 设置伸展、收缩和零基础尺寸。可滚动的弹性子节点应设置 `.min_height(0)`，且父节点尺寸需要有界。
 
 ## 合并与响应式样式
 
@@ -65,3 +65,6 @@ fn interaction_button() -> @ui.Element {
 使用 `@ui.rgb8(r, g, b)` 或 `@ui.rgba8(r, g, b, a)`，通道取值为 0–255。窗口选项接受颜色的 JSON 值；原始整数采用 `0xAABBGGRR`（`0` 表示透明）。不要将 CSS 颜色字符串传给窗口 `background`。
 
 `@ui.svg(source)` 生成由 `.text_color(...)` 着色的蒙版。多色图形可像 Quick Git 一样使用独立的着色 SVG 图层。
+
+
+布局辅助方法与 Rust 保持一致：`.grid_cols(3)`、`.col_span_full()`、`.flex_col_reverse()`、`.justify_between()`、`.p_4()`、`.mx_auto()` 和 `.rounded_lg()`。数字间距预设采用 Rust 的四像素单位，`rounded_lg` 的圆角半径为八像素。这些方法也可用于 `@ui.style()`。`.flex()` 启用弹性布局，`.flex_1()` 设置伸展系数 1、收缩系数 1 和零基础尺寸。

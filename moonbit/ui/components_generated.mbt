@@ -2465,12 +2465,15 @@ pub fn Element::bind_collision_padding(
 }
 
 ///|
-pub fn Element::sticky(self : Element, value : Bool) -> Element {
+pub fn Element::anchor_sticky(self : Element, value : Bool) -> Element {
   self.property(@protocol.STICKY, @protocol.Boolean(value))
 }
 
 ///|
-pub fn Element::bind_sticky(self : Element, read : () -> Bool) -> Element {
+pub fn Element::bind_anchor_sticky(
+  self : Element,
+  read : () -> Bool,
+) -> Element {
   self.bind(@protocol.STICKY, () => @protocol.Boolean(read()))
 }
 

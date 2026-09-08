@@ -408,6 +408,16 @@ func ScrollSnapType(value string) StyleOption {
 	return func(style *Style) { style.ScrollSnapType = value }
 }
 
+// ScrollSnapX sets the corresponding style property.
+func ScrollSnapX(value string) StyleOption {
+	return func(style *Style) { style.ScrollSnapX = value }
+}
+
+// ScrollSnapY sets the corresponding style property.
+func ScrollSnapY(value string) StyleOption {
+	return func(style *Style) { style.ScrollSnapY = value }
+}
+
 // ScrollSnapAlign sets the corresponding style property.
 func ScrollSnapAlign(value string) StyleOption {
 	return func(style *Style) { style.ScrollSnapAlign = value }

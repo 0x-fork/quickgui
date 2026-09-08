@@ -116,7 +116,7 @@ for (const tag of [
   source += `\n///|\npub fn swift_ui_${tag.toLowerCase()}(${container ? "children : Array[Element]" : ""}) -> Element {\n  configure_element(element(@protocol.TAG_SWIFT_UI_${tag}), ${container ? "children" : "([] : Array[Element])"})\n}\n`;
 }
 for (const name of allProperties) {
-  const method = name.toLowerCase();
+  const method = name === "STICKY" ? "anchor_sticky" : name.toLowerCase();
   const type = propertyType(name);
   if (!existing.includes(`Element::${method}(`)) {
     const numeric = numberProperties.includes(name);

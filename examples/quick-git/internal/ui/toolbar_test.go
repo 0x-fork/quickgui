@@ -24,20 +24,20 @@ func TestToolbarRetainsButtonsAndUpdatesTaskState(t *testing.T) {
 		store := &model.Store{Status: status, Busy: busy, Conflicts: conflicts}
 		theme, _ := reactive.CreateSignal(ThemeFor("dark"))
 		root := gui.View(func() { ProvideApp(AppContext{Store: store, Theme: theme}, Toolbar) })
-		buttons := toolbarButtons(root)
+		buttons := toolbarButtons(root.Node)
 		if len(buttons) != 5 || buttons["Fetch"] == nil || buttons["Pull"] == nil || buttons["Push"] == nil {
 			t.Fatalf("missing toolbar actions: %v", buttons)
 		}
-		assertFrameworkToolbar(t, root)
+		assertFrameworkToolbar(t, root.Node)
 		cancelled := 0
 		offset := len(root.Pending.Body())
 		setBusy(&model.BusyState{Label: "Fetch", Cancel: func() { cancelled++ }})
 		for _, label := range []string{"Fetch", "Pull", "Push", ""} {
-			assertDisabledMutation(t, root, offset, buttons[label], true)
+			assertDisabledMutation(t, root.Node, offset, buttons[label], true)
 		}
-		assertFrameworkToolbar(t, root)
-		cancel := toolbarButtons(root)["Cancel"]
-		if cancel == nil || !strings.Contains(toolbarText(root), "Fetch…") {
+		assertFrameworkToolbar(t, root.Node)
+		cancel := toolbarButtons(root.Node)["Cancel"]
+		if cancel == nil || !strings.Contains(toolbarText(root.Node), "Fetch…") {
 			t.Fatal("busy state did not show its label and cancellation action")
 		}
 		for _, listener := range cancel.Listeners {
@@ -49,27 +49,27 @@ func TestToolbarRetainsButtonsAndUpdatesTaskState(t *testing.T) {
 			t.Fatal("Cancel did not reach the current operation")
 		}
 		setBusy(&model.BusyState{Label: "Refresh"})
-		if !strings.Contains(toolbarText(root), "Refresh…") || toolbarButtons(root)["Cancel"] != nil {
+		if !strings.Contains(toolbarText(root.Node), "Refresh…") || toolbarButtons(root.Node)["Cancel"] != nil {
 			t.Fatal("changing an active task left a stale label or cancellation action")
 		}
 		setStatus(&git.RepositoryStatus{
 			Branch: "feature", HasUpstreamCounts: true, Ahead: 3, Behind: 2,
 		})
 		setConflicts(2)
-		if text := toolbarText(root); !strings.Contains(text, "feature") || !strings.Contains(text, "feature32") || !strings.Contains(text, "2 conflicted") {
+		if text := toolbarText(root.Node); !strings.Contains(text, "feature") || !strings.Contains(text, "feature32") || !strings.Contains(text, "2 conflicted") {
 			t.Fatalf("status text did not follow its signals: %q", text)
 		}
 		offset = len(root.Pending.Body())
 		setBusy(nil)
 		for _, label := range []string{"Fetch", "Push", ""} {
-			assertDisabledMutation(t, root, offset, buttons[label], false)
+			assertDisabledMutation(t, root.Node, offset, buttons[label], false)
 		}
 		// Pull stays disabled without an upstream, then re-enables when one appears.
 		offset = len(root.Pending.Body())
 		setStatus(&git.RepositoryStatus{Branch: "feature", Upstream: "origin/feature"})
-		assertDisabledMutation(t, root, offset, buttons["Pull"], false)
+		assertDisabledMutation(t, root.Node, offset, buttons["Pull"], false)
 		for label, button := range buttons {
-			if label != "main" && toolbarButtons(root)[label] != button {
+			if label != "main" && toolbarButtons(root.Node)[label] != button {
 				t.Fatal("a task or status update rebuilt the toolbar buttons")
 			}
 		}

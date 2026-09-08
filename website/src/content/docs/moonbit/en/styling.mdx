@@ -16,7 +16,7 @@ fn card() -> @ui.Element {
 }
 ```
 
-Use `.flex_row()`, `.flex_col()`, `.items_center()`, and `.justify_center()` for common layouts. `.flex(1)` sets grow, shrink, and a zero basis. Give scrollable flex children `.min_height(0)` and a bounded parent size.
+Use `.flex_row()`, `.flex_col()`, `.items_center()`, and `.justify_center()` for common layouts. `.flex_1()` sets grow, shrink, and a zero basis. Give scrollable flex children `.min_height(0)` and a bounded parent size.
 
 ## Merging and reactive styles
 
@@ -65,3 +65,6 @@ fn interaction_button() -> @ui.Element {
 Use `@ui.rgb8(r, g, b)` or `@ui.rgba8(r, g, b, a)`, with channels from 0 to 255. Window options accept these colors as JSON values; a raw integer uses `0xAABBGGRR` (`0` for transparent). Do not pass CSS color strings as a window’s `background`.
 
 `@ui.svg(source)` produces a mask tinted by `.text_color(...)`. For multiple graph colors, use separate tinted SVG layers, as shown in Quick Git.
+
+
+Layout helpers match Rust: `.grid_cols(3)`, `.col_span_full()`, `.flex_col_reverse()`, `.justify_between()`, `.p_4()`, `.mx_auto()`, and `.rounded_lg()`. Numeric spacing presets use Rust's four-pixel unit; `rounded_lg` uses an eight-pixel radius. The same helpers work on `@ui.style()`. `.flex()` selects flex display; `.flex_1()` sets grow 1, shrink 1, and zero basis.

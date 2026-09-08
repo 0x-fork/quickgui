@@ -10,6 +10,19 @@ import (
 	"testing"
 )
 
+func TestWrapsFluentDeclarations(t *testing.T) {
+	source := []byte(`package example
+import ui "github.com/egoist/quickgui/go/ui"
+func root() {
+ui.View(ui.Text("hello"), ui.Input().Value("xxx")).Flex().Styles(ui.PaddingLeft(20), ui.TextAlign("center"), ui.BackgroundColor("#112233"))
+ui.Button("Toggle").When(func() bool { return selected() }, ui.BackgroundColor("blue"), ui.TextColor("white"))
+}`)
+	result := checkFormat(t, source)
+	if !bytes.Contains(result, []byte(".Styles(\n")) || !bytes.Contains(result, []byte(".When(\n")) {
+		t.Fatalf("fluent declarations were not wrapped:\n%s", result)
+	}
+}
+
 func TestWrapsCallbacksWithoutChangingTokens(t *testing.T) {
 	source := []byte(`package example
 import gui "github.com/egoist/quickgui/go/ui"

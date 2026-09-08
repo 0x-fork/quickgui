@@ -66,7 +66,7 @@ func View(props Props, children ...any) *native.Node {
 	}
 	arguments := []any{props.Props}
 	arguments = append(arguments, children...)
-	node := ui.NativeElement(protocol.TagTerminal, arguments...)
+	node := ui.NativeElement(protocol.TagTerminal, arguments...).Node
 	if props.Program != "" {
 		native.SetString(node, protocol.TerminalProgram, props.Program)
 	}

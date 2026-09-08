@@ -31,28 +31,19 @@ func main() {
 func Counter() {
 	count, setCount := ui.CreateSignal(0)
 	ui.View(
-		func() {
-			ui.Text("Fine-grained native UI", ui.FontSize(28), ui.FontWeight(700))
-
-			ui.Text("Count: ", count)
-
-			ui.Button(
-				"Increment",
-				ui.Padding(12),
-				ui.BorderRadius(8),
-				ui.BackgroundColor("#2563eb"),
-				ui.Hover(ui.BackgroundColor("#3b82f6")),
-				ui.OnClick(func() { setCount(count() + 1) }),
-			)
-		},
-		ui.Display("flex"),
-		ui.FlexDirection("column"),
-		ui.Width("100%"),
-		ui.Height("100%"),
-		ui.AlignItems("center"),
-		ui.JustifyContent("center"),
-		ui.Gap(20),
-		ui.BackgroundColor("#090d16"),
-		ui.TextColor("#e2e8f0"),
-	)
+		ui.Text("Fine-grained native UI").FontSize(28).FontWeight(700),
+		ui.Text("Count: ", count),
+		ui.Button("Increment").
+			OnClick(func() { setCount(count() + 1) }).
+			Padding(12).
+			RoundedLg().
+			Bg("#2563eb").
+			Hover(ui.BackgroundColor("#3b82f6")),
+	).FlexCol().
+		SizeFull().
+		ItemsCenter().
+		JustifyCenter().
+		Gap(20).
+		Bg("#090d16").
+		TextColor("#e2e8f0")
 }

@@ -19,8 +19,8 @@ func TestRemovingDynamicNodesDisposesSubscriptions(t *testing.T) {
 			renders++
 			Input(Props{Value: value, Children: value})
 		})
-		native.InsertNode(parent, region, nil)
-		native.RemoveNode(parent, region)
+		native.InsertNode(parent.Node, region, nil)
+		native.RemoveNode(parent.Node, region)
 		setValue("removed")
 		setVisible(false)
 		setVisible(true)
@@ -92,7 +92,7 @@ func TestShowCreatesChildrenOnDemand(t *testing.T) {
 			created++
 			Text(Props{Children: "shown"})
 		})
-		native.InsertNode(parent, sentinel, nil)
+		native.InsertNode(parent.Node, sentinel, nil)
 		if created != 0 {
 			t.Fatal("created before visible")
 		}

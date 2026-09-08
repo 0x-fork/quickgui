@@ -76,6 +76,8 @@ func wrap(source []byte, width int) ([]byte, error) {
 				expr = value.X
 			case *ast.IndexListExpr:
 				expr = value.X
+			case *ast.CallExpr:
+				expr = value.Fun
 			default:
 				id, ok := expr.(*ast.Ident)
 				return ok && aliases[id.Name]

@@ -492,7 +492,9 @@ mod property {
     /// Web-style `selected` flag on any element: the native accessibility state and the
     /// `selected` state style follow one declaration.
     pub const SELECTED: u16 = 358;
-    pub const LAST: u16 = SELECTED;
+    pub const SCROLL_SNAP_X: u16 = 359;
+    pub const SCROLL_SNAP_Y: u16 = 360;
+    pub const LAST: u16 = SCROLL_SNAP_Y;
 }
 
 /// Base64 transport for optional byte payloads carried inside JSON options and results.

@@ -15,7 +15,7 @@ fn branches_view(s : Store) -> @ui.Element {
     row()
     .children([
       caption(s, "BRANCHES AND TAGS"),
-      @ui.div([]).flex(1),
+      @ui.div([]).flex_1(),
       field(s, "Filter branches", search).width(180),
       button(s, "New Branch", () => s.open_dialog("branch"), primary=true),
     ])
@@ -28,7 +28,7 @@ fn branches_view(s : Store) -> @ui.Element {
     ])
     .row_count(branches().length())
     .row_height(32)
-    .flex(1)
+    .flex_1()
     .on_change(data => {
       if @io.field(data, "visibleRange") is Object(_) {
         set_viewport(
@@ -51,7 +51,7 @@ fn branches_view(s : Store) -> @ui.Element {
           .children(
             [
               icon(s, "branch"),
-              label(s, () => branch.get().item.name).flex(1).line_clamp(1),
+              label(s, () => branch.get().item.name).flex_1().line_clamp(1),
               ..if branch.get().item.current {
                 [icon(s, "check", tone="accent")]
               } else {
@@ -97,7 +97,7 @@ fn worktrees_view(s : Store) -> @ui.Element {
     row()
     .children([
       caption(s, "WORKTREES"),
-      @ui.div([]).flex(1),
+      @ui.div([]).flex_1(),
       button(s, "New Worktree", () => s.open_dialog("worktree"), primary=true),
     ])
     .height(30),
@@ -122,7 +122,7 @@ fn worktrees_view(s : Store) -> @ui.Element {
           }).font_weight(600),
           label(s, () => w().path, tone="muted").font_size(11).line_clamp(1),
         ])
-        .flex(1)
+        .flex_1()
         .gap(3),
         ..if w().locked {
           [caption(s, "Locked")]
@@ -182,7 +182,7 @@ fn stashes_view(s : Store) -> @ui.Element {
       row()
       .children([
         caption(s, "STASHES"),
-        @ui.div([]).flex(1),
+        @ui.div([]).flex_1(),
         button(s, "Stash Changes", () => s.open_dialog("stash"), primary=true, disabled=() => {
           s.status.get().entries.is_empty()
         }),
@@ -267,7 +267,7 @@ fn stashes_view(s : Store) -> @ui.Element {
     ),
     diff_pane(s),
   ])
-  .flex(1)
+  .flex_1()
   .min_height(0)
   .align_items("stretch")
 }
@@ -430,7 +430,7 @@ fn dialogs(s : Store) -> @ui.Element {
         caption(s, "DIRECTORY (OPTIONAL)"),
         row()
         .children([
-          field(s, "Choose a directory or use the suggested path", path).flex(1),
+          field(s, "Choose a directory or use the suggested path", path).flex_1(),
           button(s, "Browse…", () => {
             s.window.dialog(
               1,

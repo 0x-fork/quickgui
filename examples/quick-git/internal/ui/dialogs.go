@@ -28,7 +28,7 @@ func Dialogs() {
 	)
 }
 
-func dialogFrame(title, description string, body *native.Node, actions *native.Node) {
+func dialogFrame(title, description string, body *gui.Element, actions *gui.Element) {
 	app := UseApp()
 	gui.Dialog.Root(
 		gui.DialogRootProps{

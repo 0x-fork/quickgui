@@ -1,3 +1,13 @@
+Go 视图使用链式方法设置属性、事件和样式。Rust 布局辅助方法包括 `.P4()`、`.MxAuto()`、`.GridCols(3)`、`.ColSpanFull()` 和 `.RoundedLg()`。这些预设也能通过 `ui.Styles(...)` 组合；构造函数中的旧式选项仍然受支持。
+
+```go
+ui.View(ui.Text("hello"), ui.Input().Value("xxx")).
+	FlexCol().
+	PaddingLeft(20).
+	RoundedLg().
+	TextAlign("center")
+```
+
 将 `ui.BackgroundColor(...)`、`ui.PaddingLeft(...)` 等样式选项直接传给 `ui.View`、`ui.Text` 等基础组件，与子节点和事件处理函数放在一起。
 
 ## 样式选项

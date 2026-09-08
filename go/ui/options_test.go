@@ -81,8 +81,8 @@ func TestComposedStylesKeepPartBindingsIndependent(t *testing.T) {
 		}
 		parent := View()
 		node := View()
-		applyPart(node, PartProps{Style: shared})
-		native.InsertNode(parent, node, nil)
+		applyPart(node.Node, PartProps{Style: shared})
+		native.InsertNode(parent.Node, node.Node, nil)
 		offset := len(parent.Pending.Body())
 		width.Write(30)
 		expected := protocol.NewBatch()
@@ -90,7 +90,7 @@ func TestComposedStylesKeepPartBindingsIndependent(t *testing.T) {
 		if !bytes.Equal(parent.Pending.Body()[offset:], expected.Body()) {
 			t.Fatal("a composed part style updated unrelated properties")
 		}
-		native.RemoveNode(parent, node)
+		native.RemoveNode(parent.Node, node.Node)
 		if len(width.Observers) != 0 || len(color.Observers) != 0 {
 			t.Fatal("a disposed composed style retained its bindings")
 		}
@@ -242,7 +242,7 @@ func TestNestedWhenTracksOnlyTheActiveBranch(t *testing.T) {
 		inner := reactive.NewSignal(true)
 		parent := View()
 		node := View(When(outer, When(inner.Read, TextColor("white"))))
-		native.InsertNode(parent, node, nil)
+		native.InsertNode(parent.Node, node.Node, nil)
 		if len(inner.Observers) != 0 {
 			t.Fatal("inactive branch was evaluated")
 		}
@@ -250,7 +250,7 @@ func TestNestedWhenTracksOnlyTheActiveBranch(t *testing.T) {
 		if len(inner.Observers) != 1 {
 			t.Fatal("active branch was not tracked")
 		}
-		native.RemoveNode(parent, node)
+		native.RemoveNode(parent.Node, node.Node)
 		if len(inner.Observers) != 0 {
 			t.Fatal("removed node retained its conditional option")
 		}

@@ -98,7 +98,7 @@ fn row() -> @ui.Element {
 
 ///|
 fn fill() -> @ui.Element {
-  col().flex(1)
+  col().flex_1()
 }
 
 ///|

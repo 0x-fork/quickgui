@@ -127,7 +127,7 @@ fn counter() -> @ui.Element {
       .border_width(1)
       .border_radius(16),
     ])
-    .flex(1)
+    .flex_1()
     .min_height(0)
     .flex_row()
     .items_center()

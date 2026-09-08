@@ -1087,6 +1087,12 @@ pub const SELECTED_STYLE : Int = 357
 pub const SELECTED : Int = 358
 
 ///|
+pub const SCROLL_SNAP_X : Int = 359
+
+///|
+pub const SCROLL_SNAP_Y : Int = 360
+
+///|
 pub const TAG_VIEW : Int = 1
 
 ///|

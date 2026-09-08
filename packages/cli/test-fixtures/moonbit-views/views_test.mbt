@@ -341,3 +341,38 @@ test "fluent JSON props keep their type and slot styles stay on their own nodes"
     }
   })
 }
+
+///|
+test "Rust layout helper chains preserve compiler bindings and static overrides" {
+  let baseline = @reactive.active_effect_count()
+  @native.test_tree(fn(root) raise {
+    let (space, set_space) = @ui.create_signal(4)
+    let (columns, set_columns) = @ui.create_signal(2)
+    let view = @ui.div([@ui.text("retained")])
+      .flex_col_reverse()
+      .px(space())
+      .padding_left(20)
+      .grid_cols(columns())
+      .rounded_lg()
+    let node = view.native_node()
+    root.append(node)
+    let child = node.children()[0]
+    ignore(root.take_batch())
+    set_space(8)
+    assert_eq(root.pending_mutations(), 1)
+    assert_true(node.property(@protocol.PADDING_LEFT) == @protocol.Number(20))
+    assert_true(node.property(@protocol.PADDING_RIGHT) == @protocol.Number(8))
+    assert_true(node.property(@protocol.BORDER_RADIUS) == @protocol.Number(8))
+    assert_true(node.children()[0] == child)
+    ignore(root.take_batch())
+    set_columns(3)
+    assert_eq(root.pending_mutations(), 1)
+    assert_true(node.property(@protocol.GRID_TEMPLATE_COLUMNS) == @protocol.Text("repeat(3, minmax(0, 1fr))"))
+    node.remove()
+    ignore(root.take_batch())
+    set_space(12)
+    set_columns(4)
+    assert_eq(root.pending_mutations(), 0)
+  })
+  assert_eq(@reactive.active_effect_count(), baseline)
+}

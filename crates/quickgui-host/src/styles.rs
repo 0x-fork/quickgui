@@ -1000,6 +1000,21 @@ pub(super) fn apply_layout_styles(mut element: Element, node: &NativeNode) -> El
     if let Some(value) = node.string(property::SCROLL_SNAP_TYPE) {
         element = apply_scroll_snap_type(element, value);
     }
+    for (code, horizontal) in [
+        (property::SCROLL_SNAP_X, true),
+        (property::SCROLL_SNAP_Y, false),
+    ] {
+        let strictness = match node.string(code) {
+            Some("mandatory") => SnapStrictness::Mandatory,
+            Some("proximity") => SnapStrictness::Proximity,
+            _ => continue,
+        };
+        element = if horizontal {
+            element.scroll_snap_x(strictness)
+        } else {
+            element.scroll_snap_y(strictness)
+        };
+    }
     if let Some(value) = node.string(property::SCROLL_SNAP_ALIGN) {
         element = match value {
             "start" => element.snap_align(SnapAlign::Start),

@@ -43,7 +43,7 @@ fn changes_view(s : Store) -> @ui.Element {
   .children([
     col()
     .children([change_list(s, false), change_list(s, true), composer(s)])
-    .flex(1)
+    .flex_1()
     .resizable_panel(
       () => s.changes_width.get(),
       n => {
@@ -56,7 +56,7 @@ fn changes_view(s : Store) -> @ui.Element {
     ),
     diff_pane(s),
   ])
-  .flex(1)
+  .flex_1()
   .min_height(0)
   .align_items("stretch")
 }
@@ -77,7 +77,7 @@ fn change_list(s : Store, staged : Bool) -> @ui.Element {
     .row_count(items().length())
     .row_height(26)
     .selection_mode("multiple")
-    .flex(1)
+    .flex_1()
     .bind_json(@protocol.SELECTION, () => {
       let selected : Array[Array[Int]] = []
       if s.staged.get() == staged {
@@ -192,7 +192,7 @@ fn change_list(s : Store, staged : Bool) -> @ui.Element {
     .children([
       caption(s, if staged { "STAGED" } else { "UNSTAGED" }),
       label(s, () => "\{items().length()}", tone="muted").font_size(11),
-      @ui.div([]).flex(1),
+      @ui.div([]).flex_1(),
       button(
         s,
         if staged {
@@ -214,7 +214,7 @@ fn change_list(s : Store, staged : Bool) -> @ui.Element {
     .bind_style(() => @ui.style().border_color(s.color("border"))),
     table,
   ])
-  .flex(1)
+  .flex_1()
 }
 
 ///|
@@ -284,7 +284,7 @@ fn composer(s : Store) -> @ui.Element {
       button(s, "Generate", () => s.generate(""), disabled=() => {
         agents.get().is_empty() || s.busy.get() != ""
       })
-      .flex(1)
+      .flex_1()
       .on_context_menu(() => {
         s.window.popup_menu([
           @native.menu_action("Generate with instructions…", () => {
@@ -307,7 +307,7 @@ fn composer(s : Store) -> @ui.Element {
         s.subject.get().trim().is_empty() ||
         s.busy.get() != "" ||
         (s.items(true).is_empty() && !s.amend.get())
-      }).flex(1),
+      }).flex_1(),
     ])
     .gap(6),
   ])
@@ -336,7 +336,7 @@ fn diff_pane(s : Store) -> @ui.Element {
           })
           .font_weight(600)
           .line_clamp(1)
-          .flex(1),
+          .flex_1(),
           ..if s.view.get() == "changes" && !s.selected.get().is_empty() {
             [
               row()
@@ -425,7 +425,7 @@ fn diff_table(s : Store) -> @ui.Element {
   .row_count(s.rows.get().length())
   .row_height(20)
   .selection_mode("multiple")
-  .flex(1)
+  .flex_1()
   .font_family("monospace")
   .font_size(12)
   .bind_json(@protocol.SELECTION, () => s.diff_selection.get().to_json())
@@ -561,7 +561,7 @@ fn diff_table(s : Store) -> @ui.Element {
               },
             )
             .white_space("pre")
-            .flex(1)
+            .flex_1()
             .min_width(0)
             .line_clamp(1)
             .bind_style(() => {

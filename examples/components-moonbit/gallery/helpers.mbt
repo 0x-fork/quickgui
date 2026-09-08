@@ -46,7 +46,7 @@ fn col() -> @ui.Element {
 
 ///|
 fn row() -> @ui.Element {
-  @ui.div([]).flex_row().items_center().flex_wrap("wrap").gap(10).flex_shrink(0)
+  @ui.div([]).flex_row().items_center().flex_wrap().gap(10).flex_shrink(0)
 }
 
 ///|

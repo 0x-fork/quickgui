@@ -128,6 +128,7 @@ type Node struct {
 	bindings        *reactive.Owner
 	propertyCapture map[uint16]struct{}
 	bindingScope    *reactive.Owner
+	propertyBinding *PropertyBinding
 }
 
 // BindingOwner holds bindings and conditional content until this node is removed.
@@ -144,6 +145,12 @@ func (n *Node) BindingOwner() *reactive.Owner {
 // Bind creates a reactive binding that is disposed with this node.
 func (n *Node) Bind(fn func()) {
 	owner := n.bindingScope
+	if declaration := n.propertyBinding; declaration != nil {
+		if declaration.owner == nil {
+			declaration.owner = reactive.NewOwner(n.BindingOwner())
+		}
+		owner = declaration.owner
+	}
 	if owner == nil {
 		owner = n.BindingOwner()
 	}
@@ -153,12 +160,60 @@ func (n *Node) Bind(fn func()) {
 	})
 }
 
+// PropertyBinding owns one independently replaceable declaration. Static values
+// do not create effects or owners; accessors are disposed when replaced or when
+// the node is removed. Use BindProperties for a reactive declaration selector.
+type PropertyBinding struct {
+	node       *Node
+	owner      *reactive.Owner
+	properties map[uint16]struct{}
+	spare      map[uint16]struct{}
+}
+
+func NewPropertyBinding(node *Node) *PropertyBinding { return &PropertyBinding{node: node} }
+
+// Set replaces just this declaration, preserving other bindings and children.
+func (binding *PropertyBinding) Set(declare func()) {
+	node := binding.node
+	if node.Removed {
+		panic("a removed QuickGUI node cannot be mutated")
+	}
+	binding.Dispose()
+	next := binding.spare
+	if next == nil {
+		next = make(map[uint16]struct{})
+	} else {
+		clear(next)
+	}
+	func() {
+		capture, declaration := node.propertyCapture, node.propertyBinding
+		node.propertyCapture, node.propertyBinding = next, binding
+		defer func() { node.propertyCapture, node.propertyBinding = capture, declaration }()
+		reactive.Untrack(func() struct{} { declare(); return struct{}{} })
+	}()
+	for property := range binding.properties {
+		if _, retained := next[property]; !retained {
+			ClearProperty(node, property)
+		}
+	}
+	binding.properties, binding.spare = next, binding.properties
+}
+
+// Dispose releases subscriptions without clearing the retained native values.
+func (binding *PropertyBinding) Dispose() {
+	reactive.DisposeOwner(binding.owner)
+	binding.owner = nil
+}
+
 // BindProperties replaces one reactive property declaration. Properties omitted
 // on the next run are cleared; nested bindings are disposed before reevaluation.
 // Children are mounted separately and are never rebuilt by this binding.
-func (n *Node) BindProperties(declare func()) {
+// The returned function refreshes the declaration immediately, including inside
+// a batch, and releases its previous bindings without touching child ownership.
+func (n *Node) BindProperties(declare func()) func() {
 	var previous map[uint16]struct{}
-	n.Bind(func() {
+	var owner *reactive.Owner
+	apply := func() {
 		next := make(map[uint16]struct{})
 		func() {
 			capture, scope := n.propertyCapture, n.bindingScope
@@ -173,7 +228,18 @@ func (n *Node) BindProperties(declare func()) {
 			}
 		}
 		previous = next
-	})
+	}
+	refresh := func() {
+		parent := n.BindingOwner()
+		reactive.DisposeOwner(owner)
+		owner = reactive.NewOwner(parent)
+		reactive.RunWithOwner(owner, func() struct{} {
+			reactive.CreateRenderEffect(apply)
+			return struct{}{}
+		})
+	}
+	refresh()
+	return refresh
 }
 
 func (n *Node) Focus() bool {

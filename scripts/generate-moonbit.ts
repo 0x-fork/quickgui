@@ -50,7 +50,7 @@ function emit(relative: string, items: string[]) {
 emit("moonbit/protocol/constants.mbt", declarations);
 
 // Public fluent spellings; all IDs still come from the Rust wire schema above.
-const fields = `display flex_direction flex_wrap flex_grow flex_shrink flex_basis
+const fields = `display flex_direction flex_wrap_mode flex_grow flex_shrink flex_basis
 align_items align_self justify_content align_content gap column_gap row_gap width height
 min_width min_height max_width max_height padding padding_top padding_right padding_bottom padding_left
 margin margin_top margin_right margin_bottom margin_left opacity border_width border_radius font_size
@@ -62,6 +62,9 @@ text_decoration_thickness word_spacing word_break overflow_wrap hyphens backgrou
 background_repeat background_position filter backdrop_filter mix_blend_mode transition transition_property
 transition_duration transition_easing transition_max_fps grid_template_columns grid_template_rows grid_auto_flow
 grid_column_start grid_column_end grid_column_span grid_row_start grid_row_end grid_row_span aspect_ratio
+direction padding_start padding_end margin_start margin_end border_start_width border_end_width
+border_top_left_radius border_top_right_radius border_bottom_left_radius border_bottom_right_radius
+scroll_snap_type scroll_snap_x scroll_snap_y scroll_snap_align scroll_snap_stop
 value placeholder multiline disabled`
   .trim()
   .split(/\s+/);
@@ -69,7 +72,7 @@ const known = new Set(properties.map(([, name]) => name));
 const methods: string[] = [];
 for (const name of fields) {
   const code =
-    ({ transition_property: "TRANSITION_PROPERTIES" } as Record<string, string>)[name] ??
+    ({ transition_property: "TRANSITION_PROPERTIES", flex_wrap_mode: "FLEX_WRAP" } as Record<string, string>)[name] ??
     name.toUpperCase();
   if (!known.has(code)) throw new Error(`Unknown fluent property: ${code}`);
   const key = name.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());

@@ -17,7 +17,7 @@ func TestScalarStyleBindingsUpdateIndependentlyAndDispose(t *testing.T) {
 		mounts := 0
 		parent := View()
 		node := View(Width(width.Read), BackgroundColor(color.Read), func() { mounts++; Text("kept") })
-		native.InsertNode(parent, node, nil)
+		native.InsertNode(parent.Node, node.Node, nil)
 		child := node.Children[0]
 		offset := len(parent.Pending.Body())
 		width.Write(420)
@@ -36,7 +36,7 @@ func TestScalarStyleBindingsUpdateIndependentlyAndDispose(t *testing.T) {
 		if mounts != 1 || child != node.Children[0] {
 			t.Fatal("style update remounted children")
 		}
-		native.RemoveNode(parent, node)
+		native.RemoveNode(parent.Node, node.Node)
 		if len(width.Observers) != 0 || len(color.Observers) != 0 {
 			t.Fatal("removed styles retained observers")
 		}
@@ -76,7 +76,7 @@ func TestStateStyleTracksThemeAndReleasesBindings(t *testing.T) {
 		accent := reactive.NewSignal("#112233")
 		parent := View()
 		node := Button(Hover(BackgroundColor(accent.Read)), Focus(OutlineWidth(2), OutlineColor(accent.Read)), "Retained")
-		native.InsertNode(parent, node, nil)
+		native.InsertNode(parent.Node, node.Node, nil)
 		child := node.Children[0]
 		before := len(parent.Pending.Body())
 		accent.Write("#abcdef")
@@ -87,7 +87,7 @@ func TestStateStyleTracksThemeAndReleasesBindings(t *testing.T) {
 		if node.Children[0] != child || len(accent.Observers) != 2 {
 			t.Fatal("state style update remounted children or accumulated bindings")
 		}
-		native.RemoveNode(parent, node)
+		native.RemoveNode(parent.Node, node.Node)
 		if len(accent.Observers) != 0 {
 			t.Fatal("removed state styles retained observers")
 		}

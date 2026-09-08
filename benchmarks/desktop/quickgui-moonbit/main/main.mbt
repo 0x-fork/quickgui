@@ -210,7 +210,7 @@ fn issue_tracker() -> @ui.Element {
   }
   ignore(
     sidebar.children([
-      @ui.div([]).flex(1),
+      @ui.div([]).flex_1(),
       caption(() => "September cycle\n4 projects · 5 teammates").padding(12),
     ]),
   )
@@ -263,14 +263,14 @@ fn issue_tracker() -> @ui.Element {
       .border_bottom_width(1)
       .border_color(line()),
     ])
-    .flex(1)
+    .flex_1()
     // A new result page starts at the top; selection and edits keep its viewport.
     .children_keyed(
       () => ["\{query()}|\{filter()}|\{current_page()}"],
       key => key,
       _ => {
         col()
-        .flex(1)
+        .flex_1()
         .overflow_y("scroll")
         .children_keyed(visible, index => index.to_string(), item => {
           let index = item.peek()
@@ -431,11 +431,11 @@ fn issue_tracker() -> @ui.Element {
       header,
       row()
       .children([inbox, details])
-      .flex(1)
+      .flex_1()
       .min_height(0)
       .align_items("stretch"),
     ])
-    .flex(1),
+    .flex_1(),
   ])
   .size_full()
   .align_items("stretch")

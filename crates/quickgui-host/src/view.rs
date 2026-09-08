@@ -2294,7 +2294,7 @@ pub(super) fn apply_part(element: Element, id: u32, node: &NativeNode) -> Option
 /// template, and the result is bounded by [`MAX_GRID_TRACKS`].
 pub(super) fn native_grid_tracks(value: &str) -> Vec<GridTrack> {
     let mut tracks = Vec::new();
-    if value.len() > MAX_GRID_TRACK_LIST_BYTES {
+    if value.len() > MAX_GRID_TRACK_LIST_BYTES || value.trim() == "none" {
         return tracks;
     }
     for token in split_grid_tokens(value) {
@@ -2445,12 +2445,12 @@ fn split_grid_arguments(value: &str) -> Vec<String> {
 /// Apply the declared CSS grid template, flow, and item placement.
 pub(super) fn apply_grid(mut element: Element, node: &NativeNode) -> Element {
     if let Some(columns) = node.string(property::GRID_TEMPLATE_COLUMNS) {
-        element = element.grid_template_columns(native_grid_tracks(columns));
+        element = apply_grid_template(element, columns, false);
     } else if let Some(count) = node.number(property::GRID_TEMPLATE_COLUMNS) {
         element = element.grid_cols(bounded_track_count(count));
     }
     if let Some(rows) = node.string(property::GRID_TEMPLATE_ROWS) {
-        element = element.grid_template_rows(native_grid_tracks(rows));
+        element = apply_grid_template(element, rows, true);
     } else if let Some(count) = node.number(property::GRID_TEMPLATE_ROWS) {
         element = element.grid_rows(bounded_track_count(count));
     }
@@ -2483,6 +2483,40 @@ pub(super) fn apply_grid(mut element: Element, node: &NativeNode) -> Element {
     element
 }
 
+// Preserve the core's compact equal-track presets, including their intrinsic
+// minimum/maximum sizing. The generic CSS parser handles other track lists.
+fn apply_grid_template(element: Element, value: &str, rows: bool) -> Element {
+    if let Some(arguments) = function_arguments(value.trim(), "repeat") {
+        let parts = split_grid_arguments(arguments);
+        if let [count, track] = parts.as_slice()
+            && let Ok(count) = count.trim().parse::<u16>()
+            && let Some(minmax) = function_arguments(track.trim(), "minmax")
+        {
+            let bounds = split_grid_arguments(minmax);
+            if let [minimum, maximum] = bounds.as_slice() {
+                match (rows, minimum.trim(), maximum.trim()) {
+                    (false, "0" | "0px", "1fr") => return element.grid_cols(count),
+                    (true, "0" | "0px", "1fr") => return element.grid_rows(count),
+                    (false, "min-content", "1fr") => return element.grid_cols_min_content(count),
+                    (true, "min-content", "1fr") => return element.grid_rows_min_content(count),
+                    (false, "0" | "0px", "max-content") => {
+                        return element.grid_cols_max_content(count);
+                    }
+                    (true, "0" | "0px", "max-content") => {
+                        return element.grid_rows_max_content(count);
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+    if rows {
+        element.grid_template_rows(native_grid_tracks(value))
+    } else {
+        element.grid_template_columns(native_grid_tracks(value))
+    }
+}
+
 fn bounded_track_count(value: f32) -> u16 {
     if value.is_finite() {
         value.clamp(0.0, MAX_GRID_TRACKS as f32) as u16
@@ -2493,7 +2527,8 @@ fn bounded_track_count(value: f32) -> u16 {
 
 fn bounded_grid_line(value: f32) -> i16 {
     if value.is_finite() {
-        value.clamp(-(MAX_GRID_TRACKS as f32), MAX_GRID_TRACKS as f32) as i16
+        let limit = (MAX_GRID_TRACKS + 1) as f32;
+        value.clamp(-limit, limit) as i16
     } else {
         0
     }
@@ -2653,6 +2688,15 @@ fn bounded_tooltip_text(label: &str) -> Arc<str> {
     Arc::from(&label[..end])
 }
 
+pub(super) fn native_text_overflow(value: &str) -> Option<quickgui::TextOverflow> {
+    match value {
+        "ellipsis" => Some(quickgui::TextOverflow::ellipsis()),
+        "ellipsis-start" => Some(quickgui::TextOverflow::ellipsis_start()),
+        "ellipsis-middle" => Some(quickgui::TextOverflow::ellipsis_middle()),
+        _ => None,
+    }
+}
+
 pub(super) fn apply_properties(mut element: Element, node: &NativeNode) -> Element {
     if let Some(display) = node.string(property::DISPLAY) {
         element = match display {
@@ -2776,6 +2820,23 @@ pub(super) fn apply_properties(mut element: Element, node: &NativeNode) -> Eleme
     {
         element = element.margin(margin_top, margin_right, margin_bottom, margin_left);
     }
+    let automatic = |code| match node.property(code) {
+        Some(PropertyValue::String(value)) => value.as_ref() == "auto",
+        None => node.string(property::MARGIN) == Some("auto"),
+        _ => false,
+    };
+    if automatic(property::MARGIN_TOP) {
+        element = element.mt_auto();
+    }
+    if automatic(property::MARGIN_RIGHT) {
+        element = element.mr_auto();
+    }
+    if automatic(property::MARGIN_BOTTOM) {
+        element = element.mb_auto();
+    }
+    if automatic(property::MARGIN_LEFT) {
+        element = element.ml_auto();
+    }
 
     if let Some(color) = node.color(property::BACKGROUND_COLOR) {
         element = element.bg(color);
@@ -2892,8 +2953,11 @@ pub(super) fn apply_properties(mut element: Element, node: &NativeNode) -> Eleme
             _ => element.whitespace_normal(),
         };
     }
-    if node.string(property::TEXT_OVERFLOW) == Some("ellipsis") {
-        element = element.text_ellipsis();
+    if let Some(overflow) = node
+        .string(property::TEXT_OVERFLOW)
+        .and_then(native_text_overflow)
+    {
+        element = element.text_overflow(overflow);
     }
     if let Some(value) = node.number(property::LINE_CLAMP) {
         element = element.line_clamp(value.max(1.0) as usize);

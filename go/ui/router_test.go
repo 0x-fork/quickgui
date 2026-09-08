@@ -163,7 +163,7 @@ func TestRouterMountsMatchedChainAndKeepsPageOnParamChange(t *testing.T) {
 			},
 			Fallback: func() { Text(Props{Children: "missing"}) },
 		})
-		native.InsertNode(parent, node, nil)
+		native.InsertNode(parent.Node, node, nil)
 		if homeCreated != 1 || projectCreated != 0 {
 			t.Fatalf("home=%d project=%d", homeCreated, projectCreated)
 		}
@@ -215,7 +215,7 @@ func TestRouterRetainsNestedLayoutsAndDisposesOnlyReplacedBranches(t *testing.T)
 				if children != nil {
 					children()
 				}
-			})
+			}).Node
 		}
 	}
 	declare := func(id, path string, component Component, children ...*RouteDeclaration) *RouteDeclaration {
@@ -339,8 +339,8 @@ func TestLinkNavigatesAndSetsRole(t *testing.T) {
 				}),
 			},
 		})
-		native.InsertNode(parent, node, nil)
-		link := findButton(parent)
+		native.InsertNode(parent.Node, node, nil)
+		link := findButton(parent.Node)
 		if link == nil {
 			t.Fatal("missing link")
 		}

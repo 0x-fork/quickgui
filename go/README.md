@@ -40,60 +40,56 @@ func main() {
 func Counter() {
 	count, setCount := ui.CreateSignal(0)
 	ui.View(
-		func() {
-			ui.Text("Fine-grained native UI", ui.FontSize(28), ui.FontWeight(700))
-
-			ui.Text("Count: ", count)
-
-			ui.Button(
-				"Increment",
-				ui.Padding(12),
-				ui.BorderRadius(8),
-				ui.BackgroundColor("#2563eb"),
-				ui.Hover(ui.BackgroundColor("#3b82f6")),
-				ui.OnClick(func() { setCount(count() + 1) }),
-			)
-		},
-		ui.Display("flex"),
-		ui.FlexDirection("column"),
-		ui.Width("100%"),
-		ui.Height("100%"),
-		ui.AlignItems("center"),
-		ui.JustifyContent("center"),
-		ui.Gap(20),
-		ui.BackgroundColor("#090d16"),
-		ui.TextColor("#e2e8f0"),
-	)
+		ui.Text("Fine-grained native UI").FontSize(28).FontWeight(700),
+		ui.Text("Count: ", count),
+		ui.Button("Increment").
+			OnClick(func() { setCount(count() + 1) }).
+			Padding(12).
+			RoundedLg().
+			Bg("#2563eb").
+			Hover(ui.BackgroundColor("#3b82f6")),
+	).FlexCol().
+		SizeFull().
+		ItemsCenter().
+		JustifyCenter().
+		Gap(20).
+		Bg("#090d16").
+		TextColor("#e2e8f0")
 }
 ```
 
 Components and `func() { ... }` children blocks run once when mounted. UI calls inside a block declare children in order; nested blocks keep their own parent. Ordinary `if` and `for` statements are useful for static construction. Reading a signal inside an accessor subscribes that binding; setting it changes the affected native properties or text nodes. Event handlers batch writes automatically. Use `ui.Batch` to group writes outside an event. Pass string or numeric accessors directly as children: `ui.Text("Count: ", count)` retains the prefix and updates only the number. Numbers use typed `strconv` conversions. Calling `count()` while mounting captures its current value; pass the accessor itself or a `func() int` for derived values. Use `strconv` and concatenation when a property needs one combined string, such as an input value or accessibility label.
 
-Pass style and event options directly alongside children: `ui.View(ui.BackgroundColor("#ccc"), ui.PaddingLeft(20), "Hello")`. Children can appear before or after options. Options apply in declaration order; a later value replaces only the same property, including explicit zero. Repeated interaction styles merge their properties. Use `ui.Hover(ui.BackgroundColor("#ddd"))`, `ui.Active(...)`, `ui.Focus(...)`, `ui.DisabledStyle(...)`, or `ui.SelectedStyle(...)` for native states. `ui.OnClick(func() { ... })` handles ordinary clicks; `ui.OnClickEvent` receives the native event.
+Pass children or content to constructors, then chain properties, styles, and handlers:
+
+```go
+ui.View(
+	ui.Text("hello"),
+	ui.Input().Value("xxx").OnInput(func(value string) { /* save value */ }),
+).Flex().PaddingLeft(20).TextAlign("center").RoundedLg()
+```
+
+Go primitives return `*ui.Element`. `.Value`, `.Width`, `.PaddingLeft`, and the other modifiers return the same retained element. Accessors remain fine-grained bindings; later declarations replace earlier values without remounting children. `.OnClick(func() { ... })` handles clicks, and `.OnInput(func(value string) { ... })` receives text. Use `.OnClickEvent`, `.OnInputEvent`, or `.OnSubmitEvent` for the full native event. `.Styles(ui.Padding(12), ui.TextAlign("center"))` composes several style options; `.Style(shared)` applies a reusable style. Legacy options inside constructors remain supported.
+
+Rust's layout helpers are available with Go names: `.FlexCol()`, `.FlexRowReverse()`, `.Flex1()`, `.ItemsCenter()`, `.JustifyBetween()`, `.GridCols(3)`, `.ColSpanFull()`, `.P4()`, `.MxAuto()`, `.SizeFull()`, `.RoundedLg()`, and `.TextSm()`. The generator checks 325 layout and style conveniences against Rust, including its four-pixel spacing scale and radius values. `.Flex()` selects flex display; `.Flex1()` sets grow 1, shrink 1, and zero basis.
 
 Use `ui.Styles(ui.Padding(12), ui.BorderRadius(8))` to share styles or fill a compound control’s `PartProps.Style` field. It returns a reusable `ui.Style` value; composing it with more options does not mutate it. Scalar accessors are bound independently when mounted, without rerunning the component.
 
 ## Conditional options
 
-`ui.When` tracks a condition and applies one or more options while it is true. Conditional options merge with earlier options; later values win only for the same property. Turning a condition off restores an earlier value, or clears the property when there is no base value. Children stay mounted. Conditional event handlers and value bindings are released when their condition becomes false.
+`.When` tracks a condition and applies one or more options while it is true. Conditional options merge with earlier options; later values win only for the same property. Turning a condition off restores an earlier value, or clears the property when there is no base value. Children stay mounted. Conditional event handlers and value bindings are released when their condition becomes false.
 
 ```go
 selected, setSelected := ui.CreateSignal(false)
-ui.Button(
-	"Toggle selection",
-	ui.Padding(12),
-	ui.BackgroundColor("#ccc"),
-	ui.BorderRadius(8),
-	ui.When(
-		selected,
-		ui.BackgroundColor("#2563eb"),
-		ui.TextColor("white"),
-	),
-	ui.OnClick(func() { setSelected(!selected()) }),
-)
+ui.Button("Toggle selection").
+	Padding(12).
+	Bg("#ccc").
+	RoundedLg().
+	When(selected, ui.BackgroundColor("#2563eb"), ui.TextColor("white")).
+	OnClick(func() { setSelected(!selected()) })
 ```
 
-For a computed condition, use `ui.When(func() bool { return count() >= 5 }, ...)`. Keep ref callbacks outside conditional options; refs run after mounting.
+For a computed condition, use `.When(func() bool { return count() >= 5 }, ...)`. Keep ref callbacks outside conditional options; refs run after mounting.
 
 Run `quickgui fmt` to apply QuickGUI's formatting rule. Long UI calls (over 100 columns), multiline calls, and calls with callback arguments use one argument per line and a trailing comma. Multiline typed props use one field per line. Short calls stay compact; `gofmt` then handles ordinary Go spacing, indentation, and alignment. Comments and string contents are preserved, and generated files are left to their generator. Running `gofmt` afterward preserves the layout.
 
@@ -160,7 +156,7 @@ ui.For(
 )
 ```
 
-Use `ui.Ref(func(node *native.Node) { ... })` when a component needs a node handle, such as a popover anchor. Framework constructors still expose node handles for low-level tree work; component callbacks always use `func()`.
+Use `.Ref(func(node *native.Node) { ... })` for a node handle, such as a popover anchor. It runs once at its position in the fluent chain. Pass `element.Node` to low-level native APIs. Component callbacks remain `func()`.
 
 ## Background work
 
@@ -177,7 +173,7 @@ Go and Rust exchange bounded binary mutation batches and copied event data throu
 - `reactive`: signals, memos, batching, effects, owners, and contexts.
 - `host`: the purego C ABI adapter and a replaceable host interface for tests.
 
-Compound controls accept the same children blocks after their typed props, so descendants inherit their root context: `ui.Tabs.Root(props, func() { ... })`. Pass strings or string accessors directly as children to text and buttons. Primitives accept style and event options directly, without a props wrapper. `ui.Child(node)` inserts a previously constructed detached node in a block. The `Props.Children` form remains available for programmatic composition. Families include `Checkbox`, `Switch`, `Tabs`, `Dialog`, `Popover`, `SystemPopover`, `Slider`, `Select`, `Combobox`, `Menu`, `Table`, `Tree`, and `Toast`. Their native behavior remains in Rust. `ui.SwiftUI` provides the macOS SwiftUI control gallery and reverse-hosted QuickGUI views.
+Compound controls accept the same children blocks after their typed props, so descendants inherit their root context: `ui.Tabs.Root(props, func() { ... })`. Pass strings or string accessors directly as children to text and buttons. Primitives configure styles and events with fluent methods. `ui.Child(node)` inserts a previously constructed detached node in a block. The `Props.Children` form remains available for programmatic composition. Families include `Checkbox`, `Switch`, `Tabs`, `Dialog`, `Popover`, `SystemPopover`, `Slider`, `Select`, `Combobox`, `Menu`, `Table`, `Tree`, and `Toast`. Their native behavior remains in Rust. `ui.SwiftUI` provides the macOS SwiftUI control gallery and reverse-hosted QuickGUI views.
 
 See [counter](../examples/counter/main.go), [components](../examples/components/main.go), [routing](../examples/routing/main.go), [SwiftUI](../examples/swift-ui/main.go), and the full [Quick Git](../examples/quick-git/main.go) application.
 

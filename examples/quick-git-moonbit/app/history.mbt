@@ -26,7 +26,7 @@ fn history_view(s : Store) -> @ui.Element {
           label(s, () => "\{s.commits.get().length()} commits", tone="muted").font_size(
             11,
           ),
-          @ui.div([]).flex(1),
+          @ui.div([]).flex_1(),
           check(s, "All branches", () => s.all_branches.get(), value => {
             s.all_branches.set(value)
             s.history_ref.set("")
@@ -53,7 +53,7 @@ fn history_view(s : Store) -> @ui.Element {
         },
       ],
     )
-    .flex(1)
+    .flex_1()
     .resizable_panel(
       () => s.history_width.get(),
       n => {
@@ -66,7 +66,7 @@ fn history_view(s : Store) -> @ui.Element {
     ),
     fill().children([commit_detail(s), diff_pane(s)]),
   ])
-  .flex(1)
+  .flex_1()
   .min_height(0)
   .align_items("stretch")
 }
@@ -93,7 +93,7 @@ fn history_table(s : Store) -> @ui.Element {
   ])
   .row_count(s.commits.get().length())
   .row_height(26)
-  .flex(1)
+  .flex_1()
   .bind_json(@protocol.SELECTION, () => {
     let selected : Array[Array[Int]] = []
     for i, commit in s.commits.get() {
@@ -199,7 +199,7 @@ fn history_table(s : Store) -> @ui.Element {
           label(s, () => commit.get().item.subject)
           .line_clamp(1)
           .min_width(0)
-          .flex(1),
+          .flex_1(),
         ])
         .flex_row()
         .items_center()
@@ -309,7 +309,7 @@ fn commit_detail(s : Store) -> @ui.Element {
       row()
       .children([
         caption(s, "CHANGED FILES"),
-        @ui.div([]).flex(1),
+        @ui.div([]).flex_1(),
         button(s, "Show all", () => {
           s.commit_path.set("")
           s.load_diff()

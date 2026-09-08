@@ -202,7 +202,7 @@ fn gallery(
   // the old demo, including popups, and constructs only the new one.
   let body = @ui.div([])
     .flex_col()
-    .flex(1)
+    .flex_1()
     .min_height(0)
     .padding(20)
     .gap(16)
@@ -239,7 +239,7 @@ fn gallery(
       .font_size(13)
       .font_weight(700)
       .app_region("drag"),
-      @ui.div([sidebar]).flex(1).min_height(0).overflow_y("scroll"),
+      @ui.div([sidebar]).flex_1().min_height(0).overflow_y("scroll"),
     ])
     .width(214)
     .height("100%")
@@ -283,7 +283,7 @@ fn gallery(
       body,
     ])
     .flex_col()
-    .flex(1)
+    .flex_1()
     .min_width(0)
     .height("100%"),
   ])

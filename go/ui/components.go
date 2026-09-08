@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"github.com/egoist/quickgui/go/native"
 	"github.com/egoist/quickgui/go/protocol"
 	"github.com/egoist/quickgui/go/reactive"
 )
@@ -29,71 +28,51 @@ func OnCleanup(fn func()) { reactive.OnCleanup(fn) }
 
 // NativeElement applies ordinary children, styles, options, and reactive ownership
 // to a native node kind supplied by an extension package.
-func NativeElement(tag uint8, arguments ...any) *native.Node {
-	node := native.CreateElement(tag)
-	applyArguments(node, arguments)
-	return node
+func NativeElement(tag uint8, arguments ...any) *Element {
+	return newElement(tag, arguments)
 }
 
-// View accepts style, property, and event options alongside children, in any
-// order. Later options override the same property; callback children mount once.
-func View(arguments ...any) *native.Node {
-	node := native.CreateElement(protocol.TagView)
-	applyArguments(node, arguments)
-	return node
+// View constructs a retained container from children. Configure it with fluent
+// properties, events, and Styles. Legacy constructor options remain supported.
+func View(children ...any) *Element {
+	return newElement(protocol.TagView, children)
 }
 
-func Text(arguments ...any) *native.Node {
-	node := native.CreateElement(protocol.TagView)
-	applyArguments(node, arguments)
-	return node
+func Text(children ...any) *Element {
+	return newElement(protocol.TagView, children)
 }
 
-func Button(arguments ...any) *native.Node {
-	node := native.CreateElement(protocol.TagButton)
-	applyArguments(node, arguments)
-	return node
+func Button(children ...any) *Element {
+	return newElement(protocol.TagButton, children)
 }
 
-func Input(arguments ...any) *native.Node {
-	node := native.CreateElement(protocol.TagInput)
-	applyArguments(node, arguments)
-	return node
+func Input(children ...any) *Element {
+	return newElement(protocol.TagInput, children)
 }
 
-func TextArea(arguments ...any) *native.Node {
-	return Input(append(arguments, Multiline(true))...)
+func TextArea(children ...any) *Element {
+	return Input(children...).Multiline(true)
 }
 
-func Markdown(arguments ...any) *native.Node {
-	node := native.CreateElement(protocol.TagMarkdown)
-	applyArguments(node, arguments)
-	return node
+func Markdown(children ...any) *Element {
+	return newElement(protocol.TagMarkdown, children)
 }
 
-func Image(arguments ...any) *native.Node {
-	node := native.CreateElement(protocol.TagImage)
-	applyArguments(node, arguments)
-	return node
+func Image(children ...any) *Element {
+	return newElement(protocol.TagImage, children)
 }
 
 // SVG renders inline SVG markup supplied through Value using the Rust renderer.
-func SVG(arguments ...any) *native.Node {
-	node := native.CreateElement(protocol.TagSvg)
-	applyArguments(node, arguments)
-	return node
+func SVG(children ...any) *Element {
+	return newElement(protocol.TagSvg, children)
 }
 
 // Shader paints WGSL supplied through Value, with up to sixteen parameter floats.
-func Shader(arguments ...any) *native.Node {
-	node := native.CreateElement(protocol.TagShader)
-	applyArguments(node, arguments)
-	return node
+func Shader(children ...any) *Element {
+	return newElement(protocol.TagShader, children)
 }
 
 // VirtualList lays out and paints the visible children using the core's virtual list.
-func VirtualList(arguments ...any) *native.Node {
-	node := native.CreateElement(protocol.TagVirtualList)
-	applyArguments(node, arguments)
-	return node
+func VirtualList(children ...any) *Element {
+	return newElement(protocol.TagVirtualList, children)
 }
