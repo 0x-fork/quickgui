@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { site } from "../lib/site";
 import type { Locale } from "../i18n";
+import type { DocsFrontend } from "../lib/docs";
 
 const LINKS = [
   { labelKey: "nav.docs", href: site.links.docs, external: false },
@@ -9,9 +10,10 @@ const LINKS = [
   { label: "MoonBit SDK", href: site.links.moonbit, external: true },
 ] as const;
 
-export function SiteFooter() {
+export function SiteFooter({ frontend }: { frontend: DocsFrontend }) {
   const { t, i18n } = useTranslation();
   const current = (i18n.language as Locale) ?? "en";
+  const docsHref = `${current === "en" ? "" : `/${current}`}/docs/${frontend}`;
 
   return (
     <footer>
@@ -23,7 +25,7 @@ export function SiteFooter() {
           {LINKS.map((link) => (
             <a
               key={link.href}
-              href={link.external || current === "en" ? link.href : `/${current}${link.href}`}
+              href={link.external ? link.href : docsHref}
               target={link.external ? "_blank" : undefined}
               rel={link.external ? "noreferrer" : undefined}
               className="transition-colors hover:text-foreground"

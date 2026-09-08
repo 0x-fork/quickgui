@@ -14,6 +14,7 @@ import { findDocsPage, docsPath, type DocsSlug } from '../lib/docs'
 import { localizedDocsPage } from '../lib/docs-locales'
 import { guideMdx } from '../lib/docs-mdx'
 import { siteMeta } from '../lib/meta'
+import { readFrontendPreference } from '../lib/frontend-preference'
 
 function localizedPath(locale: Locale, path: string): string {
   return locale === 'en' ? path : `/${locale}${path}`
@@ -29,9 +30,19 @@ function docsArea(slug: DocsSlug): DocsArea {
 
 export function loader({ params, request }: Route.LoaderArgs) {
   const locale = resolveLocale(params.locale)
-  const route = resolveDocsRoute(params.frontend, params.slug)
+  const route = resolveDocsRoute(
+    params.frontend,
+    params.slug,
+    readFrontendPreference(request.headers.get('Cookie')),
+  )
   if (!locale || !route) throw new Response('Page not found', { status: 404 })
   if (route.kind === 'redirect') {
+    if (!params.frontend && !params.slug) {
+      return redirect(localizedPath(locale, route.path) + new URL(request.url).search, {
+        status: 302,
+        headers: { 'Cache-Control': 'private, no-store' },
+      })
+    }
     return redirect(localizedPath(locale, route.path) + new URL(request.url).search, 308)
   }
   const page = route.page

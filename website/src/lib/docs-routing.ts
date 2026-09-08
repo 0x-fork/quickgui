@@ -1,9 +1,13 @@
 import { componentDocsPath, findComponentDoc } from './component-docs'
-import { docsPath, findDocsPage, isDocsFrontend, type DocsPageMeta } from './docs'
+import { docsPath, findDocsPage, isDocsFrontend, type DocsFrontend, type DocsPageMeta } from './docs'
 
 type DocsRoute = { kind: 'page'; page: DocsPageMeta } | { kind: 'redirect'; path: string }
 
-export function resolveDocsRoute(frontend?: string, slug?: string): DocsRoute | undefined {
+export function resolveDocsRoute(
+  frontend?: string,
+  slug?: string,
+  preferredFrontend: DocsFrontend = 'go',
+): DocsRoute | undefined {
   if (isDocsFrontend(frontend)) {
     const page = findDocsPage(frontend, slug)
     if (!page) return undefined
@@ -12,7 +16,7 @@ export function resolveDocsRoute(frontend?: string, slug?: string): DocsRoute | 
       : { kind: 'page', page }
   }
 
-  if (!frontend && !slug) return { kind: 'redirect', path: docsPath('go') }
+  if (!frontend && !slug) return { kind: 'redirect', path: docsPath(preferredFrontend) }
 
   // Preserve links from before the frontend-specific documentation structure.
   if ((frontend === 'components' || frontend === 'swift-ui') && slug) {

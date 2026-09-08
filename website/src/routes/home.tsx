@@ -15,6 +15,7 @@ import { getHighlightedSnippets } from "../server/highlight.server";
 import { fetchRepoStats } from "../server/stats.server";
 import { siteMeta } from "../lib/meta";
 import type { DocsFrontend } from "../lib/docs";
+import { readFrontendPreference, rememberFrontend } from "../lib/frontend-preference";
 import {
   OG_LOCALES,
   SUPPORTED_LOCALES,
@@ -33,6 +34,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   const [highlighted, stats] = await Promise.all([getHighlightedSnippets(), fetchRepoStats()]);
 
   return {
+    frontend: readFrontendPreference(request.headers.get("Cookie")),
     highlighted,
     locale,
     origin: new URL(request.url).origin,
@@ -90,7 +92,12 @@ function SkipLink() {
 export default function Home({ loaderData }: Route.ComponentProps) {
   const { highlighted, locale, stats } = loaderData;
   const [i18n] = useState(() => createI18n(locale));
-  const [frontend, setFrontend] = useState<DocsFrontend>("go");
+  const [frontend, setFrontend] = useState(loaderData.frontend);
+
+  function selectFrontend(next: DocsFrontend) {
+    rememberFrontend(next);
+    setFrontend(next);
+  }
 
   useEffect(() => {
     if (i18n.language !== locale) void i18n.changeLanguage(locale);
@@ -99,30 +106,30 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   return (
     <I18nextProvider i18n={i18n}>
       <SkipLink />
-      <SiteHeader stats={stats} />
+      <SiteHeader stats={stats} frontend={frontend} />
       <main>
         {/* One bordered column runs the whole page; sections stack flush,
             separated by hairlines. */}
         <div className="mx-auto w-full max-w-6xl border-x border-border">
-          <Hero frontend={frontend} onFrontendChange={setFrontend} />
+          <Hero frontend={frontend} onFrontendChange={selectFrontend} />
           <Benchmarks />
           <Features />
           <CodeShowcase
             highlighted={highlighted}
             frontend={frontend}
-            onFrontendChange={setFrontend}
+            onFrontendChange={selectFrontend}
           />
-          <SwiftUi highlighted={highlighted} frontend={frontend} onFrontendChange={setFrontend} />
+          <SwiftUi highlighted={highlighted} frontend={frontend} onFrontendChange={selectFrontend} />
           <Quickstart
             highlighted={highlighted}
             frontend={frontend}
-            onFrontendChange={setFrontend}
+            onFrontendChange={selectFrontend}
           />
           <Platforms />
           <FinalCta />
         </div>
       </main>
-      <SiteFooter />
+      <SiteFooter frontend={frontend} />
     </I18nextProvider>
   );
 }

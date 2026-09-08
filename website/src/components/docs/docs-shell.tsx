@@ -13,6 +13,7 @@ import { localePath, type Locale } from '../../i18n'
 import { site } from '../../lib/site'
 import { LanguageMenu } from '../language-menu'
 import { prefetchDocsSearch, searchDocs, type DocsSearchHit } from '../../lib/docs-search'
+import { rememberFrontend } from '../../lib/frontend-preference'
 
 type DocsTheme = 'light' | 'dark'
 export type DocsArea = 'guide' | 'components' | 'swift-ui'
@@ -171,6 +172,7 @@ function DocsSidebar({
             onChange={(event) => {
               const next = event.target.value
               if (!isDocsFrontend(next)) return
+              rememberFrontend(next)
               rememberScrollPosition()
               onNavigate?.()
               void navigate(localize(locale, switchDocsFrontend(currentPath, next)))
@@ -693,6 +695,10 @@ export function DocsShell({
   const [theme, setTheme] = useState<DocsTheme>('light')
   const [mobilePanel, setMobilePanel] = useState<'menu' | 'outline' | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
+
+  useEffect(() => {
+    rememberFrontend(frontend)
+  }, [frontend])
 
   useEffect(() => {
     const saved = window.localStorage.getItem('quickgui-docs-theme')

@@ -6,6 +6,7 @@ import { Logo } from "./logo";
 import { site } from "../lib/site";
 import type { RepoStats } from "../lib/stats";
 import { localePath, type Locale } from "../i18n";
+import type { DocsFrontend } from "../lib/docs";
 
 const NAV_ITEMS = [
   { key: "nav.features", href: "#features" },
@@ -14,9 +15,10 @@ const NAV_ITEMS = [
   { key: "nav.quickstart", href: "#quickstart" },
 ] as const;
 
-export function SiteHeader({ stats }: { stats: RepoStats }) {
+export function SiteHeader({ stats, frontend }: { stats: RepoStats; frontend: DocsFrontend }) {
   const { t, i18n } = useTranslation();
   const current = (i18n.language as Locale) ?? "en";
+  const docsHref = `${current === "en" ? "" : `/${current}`}/docs/${frontend}`;
 
   return (
     <header className="sticky top-0 z-50 bg-background/90 backdrop-blur-sm">
@@ -33,7 +35,7 @@ export function SiteHeader({ stats }: { stats: RepoStats }) {
             </a>
           ))}
           <a
-            href={current === "en" ? site.links.docs : `/${current}${site.links.docs}`}
+            href={docsHref}
             className="transition-colors hover:text-foreground"
           >
             {t("nav.docs")}

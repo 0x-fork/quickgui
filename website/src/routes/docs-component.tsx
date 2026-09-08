@@ -92,7 +92,7 @@ export default function DocsComponentRoute({ loaderData }: Route.ComponentProps)
         title: component.name,
         description: localizedComponentDescription(component, loaderData.locale),
         outline: localizedComponentOutline(component, loaderData.locale),
-        path: componentDocsPath(component),
+        path: componentDocsPath(component, loaderData.frontend),
         area: component.kind === 'swift-ui' ? 'swift-ui' : 'components',
       }}
     >
