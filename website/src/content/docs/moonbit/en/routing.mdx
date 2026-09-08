@@ -1,0 +1,34 @@
+The router selects components from the current application path and keeps a navigation history. Routes render native QuickGUI content in the current window.
+
+## Nested layouts
+
+Declare routes with `@ui.route`. Use `@ui.layout` to share surrounding content, and call its `outlet()` callback where the matched child belongs. Mount the router with `router.outlet()`.
+
+```moonbit
+fn routing_example() -> @ui.Element {
+  let router = @ui.router([
+    @ui.layout(
+      (router, outlet) => {
+        @ui.div([
+          router.link("/", "Home"),
+          router.link("/settings", "Settings"),
+          outlet(),
+        ]).flex_col()
+      },
+      [
+        @ui.route("/", _ => @ui.text("Home")),
+        @ui.route("/settings", _ => @ui.text("Settings")),
+      ],
+    ),
+  ])
+  router.outlet()
+}
+```
+
+## Navigation
+
+Use `router.link(path, label)` for a navigation link. `router.navigate(path)` pushes history; pass `replace=true` to replace the current entry. `router.go(-1)` goes back and `router.go(1)` goes forward.
+
+## Retained outlets
+
+Outlets retain nodes by matched route identity. Navigating between sibling routes keeps their common layout and its state. Read `router.state()` in a binding for the current location and matched parameters; `router.is_active(path)` tests a navigation destination.

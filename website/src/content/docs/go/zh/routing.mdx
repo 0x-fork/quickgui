@@ -1,0 +1,70 @@
+路由根据应用当前路径选择组件并维护导航历史。路由内容在当前窗口中以原生 QuickGUI 节点渲染。
+
+## 路由声明
+
+使用 `ui.Route` 和 `ui.Layout` 声明路由。布局通过 `ui.Outlet` 挂载匹配的子路由。用 `ui.UseParams` 读取参数，或用 `ui.UseRouter` 导航。
+
+```go
+func RouterExample() {
+	ui.Router(ui.RouterProps{
+		InitialPath: "/",
+		Routes: []*ui.RouteDeclaration{
+			ui.Route(
+				"/",
+				func() {
+					ui.Link(
+						ui.LinkProps{Href: "/settings"},
+						"Settings",
+					)
+				},
+			),
+			ui.Route(
+				"/settings",
+				func() { ui.Text("Settings") },
+			),
+		},
+		Fallback: func() { ui.Text("Page not found") },
+	})
+}
+```
+
+## 嵌套布局
+
+用 `ui.Layout` 包裹相关路由。布局组件在匹配子路由的位置调用 `ui.Outlet()`。在同级路由之间导航会保留公共布局及其状态，只替换发生变化的路由分支。
+
+把共享导航放在 outlet 外部。Home 和 Settings 共用同一布局，因此切换页面时布局的局部状态会保留。outlet 只提供当前匹配的子页面。
+
+```go
+func NestedRouterExample() {
+  ui.Router(ui.RouterProps{
+    Routes: []*ui.RouteDeclaration{
+      ui.Layout(
+        func() {
+          ui.View(func() {
+            ui.Link(ui.LinkProps{Href: "/"}, "Home")
+            ui.Link(ui.LinkProps{Href: "/settings"}, "Settings")
+            ui.Outlet()
+          }, ui.Display("flex"), ui.FlexDirection("column"), ui.Gap(12))
+        },
+        ui.Route("/", func() { ui.Text("Home") }),
+        ui.Route("/settings", func() { ui.Text("Settings") }),
+      ),
+    },
+  })
+}
+```
+
+## 导航
+
+在路由组件内，`ui.UseRouter()` 提供 `Navigate`、`Replace`、`Back` 和 `Forward`。`ui.Link` 声明导航目标。普通导航添加历史记录，替换导航则修改当前记录。
+
+```go
+func BackButton() {
+	router := ui.UseRouter()
+	ui.Button("Back", ui.OnClick(router.Back))
+}
+```
+
+## 路由参数
+
+使用 `ui.UseParams` 读取路径参数、`ui.UseSearchParams` 读取查询值、`ui.UseLocation` 读取当前位置。它们返回访问器；需要更新显示值时，在绑定中读取。仅参数发生变化时，匹配的路由组件会保持挂载。

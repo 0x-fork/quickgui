@@ -1,0 +1,87 @@
+コンポーネントはマウント時に保持ツリーを作成します。リアクティブなバインディングが対象ノードを更新し、レイアウト、描画、アクセシビリティはネイティブコアが担当します。
+
+## レンダリングモデル
+
+ウィンドウのルート、ルート画面、条件分岐、子要素ブロックはすべて `func()` を使います。コンポーネントはノードを返さず、0 個以上の子要素を宣言し、マウント時に一度実行されます。ブロック内の UI 呼び出しはその親に追加されます。静的な構築には通常の Go の `if` や `for` を使い、シグナルで子構造を変える場合は `ui.Show` や `ui.For` を使います。
+
+```go
+func ViewExample() {
+	ui.View(
+		func() {
+			ui.Text("Hello from Go")
+			ui.Button("Continue", ui.OnClick(func() {}))
+		},
+		ui.Padding(20),
+		ui.Gap(12),
+	)
+}
+```
+
+## 条件付きコンテンツ
+
+状態に応じて子をマウントまたは削除するには `ui.Show` を使います。通常の Go の `if` は構築時だけ実行されます。同じ分岐が選ばれている間はノードを保持し、分岐を削除するとバインディングも破棄します。
+
+```go
+func DisclosureExample() {
+	open, setOpen := ui.CreateSignal(false)
+	ui.View(func() {
+		ui.Button("Toggle details", ui.OnClick(func() { setOpen(!open()) }))
+		ui.Show(open, func() { ui.Text("Details") })
+	})
+}
+```
+
+## リストとノードの同一性
+
+`ui.For` でリアクティブなリストを作り、一意で安定したキーを渡します。保持された行が変更されるデータを読むには `ui.KeyedFor` の項目アクセサーを使います。削除した行は購読を解除し、キー付きの行の移動はネイティブノードの同一性を保ちます。仮想化されたテーブルやリストは、大きな集合でも可視行だけをマウントします。
+
+キーには位置ではなく、データベースの ID などの安定した識別子を使います。この例では既存の行を並べ替え、行アクセサーを通して ID 1 のラベルを更新します。親はリストを作り直しません。データを変更するときは新しいスライスを渡してください。保存済みのスライスを直接書き換えても購読側に通知されません。
+
+```go
+type ListPerson struct { ID int; Name string }
+
+func KeyedListExample() {
+  people, setPeople := ui.CreateSignal([]ListPerson{{1, "Ada"}, {2, "Grace"}})
+  ui.View(func() {
+    ui.Button("Reorder and rename", ui.OnClick(func() {
+      setPeople([]ListPerson{{2, "Grace"}, {1, "Ada Lovelace"}})
+    }))
+    ui.KeyedFor(
+      people,
+      func(person ListPerson) any { return person.ID },
+      func(person func() ListPerson, index func() int) {
+        ui.Text(index, ": ", func() string { return person().Name })
+      },
+      func() { ui.Text("No people") },
+    )
+  })
+}
+```
+
+## ウィンドウのライフサイクル
+
+`WindowOptions.Component` はウィンドウごとにリアクティブルートを作成します。閉じるとノードとエフェクトが破棄されます。リソースの後始末は `ui.OnCleanup` に登録します。バックグラウンド処理には `ui.Async` を使うと、結果が UI goroutine に返され、コンポーネント破棄時にキャンセルされます。
+
+バックグラウンド処理はコンポーネントのマウント時に開始します。`load` は UI goroutine の外で動き、コンテキストのキャンセルに従う必要があります。完了コールバックでは安全にシグナルを書き込めます。所有する分岐の削除やウィンドウの終了時にはコンテキストがキャンセルされ、遅れて届いた完了通知も破棄されます。この例では標準の `context` パッケージを使います。
+
+```go
+func LoadingPanel(load func(context.Context) (string, error)) {
+  result, setResult := ui.CreateSignal("Loading…")
+  ui.Async(load, func(value string, err error) {
+    if err != nil { setResult(err.Error()); return }
+    setResult(value)
+  })
+  ui.Text(result)
+}
+```
+
+## 現在のウィンドウ
+
+コンポーネントのマウント時に `native.CurrentWindow()` を取得し、コールバックではそのウィンドウを使います。無関係な goroutine から取得しないでください。ウィンドウイベントやネイティブリクエストは非同期コールバックで結果を返します。
+
+```go
+func CloseButton() {
+	window := native.CurrentWindow()
+	ui.Button("Close window", ui.OnClick(func() { window.Close() }))
+}
+```

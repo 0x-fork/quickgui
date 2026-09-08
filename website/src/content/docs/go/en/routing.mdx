@@ -1,0 +1,70 @@
+The router selects components from the current application path and keeps a navigation history. Routes render native QuickGUI content in the current window.
+
+## Routes
+
+Declare routes with `ui.Route` and `ui.Layout`. A layout mounts its matched child with `ui.Outlet`. Read parameters with `ui.UseParams`, or navigate with `ui.UseRouter`.
+
+```go
+func RouterExample() {
+	ui.Router(ui.RouterProps{
+		InitialPath: "/",
+		Routes: []*ui.RouteDeclaration{
+			ui.Route(
+				"/",
+				func() {
+					ui.Link(
+						ui.LinkProps{Href: "/settings"},
+						"Settings",
+					)
+				},
+			),
+			ui.Route(
+				"/settings",
+				func() { ui.Text("Settings") },
+			),
+		},
+		Fallback: func() { ui.Text("Page not found") },
+	})
+}
+```
+
+## Nested layouts
+
+Wrap related routes in `ui.Layout`. Its component calls `ui.Outlet()` where the matched child belongs. Navigation between sibling routes keeps their common layout mounted, preserving its state. Only the changed route branch is replaced.
+
+Keep shared navigation outside the outlet. Its local state survives switching between Home and Settings because both routes share the same layout. The outlet supplies only the active child.
+
+```go
+func NestedRouterExample() {
+  ui.Router(ui.RouterProps{
+    Routes: []*ui.RouteDeclaration{
+      ui.Layout(
+        func() {
+          ui.View(func() {
+            ui.Link(ui.LinkProps{Href: "/"}, "Home")
+            ui.Link(ui.LinkProps{Href: "/settings"}, "Settings")
+            ui.Outlet()
+          }, ui.Display("flex"), ui.FlexDirection("column"), ui.Gap(12))
+        },
+        ui.Route("/", func() { ui.Text("Home") }),
+        ui.Route("/settings", func() { ui.Text("Settings") }),
+      ),
+    },
+  })
+}
+```
+
+## Navigation
+
+Inside a route component, `ui.UseRouter()` exposes `Navigate`, `Replace`, `Back`, and `Forward`. `ui.Link` declares a navigation target. Pushes add a history entry; replacing changes the current entry.
+
+```go
+func BackButton() {
+	router := ui.UseRouter()
+	ui.Button("Back", ui.OnClick(router.Back))
+}
+```
+
+## Route parameters
+
+Read matched path parameters with `ui.UseParams`, query values with `ui.UseSearchParams`, and the current location with `ui.UseLocation`. These return accessors; read them inside a binding when the displayed value should update. A parameter-only change keeps the matched route component mounted.

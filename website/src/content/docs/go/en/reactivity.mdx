@@ -1,0 +1,83 @@
+Signals connect state to the text and properties that read it. Updates change retained nodes without rerunning the entire component.
+
+## Reactive state
+
+Pass an accessor for changing text or properties. Calling `count()` while constructing a string captures its current value; placing the call in `func() string` keeps it reactive. Event handlers batch writes automatically. Use `ui.Batch` for a group of writes elsewhere, and `ui.CreateMemo` for derived values.
+
+String and numeric signals can be children directly: `ui.Text("Count: ", count)`. The prefix stays retained while only the number updates. Numeric bindings use `strconv`; they do not parse a format string. For a combined string property, use `strconv.Itoa(count())` and concatenation inside an accessor.
+
+```go
+func TextExample() {
+	count, setCount := ui.CreateSignal(0)
+	ui.View(func() {
+		ui.Text(
+			"Count: ",
+			count,
+			ui.FontSize(20),
+		)
+		ui.Button("Increment", ui.OnClick(func() { setCount(count() + 1) }))
+	})
+}
+```
+
+## Derived state
+
+Use `ui.CreateMemo` for a value computed from other signals. It returns an accessor, so consumers subscribe to the derived value just like any other signal.
+
+```go
+func DerivedExample() {
+	count, setCount := ui.CreateSignal(0)
+	doubled := ui.CreateMemo(func() int { return count() * 2 })
+	ui.View(func() {
+		ui.Text("Doubled: ", doubled)
+		ui.Button("Increment", ui.OnClick(func() { setCount(count() + 1) }))
+	})
+}
+```
+
+## Effects and cleanup
+
+Use `ui.CreateEffect` to synchronize a side effect with the signals it reads. Dependencies follow the reads made during each run, including conditional branches. Register teardown with `ui.OnCleanup`; disposing the owning component releases its effects and subscriptions. Bind changing text and props directly instead of rebuilding a view inside an effect.
+
+Use an effect for work outside the view tree, such as synchronizing a subscription or updating a native window title. The effect runs initially and again when a value it read changes. Cleanup registered inside that effect runs before the next execution and when its owner is disposed. This example logs the lifecycle; replace the log calls with your subscription’s start and stop operations. Capture the topic for that execution so cleanup refers to the old topic.
+
+```go
+func EffectExample() {
+  topic, setTopic := ui.CreateSignal("Inbox")
+  ui.CreateEffect(func() {
+    current := topic()
+    log.Print("Subscribe: ", current)
+    ui.OnCleanup(func() { log.Print("Unsubscribe: ", current) })
+  })
+  ui.View(func() {
+    ui.Text("Watching: ", topic)
+    ui.Button("Switch topic", ui.OnClick(func() {
+      if topic() == "Inbox" { setTopic("Archive") } else { setTopic("Inbox") }
+    }))
+  })
+}
+```
+
+## Batched updates
+
+Event handlers batch signal writes automatically. Wrap related writes elsewhere in `ui.Batch(func() { ... })` so dependent work flushes together. `ui.Untrack` reads state without subscribing the current computation. Signal access belongs on the UI goroutine; use `ui.Async` or `native.Dispatch` to deliver background results.
+
+Here both fields change as one update. Observers see “Grace Hopper” after the batch rather than an intermediate “Grace Lovelace”. The button handler already batches automatically; the explicit batch also makes `applyProfile` safe to call from other UI code. Batches are synchronous: background work must dispatch its results back before writing signals. The logging examples use Go’s standard `log` package.
+
+```go
+func BatchedExample() {
+  first, setFirst := ui.CreateSignal("Ada")
+  last, setLast := ui.CreateSignal("Lovelace")
+  ui.CreateEffect(func() { log.Print(first() + " " + last()) })
+  applyProfile := func() {
+    ui.Batch(func() {
+      setFirst("Grace")
+      setLast("Hopper")
+    })
+  }
+  ui.View(func() {
+    ui.Text(first, " ", last)
+    ui.Button("Apply profile", ui.OnClick(applyProfile))
+  })
+}
+```

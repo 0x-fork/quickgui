@@ -1,0 +1,48 @@
+ルーターは現在のアプリ内パスからコンポーネントを選び、ナビゲーション履歴を管理します。ルートは現在のウィンドウにネイティブ QuickGUI コンテンツを描画します。
+
+## ルートの宣言
+
+`ui.Route` と `ui.Layout` でルートを宣言します。レイアウトは `ui.Outlet` で一致した子を表示します。パラメーターには `ui.UseParams`、ナビゲーションには `ui.UseRouter` を使います。
+
+```go
+func RouterExample() {
+	ui.Router(ui.RouterProps{
+		InitialPath: "/",
+		Routes: []*ui.RouteDeclaration{
+			ui.Route(
+				"/",
+				func() {
+					ui.Link(
+						ui.LinkProps{Href: "/settings"},
+						"Settings",
+					)
+				},
+			),
+			ui.Route(
+				"/settings",
+				func() { ui.Text("Settings") },
+			),
+		},
+		Fallback: func() { ui.Text("Page not found") },
+	})
+}
+```
+
+## 入れ子のレイアウト
+
+関連するルートを `ui.Layout` で包みます。レイアウトのコンポーネントは、該当する子の位置で `ui.Outlet()` を呼びます。兄弟ルート間の移動では共通レイアウトと状態を保持し、変更された分岐だけを置き換えます。
+
+## ナビゲーション
+
+ルート内の `ui.UseRouter()` は `Navigate`、`Replace`、`Back`、`Forward` を提供します。`ui.Link` で移動先を宣言できます。通常の移動は履歴に追加し、置換は現在の履歴を変更します。
+
+```go
+func BackButton() {
+	router := ui.UseRouter()
+	ui.Button("Back", ui.OnClick(router.Back))
+}
+```
+
+## ルートパラメーター
+
+`ui.UseParams` でパスパラメーター、`ui.UseSearchParams` でクエリ値、`ui.UseLocation` で現在位置を読みます。いずれもアクセサーなので、表示を更新する値はバインディング内で読み取ります。パラメーターだけが変わる場合、該当するルートのコンポーネントは保持されます。

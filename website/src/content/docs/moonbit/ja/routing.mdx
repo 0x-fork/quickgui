@@ -1,0 +1,34 @@
+ルーターは現在のアプリ内パスからコンポーネントを選び、ナビゲーション履歴を管理します。ルートは現在のウィンドウにネイティブ QuickGUI コンテンツを描画します。
+
+## 入れ子のレイアウト
+
+`@ui.route` でルートを宣言し、`@ui.layout` で周囲のコンテンツを共有します。該当する子の位置で `outlet()` コールバックを呼び、`router.outlet()` でルーターをマウントします。
+
+```moonbit
+fn routing_example() -> @ui.Element {
+  let router = @ui.router([
+    @ui.layout(
+      (router, outlet) => {
+        @ui.div([
+          router.link("/", "Home"),
+          router.link("/settings", "Settings"),
+          outlet(),
+        ]).flex_col()
+      },
+      [
+        @ui.route("/", _ => @ui.text("Home")),
+        @ui.route("/settings", _ => @ui.text("Settings")),
+      ],
+    ),
+  ])
+  router.outlet()
+}
+```
+
+## ナビゲーション
+
+`router.link(path, label)` でリンクを作成します。`router.navigate(path)` は履歴に追加し、`replace=true` を渡すと現在の履歴を置き換えます。`router.go(-1)` は戻る、`router.go(1)` は進む操作です。
+
+## 保持されるアウトレット
+
+アウトレットは該当するルートの同一性でノードを保持します。兄弟ルート間の移動でも共通レイアウトと状態は残ります。現在位置とパラメーターはバインディング内で `router.state()` を読み、移動先の判定には `router.is_active(path)` を使います。

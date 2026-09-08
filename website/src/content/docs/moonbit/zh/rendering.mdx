@@ -1,0 +1,61 @@
+组件在挂载时创建保留树。响应式绑定更新受影响的节点，原生核心负责布局、绘制和无障碍行为。
+
+## 视图语法
+
+构造函数只接收子节点或内容。空容器传入 `[]`；按钮也可接收字符串或单个元素。使用 `.padding(24)`、`.checked(checked())`、`.on_click(save)` 等链式方法设置样式、属性和事件，通过 `.style(shared)` 合并可复用样式。
+
+```moonbit
+///|
+fn settings_card() -> @ui.Element {
+  @ui.div([
+    @ui.text("Settings").style(@ui.style().font_size(20)),
+    @ui.button("Save").on_click(() => println("Saved")),
+  ])
+  .style(@ui.style().padding(24).gap(12))
+  .flex_col()
+}
+```
+
+在链式属性方法中直接读取访问器：`@ui.checkbox([]).checked(checked()).on_checked_change(set_checked)`。字面量初始化组件内部状态；包含信号读取的表达式会成为受控绑定。样式按声明顺序合并。子节点统一使用列表；有作用域的部件可通过 `.children([...])` 一次挂载完整列表。
+
+## 条件子节点
+
+```moonbit
+///|
+fn disclosure() -> @ui.Element {
+  let (expanded, set_expanded) = @reactive.create_signal(false)
+  @ui.div(
+    [
+      @ui.button("Toggle details").on_click(() => set_expanded(!expanded())),
+      ..if expanded() {
+        [@ui.text("Details are mounted only while expanded.")]
+      } else {
+        [@ui.text("Collapsed")]
+      },
+    ],
+  )
+  .flex_col()
+  .gap(8)
+}
+```
+
+条件切换分支时才运行分支工厂。分支内会变化的值应放入绑定，从而保持节点挂载。
+
+## 按键保留子节点
+
+```moonbit
+fn names_list() -> @ui.Element {
+  let (names, _) = @reactive.create_signal(["Ada", "Grace", "Linus"])
+  @ui.div([])
+  .flex_col()
+  .children_keyed(() => names(), name => name, row => @ui.text(row.get()))
+}
+```
+
+键必须唯一且稳定。渲染回调接收行信号，因此已有行可以更新，而不替换原生节点 ID 或局部状态。按键子节点本身不会虚拟化长列表；请使用[表格可见范围](/docs/moonbit/components)。
+
+## 检查、测试与调试
+
+使用 `quickgui check` 和 `quickgui test`，确保测试与构建使用相同的视图编译器。添加 `--release` 可测试发布后端。直接运行 `moon check` 能检查原始类型，但 `moon test` 不会转换隐式视图绑定。
+
+CLI 保留原文件，并将编译诊断、断言失败和已符号化堆栈位置映射回原文件。原生调试器的断点和单步执行目前使用 `.quickgui/moonbit-sources` 中的生成文件，尚不支持原文件断点映射。编辑器补全与类型检查仍使用普通 MoonBit。

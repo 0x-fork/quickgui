@@ -1,0 +1,61 @@
+コンポーネントはマウント時に保持ツリーを作成します。リアクティブなバインディングが対象ノードを更新し、レイアウト、描画、アクセシビリティはネイティブコアが担当します。
+
+## ビューの構文
+
+コンストラクターは子要素やコンテンツだけを受け取ります。空のコンテナには `[]`、ボタンには文字列や単一の要素も渡せます。スタイル、プロパティ、イベントは `.padding(24)`、`.checked(checked())`、`.on_click(save)` などの fluent メソッドで設定し、共通スタイルは `.style(shared)` でマージします。
+
+```moonbit
+///|
+fn settings_card() -> @ui.Element {
+  @ui.div([
+    @ui.text("Settings").style(@ui.style().font_size(20)),
+    @ui.button("Save").on_click(() => println("Saved")),
+  ])
+  .style(@ui.style().padding(24).gap(12))
+  .flex_col()
+}
+```
+
+fluent プロパティで getter を直接読みます：`@ui.checkbox([]).checked(checked()).on_checked_change(set_checked)`。リテラルは内部状態を初期化し、シグナルを読む式は制御用バインディングになります。スタイルは宣言順にマージされます。子要素にはリストを使い、スコープを持つパーツにも `.children([...])` でリストをまとめて追加できます。
+
+## 条件付きの子ノード
+
+```moonbit
+///|
+fn disclosure() -> @ui.Element {
+  let (expanded, set_expanded) = @reactive.create_signal(false)
+  @ui.div(
+    [
+      @ui.button("Toggle details").on_click(() => set_expanded(!expanded())),
+      ..if expanded() {
+        [@ui.text("Details are mounted only while expanded.")]
+      } else {
+        [@ui.text("Collapsed")]
+      },
+    ],
+  )
+  .flex_col()
+  .gap(8)
+}
+```
+
+分岐のファクトリーは条件が切り替わったときに実行されます。分岐内で変わる値はバインディングに入れることでノードを保持できます。
+
+## キー付きの子ノード
+
+```moonbit
+fn names_list() -> @ui.Element {
+  let (names, _) = @reactive.create_signal(["Ada", "Grace", "Linus"])
+  @ui.div([])
+  .flex_col()
+  .children_keyed(() => names(), name => name, row => @ui.text(row.get()))
+}
+```
+
+キーは一意で安定している必要があります。描画コールバックには行のシグナルが渡るため、ネイティブノード ID やローカル状態を置き換えずに行を更新できます。キー付きの子ノードだけでは長いリストは仮想化されません。[テーブルの可視範囲](/docs/moonbit/components)を使ってください。
+
+## チェック・テスト・デバッグ
+
+`quickgui check` と `quickgui test` を使うと、ビルドと同じビュー変換が適用されます。リリース用バックエンドは `--release` でテストできます。直接の `moon check` は元の型をチェックしますが、`moon test` は暗黙のビュー用バインディングを変換しません。
+
+CLI は元のファイルを維持し、コンパイル診断、アサーション失敗、シンボル付きスタックの位置を元のファイルに対応付けます。ネイティブデバッガーのブレークポイントとステップ実行は現在 `.quickgui/moonbit-sources` の生成ファイルを使います。元のファイルへのブレークポイントの対応付けは未対応です。エディター補完と型チェックは通常の MoonBit を使います。

@@ -1,0 +1,87 @@
+组件在挂载时创建保留树。响应式绑定更新受影响的节点，原生核心负责布局、绘制和无障碍行为。
+
+## 渲染模型
+
+窗口根组件、路由、条件分支和子节点块统一使用 `func()`。组件直接声明零个或多个子节点，无需返回节点，并在挂载时执行一次。块内的 UI 调用会添加到该块的父节点。静态结构使用普通 Go `if` 和 `for`；需要信号改变子节点结构时使用 `ui.Show` 或 `ui.For`。
+
+```go
+func ViewExample() {
+	ui.View(
+		func() {
+			ui.Text("Hello from Go")
+			ui.Button("Continue", ui.OnClick(func() {}))
+		},
+		ui.Padding(20),
+		ui.Gap(12),
+	)
+}
+```
+
+## 条件内容
+
+当状态需要挂载或移除子节点时，使用 `ui.Show`。普通 Go `if` 只在构造时执行。条件保持在同一分支时，子节点会保留；移除分支时会清理其绑定。
+
+```go
+func DisclosureExample() {
+	open, setOpen := ui.CreateSignal(false)
+	ui.View(func() {
+		ui.Button("Toggle details", ui.OnClick(func() { setOpen(!open()) }))
+		ui.Show(open, func() { ui.Text("Details") })
+	})
+}
+```
+
+## 列表与节点身份
+
+用 `ui.For` 声明响应式列表，并提供稳定且唯一的键。保留的行需要读取变化的数据时，使用 `ui.KeyedFor` 接收条目访问器。移除的行会释放订阅；移动带键的行会保留原生节点身份。虚拟表格和列表将大集合的挂载范围限制在可见行。
+
+使用数据库 ID 等稳定标识作为键，不要使用位置。这个例子重排已有行，并通过行访问器更新 ID 为 1 的名称；父组件不会重建列表。修改数据时传入新切片，让信号收到更新。原地修改已存储的切片不会通知订阅者。
+
+```go
+type ListPerson struct { ID int; Name string }
+
+func KeyedListExample() {
+  people, setPeople := ui.CreateSignal([]ListPerson{{1, "Ada"}, {2, "Grace"}})
+  ui.View(func() {
+    ui.Button("Reorder and rename", ui.OnClick(func() {
+      setPeople([]ListPerson{{2, "Grace"}, {1, "Ada Lovelace"}})
+    }))
+    ui.KeyedFor(
+      people,
+      func(person ListPerson) any { return person.ID },
+      func(person func() ListPerson, index func() int) {
+        ui.Text(index, ": ", func() string { return person().Name })
+      },
+      func() { ui.Text("No people") },
+    )
+  })
+}
+```
+
+## 窗口生命周期
+
+`WindowOptions.Component` 为每个窗口创建一个响应式根。关闭窗口会释放节点和副作用。使用 `ui.OnCleanup` 注册资源清理；后台任务可使用 `ui.Async`，它会将结果送回 UI goroutine，并在组件释放时取消。
+
+在组件挂载时启动后台任务。`load` 在 UI goroutine 之外执行，并应遵守上下文的取消信号；完成回调可以安全写入信号。移除组件所属分支或关闭窗口时，上下文会被取消，过期的完成回调也不会再执行。这个例子使用标准库的 `context` 包。
+
+```go
+func LoadingPanel(load func(context.Context) (string, error)) {
+  result, setResult := ui.CreateSignal("Loading…")
+  ui.Async(load, func(value string, err error) {
+    if err != nil { setResult(err.Error()); return }
+    setResult(value)
+  })
+  ui.Text(result)
+}
+```
+
+## 当前窗口
+
+在组件挂载时捕获 `native.CurrentWindow()`，之后在回调中使用该窗口。不要从无关的 goroutine 中查询当前窗口。窗口事件与原生请求通过异步回调返回。
+
+```go
+func CloseButton() {
+	window := native.CurrentWindow()
+	ui.Button("Close window", ui.OnClick(func() { window.Close() }))
+}
+```

@@ -1,0 +1,87 @@
+Components construct a retained tree once when mounted. Reactive bindings update the affected nodes; the native core handles layout, painting, and accessibility.
+
+## Rendering model
+
+Every component uses `func()`, including window roots, routes, conditional branches, and children blocks. It declares zero or more children without returning a node. Components run once when mounted. UI calls inside a children block attach to that block’s parent. Use normal Go `if` and `for` for static construction; use `ui.Show` or `ui.For` when a signal must change the child structure.
+
+```go
+func ViewExample() {
+	ui.View(
+		func() {
+			ui.Text("Hello from Go")
+			ui.Button("Continue", ui.OnClick(func() {}))
+		},
+		ui.Padding(20),
+		ui.Gap(12),
+	)
+}
+```
+
+## Conditional content
+
+Use `ui.Show` when state should mount or remove children. A normal Go `if` runs only during construction. Branch children keep their nodes while the condition stays in the same branch, and disposal removes their bindings.
+
+```go
+func DisclosureExample() {
+	open, setOpen := ui.CreateSignal(false)
+	ui.View(func() {
+		ui.Button("Toggle details", ui.OnClick(func() { setOpen(!open()) }))
+		ui.Show(open, func() { ui.Text("Details") })
+	})
+}
+```
+
+## Lists and identity
+
+Use `ui.For` for a reactive list and provide stable, unique keys. Use `ui.KeyedFor` when retained rows need an accessor to changing item data. Removed rows release their subscriptions; moving a keyed row preserves its native identity. Virtualized tables and lists keep large collections bounded to visible rows.
+
+Use a database ID or another stable identity as the key, not an item’s position. In this example reordering moves the existing rows, and renaming item 1 updates its label through the row accessor. The parent does not recreate the list. Pass a new slice when editing data so the signal receives the update; mutating a previously stored slice in place does not notify subscribers.
+
+```go
+type ListPerson struct { ID int; Name string }
+
+func KeyedListExample() {
+  people, setPeople := ui.CreateSignal([]ListPerson{{1, "Ada"}, {2, "Grace"}})
+  ui.View(func() {
+    ui.Button("Reorder and rename", ui.OnClick(func() {
+      setPeople([]ListPerson{{2, "Grace"}, {1, "Ada Lovelace"}})
+    }))
+    ui.KeyedFor(
+      people,
+      func(person ListPerson) any { return person.ID },
+      func(person func() ListPerson, index func() int) {
+        ui.Text(index, ": ", func() string { return person().Name })
+      },
+      func() { ui.Text("No people") },
+    )
+  })
+}
+```
+
+## Window lifecycle
+
+`WindowOptions.Component` creates one reactive root per window. Closing the window disposes its nodes and effects. Register resource cleanup with `ui.OnCleanup`. For background work, `ui.Async` delivers its result back to the UI goroutine and cancels when its component is disposed.
+
+Start background work while its component is mounting. The `load` function runs away from the UI goroutine and must respect its context; the completion callback can safely write signals. Removing this component’s owning branch or closing its window cancels the context and suppresses late completion. This example uses the standard `context` package.
+
+```go
+func LoadingPanel(load func(context.Context) (string, error)) {
+  result, setResult := ui.CreateSignal("Loading…")
+  ui.Async(load, func(value string, err error) {
+    if err != nil { setResult(err.Error()); return }
+    setResult(value)
+  })
+  ui.Text(result)
+}
+```
+
+## Current window
+
+Capture `native.CurrentWindow()` while the component is mounting, then use the captured window in callbacks. Do not look it up from an unrelated goroutine. Window events and native requests expose asynchronous callbacks.
+
+```go
+func CloseButton() {
+	window := native.CurrentWindow()
+	ui.Button("Close window", ui.OnClick(func() { window.Close() }))
+}
+```
