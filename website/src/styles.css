@@ -70,6 +70,39 @@
   --peach: #c2410c;
   --mint: #059669;
   --card-2: #fafafa;
+  --dot-color: rgba(0, 0, 0, 0.18);
+  --scrollbar-color: rgba(0, 0, 0, 0.22);
+  --selection: rgba(194, 65, 12, 0.16);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #171719;
+    --foreground: #f4f4f5;
+    --card: #171719;
+    --card-foreground: #f4f4f5;
+    --popover: #222225;
+    --popover-foreground: #f4f4f5;
+    --primary: #f4f4f5;
+    --primary-foreground: #18181b;
+    --secondary: #222225;
+    --secondary-foreground: #f4f4f5;
+    --muted: #222225;
+    --muted-foreground: #aaaab1;
+    --accent: #2a2a2e;
+    --accent-foreground: #f4f4f5;
+    --destructive: #f87171;
+    --destructive-foreground: #18181b;
+    --border: #343438;
+    --input: #343438;
+    --ring: rgba(251, 146, 60, 0.35);
+    --peach: #fb923c;
+    --mint: #34d399;
+    --card-2: #222225;
+    --dot-color: rgba(255, 255, 255, 0.18);
+    --scrollbar-color: rgba(255, 255, 255, 0.22);
+    --selection: rgba(251, 146, 60, 0.24);
+  }
 }
 
 /* CJK locales: Geist stays for latin glyphs, CJK falls through to native
@@ -101,7 +134,7 @@ html:lang(ja) h2 {
   }
 
   html {
-    color-scheme: light;
+    color-scheme: light dark;
     scroll-behavior: smooth;
     scroll-padding-top: 5.5rem;
   }
@@ -112,7 +145,7 @@ html:lang(ja) h2 {
   }
 
   ::selection {
-    background: rgba(194, 65, 12, 0.16);
+    background: var(--selection);
   }
 }
 
@@ -158,7 +191,7 @@ html:lang(ja) h2 {
   /* Faint dot grid used behind the demos; parent applies a mask. */
   .bg-dots {
     background-image: radial-gradient(
-      rgba(0, 0, 0, 0.18) 1px,
+      var(--dot-color) 1px,
       transparent 1.4px
     );
     background-size: 22px 22px;
@@ -166,6 +199,19 @@ html:lang(ja) h2 {
 
   .animate-fade-up {
     animation: fade-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+
+/* Both homepage and docs code colors follow the system theme. */
+.shiki,
+.shiki span {
+  color: var(--shiki-light) !important;
+}
+
+@media (prefers-color-scheme: dark) {
+  .shiki,
+  .shiki span {
+    color: var(--shiki-dark) !important;
   }
 }
 
@@ -188,7 +234,7 @@ html:lang(ja) h2 {
 
 .slim-scroll {
   scrollbar-width: thin;
-  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+  scrollbar-color: var(--scrollbar-color) transparent;
 }
 
 .slim-scroll::-webkit-scrollbar {
@@ -203,7 +249,7 @@ html:lang(ja) h2 {
 .slim-scroll::-webkit-scrollbar-thumb {
   border: 3px solid transparent;
   background-clip: padding-box;
-  background-color: rgba(0, 0, 0, 0.22);
+  background-color: var(--scrollbar-color);
 }
 
 @keyframes fade-up {

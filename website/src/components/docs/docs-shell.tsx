@@ -15,7 +15,6 @@ import { LanguageMenu } from '../language-menu'
 import { prefetchDocsSearch, searchDocs, type DocsSearchHit } from '../../lib/docs-search'
 import { rememberFrontend } from '../../lib/frontend-preference'
 
-type DocsTheme = 'light' | 'dark'
 export type DocsArea = 'guide' | 'components' | 'swift-ui'
 
 export interface DocsShellPage {
@@ -49,9 +48,6 @@ const ui = {
     skip: 'Skip to content',
     language: 'Language',
     frontend: 'Frontend',
-    theme: 'Switch to {{theme}} theme',
-    light: 'light',
-    dark: 'dark',
     home: 'QuickGUI home',
     documentation: 'Documentation',
     documentationPages: 'Documentation pages',
@@ -76,9 +72,6 @@ const ui = {
     skip: '跳到正文',
     language: '语言',
     frontend: '前端语言',
-    theme: '切换到{{theme}}主题',
-    light: '浅色',
-    dark: '深色',
     home: 'QuickGUI 首页',
     documentation: '文档',
     documentationPages: '文档页面',
@@ -103,9 +96,6 @@ const ui = {
     skip: '本文へスキップ',
     language: '言語',
     frontend: 'フロントエンド',
-    theme: '{{theme}}テーマに切り替え',
-    light: 'ライト',
-    dark: 'ダーク',
     home: 'QuickGUI ホーム',
     documentation: 'ドキュメント',
     documentationPages: 'ドキュメントページ',
@@ -546,23 +536,19 @@ function DocsHeader({
   currentPath,
   locale,
   frontend,
-  theme,
   menuOpen,
   onMenuToggle,
   onSearch,
   onSearchPrepare,
-  onThemeToggle,
 }: {
   area: DocsArea
   currentPath: string
   locale: Locale
   frontend: DocsFrontend
-  theme: DocsTheme
   menuOpen: boolean
   onMenuToggle: () => void
   onSearch: () => void
   onSearchPrepare: () => void
-  onThemeToggle: () => void
 }) {
   const labels = ui[locale]
   const headerLinks = [
@@ -609,20 +595,6 @@ function DocsHeader({
             label={labels.language}
             hrefForLocale={(candidate) => localize(candidate, currentPath)}
           />
-          <button
-            type="button"
-            className="docs-theme-button"
-            onClick={onThemeToggle}
-            aria-pressed={theme === 'dark'}
-            aria-label={labels.theme.replace(
-              '{{theme}}',
-              theme === 'light' ? labels.dark : labels.light,
-            )}
-          >
-            <span className="docs-theme-thumb" aria-hidden>
-              <span className={theme === 'light' ? 'i-lucide-sun' : 'i-lucide-moon'} />
-            </span>
-          </button>
           <a
             className="docs-github-link"
             href={site.links.github}
@@ -692,32 +664,12 @@ export function DocsShell({
   frontend: DocsFrontend
   children: ReactNode
 }) {
-  const [theme, setTheme] = useState<DocsTheme>('light')
   const [mobilePanel, setMobilePanel] = useState<'menu' | 'outline' | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
 
   useEffect(() => {
     rememberFrontend(frontend)
   }, [frontend])
-
-  useEffect(() => {
-    const saved = window.localStorage.getItem('quickgui-docs-theme')
-    if (saved === 'light' || saved === 'dark') {
-      setTheme(saved)
-    } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      setTheme('dark')
-    }
-  }, [])
-
-  useEffect(() => {
-    const root = document.documentElement
-    root.dataset.docsTheme = theme
-    root.classList.toggle('dark', theme === 'dark')
-    return () => {
-      delete root.dataset.docsTheme
-      root.classList.remove('dark')
-    }
-  }, [theme])
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -733,16 +685,8 @@ export function DocsShell({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
-  function toggleTheme() {
-    setTheme((current) => {
-      const next = current === 'light' ? 'dark' : 'light'
-      window.localStorage.setItem('quickgui-docs-theme', next)
-      return next
-    })
-  }
-
   return (
-    <div className="docs-root" data-theme={theme}>
+    <div className="docs-root">
       <a className="docs-skip-link" href="#docs-content">
         {ui[locale].skip}
       </a>
@@ -751,12 +695,10 @@ export function DocsShell({
         currentPath={page.path}
         locale={locale}
         frontend={frontend}
-        theme={theme}
         menuOpen={mobilePanel === 'menu'}
         onMenuToggle={() => setMobilePanel((current) => (current === 'menu' ? null : 'menu'))}
         onSearch={() => setSearchOpen(true)}
         onSearchPrepare={() => prefetchDocsSearch(locale, frontend)}
-        onThemeToggle={toggleTheme}
       />
 
       <div className="docs-mobile-local-nav">

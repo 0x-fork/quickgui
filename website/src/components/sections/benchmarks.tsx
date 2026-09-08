@@ -5,7 +5,7 @@ import { SectionHeading } from "../section-heading";
 import { site } from "../../lib/site";
 
 const MB = 1_000_000;
-const colors = ["#c2410c", "#059669", "#64748b", "#71717a"];
+const colors = ["var(--peach)", "var(--mint)", "#64748b", "#71717a"];
 type Metric = "memory" | "bundle";
 
 function axisMaximum(value: number): number {

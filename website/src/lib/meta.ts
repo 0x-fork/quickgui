@@ -7,7 +7,8 @@ export function siteMeta(
 ): MetaDescriptor[] {
   return [
     { title },
-    { name: 'theme-color', content: '#ffffff' },
+    { name: 'theme-color', content: '#ffffff', media: '(prefers-color-scheme: light)' },
+    { name: 'theme-color', content: '#171719', media: '(prefers-color-scheme: dark)' },
     { property: 'og:site_name', content: site.name },
     { property: 'og:type', content: 'website' },
     { property: 'og:image', content: `${origin}/og.png` },

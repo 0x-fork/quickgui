@@ -11,6 +11,7 @@ async function highlightAll(): Promise<HighlightedSnippets> {
     moonbit,
     bash,
     githubLight,
+    githubDark,
   ] = await Promise.all([
     import("../lib/snippets"),
     import("shiki/core"),
@@ -19,10 +20,11 @@ async function highlightAll(): Promise<HighlightedSnippets> {
     import("shiki/langs/moonbit.mjs"),
     import("shiki/langs/bash.mjs"),
     import("shiki/themes/github-light.mjs"),
+    import("shiki/themes/github-dark.mjs"),
   ]);
 
   const highlighter = await createHighlighterCore({
-    themes: [githubLight.default],
+    themes: [githubLight.default, githubDark.default],
     langs: [go.default, moonbit.default, bash.default],
     engine: createJavaScriptRegexEngine({ forgiving: true }),
   });
@@ -30,7 +32,11 @@ async function highlightAll(): Promise<HighlightedSnippets> {
   const out = {} as HighlightedSnippets;
   for (const key of Object.keys(snippets) as Array<SnippetKey>) {
     const { lang, code } = snippets[key];
-    out[key] = highlighter.codeToHtml(code, { lang, theme: "github-light" });
+    out[key] = highlighter.codeToHtml(code, {
+      lang,
+      themes: { light: "github-light", dark: "github-dark" },
+      defaultColor: false,
+    });
   }
   return out;
 }
