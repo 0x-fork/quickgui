@@ -1,11 +1,11 @@
 import { getDemoSource } from "../src/lib/demo-source.server";
-import { rustFunction } from "../scripts/build-demo-sources";
 import { expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { ALL_COMPONENT_DOCS } from "../src/lib/component-docs";
 import { getComponentApi } from "../src/lib/component-api.server";
 import { DEMO_COMPONENTS } from "../src/lib/component-demos";
+import { DOCS_FRONTENDS } from "../src/lib/docs";
 
 const root = resolve(import.meta.dir, "../..");
 test("each frontend reference uses real declarations, examples, and source targets", () => {
@@ -71,18 +71,28 @@ test("the browser catalog matches the Rust demo dispatcher", () => {
   expect(declared).not.toContain("system-popover");
 });
 
-test("preview code is extracted from the functions compiled for that demo", () => {
+test("every preview uses the selected frontend's documented example and syntax highlighting", () => {
   for (const component of DEMO_COMPONENTS) {
-    const demo = getDemoSource(component)!;
-    expect(demo).toBeDefined();
-    const source = readFileSync(resolve(root, demo.path), "utf8");
-    for (const fn of demo.functions) expect(demo.code).toContain(rustFunction(source, fn));
-    expect(demo.html).toContain('class="shiki ');
-    expect(demo.html).toContain("--shiki-light:");
+    for (const frontend of DOCS_FRONTENDS) {
+      const demo = getDemoSource(frontend, component)!;
+      expect(demo).toBeDefined();
+      expect(demo.language).toBe(frontend === "typescript" ? "tsx" : frontend);
+      expect(demo.path).toBe(`website/src/content/docs/${frontend}/components/ui/${component}.mdx`);
+      const source = readFileSync(resolve(root, demo.path), "utf8");
+      expect(demo.code.trim().length).toBeGreaterThan(0);
+      expect(source).toContain(`\`\`\`${demo.language}\n${demo.code}\n\`\`\``);
+      expect(demo.code).toBe(getComponentApi(frontend, "ui", component).example);
+      expect(demo.html).toContain('class="shiki ');
+      expect(demo.html).toContain("--shiki-light:");
+    }
   }
-  const button = getDemoSource("button")!;
-  expect(button.code).toContain("view.count += 1");
-  expect(button.code).toContain("fn action(");
+  expect(getDemoSource("go", "button")!.code).toContain("ui.Button(");
+  expect(getDemoSource("moonbit", "button")!.code).toContain("@ui.button(");
+  expect(getDemoSource("typescript", "button")!.code).toContain("<Button");
+  for (const frontend of DOCS_FRONTENDS) {
+    expect(getDemoSource(frontend, "terminal")).toBeUndefined();
+    expect(getDemoSource(frontend, "missing")).toBeUndefined();
+  }
 });
 
 test("the MoonBit container uses the same View name as the Go API", () => {

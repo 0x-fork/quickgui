@@ -39,7 +39,7 @@ export function loader({ params, request }: Route.LoaderArgs) {
     locale,
     origin: new URL(request.url).origin,
     api: getComponentApi(params.frontend, kind, component.slug),
-    demoSource: kind === 'ui' ? getDemoSource(component.slug) : undefined,
+    demoSource: kind === 'ui' ? getDemoSource(params.frontend, component.slug) : undefined,
   }
 }
 

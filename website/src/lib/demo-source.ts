@@ -1,6 +1,8 @@
+import type { ComponentApi } from "./component-api";
+
 export interface DemoSource {
   path: string;
-  functions: string[];
+  language: ComponentApi["language"];
   code: string;
   html: string;
 }
