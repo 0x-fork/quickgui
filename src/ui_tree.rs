@@ -424,7 +424,9 @@ struct RetainedVirtualScroll {
 impl RetainedVirtualScroll {
     fn update_from_input(&self, offset_y: f32, viewport_height: f32) -> bool {
         self.handle.set_offset_from_input(offset_y);
-        !self.mount.retains_viewport(offset_y, viewport_height)
+        !self
+            .handle
+            .retains_viewport(&self.mount, offset_y, viewport_height)
     }
 }
 

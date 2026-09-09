@@ -1,11 +1,11 @@
 //! Declared virtual tables and trees bound to the Rust core's `TableState` and `TreeState`.
 //!
-//! Both collections are on-demand: the core owns the virtual window, and the rows JavaScript
-//! declares are the rows the core last reported as visible. That range travels back as one
+//! Both collections are on-demand: the core owns the virtual window, and the rows frontends
+//! declare are the rows the core last reported as visible. That range travels back as one
 //! asynchronous `componentchange` payload, exactly like every other result the core decides, so
 //! the hosted boundary never answers a synchronous question while a scroll is in flight.
 //!
-//! Row and cell content is still ordinary declared JavaScript: the binding builds those elements
+//! Row and cell content is still ordinary frontend content: the binding builds those elements
 //! from the retained tree before it hands the core its row renderer, so the renderer the core
 //! retains never reaches back into the hosted tree. Column widths, display order, sort direction,
 //! selection ranges, expansion, lazy children, and inline-edit lifetime all live in the core.
@@ -748,6 +748,38 @@ fn tree_report(retained: &NativeTreeState) -> TreeReport {
     }
 }
 
+/// Retain a contiguous supplied window nearest the requested destination. A partial declaration
+/// must not fill gaps with empty cells or drop every old row during an asynchronous range change.
+fn supplied_table_range(
+    rows: &HashMap<usize, Element>,
+    requested: usize,
+) -> std::ops::Range<usize> {
+    let mut indices = rows.keys().copied().collect::<Vec<_>>();
+    indices.sort_unstable();
+    let mut best = 0..0;
+    let mut distance = usize::MAX;
+    let mut cursor = 0;
+    while cursor < indices.len() {
+        let start = indices[cursor];
+        let mut end = start + 1;
+        cursor += 1;
+        while cursor < indices.len() && indices[cursor] == end {
+            end += 1;
+            cursor += 1;
+        }
+        let candidate_distance = if requested < start {
+            start - requested
+        } else {
+            requested.saturating_sub(end - 1)
+        };
+        if candidate_distance < distance {
+            best = start..end;
+            distance = candidate_distance;
+        }
+    }
+    best
+}
+
 /// Build one declared virtual table, mounting the core's own scroll container inside the
 /// caller-owned wrapper.
 ///
@@ -857,6 +889,14 @@ pub(super) fn build_table(
     let Some(retained) = states.components.tables.get_mut(&key) else {
         return wrapper;
     };
+    let supplied = supplied_table_range(
+        &row_shells,
+        retained.state.list_state().logical_scroll_top().item_ix,
+    );
+    retained
+        .state
+        .list_state()
+        .set_available_range(Some(supplied));
     let table = retained.state.element_with_rows(
         cx,
         root,
@@ -915,8 +955,8 @@ pub(super) fn build_table(
         }
         cx.invalidate();
     });
-    // The virtual window the core mounted is only known after this frame lays out, so the
-    // binding asks for exactly one more frame whenever the range it would report has moved.
+    // Request the destination plus bounded prefetch while the core continues presenting supplied
+    // rows. The frontend's next mutation batch replaces the window without an empty-cell frame.
     if let Some(retained) = states.components.tables.get_mut(&key) {
         publish_table(retained, window, events);
     }

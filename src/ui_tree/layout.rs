@@ -1653,7 +1653,8 @@ pub(super) fn collect_layout_bounds(
         let offset = scroll_offsets.entry(element.runtime_id).or_default();
         offset.x = 0.0;
         offset.y = virtual_scroll.handle.offset().clamp(0.0, max_offset);
-        scroll.y = offset.y - virtual_scroll.mount.layout_offset_y;
+        scroll.y =
+            virtual_scroll.handle.presented_offset(offset.y) - virtual_scroll.mount.layout_offset_y;
         scroll_end_states.remove(&element.runtime_id);
     } else {
         scroll_end_states.remove(&element.runtime_id);

@@ -194,6 +194,13 @@ correcting view rebuild and then sleeps. Width changes and targeted remeasuremen
 logical top item and inset. During a captured scrollbar drag, the estimated content extent is
 frozen so measuring overscan cannot move the thumb under the pointer.
 
+Hosted tables supply rows asynchronously. Their `ListState` tracks the supplied contiguous range
+separately from the requested scroll destination, prefetches a bounded viewport of rows on either
+side, and requests a refill when roughly half a viewport of buffer remains. If input outruns supplied
+content, painting, hit testing, and accessibility keep the viewport within the mounted rows until the next
+frontend mutation batch arrives. Input and scrollbar position continue tracking the requested
+destination. Only the bounded window is mounted, and waiting for rows creates no polling timer.
+
 ## Rendering
 
 Paint traversal carries one scalar opacity and restores it after each subtree. A child multiplies

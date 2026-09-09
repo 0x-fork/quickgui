@@ -675,7 +675,8 @@ pub(super) fn collect_layout_hit_regions(
         let offset = scroll_offsets.entry(element.runtime_id).or_default();
         offset.x = 0.0;
         offset.y = virtual_scroll.handle.offset().clamp(0.0, max_offset_y);
-        scroll.y = offset.y - virtual_scroll.mount.layout_offset_y;
+        scroll.y =
+            virtual_scroll.handle.presented_offset(offset.y) - virtual_scroll.mount.layout_offset_y;
     }
 
     let mut child_origin = child_frame(
@@ -1873,7 +1874,8 @@ fn paint_element_contents(
         let offset = scroll_offsets.entry(element.runtime_id).or_default();
         offset.x = 0.0;
         offset.y = virtual_scroll.handle.offset().clamp(0.0, max_offset_y);
-        scroll.y = offset.y - virtual_scroll.mount.layout_offset_y;
+        scroll.y =
+            virtual_scroll.handle.presented_offset(offset.y) - virtual_scroll.mount.layout_offset_y;
     }
 
     let mut child_origin = child_frame(

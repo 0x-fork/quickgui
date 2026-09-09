@@ -474,6 +474,133 @@ fn virtual_scroll_translates_the_mounted_overscan_before_rebuilding() {
 }
 
 #[test]
+fn asynchronous_list_keeps_content_and_hit_geometry_until_requested_rows_arrive() {
+    let list = crate::ListState::new(100_000, 10.0);
+    list.set_viewport_size(100.0, 100.0);
+    list.set_available_range(Some(0..20));
+    let row_id = |index| ElementId::new(10_000 + index as u64);
+    let build = || {
+        let rows = list.render_rows(list.visible_rows().range, |index| {
+            div().id(row_id(index)).h(10.0).bg(Color::WHITE)
+        });
+        div()
+            .id("async-list")
+            .relative()
+            .size(100.0, 100.0)
+            .overflow_hidden()
+            .variable_virtual_scroll(&list)
+            .child(rows)
+    };
+    let mut tree = UiTree::new();
+    let mut renderer = TestTextLayout;
+    let mut scene = Scene::new();
+    tree.set_root(build(), Size::new(100.0, 100.0), 1.0, &mut renderer)
+        .unwrap();
+    tree.paint(&mut scene, &mut renderer).unwrap();
+    let now = Instant::now();
+    let point = Some(Point::new(50.0, 50.0));
+
+    // Small deltas translate retained rows; approaching the buffer edge asks for more before
+    // any visible content is missing.
+    assert_eq!(
+        tree.scroll_at(point, Vector::new(0.0, -40.0), now),
+        ScrollResult {
+            changed: true,
+            view_dirty: false,
+        }
+    );
+    assert_eq!(
+        tree.scroll_at(point, Vector::new(0.0, -20.0), now),
+        ScrollResult {
+            changed: true,
+            view_dirty: true,
+        }
+    );
+    assert_eq!(list.visible_rows().range, 0..26);
+    tree.set_root(build(), Size::new(100.0, 100.0), 1.0, &mut renderer)
+        .unwrap();
+    scene.clear(Color::TRANSPARENT);
+    tree.paint(&mut scene, &mut renderer).unwrap();
+    assert_eq!(
+        tree.element_bounds(row_id(6)),
+        Some(Rect::new(0.0, 0.0, 100.0, 10.0))
+    );
+
+    // A large jump cannot translate the old rows out of the viewport. Rebuilding before the
+    // frontend responds still mounts real supplied rows, and further deltas keep accumulating.
+    assert!(
+        tree.scroll_at(point, Vector::new(0.0, -2_540.0), now)
+            .view_dirty
+    );
+    tree.set_root(build(), Size::new(100.0, 100.0), 1.0, &mut renderer)
+        .unwrap();
+    scene.clear(Color::TRANSPARENT);
+    tree.paint(&mut scene, &mut renderer).unwrap();
+    assert_eq!(list.scroll_offset(), 2_600.0);
+    assert_eq!(
+        tree.element_bounds(row_id(10)),
+        Some(Rect::new(0.0, 0.0, 100.0, 10.0))
+    );
+    assert_eq!(
+        tree.element_bounds(row_id(19)),
+        Some(Rect::new(0.0, 90.0, 100.0, 10.0))
+    );
+    assert_eq!(tree.natural_bounds[&row_id(10)].y, 0.0);
+    assert_eq!(list.item_rect(10), Some(Rect::new(0.0, 0.0, 100.0, 10.0)));
+    let root = tree.root.as_ref().unwrap();
+    assert_eq!(
+        accessibility_scroll_translation(root, &tree.scroll_offsets),
+        Some(Vector::ZERO)
+    );
+    assert!(
+        tree.scroll_at(point, Vector::new(0.0, -400.0), now)
+            .view_dirty
+    );
+    assert_eq!(list.scroll_offset(), 3_000.0);
+    let layout_passes = tree.layout_nodes.layout_passes;
+    tree.set_root(build(), Size::new(100.0, 100.0), 1.0, &mut renderer)
+        .unwrap();
+    assert_eq!(
+        tree.layout_nodes.layout_passes, layout_passes,
+        "new requests must not relayout unchanged rows while their presentation is held"
+    );
+
+    let requested = list.visible_rows().range;
+    assert_eq!(requested, 290..320);
+    list.set_available_range(Some(requested));
+    tree.set_root(build(), Size::new(100.0, 100.0), 1.0, &mut renderer)
+        .unwrap();
+    scene.clear(Color::TRANSPARENT);
+    tree.paint(&mut scene, &mut renderer).unwrap();
+    assert_eq!(
+        tree.element_bounds(row_id(300)),
+        Some(Rect::new(0.0, 0.0, 100.0, 10.0))
+    );
+    assert_eq!(
+        tree.element_bounds(row_id(309)),
+        Some(Rect::new(0.0, 90.0, 100.0, 10.0))
+    );
+    assert!(tree.element_bounds(row_id(10)).is_none());
+    assert_eq!(
+        tree.take_variable_list_measurement_update(),
+        ScrollResult::default()
+    );
+
+    // Reversing toward an unavailable range holds the other edge, without losing the request.
+    assert!(
+        tree.scroll_at(point, Vector::new(0.0, 3_000.0), now)
+            .view_dirty
+    );
+    scene.clear(Color::TRANSPARENT);
+    tree.paint(&mut scene, &mut renderer).unwrap();
+    assert_eq!(list.scroll_offset(), 0.0);
+    assert_eq!(
+        tree.element_bounds(row_id(290)),
+        Some(Rect::new(0.0, 0.0, 100.0, 10.0))
+    );
+}
+
+#[test]
 fn variable_list_measurements_inside_the_mounted_slice_do_not_rebuild_the_view() {
     let list = crate::ListState::new(10, 20.0).with_overscan(0);
     list.set_viewport_size(100.0, 100.0);

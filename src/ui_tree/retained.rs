@@ -7,7 +7,7 @@ pub(super) struct GeometryCache {
     natural_valid: bool,
     paint_valid: bool,
     scroll_offsets: HashMap<ElementId, Vector>,
-    virtual_offsets: HashMap<ElementId, f32>,
+    virtual_offsets: HashMap<ElementId, (f32, f32)>,
     pub(super) state_transforms: bool,
     hovered: HashSet<ElementId>,
     pressed: Option<ElementId>,
@@ -63,7 +63,9 @@ impl UiTree {
         let valid = self.geometry_cache.natural_valid
             && self.geometry_cache.scroll_offsets == self.scroll_offsets
             && self.virtual_scroll_handles.iter().all(|(id, binding)| {
-                self.geometry_cache.virtual_offsets.get(id) == Some(&binding.handle.offset())
+                let requested = binding.handle.offset();
+                self.geometry_cache.virtual_offsets.get(id)
+                    == Some(&(requested, binding.handle.presented_offset(requested)))
             });
         if valid {
             return Ok(false);
@@ -91,11 +93,12 @@ impl UiTree {
             .scroll_offsets
             .clone_from(&self.scroll_offsets);
         self.geometry_cache.virtual_offsets.clear();
-        self.geometry_cache.virtual_offsets.extend(
-            self.virtual_scroll_handles
-                .iter()
-                .map(|(id, binding)| (*id, binding.handle.offset())),
-        );
+        self.geometry_cache
+            .virtual_offsets
+            .extend(self.virtual_scroll_handles.iter().map(|(id, binding)| {
+                let requested = binding.handle.offset();
+                (*id, (requested, binding.handle.presented_offset(requested)))
+            }));
         self.geometry_cache.natural_valid = true;
         Ok(true)
     }

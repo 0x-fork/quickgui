@@ -46,7 +46,10 @@ pub(super) fn accessibility_scroll_translation(
         let offset_y = scroll_offsets
             .get(&element.runtime_id)
             .map_or_else(|| virtual_scroll.handle.offset(), |offset| offset.y);
-        Vector::new(0.0, offset_y - virtual_scroll.mount.layout_offset_y)
+        Vector::new(
+            0.0,
+            virtual_scroll.handle.presented_offset(offset_y) - virtual_scroll.mount.layout_offset_y,
+        )
     })
 }
 

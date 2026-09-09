@@ -9188,6 +9188,166 @@ fn a_declared_button_pressed_with_the_mouse_focuses_without_visible_focus_styles
 }
 
 #[test]
+fn declared_table_keeps_supplied_rows_during_delayed_scroll_range_updates() {
+    const TABLE: u32 = 600;
+    fn supply(tree: &mut NativeTree, range: std::ops::Range<usize>) {
+        let mut tx = TreeTransaction::new(tree);
+        for &id in &tree.nodes[&TABLE].children {
+            let index = tree.nodes[&id].number(property::ROW_INDEX).unwrap() as usize;
+            if !range.contains(&index) {
+                tx.remove(TABLE, id).unwrap();
+            }
+        }
+        for index in range {
+            let row = 10_000 + index as u32 * 3;
+            if tree.nodes.contains_key(&row) {
+                continue;
+            }
+            tx.create(row, NodeTag::View, Arc::from("")).unwrap();
+            tx.set_property(
+                row,
+                property::PART,
+                Some(PropertyValue::String(Arc::from("table-row"))),
+            )
+            .unwrap();
+            tx.set_property(
+                row,
+                property::ROW_INDEX,
+                Some(PropertyValue::Number(index as f32)),
+            )
+            .unwrap();
+            tx.insert(TABLE, row, None).unwrap();
+            tx.create(row + 1, NodeTag::View, Arc::from("")).unwrap();
+            tx.set_property(
+                row + 1,
+                property::PART,
+                Some(PropertyValue::String(Arc::from("table-cell"))),
+            )
+            .unwrap();
+            tx.set_property(
+                row + 1,
+                property::PART_VALUE,
+                Some(PropertyValue::String(Arc::from("name"))),
+            )
+            .unwrap();
+            tx.insert(row, row + 1, None).unwrap();
+            tx.create(row + 2, NodeTag::Text, Arc::from(format!("Row {index}")))
+                .unwrap();
+            tx.insert(row + 1, row + 2, None).unwrap();
+        }
+        let overlay = tx.finish().unwrap();
+        commit_overlay(tree, overlay);
+    }
+
+    let mut tree = NativeTree::default();
+    let mut table = component_part_node(
+        NodeTag::View,
+        ROOT_NODE,
+        "table",
+        &[
+            (property::SCOPE, "async-table"),
+            (
+                property::COLUMNS,
+                r#"[{"id":"name","label":"Name","track":"1fr"}]"#,
+            ),
+        ],
+        &[(property::COMPONENT_CHANGE_LISTENER, true)],
+    );
+    for (property, value) in [
+        (property::ROW_COUNT, 100_000.0),
+        (property::ROW_HEIGHT, 20.0),
+        (property::HEADER_HEIGHT, 0.0),
+        (property::WIDTH, 200.0),
+        (property::HEIGHT, 200.0),
+    ] {
+        table.set_property(property, Some(PropertyValue::Number(value)));
+    }
+    insert_component_node(&mut tree, TABLE, ROOT_NODE, table);
+    supply(&mut tree, 0..20);
+    let events: EventQueue = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut cx, view) = mounted_component_view(tree, events.clone());
+    let window = view.window_handle();
+    let root = ElementId::named("async-table");
+    let bounds = cx.element_bounds(window, root).unwrap();
+    // Finish the initial range response after layout has measured the formerly unsized body.
+    cx.update(view, |_view, cx| cx.invalidate()).unwrap();
+    cx.element_bounds(window, root).unwrap();
+    let row = |index| TableState::row_id(root, index);
+    merged_component_change(&events, TABLE);
+    let renders = cx.render_count(window).unwrap();
+    assert!(
+        cx.simulate_retained_scroll(window, root, quickgui::Vector::new(0.0, -80.0))
+            .unwrap()
+    );
+    assert_eq!(
+        cx.render_count(window).unwrap(),
+        renders,
+        "small scrolling reuses supplied rows"
+    );
+    assert!(
+        cx.simulate_retained_scroll(window, root, quickgui::Vector::new(0.0, -40.0))
+            .unwrap()
+    );
+    let refill = merged_component_change(&events, TABLE);
+    assert_eq!(
+        refill["visibleRange"],
+        serde_json::json!({"start": 0, "end": 26})
+    );
+    assert_eq!(cx.element_bounds(window, row(6)).unwrap().y, bounds.y);
+
+    // Do not deliver the requested rows yet. A large scroll still paints the previous supplied
+    // window, instead of rebuilding it as empty cells at the destination.
+    assert!(
+        cx.simulate_retained_scroll(window, root, quickgui::Vector::new(0.0, -5_080.0))
+            .unwrap()
+    );
+    let requested = merged_component_change(&events, TABLE);
+    assert_eq!(
+        requested["visibleRange"],
+        serde_json::json!({"start": 250, "end": 280})
+    );
+    assert!(cx.contains_element(window, row(10)).unwrap());
+    assert!(!cx.contains_element(window, row(260)).unwrap());
+    assert_eq!(cx.element_bounds(window, row(10)).unwrap().y, bounds.y);
+    assert_eq!(
+        cx.element_bounds(window, row(19)).unwrap().bottom(),
+        bounds.bottom()
+    );
+    let renders = cx.render_count(window).unwrap();
+    cx.run_until_idle().unwrap();
+    assert_eq!(
+        cx.render_count(window).unwrap(),
+        renders,
+        "waiting for data does not poll"
+    );
+    assert!(merged_component_change(&events, TABLE).is_empty());
+
+    cx.update(view, |view, cx| {
+        supply(&mut view.tree.borrow_mut(), 250..280);
+        cx.invalidate();
+    })
+    .unwrap();
+    assert_eq!(cx.element_bounds(window, row(260)).unwrap().y, bounds.y);
+    assert_eq!(
+        cx.element_bounds(window, row(269)).unwrap().bottom(),
+        bounds.bottom()
+    );
+    assert!(!cx.contains_element(window, row(10)).unwrap());
+    let update = cx.accessibility_update(window).unwrap();
+    assert!(
+        update
+            .nodes
+            .iter()
+            .any(|(id, node)| id.0 == 10_000 + 260 * 3 + 2 && node.label() == Some("Row 260"))
+    );
+    assert!(
+        cx.read(view, |view| view.tree.borrow().nodes.len())
+            .unwrap()
+            < 100
+    );
+}
+
+#[test]
 fn a_declared_table_scrollbar_track_press_and_drag_scroll_the_body() {
     let table_id = 660;
     let header_id = 661;

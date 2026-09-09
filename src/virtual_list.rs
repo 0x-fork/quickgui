@@ -87,6 +87,27 @@ impl VirtualScrollHandle {
         }
     }
 
+    /// Content may arrive after input in a hosted collection. Keep drawing supplied rows while
+    /// preserving the requested offset for subsequent input and range notifications.
+    pub(crate) fn presented_offset(&self, requested: f32) -> f32 {
+        match self {
+            Self::Fixed(_) => requested,
+            Self::Variable(handle) => handle.0.borrow().presented_offset(requested),
+        }
+    }
+
+    pub(crate) fn retains_viewport(
+        &self,
+        mount: &VirtualScrollMount,
+        offset: f32,
+        height: f32,
+    ) -> bool {
+        match self {
+            Self::Fixed(_) => mount.retains_viewport(offset, height),
+            Self::Variable(handle) => handle.0.borrow().retains_viewport(mount, offset, height),
+        }
+    }
+
     pub(crate) fn set_offset_from_input(&self, offset: f32) {
         debug_assert!(offset.is_finite() && offset >= 0.0);
         match self {
@@ -464,6 +485,7 @@ struct ListStateInner {
     measurement_revision: u64,
     scrollbar_drag_max_offset: Option<f32>,
     mounted_range: Option<Range<usize>>,
+    available_range: Option<Range<usize>>,
 }
 
 #[derive(Clone, Copy)]
@@ -473,6 +495,32 @@ struct ItemAnchor {
 }
 
 impl ListStateInner {
+    fn presented_offset(&self, requested: f32) -> f32 {
+        if self.available_range.is_none() {
+            return requested;
+        }
+        let Some(range) = &self.mounted_range else {
+            return requested;
+        };
+        let start = self.metrics.item_top(range.start.min(self.metrics.len));
+        let end = self.metrics.item_top(range.end.min(self.metrics.len));
+        let minimum = start.min(self.actual_max_scroll_offset());
+        let maximum = (end - self.viewport.height).max(minimum);
+        requested.clamp(minimum, maximum)
+    }
+
+    fn retains_viewport(&self, mount: &VirtualScrollMount, offset: f32, height: f32) -> bool {
+        if self.available_range.is_none() {
+            return mount.retains_viewport(offset, height);
+        }
+        // Refill before the viewport consumes the supplied buffer. The remaining half viewport
+        // lets ordinary scrolling continue while the frontend handles the asynchronous request.
+        let margin = height * 0.5;
+        let start = (offset - margin).max(0.0);
+        let end = (offset + height + margin).min(self.metrics.content_height());
+        mount.retains_viewport(start, (end - start).max(0.0))
+    }
+
     fn actual_max_scroll_offset(&self) -> f32 {
         (self.metrics.content_height() - self.viewport.height).max(0.0)
     }
@@ -590,7 +638,7 @@ impl ListStateInner {
         }
     }
 
-    fn content_origin(&self, first_item: usize) -> f32 {
+    fn content_origin_at(&self, first_item: usize, offset: f32) -> f32 {
         let content_height = self.metrics.content_height();
         let bottom_inset =
             if self.alignment == ListAlignment::Bottom && content_height < self.viewport.height {
@@ -598,7 +646,7 @@ impl ListStateInner {
             } else {
                 0.0
             };
-        bottom_inset + self.metrics.item_top(first_item) - self.scroll_offset
+        bottom_inset + self.metrics.item_top(first_item) - offset
     }
 
     fn visible_rows(&self) -> VisibleRows {
@@ -628,10 +676,15 @@ impl ListStateInner {
                 .saturating_add(1)
                 .min(self.metrics.len)
         };
-        let start = first.saturating_sub(self.overscan);
-        let end = visible_end
-            .saturating_add(self.overscan)
-            .min(self.metrics.len);
+        let overscan = if self.available_range.is_some() {
+            self.overscan
+                .max(visible_end.saturating_sub(first))
+                .min(MAX_LIST_OVERSCAN_ITEMS)
+        } else {
+            self.overscan
+        };
+        let start = first.saturating_sub(overscan);
+        let end = visible_end.saturating_add(overscan).min(self.metrics.len);
         VisibleRows {
             range: start..end.min(start.saturating_add(MAX_MOUNTED_LIST_ITEMS)),
         }
@@ -696,7 +749,7 @@ impl ListScrollHandle {
             (!range.is_empty())
                 .then(|| state.metrics.item_top(range.start)..state.metrics.item_top(range.end))
         });
-        mount.retains_viewport(state.scroll_offset, state.viewport.height)
+        state.retains_viewport(mount, state.scroll_offset, state.viewport.height)
     }
 }
 
@@ -726,6 +779,7 @@ impl ListState {
             measurement_revision: 0,
             scrollbar_drag_max_offset: None,
             mounted_range: None,
+            available_range: None,
         })))
     }
 
@@ -1006,29 +1060,53 @@ impl ListState {
         self.0.borrow().visible_rows()
     }
 
+    /// Limit mounted content to a contiguous range supplied asynchronously by the application.
+    ///
+    /// [`Self::visible_rows`] continues to report the requested scroll destination, including a
+    /// bounded viewport of prefetch on either side. Rendering stays within the supplied range
+    /// until its replacement arrives; wheel deltas and scrollbar dragging keep their requested
+    /// offset. Pass `None` for ordinary synchronous row construction.
+    pub fn set_available_range(&self, range: Option<Range<usize>>) {
+        let mut state = self.0.borrow_mut();
+        state.available_range = range.map(|range| {
+            let start = range.start.min(state.metrics.len);
+            let end = range.end.max(start).min(state.metrics.len);
+            start..end
+        });
+    }
+
     /// Build a positioned normal-flow column for a contiguous visible range.
     ///
     /// Each rendered root receives stable list-scoped identity when it has no explicit ID. Its
     /// actual Taffy height is measured automatically after layout. Ranges are clamped to the list
-    /// and [`MAX_MOUNTED_LIST_ITEMS`].
+    /// and [`MAX_MOUNTED_LIST_ITEMS`]. With [`Self::set_available_range`], the window is moved
+    /// inside the supplied range so it never constructs rows that have not arrived yet.
     pub fn render_rows<E>(&self, range: Range<usize>, mut render: impl FnMut(usize) -> E) -> Element
     where
         E: IntoElement,
     {
         let (id, generation, start, end, origin, handle) = {
             let mut state = self.0.borrow_mut();
-            let start = range.start.min(state.metrics.len);
-            let end = range
+            let mut start = range.start.min(state.metrics.len);
+            let mut end = range
                 .end
+                .max(start)
                 .min(state.metrics.len)
                 .min(start.saturating_add(MAX_MOUNTED_LIST_ITEMS));
+            if let Some(available) = &state.available_range {
+                let available_start = available.start.min(state.metrics.len);
+                let available_end = available.end.min(state.metrics.len);
+                let count = (end - start).min(available_end - available_start);
+                start = start.clamp(available_start, available_end - count);
+                end = start + count;
+            }
             state.mounted_range = Some(start..end);
             (
                 state.id,
                 state.generation,
                 start,
                 end,
-                state.content_origin(start),
+                state.content_origin_at(start, state.presented_offset(state.scroll_offset)),
                 ListScrollHandle(Rc::clone(&self.0)),
             )
         };
@@ -1065,7 +1143,7 @@ impl ListState {
         }
         Some(Rect::new(
             0.0,
-            state.content_origin(index),
+            state.content_origin_at(index, state.presented_offset(state.scroll_offset)),
             state.viewport.width,
             state.metrics.item_height(index),
         ))
@@ -1086,7 +1164,7 @@ impl ListState {
             VirtualScrollHandle::Variable(handle),
             state.effective_max_scroll_offset(),
             state.measurement_revision,
-            VirtualScrollMount::new(state.scroll_offset, content_range),
+            VirtualScrollMount::new(state.presented_offset(state.scroll_offset), content_range),
         )
     }
 }
@@ -1474,6 +1552,48 @@ mod tests {
         assert!(handle.report_item_height(30, generation, 60.0));
         assert_eq!(list.scroll_offset(), 425.0);
         assert_eq!(list.stats().measured_items, 2);
+    }
+
+    #[test]
+    fn asynchronous_ranges_mount_only_a_bounded_window_of_available_rows() {
+        let list = ListState::new(MAX_LIST_ITEMS, 20.0);
+        list.set_viewport_size(320.0, 100.0);
+        list.set_available_range(Some(0..MAX_LIST_ITEMS));
+        list.scroll_to_pixels(10_000.0);
+        let requested = list.visible_rows().range;
+        assert_eq!(requested, 495..510);
+        let rows = list.render_rows(requested, |_| div().h(20.0));
+        assert_eq!(
+            rows.children.len(),
+            15,
+            "a supplied full data set must stay virtualized"
+        );
+        assert_eq!(list.0.borrow().mounted_range, Some(495..510));
+
+        list.set_available_range(Some(0..10));
+        let rows = list.render_rows(list.visible_rows().range, |_| div().h(20.0));
+        assert_eq!(rows.children.len(), 10);
+        assert_eq!(list.scroll_offset(), 10_000.0);
+        assert_eq!(list.item_rect(5).unwrap().y, 0.0);
+
+        // Shrinking or clearing a source cannot leave an invalid range or a stale offset.
+        list.set_item_count(3);
+        let rows = list.render_rows(list.visible_rows().range, |_| div().h(20.0));
+        assert_eq!(rows.children.len(), 3);
+        assert_eq!(list.scroll_offset(), 0.0);
+        list.set_available_range(Some(usize::MAX..usize::MAX));
+        assert!(
+            list.render_rows(list.visible_rows().range, |_| div())
+                .children
+                .is_empty()
+        );
+        list.set_available_range(None);
+        assert_eq!(
+            list.render_rows(list.visible_rows().range, |_| div())
+                .children
+                .len(),
+            3
+        );
     }
 
     #[test]
