@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"sync/atomic"
 
 	"github.com/egoist/quickgui/go/host"
@@ -263,6 +264,7 @@ var hasRun atomic.Bool
 // Run owns the AppKit/Winit main thread. Components and events execute on one
 // dedicated Go goroutine pinned to an OS thread, including CPU-only Rust services.
 // Call Run once, from main. Dispatch schedules background results onto the UI loop.
+// Recovered application and cleanup panics include their Go stack in the returned error.
 func Run(start func(), options ...AppOptions) error {
 	if !hasRun.CompareAndSwap(false, true) {
 		return errors.New("native.Run may only be called once")
@@ -281,12 +283,12 @@ func Run(start func(), options ...AppOptions) error {
 			// Always release Run's waiter, even if application cleanup panics.
 			defer func() {
 				if recovered := recover(); recovered != nil {
-					result = errors.Join(result, fmt.Errorf("QuickGUI cleanup: %v", recovered))
+					result = errors.Join(result, fmt.Errorf("QuickGUI cleanup: %v\n%s", recovered, debug.Stack()))
 				}
 				exited <- result
 			}()
 			if recovered := recover(); recovered != nil {
-				result = fmt.Errorf("QuickGUI application: %v", recovered)
+				result = fmt.Errorf("QuickGUI application: %v\n%s", recovered, debug.Stack())
 				host.Current.Abort(result.Error())
 			}
 			App.ready = false
