@@ -16,7 +16,7 @@ import {
 fn component_example() -> @ui.Element {
   @ui.swift_ui_host([
     @ui.swift_ui_quickgui_host_view(() => {
-      @ui.div([@ui.text("QuickGUI inside SwiftUI")]).padding(12)
+      @ui.view([@ui.text("QuickGUI inside SwiftUI")]).padding(12)
     })
     .width(320)
     .height(120),
@@ -34,7 +34,7 @@ SwiftUI controls require macOS and a `swift_ui_host([])` ancestor. Use `label(..
 | --- | --- |
 | `swift_ui_host(...)` | Native component configuration; `bind_` accepts a reactive accessor. (SwiftUiHost) |
 | `swift_ui_quickgui_host_view(...)` | Native component configuration; `bind_` accepts a reactive accessor. (SwiftUiQuickguiHostView) |
-| `div(...)` | Native component configuration; `bind_` accepts a reactive accessor. (Div) |
+| `view(...)` | Native component configuration; `bind_` accepts a reactive accessor. (View) |
 | `text(...)` | Native component configuration; `bind_` accepts a reactive accessor. (Text) |
 | `padding(...)` | Native component configuration; `bind_` accepts a reactive accessor. (Padding) |
 | `style(...), [children]` | Layout, typography, colors, interaction states and child composition. |

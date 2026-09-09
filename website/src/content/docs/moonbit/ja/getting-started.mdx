@@ -26,7 +26,7 @@ bun packages/cli/src/cli.ts dev --project examples/moonbit-counter
 ```moonbit
 fn counter() -> @ui.Element {
   let (count, set_count) = @ui.create_signal(0)
-  @ui.div([
+  @ui.view([
     @ui.text("Count: \{count()}").font_size(24),
     @ui.button("Increment")
     .on_click(() => set_count(count() + 1))

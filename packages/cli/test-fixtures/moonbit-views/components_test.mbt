@@ -7,7 +7,7 @@ struct Product {
 fn line_item(product : Product, quantity : Int, builds : @ref.Ref[Int]) -> @ui.Element {
   builds.val += 1
   let initial = quantity
-  @ui.div([
+  @ui.view([
     @ui.text(product.name),
     @ui.text("\{quantity}"),
     @ui.text("\{product.price * quantity}"),

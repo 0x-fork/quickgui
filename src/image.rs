@@ -986,11 +986,11 @@ mod tests {
         let animation = AnimatedImage::new([
             AnimatedImageFrame::new(
                 Image::from_rgba(1, 1, vec![1, 2, 3, 255]).unwrap(),
-                std::time::Duration::from_millis(40),
+                web_time::Duration::from_millis(40),
             ),
             AnimatedImageFrame::new(
                 Image::from_rgba(1, 1, vec![4, 5, 6, 255]).unwrap(),
-                std::time::Duration::from_millis(60),
+                web_time::Duration::from_millis(60),
             ),
         ])
         .unwrap();

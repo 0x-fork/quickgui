@@ -10,8 +10,8 @@ fn main {
         let window = @ui.window(
           () => {
             @reactive.on_cleanup(() => cleaned.val = true)
-            @ui.div([
-              @ui.div([]).bind_content(() => "Native value: \{count.get()}"),
+            @ui.view([
+              @ui.view([]).bind_content(() => "Native value: \{count.get()}"),
               @ui.button("Test")
               .bg(@ui.rgb8(45, 105, 180))
               .hover(s => s.opacity(0.5)),

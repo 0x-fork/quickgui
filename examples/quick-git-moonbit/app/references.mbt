@@ -15,7 +15,7 @@ fn branches_view(s : Store) -> @ui.Element {
     row()
     .children([
       caption(s, "BRANCHES AND TAGS"),
-      @ui.div([]).flex_1(),
+      @ui.view([]).flex_1(),
       field(s, "Filter branches", search).width(180),
       button(s, "New Branch", () => s.open_dialog("branch"), primary=true),
     ])
@@ -97,7 +97,7 @@ fn worktrees_view(s : Store) -> @ui.Element {
     row()
     .children([
       caption(s, "WORKTREES"),
-      @ui.div([]).flex_1(),
+      @ui.view([]).flex_1(),
       button(s, "New Worktree", () => s.open_dialog("worktree"), primary=true),
     ])
     .height(30),
@@ -182,7 +182,7 @@ fn stashes_view(s : Store) -> @ui.Element {
       row()
       .children([
         caption(s, "STASHES"),
-        @ui.div([]).flex_1(),
+        @ui.view([]).flex_1(),
         button(s, "Stash Changes", () => s.open_dialog("stash"), primary=true, disabled=() => {
           s.status.get().entries.is_empty()
         }),
@@ -372,7 +372,7 @@ fn dialogs(s : Store) -> @ui.Element {
     }
     s.dialog.set("")
   }
-  let portal = @ui.div([])
+  let portal = @ui.view([])
   let scope = "quick-git-dialog-\{portal.native_node().id}"
   fn part(node : @ui.Element, name : String) -> @ui.Element {
     node
@@ -472,7 +472,7 @@ fn dialogs(s : Store) -> @ui.Element {
   )
   part(portal, "dialog")
   .children([
-    part(@ui.div([]), "dialog-backdrop")
+    part(@ui.view([]), "dialog-backdrop")
     .position("absolute")
     .top(0)
     .bottom(0)

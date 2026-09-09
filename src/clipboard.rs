@@ -888,13 +888,13 @@ impl SystemClipboard {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(all(not(target_os = "macos"), not(target_arch = "wasm32")))]
 #[derive(Default)]
 struct SystemClipboard {
     general: Option<arboard::Clipboard>,
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(all(not(target_os = "macos"), not(target_arch = "wasm32")))]
 impl SystemClipboard {
     fn read(&mut self, target: ClipboardTarget) -> Result<Option<ClipboardItem>, ClipboardError> {
         self.read_target(target)
@@ -991,7 +991,11 @@ impl SystemClipboard {
     }
 }
 
-#[cfg(all(not(target_os = "macos"), not(target_os = "linux")))]
+#[cfg(all(
+    not(target_os = "macos"),
+    not(target_os = "linux"),
+    not(target_arch = "wasm32")
+))]
 fn arboard_file_list(
     clipboard: &mut arboard::Clipboard,
     _target: ClipboardTarget,
@@ -1011,7 +1015,11 @@ fn arboard_file_list(
         .file_list()
 }
 
-#[cfg(all(not(target_os = "macos"), not(target_os = "linux")))]
+#[cfg(all(
+    not(target_os = "macos"),
+    not(target_os = "linux"),
+    not(target_arch = "wasm32")
+))]
 fn arboard_text(
     clipboard: &mut arboard::Clipboard,
     _target: ClipboardTarget,
@@ -1028,7 +1036,11 @@ fn arboard_text(
     clipboard.get().clipboard(arboard_target(target)).text()
 }
 
-#[cfg(all(not(target_os = "macos"), not(target_os = "linux")))]
+#[cfg(all(
+    not(target_os = "macos"),
+    not(target_os = "linux"),
+    not(target_arch = "wasm32")
+))]
 fn arboard_html(
     clipboard: &mut arboard::Clipboard,
     _target: ClipboardTarget,
@@ -1045,7 +1057,11 @@ fn arboard_html(
     clipboard.get().clipboard(arboard_target(target)).html()
 }
 
-#[cfg(all(not(target_os = "macos"), not(target_os = "linux")))]
+#[cfg(all(
+    not(target_os = "macos"),
+    not(target_os = "linux"),
+    not(target_arch = "wasm32")
+))]
 fn arboard_image(
     clipboard: &mut arboard::Clipboard,
     _target: ClipboardTarget,
@@ -1062,7 +1078,11 @@ fn arboard_image(
     clipboard.get().clipboard(arboard_target(target)).image()
 }
 
-#[cfg(all(not(target_os = "macos"), not(target_os = "linux")))]
+#[cfg(all(
+    not(target_os = "macos"),
+    not(target_os = "linux"),
+    not(target_arch = "wasm32")
+))]
 fn arboard_set_file_list(
     clipboard: &mut arboard::Clipboard,
     _target: ClipboardTarget,
@@ -1084,7 +1104,11 @@ fn arboard_set_file_list(
         .file_list(paths)
 }
 
-#[cfg(all(not(target_os = "macos"), not(target_os = "linux")))]
+#[cfg(all(
+    not(target_os = "macos"),
+    not(target_os = "linux"),
+    not(target_arch = "wasm32")
+))]
 fn arboard_set_image(
     clipboard: &mut arboard::Clipboard,
     _target: ClipboardTarget,
@@ -1106,7 +1130,11 @@ fn arboard_set_image(
         .image(image)
 }
 
-#[cfg(all(not(target_os = "macos"), not(target_os = "linux")))]
+#[cfg(all(
+    not(target_os = "macos"),
+    not(target_os = "linux"),
+    not(target_arch = "wasm32")
+))]
 fn arboard_set_html(
     clipboard: &mut arboard::Clipboard,
     _target: ClipboardTarget,
@@ -1130,7 +1158,11 @@ fn arboard_set_html(
         .html(html, text)
 }
 
-#[cfg(all(not(target_os = "macos"), not(target_os = "linux")))]
+#[cfg(all(
+    not(target_os = "macos"),
+    not(target_os = "linux"),
+    not(target_arch = "wasm32")
+))]
 fn arboard_set_text(
     clipboard: &mut arboard::Clipboard,
     _target: ClipboardTarget,
@@ -1149,7 +1181,11 @@ fn arboard_set_text(
     clipboard.set().clipboard(arboard_target(target)).text(text)
 }
 
-#[cfg(all(not(target_os = "macos"), not(target_os = "linux")))]
+#[cfg(all(
+    not(target_os = "macos"),
+    not(target_os = "linux"),
+    not(target_arch = "wasm32")
+))]
 fn arboard_clear(
     clipboard: &mut arboard::Clipboard,
     _target: ClipboardTarget,
@@ -1174,7 +1210,7 @@ const fn arboard_target(target: ClipboardTarget) -> arboard::LinuxClipboardKind 
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(all(not(target_os = "macos"), not(target_arch = "wasm32")))]
 fn map_arboard_error(error: arboard::Error) -> ClipboardError {
     match error {
         arboard::Error::ClipboardNotSupported => ClipboardError::Unavailable,
@@ -1183,7 +1219,7 @@ fn map_arboard_error(error: arboard::Error) -> ClipboardError {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(all(not(target_os = "macos"), not(target_arch = "wasm32")))]
 fn encode_arboard_image(
     image: arboard::ImageData<'static>,
 ) -> Result<ClipboardImage, ClipboardError> {
@@ -1235,7 +1271,7 @@ fn encode_arboard_image(
     ClipboardImage::new(ClipboardImageFormat::Png, output.bytes)
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(all(not(target_os = "macos"), not(target_arch = "wasm32")))]
 fn decode_arboard_image(
     image: &ClipboardImage,
 ) -> Result<arboard::ImageData<'static>, ClipboardError> {
@@ -1404,5 +1440,25 @@ mod tests {
             Err(ClipboardError::InvalidPath)
         );
         assert_eq!(Path::new("/tmp/valid").to_str(), Some("/tmp/valid"));
+    }
+}
+
+// Browser clipboard reads require an asynchronous permission flow. Report that
+// boundary explicitly; the docs host must not silently substitute local data.
+#[cfg(target_arch = "wasm32")]
+#[derive(Default)]
+struct SystemClipboard;
+
+#[cfg(target_arch = "wasm32")]
+impl SystemClipboard {
+    fn read(&mut self, _target: ClipboardTarget) -> Result<Option<ClipboardItem>, ClipboardError> {
+        Err(ClipboardError::Unavailable)
+    }
+    fn write(
+        &mut self,
+        _target: ClipboardTarget,
+        _item: ClipboardItem,
+    ) -> Result<(), ClipboardError> {
+        Err(ClipboardError::Unavailable)
     }
 }

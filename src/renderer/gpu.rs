@@ -1,5 +1,44 @@
 use super::*;
 
+#[cfg(target_arch = "wasm32")]
+impl GpuContext {
+    pub(crate) async fn for_canvas(
+        canvas: web_sys::HtmlCanvasElement,
+        profile: PerformanceProfile,
+    ) -> Result<Self, RendererInitError> {
+        let instance = Instance::new(InstanceDescriptor::new_without_display_handle());
+        let surface = instance.create_surface(wgpu::SurfaceTarget::Canvas(canvas))?;
+        let adapter = instance
+            .request_adapter(&RequestAdapterOptions {
+                power_preference: profile.into(),
+                compatible_surface: Some(&surface),
+                ..Default::default()
+            })
+            .await?;
+        let (device, queue) = adapter.request_device(&DeviceDescriptor::default()).await?;
+        device.on_uncaptured_error(Arc::new(|error| {
+            web_sys::console::error_1(&error.to_string().into());
+            if let Some(window) = web_sys::window() {
+                if let Ok(event) = web_sys::CustomEvent::new("quickgui:error") {
+                    let _ = window.dispatch_event(&event);
+                }
+            }
+        }));
+        let format = preferred_surface_format(&surface.get_capabilities(&adapter).formats)
+            .ok_or(RendererInitError::IncompatibleSurface)?;
+        let shape_pipeline = ShapePipeline::new(&device, format);
+        let text_cache = Cache::new(&device);
+        Ok(Self {
+            instance,
+            adapter,
+            device,
+            queue,
+            shape_pipeline,
+            text_cache,
+        })
+    }
+}
+
 impl GpuRenderer {
     pub async fn new(
         window: Arc<Window>,

@@ -192,7 +192,7 @@ fn change_list(s : Store, staged : Bool) -> @ui.Element {
     .children([
       caption(s, if staged { "STAGED" } else { "UNSTAGED" }),
       label(s, () => "\{items().length()}", tone="muted").font_size(11),
-      @ui.div([]).flex_1(),
+      @ui.view([]).flex_1(),
       button(
         s,
         if staged {

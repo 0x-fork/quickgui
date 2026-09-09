@@ -15,8 +15,8 @@ use std::{
     ops::Range,
     rc::Rc,
     sync::Arc,
-    time::Duration,
 };
+use web_time::Duration;
 
 use unicode_segmentation::UnicodeSegmentation;
 

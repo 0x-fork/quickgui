@@ -1,4 +1,4 @@
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 /// Work performed between presented frames. Durations are elapsed time for each phase, while
 /// [`FrameMetrics::cpu_time`] measures application-thread CPU time across the frame as a whole.

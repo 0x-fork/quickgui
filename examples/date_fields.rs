@@ -70,6 +70,8 @@ impl FieldPalette {
 }
 
 struct DateGallery {
+    #[cfg(target_arch = "wasm32")]
+    docs_component: String,
     due: DateFieldState,
     start: TimeFieldState,
     month: CalendarState,
@@ -78,6 +80,8 @@ struct DateGallery {
 impl DateGallery {
     fn new() -> Self {
         Self {
+            #[cfg(target_arch = "wasm32")]
+            docs_component: String::new(),
             due: DateFieldState::from_date(CivilDate::new(2026, 9, 3).expect("a real day"))
                 .order(DateFieldOrder::DayMonthYear)
                 .minimum(CivilDate::new(2026, 1, 1).expect("a real day"))
@@ -259,6 +263,24 @@ impl View for DateGallery {
         }
         let (year, month_number) = self.month.displayed_month();
 
+        #[cfg(target_arch = "wasm32")]
+        if !self.docs_component.is_empty() {
+            let content = match self.docs_component.as_str() {
+                "date-field" => date_row,
+                "time-field" => time_row,
+                _ => month,
+            };
+            return div()
+                .size_full()
+                .p(20.0)
+                .flex_col()
+                .items_center()
+                .justify_center()
+                .bg(palette.page)
+                .text_color(palette.foreground)
+                .child(content);
+        }
+
         let valid = self.due.is_valid() && self.start.is_valid();
         div()
             .size_full()
@@ -339,4 +361,12 @@ impl View for DateGallery {
                     ),
             )
     }
+}
+
+/// Focused presentation of the same native example for browser documentation.
+#[cfg(target_arch = "wasm32")]
+pub fn docs_demo(component: String) -> impl quickgui::View {
+    let mut view = DateGallery::new();
+    view.docs_component = component;
+    view
 }

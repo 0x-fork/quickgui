@@ -4,7 +4,7 @@ fn open_details_window() -> Unit {
     @ui.window(
       () => {
         let window = @native.current_window()
-        @ui.div([
+        @ui.view([
           @ui.text("Created while the app is running")
           .font_size(22)
           .font_weight(700),
@@ -46,8 +46,8 @@ fn open_details_window() -> Unit {
 ///|
 fn counter() -> @ui.Element {
   let (count, set_count) = @ui.create_signal(0)
-  @ui.div([
-    @ui.div([@ui.text("QuickGUI · MoonBit").font_weight(600)])
+  @ui.view([
+    @ui.view([@ui.text("QuickGUI · MoonBit").font_weight(600)])
     .flex_row()
     .height(52)
     .flex_shrink(0)
@@ -56,8 +56,8 @@ fn counter() -> @ui.Element {
     .app_region("drag")
     .border_color(@ui.rgb8(30, 41, 59))
     .border_width(1),
-    @ui.div([
-      @ui.div(
+    @ui.view([
+      @ui.view(
         [
           @ui.text("Fine-grained native UI")
           .font_size(28)

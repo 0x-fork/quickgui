@@ -10,8 +10,8 @@ use std::{
         atomic::{AtomicU64, Ordering},
     },
     task::{Context, Poll, Waker},
-    time::SystemTime,
 };
+use web_time::SystemTime;
 
 use thiserror::Error;
 #[cfg(target_os = "macos")]

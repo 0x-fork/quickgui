@@ -17,6 +17,8 @@ fn main() -> Result<(), quickgui::AppError> {
 }
 
 struct DialogGallery {
+    #[cfg(target_arch = "wasm32")]
+    docs_component: String,
     dialog_open: bool,
     alert_open: bool,
     project_name: Arc<str>,
@@ -26,6 +28,8 @@ struct DialogGallery {
 impl Default for DialogGallery {
     fn default() -> Self {
         Self {
+            #[cfg(target_arch = "wasm32")]
+            docs_component: String::new(),
             dialog_open: false,
             alert_open: false,
             project_name: Arc::from("QuickGUI"),
@@ -45,6 +49,7 @@ impl DialogGallery {
 
 impl View for DialogGallery {
     fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
+        let viewport = cx.size();
         let light = cx.appearance() == WindowAppearance::Light;
         let colors = GalleryColors::new(light);
         let dialog = Dialog::new("project-dialog", self.dialog_open)
@@ -153,12 +158,39 @@ impl View for DialogGallery {
                     ),
             );
 
+        #[cfg(target_arch = "wasm32")]
+        if !self.docs_component.is_empty() {
+            root = div()
+                .relative()
+                .size_full()
+                .p(16.0)
+                .flex_col()
+                .items_center()
+                .justify_center()
+                .bg(colors.background)
+                .text_color(colors.text)
+                .child(if self.docs_component == "alert-dialog" {
+                    alert
+                        .trigger_part(
+                            "delete-workspace",
+                            gallery_button("Delete project", false, colors),
+                        )
+                        .on_click(open_alert)
+                } else {
+                    dialog
+                        .trigger_part(
+                            "open-project-dialog",
+                            gallery_button("Edit project", true, colors),
+                        )
+                        .on_click(open_dialog)
+                });
+        }
         if self.dialog_open {
             let popover = dialog
                 .popover_part(
                     div()
                         .relative()
-                        .w(460.0)
+                        .w(460.0_f32.min((viewport.width - 32.0).max(1.0))).max_h((viewport.height - 32.0).max(1.0)).overflow_y_scroll()
                         .rounded_xl()
                         .border(1.0, colors.border)
                         .bg(colors.surface)
@@ -300,6 +332,9 @@ impl View for DialogGallery {
 fn gallery_button(label: &'static str, primary: bool, colors: GalleryColors) -> Element {
     button()
         .h(36.0)
+        .flex_row()
+        .items_center()
+        .justify_center()
         .px_4()
         .rounded_lg()
         .border(
@@ -360,4 +395,12 @@ impl GalleryColors {
             }
         }
     }
+}
+
+/// Focused presentation of the same native example for browser documentation.
+#[cfg(target_arch = "wasm32")]
+pub fn docs_demo(component: String) -> impl quickgui::View {
+    let mut view = DialogGallery::default();
+    view.docs_component = component;
+    view
 }

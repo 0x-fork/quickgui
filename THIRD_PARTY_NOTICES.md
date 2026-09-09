@@ -34,10 +34,11 @@ fallbacks to owned text attributes, fallback selection, and shaping-cache identi
 Copyright the Cosmic Text contributors and is available under MIT or Apache-2.0; see
 `vendor/cosmic_text/LICENSE-MIT` and `vendor/cosmic_text/LICENSE-APACHE`.
 
-## Text-shaping test fonts
+## Text-shaping and documentation fonts
 
 `tests/fixtures/fonts/Inter-Regular.ttf` is Copyright 2020 The Inter Project Authors, and
 `tests/fixtures/fonts/NotoSansHebrew.ttf` is Copyright 2012 Google Inc. Both test fixtures are
 licensed under the SIL Open Font License 1.1; see `tests/fixtures/fonts/Inter-LICENSE` and
-`tests/fixtures/fonts/NotoSans-LICENSE`. They are compiled only into framework tests, never loaded
-by an application at runtime.
+`tests/fixtures/fonts/NotoSans-LICENSE`. Noto Sans is compiled only into framework tests.
+Inter is also embedded in the browser documentation demos; their build includes
+`Inter-LICENSE.txt` beside the generated WebAssembly bundle.

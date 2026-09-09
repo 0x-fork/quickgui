@@ -451,10 +451,13 @@ impl SystemInfo {
             os_info::Bitness::X64 => SystemBitness::X64,
             _ => SystemBitness::Unknown,
         };
+        #[cfg(not(target_arch = "wasm32"))]
         let hostname = hostname::get()
             .ok()
             .and_then(|value| value.into_string().ok())
             .and_then(|value| bounded_text(&value));
+        #[cfg(target_arch = "wasm32")]
+        let hostname = None;
         let (preferred_languages, languages_truncated) = preferred_languages();
         let locale = preferred_languages.first().cloned();
         Self {

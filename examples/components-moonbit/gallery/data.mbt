@@ -181,7 +181,7 @@ fn table_demo(t : Theme) -> @ui.Element {
             @ui.text(if name == "name" { "NAME" } else { "SIZE" }),
             ..if string(get(sort(), "column")) == name {
               [
-                @ui.div(
+                @ui.view(
                   [
                     ..if string(get(sort(), "direction")) == "ascending" {
                       [icon("up", size=12)]

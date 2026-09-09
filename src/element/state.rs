@@ -13,7 +13,7 @@ impl Element {
 
     /// Smooth supported paint-only style changes under one retained element identity.
     ///
-    /// A [`Duration`](std::time::Duration) converts to an all-property [`Transition`]. Layout
+    /// A [`Duration`](web_time::Duration) converts to an all-property [`Transition`]. Layout
     /// values use [`crate::AnimationExt`] instead because they require a declaration rebuild and
     /// Taffy layout.
     pub fn transition(mut self, transition: impl Into<Transition>) -> Self {

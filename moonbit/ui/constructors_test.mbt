@@ -6,8 +6,8 @@ test "child lists keep node identity and update only the bound text" {
     let builds = @ref.Ref(0)
     fn counter() -> @ui.Element {
       builds.val += 1
-      @ui.div([
-        @ui.div([]).bind_content(() => "Count: \{count.get()}"),
+      @ui.view([
+        @ui.view([]).bind_content(() => "Count: \{count.get()}"),
         @ui.button("Increment").on_click(() => count.update(n => n + 1)),
         @ui.text("Unchanged"),
       ]).style(@ui.style().gap(12))
@@ -48,8 +48,8 @@ test "buttons accept text and rich children without wrapper nodes" {
     let single_child = @ui.text("More")
     let single = @ui.button(single_child)
     let text = @ui.button("Plain label")
-    let empty = @ui.div([])
-    let view = @ui.div([rich, single, text, empty])
+    let empty = @ui.view([])
+    let view = @ui.view([rich, single, text, empty])
     root.append(view.native_node())
     assert_eq(view.native_node().children().length(), 4)
     assert_eq(rich.native_node().children().length(), 2)
@@ -76,7 +76,7 @@ test "fluent styles snapshot and later modifiers retain precedence" {
       .placeholder("Name")
       .disabled(true)
       .bind_optional_style(() => absent)
-    let view = @ui.div([first, second, input])
+    let view = @ui.view([first, second, input])
     root.append(view.native_node())
     assert_true(
       first.native_node().property(@protocol.WIDTH) == @protocol.Number(200),
@@ -111,7 +111,7 @@ test "fluent component callbacks compose and preserve controlled state" {
     let indicator = box.slot(@ui.Indicator)
     ignore(box.child(indicator))
     let read_only = @ui.checkbox([]).checked(true).read_only(true)
-    root.append(@ui.div([box, read_only]).native_node())
+    root.append(@ui.view([box, read_only]).native_node())
     ignore(root.take_batch())
     box.native_node().emit("click", {})
     assert_true(checked.get())

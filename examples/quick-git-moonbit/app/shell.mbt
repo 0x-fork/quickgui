@@ -1,6 +1,6 @@
 ///|
 fn app_view(s : Store) -> @ui.Element {
-  @ui.div(
+  @ui.view(
     [
       ..if s.root.get() != "" {
         [
@@ -501,7 +501,7 @@ fn toolbar(s : Store) -> @ui.Element {
       } else {
         []
       },
-      @ui.div([]).flex_1(),
+      @ui.view([]).flex_1(),
       ..if s.busy.get() != "" {
         [
           row()

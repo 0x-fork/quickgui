@@ -1,7 +1,7 @@
 ///|
 fn counter() -> @ui.Element {
   let (count, set_count) = @ui.create_signal(0)
-  @ui.div(
+  @ui.view(
     [
       @ui.text("QuickGUI · MoonBit").font_size(28).font_weight(700),
       @ui.text("Count: \{count()}").font_size(22),
@@ -28,7 +28,7 @@ fn counter() -> @ui.Element {
           @ui.window(
             () => {
               let window = @native.current_window()
-              @ui.div([
+              @ui.view([
                 @ui.text("An independent MoonBit window"),
                 @ui.button("Close window").on_click(() => window.close()),
               ])

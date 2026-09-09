@@ -24,7 +24,7 @@ export const snippets = {
     lang: "moonbit",
     code: `fn counter() -> @ui.Element {
   let (count, set_count) = @ui.create_signal(0)
-  @ui.div([
+  @ui.view([
     @ui.text("Count: \\{count()}"),
     @ui.button("Increment")
     .on_click(() => set_count(count() + 1))

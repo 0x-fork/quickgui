@@ -41,7 +41,7 @@ fn main {
         () => {
           let button = @ui.button("Anchor").width(120).height(32)
           anchor.val = Some(button.native_node())
-          @ui.div([
+          @ui.view([
             button,
             @ui.swift_ui_host([
               @ui.swift_ui_quickgui_host_view(() => {

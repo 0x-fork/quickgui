@@ -6,7 +6,7 @@
 
 ```moonbit
 fn settings_card() -> @ui.Element {
-  @ui.div([
+  @ui.view([
     @ui.text("Settings").style(@ui.style().font_size(20)),
     @ui.button("Save").on_click(() => println("Saved")),
   ])
@@ -22,7 +22,7 @@ fluent プロパティで getter を直接読みます：`@ui.checkbox([]).check
 ```moonbit
 fn disclosure() -> @ui.Element {
   let (expanded, set_expanded) = @ui.create_signal(false)
-  @ui.div(
+  @ui.view(
     [
       @ui.button("Toggle details").on_click(() => set_expanded(!expanded())),
       ..if expanded() {
@@ -44,7 +44,7 @@ fn disclosure() -> @ui.Element {
 ```moonbit
 fn names_list() -> @ui.Element {
   let (names, _) = @ui.create_signal(["Ada", "Grace", "Linus"])
-  @ui.div([])
+  @ui.view([])
   .flex_col()
   .children_keyed(() => names(), name => name, row => @ui.text(row.get()))
 }

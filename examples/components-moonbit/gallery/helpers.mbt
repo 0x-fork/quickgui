@@ -41,12 +41,12 @@ fn Theme::color_text(self : Theme, name : String) -> String {
 
 ///|
 fn col() -> @ui.Element {
-  @ui.div([]).flex_col().gap(8).min_width(0).flex_shrink(0)
+  @ui.view([]).flex_col().gap(8).min_width(0).flex_shrink(0)
 }
 
 ///|
 fn row() -> @ui.Element {
-  @ui.div([]).flex_row().items_center().flex_wrap().gap(10).flex_shrink(0)
+  @ui.view([]).flex_row().items_center().flex_wrap().gap(10).flex_shrink(0)
 }
 
 ///|
@@ -312,7 +312,7 @@ fn check_indicator(
       ..if mixed() {
         [icon("minus", size=12)]
       } else {
-        [@ui.div([..if checked() { [icon("check", size=12)] } else { [] }])]
+        [@ui.view([..if checked() { [icon("check", size=12)] } else { [] }])]
       },
     ],
   )

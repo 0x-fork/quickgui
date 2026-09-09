@@ -15,8 +15,8 @@ use std::{
     },
     task::{Context, Poll, Waker},
     thread::{self, ThreadId},
-    time::{Duration, Instant},
 };
+use web_time::{Duration, Instant};
 
 use thiserror::Error;
 use winit::event_loop::EventLoopProxy;

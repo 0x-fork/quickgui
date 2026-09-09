@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use crate::{AccessibilityRole, Element, ElementId, EventContext, StateAccessor, ViewContext, div};
 

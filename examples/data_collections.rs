@@ -83,6 +83,8 @@ impl CollectionPalette {
 }
 
 struct CollectionsGallery {
+    #[cfg(target_arch = "wasm32")]
+    docs_component: String,
     tree: TreeState<&'static str>,
     table: TableState,
     records: Arc<Vec<FileRecord>>,
@@ -117,6 +119,8 @@ impl CollectionsGallery {
         let order = (0..records.len()).collect::<Vec<_>>();
 
         Self {
+            #[cfg(target_arch = "wasm32")]
+            docs_component: String::new(),
             tree,
             table: TableState::new(records.len())
                 .with_layout(TableLayout::new(34.0, 32.0))
@@ -423,6 +427,20 @@ impl View for CollectionsGallery {
             .on_action(selection_changed)
             .on_action(edit_ended);
 
+        #[cfg(target_arch = "wasm32")]
+        if !self.docs_component.is_empty() {
+            let content = if self.docs_component == "table" {
+                table
+            } else {
+                tree
+            };
+            return div()
+                .size_full()
+                .p(16.0)
+                .flex_col()
+                .bg(palette.page)
+                .child(content.flex_1().min_h(0.0).w_full());
+        }
         let metrics = cx.metrics();
         div()
             .size_full()
@@ -544,4 +562,12 @@ fn format_bytes(bytes: u64) -> String {
     } else {
         format!("{bytes} B")
     }
+}
+
+/// Focused presentation of the same native example for browser documentation.
+#[cfg(target_arch = "wasm32")]
+pub fn docs_demo(component: String) -> impl quickgui::View {
+    let mut view = CollectionsGallery::new();
+    view.docs_component = component;
+    view
 }

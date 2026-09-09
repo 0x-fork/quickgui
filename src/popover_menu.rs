@@ -3,8 +3,8 @@ use std::{
     fmt,
     rc::Rc,
     sync::Arc,
-    time::{Duration, Instant},
 };
+use web_time::{Duration, Instant};
 
 use thiserror::Error;
 

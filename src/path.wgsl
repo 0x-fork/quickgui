@@ -219,12 +219,13 @@ fn path_color(paint_index: u32, position: vec2<f32>) -> vec4<f32> {
 
 fn quickgui_shade_linear(input: VertexOutput) -> vec4<f32> {
     let clip = paints[input.paint_index].clip;
+
+
+    let derivative = max(fwidth(input.barycentric), vec3<f32>(0.000001));
     if input.logical_position.x < clip.x || input.logical_position.y < clip.y ||
        input.logical_position.x >= clip.z || input.logical_position.y >= clip.w {
         discard;
     }
-
-    let derivative = max(fwidth(input.barycentric), vec3<f32>(0.000001));
     let edge_distance = input.barycentric / derivative;
     let masked_distance = select(vec3<f32>(1000000.0), edge_distance, input.edge_mask > vec3<f32>(0.5));
     let coverage = smoothstep(0.0, 1.0, min(masked_distance.x, min(masked_distance.y, masked_distance.z)));

@@ -14,7 +14,7 @@ import {
 
 ```moonbit
 fn component_example() -> @ui.Element {
-  @ui.div([@ui.text("Hello")]).size_full().flex_col().gap(12).padding(24)
+  @ui.view([@ui.text("Hello")]).size_full().flex_col().gap(12).padding(24)
 }
 ```
 
@@ -26,7 +26,7 @@ fn component_example() -> @ui.Element {
 
 | 方法 | 用途 |
 | --- | --- |
-| `div(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Div) |
+| `view(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (View) |
 | `text(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Text) |
 | `size_full(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (SizeFull) |
 | `flex_col(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (FlexCol) |

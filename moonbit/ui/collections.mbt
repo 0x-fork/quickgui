@@ -121,7 +121,7 @@ pub fn Element::resizable_panel(
   maximum? : Double = 900,
   label? : String = "Resize panel",
 ) -> Element {
-  let root = div([])
+  let root = view([])
   let scope = "moon-splitter-\{root.native_node().id}"
   root
   .part("splitter", scope~)
@@ -145,7 +145,7 @@ pub fn Element::resizable_panel(
     .property(@protocol.ITEM_INDEX, @protocol.Number(0)),
   )
   .child(
-    div([])
+    view([])
     .part("splitter-handle", scope~)
     .property(@protocol.ITEM_INDEX, @protocol.Number(0))
     .property(@protocol.ACCESSIBILITY_LABEL, @protocol.Text(label))

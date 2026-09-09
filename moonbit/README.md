@@ -5,7 +5,7 @@ A native MoonBit frontend alongside Go. Views use child lists inspired by [Rabbi
 ```moonbit
 fn counter() -> @ui.Element {
   let (count, set_count) = @ui.create_signal(0)
-  @ui.div([
+  @ui.view([
     @ui.text("Count: \{count()}").font_size(24),
     @ui.button("Increment")
     .on_click(() => set_count(count() + 1))
@@ -23,7 +23,7 @@ fn counter() -> @ui.Element {
 }
 ```
 
-Pass an array to containers, including `div([])` for an empty view. Buttons accept a string, a single element, or an element array. Constructors accept only children or content. Set properties and handlers through fluent methods: `button("Save").on_click(save)`, `input().placeholder("Name").on_input(update_name)`, and `checkbox([]).checked(true)`. Use `.style(shared)` for reusable styles; fluent modifiers and styles merge in declaration order.
+Pass an array to containers, including `view([])` for an empty view. Buttons accept a string, a single element, or an element array. Constructors accept only children or content. Set properties and handlers through fluent methods: `button("Save").on_click(save)`, `input().placeholder("Name").on_input(update_name)`, and `checkbox([]).checked(true)`. Use `.style(shared)` for reusable styles; fluent modifiers and styles merge in declaration order.
 
 The QuickGUI CLI compiles expressions in text, button content, fluent properties and styles, and child lists into fine-grained bindings. Use `let (count, set_count) = @ui.create_signal(0)` and read `count()` directly in the view. Components construct once; each binding tracks only the signals it reads. Child arrays attach directly, without wrapper nodes or a virtual DOM.
 

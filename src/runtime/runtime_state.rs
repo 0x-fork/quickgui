@@ -140,6 +140,8 @@ impl Runtime {
             assets,
             font_system,
             gpu_contexts: HashMap::new(),
+            #[cfg(target_arch = "wasm32")]
+            web_canvas: None,
             displays: Displays::default(),
             keyboard,
             #[cfg(target_os = "macos")]
@@ -444,6 +446,15 @@ impl Runtime {
 
     pub(super) fn fail(&mut self, event_loop: &ActiveEventLoop, error: AppError) {
         tracing::error!(%error, "QuickGUI is exiting after a fatal error");
+        #[cfg(target_arch = "wasm32")]
+        {
+            web_sys::console::error_1(&error.to_string().into());
+            if let Some(window) = web_sys::window() {
+                if let Ok(event) = web_sys::CustomEvent::new("quickgui:error") {
+                    let _ = window.dispatch_event(&event);
+                }
+            }
+        }
         self.fatal_error = Some(error);
         event_loop.exit();
     }

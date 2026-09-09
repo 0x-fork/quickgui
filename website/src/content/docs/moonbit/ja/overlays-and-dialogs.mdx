@@ -58,7 +58,7 @@ fn component_example() -> @ui.Element {
   @ui.system_popover([])
   .label("Open details")
   .system_content(
-    () => @ui.div([@ui.text("Native child window")]).padding(16),
+    () => @ui.view([@ui.text("Native child window")]).padding(16),
     options={
       "width": 260,
       "height": 120,
@@ -78,7 +78,7 @@ fn component_example() -> @ui.Element {
 fn folder_picker() -> @ui.Element {
   let window = @native.current_window()
   let (selected, set_selected) = @ui.create_signal("No folder selected")
-  @ui.div([
+  @ui.view([
     @ui.button("Open folder").on_click(() => {
       window.dialog(
         1,
@@ -114,7 +114,7 @@ fn menu_button() -> @ui.Element {
       @native.menu_action("Close window", () => window.close()),
     ])
   }
-  @ui.div([
+  @ui.view([
     @ui.button("Actions").on_click(open).on_context_menu(open),
     @ui.text(status()),
   ])

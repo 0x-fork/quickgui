@@ -22,6 +22,8 @@ fn main() -> Result<(), quickgui::AppError> {
 }
 
 struct TooltipContextDemo {
+    #[cfg(target_arch = "wasm32")]
+    docs_component: String,
     context_menu: ContextMenuState,
     /// One shared group: the first hint waits, the next adjacent one opens instantly.
     hints: TooltipProvider,
@@ -36,6 +38,8 @@ impl Default for TooltipContextDemo {
             .delay(Duration::from_millis(400))
             .close_delay(Duration::from_millis(80));
         Self {
+            #[cfg(target_arch = "wasm32")]
+            docs_component: String::new(),
             context_menu: ContextMenuState::default(),
             save_hint: TooltipState::new("save-hint", "save-hint-popup")
                 .provider(&hints)
@@ -279,6 +283,19 @@ impl View for TooltipContextDemo {
         if let Some(popup) = share_popup {
             grouped_hints = grouped_hints.child(popup);
         }
+        #[cfg(target_arch = "wasm32")]
+        if !self.docs_component.is_empty() {
+            return div()
+                .relative()
+                .size_full()
+                .p(24.0)
+                .flex_col()
+                .items_center()
+                .justify_center()
+                .bg(Color::rgb8(17, 19, 24))
+                .text_color(Color::WHITE)
+                .child(grouped_hints);
+        }
         let tooltip_click = cx.listener("tooltip-button", |this, cx| {
             this.status = Some(Arc::from("Tooltip trigger clicked"));
             cx.invalidate();
@@ -478,4 +495,12 @@ mod tests {
 
         assert_eq!(demo.status.as_deref(), Some("Context action: Open"));
     }
+}
+
+/// Focused presentation of the same native example for browser documentation.
+#[cfg(target_arch = "wasm32")]
+pub fn docs_demo(component: String) -> impl quickgui::View {
+    let mut view = TooltipContextDemo::default();
+    view.docs_component = component;
+    view
 }

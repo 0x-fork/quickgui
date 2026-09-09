@@ -1,3 +1,4 @@
+import { DEMO_COMPONENTS } from './component-demos'
 import type { DocsOutlineItem, DocsFrontend } from './docs'
 
 export type ComponentDocKind = 'ui' | 'swift-ui'
@@ -856,9 +857,10 @@ export function findComponentDoc(kind: ComponentDocKind, slug?: string): Compone
 
 export function componentOutline(component: ComponentDoc): readonly DocsOutlineItem[] {
   return [
+    ...(component.kind === 'ui' && DEMO_COMPONENTS.includes(component.slug) ? [{ id: 'preview', title: 'Preview' }] : []),
     { id: 'import', title: 'Import' },
     { id: 'usage', title: 'Usage' },
     ...(component.parts.length ? [{ id: 'anatomy', title: 'Anatomy' } as const] : []),
-    { id: 'key-props', title: 'Key props' },
+    { id: 'api-reference', title: 'API reference' },
   ]
 }

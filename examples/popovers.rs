@@ -25,6 +25,8 @@ fn main() -> Result<(), quickgui::AppError> {
 }
 
 struct PopoverGallery {
+    #[cfg(target_arch = "wasm32")]
+    docs_component: String,
     account_open: bool,
     nested_open: bool,
     actions_open: bool,
@@ -42,6 +44,8 @@ struct PopoverGallery {
 impl Default for PopoverGallery {
     fn default() -> Self {
         Self {
+            #[cfg(target_arch = "wasm32")]
+            docs_component: String::new(),
             account_open: false,
             nested_open: false,
             actions_open: false,
@@ -536,4 +540,12 @@ fn popover_item(
         .active(|style| style.bg(Color::rgba8(10, 132, 255, 55)))
         .focus(|style| style.border(2.0, Color::rgb8(10, 132, 255)))
         .child(text(label))
+}
+
+/// Browser docs reuse this interactive native gallery.
+#[cfg(target_arch = "wasm32")]
+pub fn docs_demo(component: String) -> impl quickgui::View {
+    let mut view = PopoverGallery::default();
+    view.docs_component = component;
+    view
 }

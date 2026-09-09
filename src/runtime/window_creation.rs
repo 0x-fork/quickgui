@@ -94,6 +94,13 @@ impl Runtime {
                 restore_rect.width as f64,
                 restore_rect.height as f64,
             ));
+        #[cfg(target_arch = "wasm32")]
+        {
+            use winit::platform::web::WindowAttributesExtWebSys;
+            attributes = attributes
+                .with_canvas(self.web_canvas.take())
+                .with_append(true);
+        }
         #[cfg(target_os = "windows")]
         {
             attributes = attributes.with_skip_taskbar(self.config.skip_taskbar);

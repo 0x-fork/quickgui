@@ -15,12 +15,12 @@ test("constructor styles and events migrate to fluent methods after children", (
   const result = fluentProps(
     parser,
     `fn view() {
-    @ui.div([@ui.input(value=name(), on_input=set_name)], style=@ui.style().padding(24), on_click=save)
+    @ui.view([@ui.input(value=name(), on_input=set_name)], style=@ui.style().padding(24), on_click=save)
   }`,
     "view.mbt",
   );
   expect(result).toContain(
-    "@ui.div([@ui.input().value(name()).on_input(set_name)]).style(@ui.style().padding(24)).on_click(save)",
+    "@ui.view([@ui.input().value(name()).on_input(set_name)]).style(@ui.style().padding(24)).on_click(save)",
   );
   parseMoonbit(parser, result, "generated.mbt").delete();
 });

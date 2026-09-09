@@ -17,7 +17,7 @@ fn component_example() -> @ui.Element {
   let router = @ui.router([
     @ui.layout(
       (router, outlet) => {
-        @ui.div([
+        @ui.view([
           router.link("/", "Home"),
           router.link("/settings", "Settings"),
           outlet(),
@@ -51,7 +51,7 @@ fn component_example() -> @ui.Element {
 | --- | --- |
 | `router(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Router) |
 | `layout(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Layout) |
-| `div(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Div) |
+| `view(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (View) |
 | `link(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Link) |
 | `flex_col(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (FlexCol) |
 | `route(...)` | 原生组件配置；`bind_` 接收响应式访问器。 (Route) |

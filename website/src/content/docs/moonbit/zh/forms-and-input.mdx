@@ -7,7 +7,7 @@ fn name_form() -> @ui.Element {
   let (name, set_name) = @ui.create_signal("")
   let (saved, set_saved) = @ui.create_signal("")
   let submit = () => set_saved(name())
-  @ui.div([
+  @ui.view([
     @ui.text("Name"),
     @ui.input()
     .on_input(value => set_name(value))

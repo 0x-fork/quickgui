@@ -30,7 +30,7 @@ fn accordion_demo(t : Theme) -> @ui.Element {
     let trigger = control(t, item.slot(@ui.Trigger))
       .children([
         label(t, entry.1),
-        @ui.div(
+        @ui.view(
           [
             ..if open().contains(entry.0) {
               [icon("minus")]

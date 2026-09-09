@@ -6,6 +6,8 @@ import remarkGfm from 'remark-gfm'
 import remarkMdx from 'remark-mdx'
 import remarkParse from 'remark-parse'
 import { create, insertMultiple, save } from 'zbsearch'
+import { getComponentApi } from '../src/lib/component-api.server'
+import { COMPONENT_DOC_LABELS } from '../src/lib/docs-locales'
 import { ALL_COMPONENT_DOCS, componentDocsPath, type ComponentDoc } from '../src/lib/component-docs'
 import {
   DOCS_FRONTENDS,
@@ -188,7 +190,16 @@ async function buildLocale(locale: Locale, frontend: DocsFrontend) {
   const records: DocsSearchDocument[] = []
 
   for (const page of pageDefinitions(locale, frontend)) {
-    const source = await readableSource(page.sourcePath, page.fallbackPath)
+    let source = await readableSource(page.sourcePath, page.fallbackPath)
+    const component = ALL_COMPONENT_DOCS.find(component => componentDocsPath(component, frontend) === page.path)
+    if (component) {
+      // Match the rendered route: the summary table is replaced by the complete API.
+      source = source.split(`## ${COMPONENT_DOC_LABELS[locale].keyProps}`)[0]
+      const api = getComponentApi(frontend, component.kind, component.slug)
+      source += '\n## API reference\n' + api.sections.map(section =>
+        section.name + ' ' + section.signature + '\n' + section.entries.map(entry => `${entry.name} ${entry.type} ${entry.description}`).join('\n'),
+      ).join('\n')
+    }
     records.push(...recordsForPage(page, source, locale))
   }
 
@@ -201,7 +212,10 @@ async function buildLocale(locale: Locale, frontend: DocsFrontend) {
   const payload = save(database)
   const destination = resolve(outputRoot, frontend, `${locale}.json`)
   await mkdir(dirname(destination), { recursive: true })
-  await writeFile(destination, JSON.stringify(payload))
+  const serialized = JSON.stringify(payload)
+  if (!(await Bun.file(destination).exists()) || await readFile(destination, 'utf8') !== serialized) {
+    await writeFile(destination, serialized)
+  }
 
   return { locale, frontend, records: records.length }
 }

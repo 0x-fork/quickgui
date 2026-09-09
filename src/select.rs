@@ -1,8 +1,5 @@
-use std::{
-    fmt,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{fmt, sync::Arc};
+use web_time::{Duration, Instant};
 
 use crate::{
     AccessibilityPopover, AccessibilityRole, AnchorPlacement, AnchorSide, AsyncViewContext,

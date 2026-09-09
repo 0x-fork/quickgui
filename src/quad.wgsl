@@ -105,6 +105,9 @@ fn rounded_rect_distance(point: vec2<f32>, rect: vec4<f32>, radii: vec4<f32>) ->
     return rounded_box_distance(point - rect.xy, rect.zw, radii);
 }
 
+// Shape-kind branches use flat per-instance data. Fragment quads evaluate the
+// same SDF, but WebGPU cannot prove that across the shared coverage helper.
+@diagnostic(off, derivative_uniformity)
 fn coverage(distance: f32) -> f32 {
     let antialias_width = max(fwidth(distance), 0.0001);
     return 1.0 - smoothstep(-antialias_width, antialias_width, distance);
@@ -373,6 +376,7 @@ fn perimeter_position(point: vec2<f32>, size: vec2<f32>, radii: vec4<f32>) -> ve
 
 // Dash coverage along the border outline. The declared period is scaled so a whole number of
 // dashes fits the outline, which keeps both ends of every edge closed like CSS.
+@diagnostic(off, derivative_uniformity)
 fn dash_coverage(
     point: vec2<f32>,
     rect: vec4<f32>,

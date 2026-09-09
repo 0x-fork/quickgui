@@ -1,13 +1,7 @@
 use std::{
-    borrow::Cow,
-    cell::RefCell,
-    collections::VecDeque,
-    mem::size_of,
-    ops::Range,
-    rc::Rc,
-    sync::Arc,
-    time::{Duration, Instant},
+    borrow::Cow, cell::RefCell, collections::VecDeque, mem::size_of, ops::Range, rc::Rc, sync::Arc,
 };
+use web_time::{Duration, Instant};
 
 use unicode_segmentation::UnicodeSegmentation;
 

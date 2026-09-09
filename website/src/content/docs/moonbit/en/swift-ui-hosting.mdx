@@ -16,7 +16,7 @@ Place native controls inside `swift_ui_host([])`. Keep ordinary QuickGUI layout 
 fn embedded_content() -> @ui.Element {
   @ui.swift_ui_host([
     @ui.swift_ui_quickgui_host_view(() => {
-      @ui.div([@ui.text("QuickGUI content")]).padding(16)
+      @ui.view([@ui.text("QuickGUI content")]).padding(16)
     })
     .width(320)
     .height(120),

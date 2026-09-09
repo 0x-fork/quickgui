@@ -2,6 +2,7 @@ use super::*;
 
 use crate::runtime::effects::queue_deferred_menu_request;
 
+#[cfg(not(target_arch = "wasm32"))]
 impl AppRunner {
     /// Request an orderly application exit after native windows and owned resources close.
     pub fn exit(&mut self) -> bool {

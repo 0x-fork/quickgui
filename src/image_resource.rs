@@ -3,8 +3,8 @@ use std::{
     panic::{AssertUnwindSafe, catch_unwind},
     sync::{Arc, Mutex, mpsc},
     thread,
-    time::{Duration, Instant},
 };
+use web_time::{Duration, Instant};
 
 use winit::event_loop::EventLoopProxy;
 

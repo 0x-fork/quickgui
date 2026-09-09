@@ -116,7 +116,7 @@ fn show_portable_system_notification(
 
     if let Some(delivery_at) = notification
         .delivery_at
-        .filter(|delivery_at| *delivery_at > std::time::SystemTime::now())
+        .filter(|delivery_at| *delivery_at > web_time::SystemTime::now())
     {
         let scheduled = ScheduledToastNotification::CreateScheduledToastNotification(
             &document,
@@ -240,12 +240,12 @@ fn remove_scheduled_windows_notifications(
 }
 
 #[cfg(target_os = "windows")]
-fn windows_notification_time(time: std::time::SystemTime) -> Result<i64, PlatformError> {
+fn windows_notification_time(time: web_time::SystemTime) -> Result<i64, PlatformError> {
     const WINDOWS_TO_UNIX_EPOCH_SECONDS: u64 = 11_644_473_600;
     const TICKS_PER_SECOND: u64 = 10_000_000;
 
     let unix = time
-        .duration_since(std::time::UNIX_EPOCH)
+        .duration_since(web_time::UNIX_EPOCH)
         .map_err(|_| PlatformError::InvalidNotificationOptions)?;
     let seconds = unix
         .as_secs()
@@ -1797,7 +1797,7 @@ fn show_portable_system_notification(
 
     if notification
         .delivery_at
-        .is_some_and(|delivery_at| delivery_at > std::time::SystemTime::now())
+        .is_some_and(|delivery_at| delivery_at > web_time::SystemTime::now())
         || !notification.attachments.is_empty()
         || matches!(&notification.sound, SystemNotificationSound::Named(_))
     {

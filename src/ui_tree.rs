@@ -3,8 +3,8 @@ use std::{
     collections::{HashMap, HashSet},
     ops::Range,
     sync::Arc,
-    time::{Duration, Instant},
 };
+use web_time::{Duration, Instant};
 
 use accesskit::{
     Action, Affine, AutoComplete as NativeAccessibilityAutoComplete,

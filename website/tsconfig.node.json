@@ -1,12 +1,21 @@
 {
   "extends": "./tsconfig.json",
-  "include": ["react-router.config.ts", "vite.config.ts"],
+  "include": [
+    "react-router.config.ts",
+    "vite.config.ts",
+    "scripts/component-guide-plugin.ts"
+  ],
   "compilerOptions": {
     "composite": true,
     "target": "ES2022",
     "module": "ES2022",
     "moduleResolution": "bundler",
-    "lib": ["ES2022"],
-    "types": ["node"]
+    "lib": [
+      "ES2022"
+    ],
+    "types": [
+      "node"
+    ],
+    "allowImportingTsExtensions": true
   }
 }

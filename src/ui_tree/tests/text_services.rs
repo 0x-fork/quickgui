@@ -229,7 +229,7 @@ fn undo_routing_prefers_a_focused_text_input() {
 #[test]
 fn the_focused_caret_blinks_on_one_deadline_per_toggle_and_restarts_on_edits() {
     use crate::CARET_BLINK_HALF_PERIOD;
-    use std::time::Duration;
+    use web_time::Duration;
 
     let id = ElementId::new(702);
     let mut tree = UiTree::new();

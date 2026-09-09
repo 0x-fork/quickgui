@@ -123,7 +123,7 @@ test("fluent bindings resolve component return types across files and invalidate
   try {
     writeFileSync(join(root, "moon.mod"), 'name = "test/app"\n');
     writeFileSync(join(root, "moon.pkg"), 'import { "egoist/quickgui/ui" }');
-    writeFileSync(join(root, "helper.mbt"), "fn card() -> @ui.Element { @ui.div([]) }");
+    writeFileSync(join(root, "helper.mbt"), "fn card() -> @ui.Element { @ui.view([]) }");
     writeFileSync(join(root, "view.mbt"), "fn view() { card().width(width.get()) }");
     const first = await prepareMoonbitWorkspace(root);
     expect(first.bindings).toBe(1);

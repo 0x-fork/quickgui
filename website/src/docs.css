@@ -1210,3 +1210,69 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Component references use the same editorial frame as the guides. */
+.component-preview { overflow: hidden; margin: 28px 0 36px; border: 1px solid var(--docs-border); border-radius: 12px; background: var(--docs-bg); }
+.component-preview-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 0 14px; height: 49px; border-bottom: 1px solid var(--docs-border); }
+.component-preview-toolbar [role='tablist'] { display: flex; align-self: stretch; gap: 22px; }
+.component-preview-toolbar [role='tab'] { position: relative; color: var(--docs-muted); font-size: 13px; font-weight: 500; }
+.component-preview-toolbar [role='tab'][aria-selected='true'] { color: var(--docs-text); }
+.component-preview-toolbar [role='tab'][aria-selected='true']::after { position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; content: ''; background: var(--docs-accent); }
+.component-preview-actions { display: flex; gap: 6px; }
+.component-preview-actions :is(button,a) { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 5px; color: var(--docs-muted); }
+.component-preview-actions :is(button,a):hover { color: var(--docs-text); background: var(--docs-surface); }
+.component-preview-stage { position: relative; height: 300px; background: #fafafc; }
+.component-preview-stage[hidden], .component-preview-code[hidden] { display: none; }
+.component-preview-stage iframe { width: 100%; height: 100%; display: block; border: 0; }
+.component-preview-status,.component-preview-native { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 10px; padding: 32px; color: #71717a; background: #fafafc; text-align: center; font-size: 13px; }
+.component-preview-status p,.component-preview-native p { max-width: 360px; margin: 0; }
+.component-preview-status button { border: 1px solid #d4d4d8; border-radius: 6px; padding: 4px 12px; color: #27272a; background: white; }
+.component-preview-spinner { animation: component-spin 1s linear infinite; }
+@keyframes component-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .component-preview-spinner { animation: none; } }
+.component-preview-code { max-height: 440px; overflow: auto; padding: 20px; font-size: 14px; line-height: 1.75; }
+.component-preview-code pre { margin: 0; }
+.docs-article .component-preview-code code { background: none; padding: 0; }
+.component-api-note { color: var(--docs-muted); font-size: 14px; }
+.component-api-filter { display: flex; align-items: center; gap: 9px; border: 1px solid var(--docs-border); border-radius: 7px; padding: 8px 12px; font-size: 14px; color: var(--docs-muted); }
+.component-api-filter:focus-within { outline: 2px solid var(--docs-accent); outline-offset: 2px; }
+.component-api-filter input { outline: 0; background: transparent; width: 100%; min-width: 0; color: var(--docs-text); }
+.component-api-part { margin-top: 32px; }
+.component-api-part-title { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.component-api-part-title h3 { margin: 0 0 12px; }
+.docs-article .component-api-part-title h3 code { background: none; padding: 0; font-size: 17px; letter-spacing: -.04em; }
+.docs-article .component-api-part-title a,.docs-article .component-api-detail a { display: inline-flex; gap: 4px; align-items: center; text-decoration: none; color: var(--docs-muted); font-size: 12px; }
+.component-api-part > p { font-size: 14px; color: var(--docs-muted); }
+.component-signature,.component-api-detail pre { overflow-x: auto; padding: 13px 16px; border: 1px solid var(--docs-border); border-radius: 6px; font-size: 12px; line-height: 1.65; }
+.docs-article :is(.component-signature,.component-api-detail pre) code { padding: 0; background: none; white-space: pre-wrap; overflow-wrap: anywhere; }
+.component-api-rows { margin-top: 20px; border-top: 1px solid var(--docs-border); }
+.component-api-columns,.component-api-row summary { display: grid; grid-template-columns: minmax(130px,1fr) minmax(90px,1.2fr) 70px 14px; align-items: center; gap: 12px; padding: 12px 0; font-size: 12px; }
+.component-api-columns { color: var(--docs-muted); border-bottom: 1px solid var(--docs-border); }
+.component-api-row { border-bottom: 1px solid var(--docs-border); }
+.component-api-row summary { cursor: pointer; list-style: none; min-height: 52px; }
+.component-api-row summary::-webkit-details-marker { display: none; }
+.component-api-row summary:hover { background: color-mix(in srgb, var(--docs-accent) 4%, transparent); }
+.docs-article .component-api-row summary code { background: none; padding: 0; font-size: 12px; }
+.component-api-row summary .component-api-name { color: var(--docs-accent); overflow-wrap: anywhere; }
+.component-api-row summary .component-api-type { color: var(--docs-muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.component-api-row summary .component-api-default { overflow-wrap: anywhere; color: var(--docs-muted); }
+.component-api-row[open] summary > span { transform: rotate(180deg); }
+.component-api-detail { padding: 0 16px 18px; font-size: 14px; }
+.component-api-detail p { margin: 0 0 12px; }
+.component-api-detail > span { color: var(--docs-muted); font-size: 12px; }
+.component-api-detail pre { margin: 10px 0 14px; }
+@media (max-width: 600px) {
+  .component-api-columns,.component-api-row summary { grid-template-columns: minmax(115px,1fr) minmax(50px,.8fr) 45px 12px; gap: 6px; }
+  .component-api-row summary code { font-size: 11px; }
+  .component-preview-stage { height: 280px; }
+}
+
+.docs-article .component-preview-code :is(pre, code) { font-size: 14px; line-height: 1.75; }
+
+.component-api-columns, .component-api-row summary { font-size: 14px; }
+.docs-article .component-api-row summary code { font-size: 14px; }
+.component-api-detail { font-size: 15px; }
+.component-signature, .component-api-detail pre,
+.docs-article :is(.component-signature, .component-api-detail pre) code { font-size: 14px; }
+.docs-article .component-api-part-title a, .docs-article .component-api-detail a,
+.component-api-detail > span { font-size: 13px; }

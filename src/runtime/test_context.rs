@@ -5,8 +5,8 @@ use std::{
     marker::PhantomData,
     panic::{AssertUnwindSafe, catch_unwind},
     rc::Rc,
-    time::{Duration, Instant},
 };
+use web_time::{Duration, Instant};
 
 use thiserror::Error;
 

@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::time::Instant;
+use web_time::Instant;
 
 use crate::{
     AccessibilityPopover, AccessibilityRole, Dialog, DismissListener, Element, ElementId,
@@ -796,7 +796,7 @@ mod tests {
         Color, IntoElement, Modifiers, MouseButton, Point, Size, TestAppContext, Vector, View,
         button, text,
     };
-    use std::time::Duration;
+    use web_time::Duration;
 
     fn pointer_event(phase: PointerPhase, y: f32) -> PointerEvent {
         PointerEvent {

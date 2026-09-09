@@ -279,6 +279,7 @@ pub(super) enum TrayCommand {
     },
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl AppRunner {
     pub const fn tray_icons_supported(&self) -> bool {
         DesktopIntegrationSupport::current().tray_icons

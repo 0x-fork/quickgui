@@ -8,7 +8,7 @@ test "compiled expressions update their own retained nodes" {
     let builds = @ref.Ref(0)
     fn view() -> @ui.Element {
       builds.val += 1
-      @ui.div([
+      @ui.view([
         @ui.text("Count: \{count()}"),
         @ui.button("Count: \{count()}").on_click(() => set_count(count() + 1)),
         @ui.input()
@@ -70,7 +70,7 @@ test "ui memo getters update only their dependent text and release effects" {
       ignore(@ui.untrack(unrelated))
       @ui.on_cleanup(() => cleaned.val += 1)
     })
-    let node = @ui.div([@ui.text("Total: \{total()}"), @ui.text("Unchanged")]).native_node()
+    let node = @ui.view([@ui.text("Total: \{total()}"), @ui.text("Unchanged")]).native_node()
     root.append(node)
     let label = node.children()[0].children()[0]
     let sibling = node.children()[1]
@@ -98,7 +98,7 @@ test "ui memo getters update only their dependent text and release effects" {
 test "styles retain overrides, clear absent declarations, and track interaction styles" {
   @native.test_tree(fn(root) raise {
     let count = @reactive.signal(0)
-    let node = @ui.div([])
+    let node = @ui.view([])
       .style(@ui.style().opacity(0.5))
       .width(count.get())
       .on_click(() => count.set(1))
@@ -134,7 +134,7 @@ test "conditional branches keep identity until selection changes" {
   @native.test_tree(fn(root) raise {
     let count = @reactive.signal(0)
     let cleanups = @ref.Ref(0)
-    let node = @ui.div([
+    let node = @ui.view([
       @ui.text("before"),
       if count.get() >= 5 {
         @reactive.on_cleanup(() => cleanups.val += 1)
@@ -176,7 +176,7 @@ test "optional props and list-spread branches retain ownership and clear removed
   let baseline = @reactive.active_scope_count()
   @native.test_tree(fn(root) raise {
     let count = @reactive.signal(0)
-    let node = @ui.div(
+    let node = @ui.view(
       [
         @ui.button("Save").bind_optional(@protocol.DISABLED, () => {
           if count.get() > 0 {
@@ -185,7 +185,7 @@ test "optional props and list-spread branches retain ownership and clear removed
             None
           }
         }),
-        @ui.div([])
+        @ui.view([])
         .bind_optional_style(() => {
           if count.get() > 0 {
             Some(@ui.style().width(80))
@@ -233,7 +233,7 @@ test "computed child lists and spreads follow collection changes without retaini
   let baseline = @reactive.active_scope_count()
   @native.test_tree(fn(root) raise {
     let names = @reactive.signal(["Ada"])
-    let node = @ui.div(
+    let node = @ui.view(
       [
         @ui.text("before"),
         ..names.get().map(name => @ui.text(name)),
@@ -291,7 +291,7 @@ test "interaction style factories read signals inside their binding" {
     fn build_style(value : Int) -> (@ui.Style) -> @ui.Style {
       s => s.opacity(if value > 0 { 1.0 } else { 0.5 })
     }
-    let node = @ui.div([]).hover(build_style(count())).native_node()
+    let node = @ui.view([]).hover(build_style(count())).native_node()
     root.append(node)
     set_count(1)
     match node.property(@protocol.HOVER_STYLE) {
@@ -348,7 +348,7 @@ test "Rust layout helper chains preserve compiler bindings and static overrides"
   @native.test_tree(fn(root) raise {
     let (space, set_space) = @ui.create_signal(4)
     let (columns, set_columns) = @ui.create_signal(2)
-    let view = @ui.div([@ui.text("retained")])
+    let view = @ui.view([@ui.text("retained")])
       .flex_col_reverse()
       .px(space())
       .padding_left(20)

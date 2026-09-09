@@ -447,9 +447,21 @@ fn create_pipeline(
         multiview_mask: None,
         cache: None,
     });
+    #[cfg(not(target_arch = "wasm32"))]
     if let Some(error) = pollster::block_on(scope.pop()) {
         return Err(error.to_string());
     }
+    #[cfg(target_arch = "wasm32")]
+    wasm_bindgen_futures::spawn_local(async move {
+        if let Some(error) = scope.pop().await {
+            web_sys::console::error_1(&error.to_string().into());
+            if let Some(window) = web_sys::window() {
+                if let Ok(event) = web_sys::CustomEvent::new("quickgui:error") {
+                    let _ = window.dispatch_event(&event);
+                }
+            }
+        }
+    });
     Ok(pipeline)
 }
 

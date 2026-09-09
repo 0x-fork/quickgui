@@ -1,3 +1,4 @@
+import { DEMO_COMPONENTS } from './component-demos'
 import { docsOutline, docsTitle } from './docs-structure'
 import type { Locale } from '../i18n'
 import type { ComponentDoc } from './component-docs'
@@ -444,12 +445,13 @@ export function localizedComponentOutline(
 ): readonly DocsOutlineItem[] {
   const labels = COMPONENT_DOC_LABELS[locale]
   return [
+    ...(component.kind === 'ui' && DEMO_COMPONENTS.includes(component.slug) ? [{ id: 'preview', title: locale === 'zh' ? '预览' : locale === 'ja' ? 'プレビュー' : 'Preview' }] : []),
     { id: labels.import.toLowerCase(), title: labels.import },
     { id: labels.usage.toLowerCase(), title: labels.usage },
     ...(component.parts.length
       ? [{ id: labels.anatomy.toLowerCase(), title: labels.anatomy } as const]
       : []),
-    { id: labels.keyProps.toLowerCase().replace(/\s+/g, '-'), title: labels.keyProps },
+    { id: 'api-reference', title: locale === 'zh' ? 'API 参考' : locale === 'ja' ? 'API リファレンス' : 'API reference' },
   ]
 }
 

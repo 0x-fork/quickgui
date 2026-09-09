@@ -561,7 +561,7 @@ function transformNativeViews(
             if (ctor.content === "text") {
               // One view and one retained label, matching the ordinary text constructor.
               output = [
-                inject(`${call.module}.div([]).bind_content(`, base),
+                inject(`${call.module}.view([]).bind_content(`, base),
                 ...closure(arg.value, env),
                 inject(")", base.endIndex),
               ];

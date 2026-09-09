@@ -88,12 +88,12 @@ fn Store::status_color(self : Store, code : String) -> @ui.Color {
 
 ///|
 fn col() -> @ui.Element {
-  @ui.div([]).flex_col().min_width(0).min_height(0)
+  @ui.view([]).flex_col().min_width(0).min_height(0)
 }
 
 ///|
 fn row() -> @ui.Element {
-  @ui.div([]).flex_row().items_center().min_width(0)
+  @ui.view([]).flex_row().items_center().min_width(0)
 }
 
 ///|
@@ -213,7 +213,7 @@ fn check(
 ) -> @ui.Element {
   @ui.element(@protocol.TAG_BUTTON)
   .children([
-    @ui.div(
+    @ui.view(
       [..if read() { [icon(s, "check", size=11, tone="white")] } else { [] }],
     )
     .width(14)

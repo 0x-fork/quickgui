@@ -2,7 +2,7 @@
 test "color channels match the native RGBA byte layout, including alpha" {
   assert_eq(@ui.rgba8(0x12, 0x34, 0x56, 0x78).to_json(), 0x78563412U.to_json())
   @native.test_tree(fn(root) raise {
-    let view = @ui.div([])
+    let view = @ui.view([])
       .bg(@ui.rgb8(0, 122, 255))
       .text_color(@ui.rgb8(29, 29, 31))
       .border_color(@ui.rgba8(0x12, 0x34, 0x56, 0x78))
@@ -40,11 +40,11 @@ test "fluent chains retain identities and change a single text node" {
   let baseline = @reactive.active_scope_count()
   @native.test_tree(fn(root) raise {
     let count = @reactive.signal(0)
-    let view = @ui.div([])
+    let view = @ui.view([])
       .size_full()
       .flex_col()
       .gap(12)
-      .child(@ui.div([]).bind_content(() => "Count: \{count.get()}"))
+      .child(@ui.view([]).bind_content(() => "Count: \{count.get()}"))
       .child(@ui.button("Increment").on_click(() => count.update(n => n + 1)))
     root.append(view.native_node())
     let child = view.native_node().children()[0].children()[0]
@@ -69,9 +69,9 @@ test "conditional children mount only on predicate changes and clean up" {
   @native.test_tree(fn(root) raise {
     let count = @reactive.signal(0)
     let mounts = @ref.Ref(0)
-    let view = @ui.div([]).child_if(() => count.get() >= 2, () => {
+    let view = @ui.view([]).child_if(() => count.get() >= 2, () => {
       mounts.val += 1
-      @ui.div([]).bind_content(() => "Value: \{count.get()}")
+      @ui.view([]).bind_content(() => "Value: \{count.get()}")
     })
     root.append(view.native_node())
     count.set(2)
@@ -93,7 +93,7 @@ test "conditional children mount only on predicate changes and clean up" {
 test "dynamic styles merge, clear removed properties, and skip equality" {
   @native.test_tree(fn(root) raise {
     let active = @reactive.signal(false)
-    let view = @ui.div([])
+    let view = @ui.view([])
       .width(100)
       .style(@ui.style().width(200))
       .bind_style(() => {
@@ -125,9 +125,9 @@ test "keyed children move existing rows and retire only removed rows" {
   @native.test_tree(fn(root) raise {
     let values = @reactive.signal(["a", "b", "c"])
     let mounts = @ref.Ref(0)
-    let view = @ui.div([]).children_keyed(() => values.get(), value => value, value => {
+    let view = @ui.view([]).children_keyed(() => values.get(), value => value, value => {
       mounts.val += 1
-      @ui.div([]).bind_content(() => value.get())
+      @ui.view([]).bind_content(() => value.get())
     })
     root.append(view.native_node())
     let original = view.native_node().children()
@@ -151,7 +151,7 @@ test "deferred child effects retain the owning window across windows" {
   let baseline = @reactive.active_scope_count()
   @native.test_tree(fn(first) raise {
     let value = @reactive.signal(false)
-    let view = @ui.div([]).child_if(() => value.get(), () => {
+    let view = @ui.view([]).child_if(() => value.get(), () => {
       @ui.text("First window")
     })
     first.append(view.native_node())

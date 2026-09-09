@@ -1,7 +1,7 @@
 ///|
 test "Rust presets use the same spacing, flex, grid, and corner values" {
   @native.test_tree(fn(root) raise {
-    let view = @ui.div([])
+    let view = @ui.view([])
       .flex()
       .flex_col_reverse()
       .flex_1()

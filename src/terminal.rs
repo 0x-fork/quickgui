@@ -38,7 +38,12 @@ use libghostty_vt::{
 };
 #[cfg(any(feature = "terminal", quickgui_terminal_extension))]
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::{Duration, Instant};
 #[cfg(any(feature = "terminal", quickgui_terminal_extension))]
+#[cfg(target_arch = "wasm32")]
+use web_time::{Duration, Instant};
+
 use std::{
     cell::RefCell,
     io::{Read, Write},
@@ -58,7 +63,6 @@ use std::{
         Arc, Mutex,
         atomic::{AtomicU32, AtomicU64, Ordering},
     },
-    time::{Duration, Instant},
 };
 #[path = "terminal/data.rs"]
 mod data;

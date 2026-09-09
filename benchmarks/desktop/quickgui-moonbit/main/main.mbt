@@ -75,12 +75,12 @@ fn white() -> @ui.Color {
 
 ///|
 fn col() -> @ui.Element {
-  @ui.div([]).flex_col().min_width(0).min_height(0)
+  @ui.view([]).flex_col().min_width(0).min_height(0)
 }
 
 ///|
 fn row() -> @ui.Element {
-  @ui.div([]).flex_row().items_center().min_width(0)
+  @ui.view([]).flex_row().items_center().min_width(0)
 }
 
 ///|
@@ -210,7 +210,7 @@ fn issue_tracker() -> @ui.Element {
   }
   ignore(
     sidebar.children([
-      @ui.div([]).flex_1(),
+      @ui.view([]).flex_1(),
       caption(() => "September cycle\n4 projects · 5 teammates").padding(12),
     ]),
   )

@@ -6,6 +6,7 @@ import mdx from '@mdx-js/rollup'
 import rehypeShiki from '@shikijs/rehype'
 import rehypeSlug from 'rehype-slug'
 import remarkGfm from 'remark-gfm'
+import { componentGuidePlugin } from './scripts/component-guide-plugin.ts'
 
 export default defineConfig({
   resolve: { tsconfigPaths: true },
@@ -13,7 +14,7 @@ export default defineConfig({
     cloudflare({ viteEnvironment: { name: 'ssr' } }),
     tailwindcss(),
     mdx({
-      remarkPlugins: [remarkGfm],
+      remarkPlugins: [remarkGfm, componentGuidePlugin],
       rehypePlugins: [
         rehypeSlug,
         [

@@ -17,7 +17,7 @@ fn component_example() -> @ui.Element {
   @ui.system_popover([])
   .label("Open details")
   .system_content(
-    () => @ui.div([@ui.text("Native child window")]).padding(16),
+    () => @ui.view([@ui.text("Native child window")]).padding(16),
     options={
       "width": 260,
       "height": 120,

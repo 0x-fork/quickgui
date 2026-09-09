@@ -26,7 +26,7 @@ fn history_view(s : Store) -> @ui.Element {
           label(s, () => "\{s.commits.get().length()} commits", tone="muted").font_size(
             11,
           ),
-          @ui.div([]).flex_1(),
+          @ui.view([]).flex_1(),
           check(s, "All branches", () => s.all_branches.get(), value => {
             s.all_branches.set(value)
             s.history_ref.set("")
@@ -140,7 +140,7 @@ fn history_table(s : Store) -> @ui.Element {
         @ui.table_cell([])
         .column("graph")
         .children([
-          @ui.div([])
+          @ui.view([])
           .position("relative")
           .overflow("hidden")
           .height(26)
@@ -309,7 +309,7 @@ fn commit_detail(s : Store) -> @ui.Element {
       row()
       .children([
         caption(s, "CHANGED FILES"),
-        @ui.div([]).flex_1(),
+        @ui.view([]).flex_1(),
         button(s, "Show all", () => {
           s.commit_path.set("")
           s.load_diff()

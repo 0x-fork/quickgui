@@ -15,7 +15,7 @@ import { createMoonbitParser } from "../packages/cli/src/moonbit/parser.ts";
 const root = resolve(import.meta.dir, "..");
 const viewParser = await createMoonbitParser();
 const examples: Record<string, string> = {
-  view: '@ui.div([\n@ui.text("Hello"),\n]).size_full().flex_col().gap(12).padding(24)',
+  view: '@ui.view([\n@ui.text("Hello"),\n]).size_full().flex_col().gap(12).padding(24)',
   text: 'let count = @reactive.signal(0)\n@ui.text("Count: \\{count.get()}")',
   button: '@ui.button("Save").on_click(() => println("Saved")).px(16).py(8)',
   input:
@@ -87,7 +87,7 @@ const examples: Record<string, string> = {
   toolbar:
     'let toolbar = @ui.toolbar([]).orientation("horizontal").items([{"value": "save", "label": "Save"}])\ntoolbar.flex_row().child(toolbar.slot(@ui.Button, value="save", index=0).label("Save").on_click(() => println("Saved")))',
   "system-popover":
-    '@ui.system_popover([]).label("Open details").system_content(() => @ui.div([\n@ui.text("Native child window"),\n]).padding(16), options={"width": 260, "height": 120, "popoverPlacement": "bottom-start", "popoverDismissOnEscape": true, "popoverDismissOnPointerOutside": true})',
+    '@ui.system_popover([]).label("Open details").system_content(() => @ui.view([\n@ui.text("Native child window"),\n]).padding(16), options={"width": 260, "height": 120, "popoverPlacement": "bottom-start", "popoverDismissOnEscape": true, "popoverDismissOnPointerOutside": true})',
   tooltip:
     'let tip = @ui.tooltip([]).delay(500).side("top")\ntip.children([tip.slot(@ui.Trigger).label("Hover for help"), tip.slot(@ui.Positioner).child(tip.slot(@ui.Popup).padding(8).child(@ui.text("Helpful information")))])',
   "preview-card":
@@ -104,7 +104,7 @@ const examples: Record<string, string> = {
   "navigation-menu":
     'let nav = @ui.navigation_menu([])\nlet item = nav.slot(@ui.Item, value="docs", index=0)\nnav.child(nav.slot(@ui.List).child(item.children([item.slot(@ui.Trigger).label("Docs"), item.slot(@ui.Content).child(@ui.text("Documentation links"))])))',
   router:
-    'let router = @ui.router([@ui.layout((router, outlet) => @ui.div([\nrouter.link("/", "Home"), router.link("/settings", "Settings"), outlet(),\n]).flex_col(), [@ui.route("/", _ => @ui.text("Home")), @ui.route("/settings", _ => @ui.text("Settings"))])])\nrouter.outlet()',
+    'let router = @ui.router([@ui.layout((router, outlet) => @ui.view([\nrouter.link("/", "Home"), router.link("/settings", "Settings"), outlet(),\n]).flex_col(), [@ui.route("/", _ => @ui.text("Home")), @ui.route("/settings", _ => @ui.text("Settings"))])])\nrouter.outlet()',
 };
 for (const kind of ["dialog", "alert-dialog"])
   examples[kind] =
@@ -139,7 +139,7 @@ const swift: Record<string, string> = {
   gauge:
     '@ui.swift_ui_host([\n@ui.swift_ui_gauge().value(65).minimum(0).maximum(100).swift_ui_gauge_style("accessoryLinear").label("Storage"),\n])',
   "quickgui-host-view":
-    '@ui.swift_ui_host([\n@ui.swift_ui_quickgui_host_view(() => @ui.div([\n@ui.text("QuickGUI inside SwiftUI"),\n]).padding(12), width=320, height=120),\n])',
+    '@ui.swift_ui_host([\n@ui.swift_ui_quickgui_host_view(() => @ui.view([\n@ui.text("QuickGUI inside SwiftUI"),\n]).padding(12), width=320, height=120),\n])',
   popover:
     'let opened = @reactive.signal(false)\n@ui.swift_ui_host([\n@ui.swift_ui_popover([\n@ui.swift_ui_popover_trigger([\n@ui.swift_ui_button().value("Details").on_click(() => opened.update(value => !value)),\n]), @ui.swift_ui_popover_content([\n@ui.swift_ui_button().value("Close").on_click(() => opened.set(false)),\n]),\n]).bind_swift_ui_is_presented(() => opened.get()).on("presentation", 0, event => opened.set(event.value == Some("true"))),\n])',
 };

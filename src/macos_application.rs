@@ -965,11 +965,7 @@ impl MacSystemNotificationCenter {
 
         let trigger: Option<Retained<UNNotificationTrigger>> = notification
             .delivery_at
-            .and_then(|delivery_at| {
-                delivery_at
-                    .duration_since(std::time::SystemTime::now())
-                    .ok()
-            })
+            .and_then(|delivery_at| delivery_at.duration_since(web_time::SystemTime::now()).ok())
             .filter(|delay| !delay.is_zero())
             .map(|delay| unsafe {
                 Retained::into_super(

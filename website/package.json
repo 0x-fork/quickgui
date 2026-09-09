@@ -8,14 +8,16 @@
 	"scripts": {
 		"test": "bun test --tsconfig-override ./tsconfig.cloudflare.json ./tests",
 		"docs:index": "bun ./scripts/build-docs-search-index.ts",
-		"docs:check": "bun run docs:index && bun test ./tests/docs.test.ts",
+		"docs:check": "bun ./scripts/build-component-api.ts --check && bun ./scripts/build-demo-sources.ts --check && bun run docs:index && bun test ./tests/docs.test.ts ./tests/component-api.test.ts",
 		"docs:translate": "bun ./scripts/generate-doc-translations.ts",
-		"dev": "bun run docs:index && react-router dev --port 3000",
-		"build": "bun run docs:index && react-router build",
+		"dev": "bun run docs:api && bun run docs:wasm && bun run docs:index && react-router dev --port 3000",
+		"build": "bun run docs:api && bun run docs:wasm && bun run docs:index && react-router build",
 		"preview": "bun run build && vite preview",
 		"deploy": "bun run build && wrangler deploy",
 		"cf-typegen": "wrangler types",
-		"typecheck": "wrangler types && react-router typegen && tsc -b"
+		"typecheck": "wrangler types && react-router typegen && tsc -b",
+		"docs:api": "bun ./scripts/build-component-api.ts",
+		"docs:wasm": "bun ./scripts/build-demos.ts"
 	},
 	"dependencies": {
 		"@fontsource-variable/geist": "^5.3.0",

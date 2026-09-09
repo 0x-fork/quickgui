@@ -4,12 +4,12 @@ use std::{
     sync::Arc,
 };
 
-use thiserror::Error;
-use wgpu::naga::{
+use naga::{
     ShaderStage,
     front::wgsl,
     valid::{Capabilities, ValidationFlags, Validator},
 };
+use thiserror::Error;
 
 /// Maximum application WGSL retained by one custom shader.
 pub const MAX_CUSTOM_SHADER_SOURCE_BYTES: usize = 64 * 1024;

@@ -2,7 +2,8 @@
 //!
 //! Run with `cargo run --release --example range_controls`.
 
-use std::{sync::Arc, time::Instant};
+use std::sync::Arc;
+use web_time::Instant;
 
 use quickgui::{
     Application, AsyncViewContext, Color, Element, IntoElement, Key, Meter, MouseButton,
@@ -56,6 +57,8 @@ impl Palette {
 }
 
 struct RangeControlsDemo {
+    #[cfg(target_arch = "wasm32")]
+    docs_component: String,
     volume: SliderState,
     price: SliderState,
     zoom: SliderState,
@@ -70,6 +73,8 @@ struct RangeControlsDemo {
 impl Default for RangeControlsDemo {
     fn default() -> Self {
         Self {
+            #[cfg(target_arch = "wasm32")]
+            docs_component: String::new(),
             volume: SliderState::new(0.0, 100.0, 40.0).step(5.0),
             price: SliderState::range(0.0, 100.0, &[20.0, 80.0])
                 .step(10.0)
@@ -396,7 +401,7 @@ impl RangeControlsDemo {
                 view.quantity.press_step(false, Instant::now());
                 cx.invalidate();
             });
-        let release = cx.mouse_up_listener("quantity-release", |view: &mut Self, _event, cx| {
+        let release = cx.mouse_up_listener("quantity", |view: &mut Self, _event, cx| {
             if view.quantity.release_step() {
                 view.repeat = None;
                 cx.invalidate();
@@ -668,6 +673,24 @@ impl View for RangeControlsDemo {
         let colors = Palette::dark();
         self.schedule_repeat(cx);
 
+        #[cfg(target_arch = "wasm32")]
+        if !self.docs_component.is_empty() {
+            let content = if self.docs_component == "number-field" {
+                self.number_field(cx, colors)
+            } else {
+                self.splitter(cx, colors)
+            };
+            return div()
+                .size_full()
+                .p(20.0)
+                .flex_col()
+                .items_center()
+                .justify_center()
+                .bg(colors.background)
+                .text_color(colors.foreground)
+                .child(content);
+        }
+
         let sliders = Self::section(
             "Sliders",
             colors,
@@ -706,4 +729,12 @@ impl View for RangeControlsDemo {
             .child(feedback)
             .child(panes)
     }
+}
+
+/// Focused presentation of the same native example for browser documentation.
+#[cfg(target_arch = "wasm32")]
+pub fn docs_demo(component: String) -> impl quickgui::View {
+    let mut view = RangeControlsDemo::default();
+    view.docs_component = component;
+    view
 }

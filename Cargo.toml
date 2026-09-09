@@ -24,7 +24,7 @@ include = [
 ]
 
 [workspace]
-members = ["crates/quickgui-host", "crates/quickgui-system", "crates/quickgui-terminal", "crates/quickgui-updater"]
+members = ["crates/quickgui-docs-demo", "crates/quickgui-host", "crates/quickgui-system", "crates/quickgui-terminal", "crates/quickgui-updater"]
 exclude = [
   "vendor/accesskit_winit",
   "vendor/cosmic_text",
@@ -54,23 +54,28 @@ flate2 = "1.1"
 glyphon = { package = "quickgui-glyphon", path = "vendor/glyphon", version = "=0.1.3" }
 image-codecs = { package = "image", version = "0.25.10", default-features = false, features = ["gif", "jpeg", "png", "tiff", "webp"] }
 libghostty-vt = { version = "0.2.1", default-features = false, optional = true }
+naga = { version = "30.0.1", features = ["wgsl-in"] }
 lyon = { version = "1.0.19", default-features = false }
 pollster = "0.4"
 portable-pty = { version = "0.9.0", optional = true }
 pulldown-cmark = "0.13"
-quickgui-system = { path = "crates/quickgui-system", version = "=0.1.3", default-features = false, features = ["autostart", "protocol", "secure-storage"] }
+quickgui-system = { path = "crates/quickgui-system", version = "=0.1.3", default-features = false }
 resvg = { version = "0.46.0", default-features = false, features = ["text", "system-fonts", "memmap-fonts"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 taffy = { version = "0.13.0", default-features = false, features = ["std", "taffy_tree", "flexbox", "grid", "block_layout", "content_size"] }
 thiserror = "2.0"
 tracing = "0.1"
+web-time = "1.1"
 unicode-segmentation = "1.12"
 wgpu = { version = "30.0.1", default-features = false, features = ["std", "wgsl"] }
 winit = { package = "quickgui-winit", path = "vendor/winit", version = "=0.1.3" }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+quickgui-system = { path = "crates/quickgui-system", version = "=0.1.3", default-features = false, features = ["autostart", "protocol", "secure-storage"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "0.5.1"
@@ -89,7 +94,7 @@ global-hotkey = "0.8.0"
 [target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
 tray-icon = { version = "0.24.2", default-features = false }
 
-[target.'cfg(not(target_os = "macos"))'.dependencies]
+[target.'cfg(all(not(target_os = "macos"), not(target_arch = "wasm32")))'.dependencies]
 arboard = { version = "3.6.1", default-features = false, features = ["image-data"] }
 opener = { version = "0.8.5", features = ["reveal"] }
 
@@ -118,7 +123,9 @@ zbus = "5.19.0"
 wgpu = { version = "30.0.1", default-features = false, features = ["gles", "vulkan"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-wgpu = { version = "30.0.1", default-features = false, features = ["webgpu"] }
+wgpu = { version = "30.0.1", default-features = false, features = ["webgpu", "naga-ir", "fragile-send-sync-non-atomic-wasm"] }
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = ["HtmlCanvasElement", "console", "CustomEvent", "Window"] }
 
 [dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }
@@ -160,3 +167,10 @@ opt-level = 3
 [profile.release]
 lto = "thin"
 codegen-units = 1
+
+# Browser docs reuse the production renderer, optimized for download size.
+[profile.docs-wasm]
+inherits = "release"
+opt-level = "s"
+lto = "thin"
+strip = "debuginfo"

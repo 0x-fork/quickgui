@@ -200,7 +200,7 @@ fn gallery(
   }
   // Each panel owns its effects and native nodes. Changing the sidebar retires
   // the old demo, including popups, and constructs only the new one.
-  let body = @ui.div([])
+  let body = @ui.view([])
     .flex_col()
     .flex_1()
     .min_height(0)
@@ -229,7 +229,7 @@ fn gallery(
     )
   }
   tabs.children([
-    @ui.div([
+    @ui.view([
       @ui.text("Components")
       .height(52)
       .flex_shrink(0)
@@ -239,7 +239,7 @@ fn gallery(
       .font_size(13)
       .font_weight(700)
       .app_region("drag"),
-      @ui.div([sidebar]).flex_1().min_height(0).overflow_y("scroll"),
+      @ui.view([sidebar]).flex_1().min_height(0).overflow_y("scroll"),
     ])
     .width(214)
     .height("100%")
@@ -249,8 +249,8 @@ fn gallery(
     .bind_style(() => {
       @ui.style().bg(t.color("sidebar")).border_color(t.color("border"))
     }),
-    @ui.div([
-      @ui.div([
+    @ui.view([
+      @ui.view([
         col()
         .children([
           @ui.text(current().title).font_size(15).font_weight(700),

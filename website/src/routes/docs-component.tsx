@@ -7,6 +7,11 @@ import { componentDocsPath, findComponentDoc, type ComponentDocKind } from '../l
 import { localizedComponentDescription, localizedComponentOutline } from '../lib/docs-locales'
 import { componentMdx } from '../lib/docs-mdx'
 import { isDocsFrontend } from '../lib/docs'
+import { getComponentApi } from '../lib/component-api.server'
+import { getDemoSource } from '../lib/demo-source.server'
+import { ComponentApiReference } from '../components/docs/component-api-reference'
+import { ComponentPreview } from '../components/docs/component-preview'
+import { DEMO_COMPONENTS } from '../lib/component-demos'
 import { siteMeta } from '../lib/meta'
 
 function localizedPath(locale: Locale, path: string): string {
@@ -33,6 +38,8 @@ export function loader({ params, request }: Route.LoaderArgs) {
     kind,
     locale,
     origin: new URL(request.url).origin,
+    api: getComponentApi(params.frontend, kind, component.slug),
+    demoSource: kind === 'ui' ? getDemoSource(component.slug) : undefined,
   }
 }
 
@@ -96,7 +103,10 @@ export default function DocsComponentRoute({ loaderData }: Route.ComponentProps)
         area: component.kind === 'swift-ui' ? 'swift-ui' : 'components',
       }}
     >
+      <p className="docs-lead">{localizedComponentDescription(component, loaderData.locale)}</p>
+      {component.kind === 'ui' && DEMO_COMPONENTS.includes(component.slug) && loaderData.demoSource && <ComponentPreview key={`${component.kind}/${component.slug}`} component={component} source={loaderData.demoSource} locale={loaderData.locale} />}
       <Content components={getDocsMdxComponents(loaderData.locale)} />
+      <ComponentApiReference key={`${loaderData.frontend}/${component.slug}`} api={loaderData.api} locale={loaderData.locale} />
     </DocsShell>
   )
 }

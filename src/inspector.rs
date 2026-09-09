@@ -260,7 +260,7 @@ pub(crate) struct InspectorState {
 }
 
 impl InspectorState {
-    pub(crate) fn new(animation_epoch: std::time::Instant) -> Self {
+    pub(crate) fn new(animation_epoch: web_time::Instant) -> Self {
         let mut overlay = UiTree::new_at(animation_epoch);
         overlay.set_animations_enabled(false, animation_epoch);
         overlay.set_reduce_motion(true);
@@ -438,7 +438,7 @@ impl InspectorState {
         renderer: &mut impl TextLayoutEngine,
         viewport: Size,
         scale_factor: f32,
-        paint_time: std::time::Instant,
+        paint_time: web_time::Instant,
     ) -> Result<(), UiError> {
         let root = self.overlay_element();
         self.overlay
@@ -936,7 +936,7 @@ mod tests {
 
     #[test]
     fn picking_uses_real_paint_order_and_wheel_cycles_occluded_nodes() {
-        let mut inspector = InspectorState::new(std::time::Instant::now());
+        let mut inspector = InspectorState::new(web_time::Instant::now());
         inspector.snapshot.viewport = Size::new(500.0, 400.0);
         inspector.snapshot.nodes = vec![
             node(1, ScenePlane::Base, 10, 100),
@@ -967,7 +967,7 @@ mod tests {
 
     #[test]
     fn panel_actions_are_bounded_to_the_visible_header() {
-        let mut inspector = InspectorState::new(std::time::Instant::now());
+        let mut inspector = InspectorState::new(web_time::Instant::now());
         inspector.snapshot.viewport = Size::new(500.0, 400.0);
         assert_eq!(
             inspector

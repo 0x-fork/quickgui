@@ -403,16 +403,15 @@ pub use progress::{
     Meter, Progress, ProgressPartState, ProgressStatus, ValueFormat, meter, progress,
 };
 pub use quickgui_system::{
-    AppInfo, AppPaths, AutoStart, AutoStartMode, AutoStartOptions, BatteryState, BatteryStatus,
-    ColorScheme, IdleState, MAX_APP_IDENTIFIER_BYTES, MAX_APP_NAME_BYTES, MAX_APP_VERSION_BYTES,
-    MAX_IDLE_THRESHOLD, MAX_POWER_ASSERTION_REASON_BYTES, MAX_PREFERRED_LANGUAGES,
-    MAX_RELAUNCH_ARGUMENT_BYTES, MAX_RELAUNCH_ARGUMENTS, MAX_RELAUNCH_VALUE_BYTES,
-    MAX_SYSTEM_LOCALE_BYTES, MAX_SYSTEM_LOCALES_TOTAL_BYTES, MAX_SYSTEM_TEXT_BYTES,
-    OperatingSystem, OperatingSystemFamily, PermissionKind, PermissionManager, PermissionStatus,
-    PowerAssertion, PowerAssertionKind, PowerMonitor, PowerSource, PowerState,
-    ProtocolRegistration, ProtocolRegistrationOptions, RelaunchOptions, RelaunchRequest,
-    RelaunchedProcess, SecureStorage, SessionState, SystemBitness, SystemColor, SystemColorRole,
-    SystemInfo, SystemIntegrationError, SystemPreferences, ThermalState,
+    AppInfo, AppPaths, BatteryState, BatteryStatus, ColorScheme, IdleState,
+    MAX_APP_IDENTIFIER_BYTES, MAX_APP_NAME_BYTES, MAX_APP_VERSION_BYTES, MAX_IDLE_THRESHOLD,
+    MAX_POWER_ASSERTION_REASON_BYTES, MAX_PREFERRED_LANGUAGES, MAX_RELAUNCH_ARGUMENT_BYTES,
+    MAX_RELAUNCH_ARGUMENTS, MAX_RELAUNCH_VALUE_BYTES, MAX_SYSTEM_LOCALE_BYTES,
+    MAX_SYSTEM_LOCALES_TOTAL_BYTES, MAX_SYSTEM_TEXT_BYTES, OperatingSystem, OperatingSystemFamily,
+    PermissionKind, PermissionManager, PermissionStatus, PowerAssertion, PowerAssertionKind,
+    PowerMonitor, PowerSource, PowerState, RelaunchOptions, RelaunchRequest, RelaunchedProcess,
+    SessionState, SystemBitness, SystemColor, SystemColorRole, SystemInfo, SystemIntegrationError,
+    SystemPreferences, ThermalState,
 };
 #[cfg(feature = "updater")]
 pub use quickgui_system::{
@@ -651,3 +650,9 @@ pub mod extensions;
 
 #[cfg(feature = "terminal")]
 use ui_tree::static_selection_color;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub use quickgui_system::{
+    AutoStart, AutoStartMode, AutoStartOptions, ProtocolRegistration, ProtocolRegistrationOptions,
+    SecureStorage,
+};

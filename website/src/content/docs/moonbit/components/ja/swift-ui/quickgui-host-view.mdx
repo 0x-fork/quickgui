@@ -16,7 +16,7 @@ import {
 fn component_example() -> @ui.Element {
   @ui.swift_ui_host([
     @ui.swift_ui_quickgui_host_view(() => {
-      @ui.div([@ui.text("QuickGUI inside SwiftUI")]).padding(12)
+      @ui.view([@ui.text("QuickGUI inside SwiftUI")]).padding(12)
     })
     .width(320)
     .height(120),
@@ -34,7 +34,7 @@ SwiftUI コントロールは macOS 専用で、`swift_ui_host([])` の内側に
 | --- | --- |
 | `swift_ui_host(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (SwiftUiHost) |
 | `swift_ui_quickgui_host_view(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (SwiftUiQuickguiHostView) |
-| `div(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (Div) |
+| `view(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (View) |
 | `text(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (Text) |
 | `padding(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (Padding) |
 | `style(...), [children]` | レイアウト、文字、色、操作状態、子要素の構成。 |

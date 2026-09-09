@@ -2,7 +2,7 @@
 //!
 //! Run with `cargo run --release --example toolbar_toast`.
 
-use std::time::Instant;
+use web_time::Instant;
 
 use quickgui::{
     Application, AsyncViewContext, Color, Element, IntoElement, Task, Toast, ToastKind,
@@ -79,6 +79,8 @@ fn toggle_items<const N: usize>(source: [(&str, &str); N]) -> [ToggleGroupItem; 
 }
 
 struct ToolbarToastDemo {
+    #[cfg(target_arch = "wasm32")]
+    docs_component: String,
     toolbar: ToolbarState,
     alignment: ToggleGroupState,
     marks: ToggleGroupState,
@@ -92,6 +94,8 @@ impl Default for ToolbarToastDemo {
         let mut alignment = ToggleGroupState::single();
         alignment.press("left");
         Self {
+            #[cfg(target_arch = "wasm32")]
+            docs_component: String::new(),
             toolbar: ToolbarState::empty(),
             alignment,
             marks: ToggleGroupState::multiple(),
@@ -431,6 +435,26 @@ impl View for ToolbarToastDemo {
         self.expiry = None;
         self.schedule_expiry(cx);
 
+        #[cfg(target_arch = "wasm32")]
+        if !self.docs_component.is_empty() {
+            let content = if self.docs_component == "toggle-group" {
+                self.alignment(cx, colors)
+            } else {
+                self.commands(cx, colors)
+            };
+            return div()
+                .size_full()
+                .p(20.0)
+                .flex_col()
+                .gap(24.0)
+                .items_center()
+                .justify_center()
+                .bg(colors.background)
+                .text_color(colors.foreground)
+                .child(content)
+                .child(self.toasts_surface(cx, colors));
+        }
+
         div()
             .size_full()
             .flex_col()
@@ -466,4 +490,12 @@ impl View for ToolbarToastDemo {
                 self.toasts_surface(cx, colors),
             ))
     }
+}
+
+/// Focused presentation of the same native example for browser documentation.
+#[cfg(target_arch = "wasm32")]
+pub fn docs_demo(component: String) -> impl quickgui::View {
+    let mut view = ToolbarToastDemo::default();
+    view.docs_component = component;
+    view
 }

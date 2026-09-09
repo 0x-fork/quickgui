@@ -85,6 +85,13 @@ fn rounded_rect_distance(position: vec2<f32>, size: vec2<f32>, radius_value: f32
 }
 
 fn quickgui_shade_linear(input: VertexOutput) -> vec4<f32> {
+
+
+    let mask_position = input.logical_position - input.mask.xy;
+    let distance = rounded_rect_distance(mask_position, input.mask.zw, input.radius);
+    let antialias = max(fwidth(distance), 0.001);
+    let coverage = clamp(0.5 - distance / antialias, 0.0, 1.0);
+    let alpha = textureSample(svg_mask, svg_sampler, input.uv).r * input.color.a * coverage;
     if input.logical_position.x < input.clip.x
         || input.logical_position.y < input.clip.y
         || input.logical_position.x >= input.clip.z
@@ -92,16 +99,11 @@ fn quickgui_shade_linear(input: VertexOutput) -> vec4<f32> {
     {
         discard;
     }
-
-    let mask_position = input.logical_position - input.mask.xy;
-    let distance = rounded_rect_distance(mask_position, input.mask.zw, input.radius);
-    let antialias = max(fwidth(distance), 0.001);
-    let coverage = clamp(0.5 - distance / antialias, 0.0, 1.0);
     if coverage <= 0.0 {
         discard;
     }
 
-    let alpha = textureSample(svg_mask, svg_sampler, input.uv).r * input.color.a * coverage;
+
     if alpha <= 0.0 {
         discard;
     }

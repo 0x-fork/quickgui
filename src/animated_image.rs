@@ -8,8 +8,8 @@ use std::{
         Arc,
         atomic::{AtomicU64, Ordering},
     },
-    time::Duration,
 };
+use web_time::Duration;
 
 use image_codecs::{
     AnimationDecoder as _, ImageDecoder as _, ImageFormat, Limits, Rgba,

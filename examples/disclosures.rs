@@ -44,6 +44,8 @@ impl Default for Palette {
 }
 
 struct DisclosuresDemo {
+    #[cfg(target_arch = "wasm32")]
+    docs_component: String,
     recovery_open: bool,
     single: AccordionState,
     multiple: AccordionState,
@@ -61,6 +63,8 @@ impl Default for DisclosuresDemo {
             .replace_open(["keyboard", "resources"])
             .expect("two initial multiple values");
         Self {
+            #[cfg(target_arch = "wasm32")]
+            docs_component: String::new(),
             recovery_open: false,
             single,
             multiple,
@@ -274,6 +278,17 @@ impl View for DisclosuresDemo {
                 )),
         ));
 
+        #[cfg(target_arch = "wasm32")]
+        if !self.docs_component.is_empty() {
+            return div()
+                .size_full()
+                .p(16.0)
+                .flex_col()
+                .overflow_y_scroll()
+                .bg(palette.background)
+                .text_color(palette.foreground)
+                .child(single_section);
+        }
         let multiple_section = Self::section(
             "Accordion · multiple values",
             "Panels toggle independently. Closed panels in this sample are retained as display: none.",
@@ -355,4 +370,12 @@ impl View for DisclosuresDemo {
                     ),
             )
     }
+}
+
+/// Focused presentation of the same native example for browser documentation.
+#[cfg(target_arch = "wasm32")]
+pub fn docs_demo(component: String) -> impl quickgui::View {
+    let mut view = DisclosuresDemo::default();
+    view.docs_component = component;
+    view
 }

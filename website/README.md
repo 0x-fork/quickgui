@@ -9,6 +9,8 @@ This package is part of the repo's bun workspace — install from the repo root.
 ## Develop
 
 ```console
+rustup target add wasm32-unknown-unknown
+cargo install wasm-bindgen-cli --version 0.2.127 --locked
 bun install        # at the repo root
 cd website
 bun run dev
@@ -32,3 +34,30 @@ plugin (workerd).
   with a 10-minute in-memory cache.
 - `public/og.png` is a static capture of the `/og` card; regenerate it by
   screenshotting that route at 1200×630 if the branding changes.
+
+## Component references and demos
+
+`bun run dev` and `bun run build` generate the API catalog, highlighted demo source, and browser demos before starting the site. They require Go,
+Rust with `wasm32-unknown-unknown`, and the pinned wasm-bindgen CLI above.
+
+- `bun run docs:api` reads Go declarations with `go/parser` and MoonBit declarations
+  with the component schema. Editorial descriptions live in
+  `scripts/component-property-notes.ts`; generated types are never inferred from prose.
+- `bun run docs:wasm` builds `crates/quickgui-docs-demo` with the production Rust
+  layout, renderer, and controls. It reuses the native galleries with focused
+  documentation presentations. Assets are generated under `public/demos` and
+  versioned by their content hash; binaries are not committed. The code tab is
+  extracted from those exact render functions and shared helpers by
+  `scripts/build-demo-sources.ts`, with Rust syntax highlighting. The Go/MoonBit
+  usage examples remain in each language’s documentation.
+- `bun run docs:check` checks catalog drift, source links, language-specific types,
+  and search indexes. The API is indexed at the rendered `#api-reference` anchor.
+
+The browser host currently requires WebGPU and uses embedded font data. Each
+preview owns an iframe; reset/navigation tears down its runtime and resources.
+Readiness follows the first presented frame and survives hydration timing.
+Desktop-only controls (including SwiftUI, terminal, system popovers, and native
+pickers/menus) have API references and code examples without a preview card.
+
+The WASM host is intended for documentation demos. Desktop services, background
+thread tasks, and browser clipboard integration are outside its current support.

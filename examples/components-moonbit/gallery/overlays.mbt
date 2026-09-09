@@ -278,7 +278,7 @@ fn system_context_menu_demo(t : Theme) -> @ui.Element {
   panel(
     t, "System context menu", "The operating system draws this menu. Actions update the readout below; reopen it to see the current checkmarks.",
   ).children([
-    framed(t, @ui.div([]))
+    framed(t, @ui.view([]))
     .children([muted(t, "Right-click here for the system menu")])
     .height(96)
     .display("flex")

@@ -28,7 +28,7 @@ pub fn element(tag : Int) -> Element {
 }
 
 ///|
-pub fn div(children : Array[Element]) -> Element {
+pub fn view(children : Array[Element]) -> Element {
   configure_element(element(@protocol.TAG_VIEW), children)
 }
 

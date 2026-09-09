@@ -120,7 +120,7 @@ pub fn Router::link(
 /// Key each depth by the matched route ID. Navigating between sibling routes
 /// keeps their common layout nodes, bindings and component owners alive.
 pub fn Router::outlet(self : Router, depth? : Int = 0) -> Element {
-  div([]).children_keyed(
+  view([]).children_keyed(
     () => {
       match self.snapshot.get() {
         { "matched": { "routeIds": Array(ids), .. }, .. } =>
@@ -139,7 +139,7 @@ pub fn Router::outlet(self : Router, depth? : Int = 0) -> Element {
     id => {
       match self.renderers.get(id.get()) {
         Some(render) => render(self, () => self.outlet(depth=depth + 1))
-        None => div([])
+        None => view([])
       }
     },
   )

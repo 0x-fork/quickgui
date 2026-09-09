@@ -14,7 +14,7 @@ import {
 
 ```moonbit
 fn component_example() -> @ui.Element {
-  @ui.div([@ui.text("Hello")]).size_full().flex_col().gap(12).padding(24)
+  @ui.view([@ui.text("Hello")]).size_full().flex_col().gap(12).padding(24)
 }
 ```
 
@@ -26,7 +26,7 @@ fn component_example() -> @ui.Element {
 
 | メソッド | 用途 |
 | --- | --- |
-| `div(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (Div) |
+| `view(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (View) |
 | `text(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (Text) |
 | `size_full(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (SizeFull) |
 | `flex_col(...)` | ネイティブコンポーネントの設定。`bind_` はリアクティブなアクセサーを受け取ります。 (FlexCol) |

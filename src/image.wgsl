@@ -115,13 +115,7 @@ fn rounded_rect_distance(position: vec2<f32>, size: vec2<f32>, radius_value: f32
 }
 
 fn quickgui_shade_linear(input: VertexOutput) -> vec4<f32> {
-    if input.logical_position.x < input.clip.x
-        || input.logical_position.y < input.clip.y
-        || input.logical_position.x >= input.clip.z
-        || input.logical_position.y >= input.clip.w
-    {
-        discard;
-    }
+
 
     let mask_position = input.logical_position - input.mask.xy;
     let distance = rounded_rect_distance(
@@ -131,11 +125,19 @@ fn quickgui_shade_linear(input: VertexOutput) -> vec4<f32> {
     );
     let antialias = max(fwidth(distance), 0.001);
     let coverage = clamp(0.5 - distance / antialias, 0.0, 1.0);
+    let sampled = textureSample(image_texture, image_sampler, input.uv);
+    if input.logical_position.x < input.clip.x
+        || input.logical_position.y < input.clip.y
+        || input.logical_position.x >= input.clip.z
+        || input.logical_position.y >= input.clip.w
+    {
+        discard;
+    }
     if coverage <= 0.0 {
         discard;
     }
 
-    let sampled = textureSample(image_texture, image_sampler, input.uv);
+
     var color = sampled;
     if input.radius_filtered_opacity_padding.y > 0.5 {
         // CSS filter functions are defined on encoded sRGB, so convert around the matrix.

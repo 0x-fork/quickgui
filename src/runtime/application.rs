@@ -757,6 +757,7 @@ impl Application {
     }
 
     /// Handle arguments and the working directory forwarded by a later process.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn on_second_instance(
         mut self,
         callback: impl FnMut(SecondInstanceEvent, &mut EventContext) + 'static,
@@ -947,40 +948,54 @@ impl Application {
         }
 
         #[cfg(target_arch = "wasm32")]
-        {
-            let event_loop = EventLoop::with_user_event().build()?;
-            event_loop.set_control_flow(ControlFlow::Wait);
-            let mut runtime = Runtime::new(
-                RuntimeStartup {
-                    initial_window: None,
-                    app_info: self.app_info,
-                    app_paths: self.app_paths,
-                    globals: self.globals,
-                    keymap: self.keymap,
-                    menus: self.menus,
-                    assets: self.assets,
-                    fonts: self.fonts,
-                    application_callbacks: self.application_callbacks,
-                    quit_mode: self.quit_mode,
-                },
-                event_loop.create_proxy(),
-            )?;
-            event_loop.run_app(&mut runtime)?;
-            if runtime.relaunch_request.is_some() {
-                return Err(AppError::Platform(
-                    "application relaunch is unavailable on WebAssembly".to_owned(),
-                ));
-            }
-            match runtime.fatal_error.take() {
-                Some(error) => Err(error),
-                None => Ok(()),
-            }
-        }
+        Err(AppError::Platform(
+            "use Application::run_web for asynchronous browser startup".to_owned(),
+        ))
     }
 }
 
 impl Default for Application {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl Application {
+    /// Start the retained runtime on a browser canvas. GPU initialization is
+    /// asynchronous; subsequent window setup reuses this ready device and never
+    /// blocks the browser event loop on a GPU promise.
+    pub async fn run_web(
+        mut self,
+        canvas: web_sys::HtmlCanvasElement,
+        on_finish_launching: impl FnOnce(&mut App) + 'static,
+    ) -> Result<(), AppError> {
+        use winit::platform::web::EventLoopExtWebSys;
+        let profile = PerformanceProfile::Balanced;
+        let gpu = GpuContext::for_canvas(canvas.clone(), profile)
+            .await
+            .map_err(|error| AppError::GraphicsInitialization(error.to_string()))?;
+        self.application_callbacks.finish_launching = Some(Box::new(on_finish_launching));
+        let event_loop = EventLoop::with_user_event().build()?;
+        event_loop.set_control_flow(ControlFlow::Wait);
+        let mut runtime = Runtime::new(
+            RuntimeStartup {
+                initial_window: None,
+                app_info: self.app_info,
+                app_paths: self.app_paths,
+                globals: self.globals,
+                keymap: self.keymap,
+                menus: self.menus,
+                assets: self.assets,
+                fonts: self.fonts,
+                application_callbacks: self.application_callbacks,
+                quit_mode: self.quit_mode,
+            },
+            event_loop.create_proxy(),
+        )?;
+        runtime.web_canvas = Some(canvas);
+        runtime.gpu_contexts.insert(profile, gpu);
+        event_loop.spawn_app(runtime);
+        Ok(())
     }
 }

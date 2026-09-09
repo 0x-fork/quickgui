@@ -13,8 +13,8 @@ use std::{
         Arc,
         atomic::{AtomicU64, Ordering},
     },
-    time::{Duration, Instant},
 };
+use web_time::{Duration, Instant};
 
 use accesskit::{Action as AccessibilityAction, ActionData, ActionRequest};
 use accesskit_winit::{
@@ -352,6 +352,7 @@ type KeyboardLayoutCallback = Box<dyn FnMut(&KeyboardLayout, &mut EventContext)>
 type SystemNotificationResponseCallback =
     Box<dyn FnMut(SystemNotificationResponse, &mut EventContext)>;
 type GlobalShortcutCallback = Box<dyn FnMut(GlobalShortcutEvent, &mut EventContext)>;
+#[cfg(not(target_arch = "wasm32"))]
 type SecondInstanceCallback = Box<dyn FnMut(SecondInstanceEvent, &mut EventContext)>;
 type PowerEventCallback = Box<dyn FnMut(PowerEvent, &mut EventContext)>;
 type TrayEventCallback = Box<dyn FnMut(TrayEvent, &mut EventContext)>;
@@ -373,6 +374,7 @@ struct ApplicationCallbacks {
     keyboard_layout: Option<KeyboardLayoutCallback>,
     system_notification_response: Option<SystemNotificationResponseCallback>,
     global_shortcut: Option<GlobalShortcutCallback>,
+    #[cfg(not(target_arch = "wasm32"))]
     second_instance: Option<SecondInstanceCallback>,
     power_event: Option<PowerEventCallback>,
     tray_event: Option<TrayEventCallback>,
@@ -1104,6 +1106,8 @@ struct Runtime {
     assets: Assets,
     font_system: SharedFontSystem,
     gpu_contexts: HashMap<PerformanceProfile, GpuContext>,
+    #[cfg(target_arch = "wasm32")]
+    web_canvas: Option<web_sys::HtmlCanvasElement>,
     displays: Displays,
     keyboard: KeyboardState,
     #[cfg(target_os = "macos")]

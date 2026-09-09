@@ -506,6 +506,12 @@ impl Runtime {
             state.first_presented = true;
             // Ready-to-show: the first frame is on screen, so a window created with
             // `WindowOptions::show(false)` can be revealed without a blank flash.
+            #[cfg(target_arch = "wasm32")]
+            if let Some(window) = web_sys::window() {
+                if let Ok(event) = web_sys::CustomEvent::new("quickgui:ready") {
+                    let _ = window.dispatch_event(&event);
+                }
+            }
             if !self.dispatch(event_loop, Event::FirstPresented, false) {
                 return;
             }

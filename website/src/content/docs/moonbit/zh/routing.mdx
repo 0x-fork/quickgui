@@ -13,7 +13,7 @@ fn routing_example() -> @ui.Element {
   let router = @ui.router([
     @ui.layout(
       (router, outlet) => {
-        @ui.div([
+        @ui.view([
           router.link("/", "Home"),
           router.link("/settings", "Settings"),
           outlet(),
@@ -39,7 +39,7 @@ fn routing_example() -> @ui.Element {
 
 ```moonbit
 fn navigation_controls(router : @ui.Router) -> @ui.Element {
-  @ui.div([
+  @ui.view([
     @ui.button("Back").on_click(() => router.go(-1)),
     @ui.button("Forward").on_click(() => router.go(1)),
     router

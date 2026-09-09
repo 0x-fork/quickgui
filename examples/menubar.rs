@@ -287,3 +287,10 @@ impl View for MenubarGallery {
         page
     }
 }
+
+/// Focused presentation of the same native example for browser documentation.
+#[cfg(target_arch = "wasm32")]
+pub fn docs_demo(component: String) -> impl quickgui::View {
+    let _ = component;
+    MenubarGallery::new()
+}

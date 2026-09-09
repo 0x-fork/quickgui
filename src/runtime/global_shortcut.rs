@@ -56,6 +56,7 @@ static GLOBAL_SHORTCUT_PROXY: Mutex<Option<EventLoopProxy<RuntimeEvent>>> = Mute
 #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 static INSTALL_GLOBAL_SHORTCUT_HANDLER: Once = Once::new();
 
+#[cfg(not(target_arch = "wasm32"))]
 impl AppRunner {
     pub const fn global_shortcuts_supported(&self) -> bool {
         DesktopIntegrationSupport::current().global_shortcuts

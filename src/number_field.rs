@@ -1,7 +1,5 @@
-use std::{
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::sync::Arc;
+use web_time::{Duration, Instant};
 
 use crate::{
     AccessibilityRole, AccessibilityValueRange, Element, ElementId, Modifiers, Point, PointerEvent,

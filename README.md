@@ -46,7 +46,7 @@ The [MoonBit frontend](moonbit/README.md) uses child lists, fluent properties, a
 
 ```moonbit
 let (count, set_count) = @reactive.create_signal(0)
-@ui.div([
+@ui.view([
   @ui.text("Count: \{count()}"),
   @ui.button("Increment").on_click(() => set_count(count() + 1)),
 ])

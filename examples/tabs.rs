@@ -50,6 +50,8 @@ impl Default for Palette {
 }
 
 struct TabsDemo {
+    #[cfg(target_arch = "wasm32")]
+    docs_component: String,
     workspace: TabsState,
     preferences: TabsState,
     /// The active tab's laid-out geometry, published by the framework while it paints.
@@ -60,6 +62,8 @@ struct TabsDemo {
 impl Default for TabsDemo {
     fn default() -> Self {
         Self {
+            #[cfg(target_arch = "wasm32")]
+            docs_component: String::new(),
             workspace: TabsState::new("overview"),
             preferences: TabsState::new("editor"),
             workspace_indicator: AnchorPlacementHandle::new(),
@@ -292,6 +296,17 @@ impl View for TabsDemo {
                 ))),
         ));
 
+        #[cfg(target_arch = "wasm32")]
+        if !self.docs_component.is_empty() {
+            return div()
+                .size_full()
+                .p(16.0)
+                .flex_col()
+                .overflow_y_scroll()
+                .bg(palette.background)
+                .text_color(palette.foreground)
+                .child(workspace_card);
+        }
         let preferences = Tabs::from_state("preference-tabs", &self.preferences)
             .vertical()
             .activate_on_focus(true);
@@ -439,4 +454,12 @@ impl View for TabsDemo {
                     ),
             )
     }
+}
+
+/// Focused presentation of the same native example for browser documentation.
+#[cfg(target_arch = "wasm32")]
+pub fn docs_demo(component: String) -> impl quickgui::View {
+    let mut view = TabsDemo::default();
+    view.docs_component = component;
+    view
 }

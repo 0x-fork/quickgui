@@ -4,7 +4,7 @@ Element methods and `@ui.style()` share the same native style properties. Numeri
 
 ```moonbit
 fn card() -> @ui.Element {
-  @ui.div([@ui.text("A retained card").font_size(24).font_weight(600)])
+  @ui.view([@ui.text("A retained card").font_size(24).font_weight(600)])
   .flex_col()
   .width(420)
   .max_width("100%")
@@ -47,9 +47,9 @@ The compiler binds getter reads inside `.style(...)` and fluent modifiers. Later
 fn shared_cards() -> @ui.Element {
   let card = @ui.style().padding(20).border_radius(12)
   let emphasized = @ui.style().merge(card).padding_left(28)
-  @ui.div([
-    @ui.div([@ui.text("Hello")]).style(card),
-    @ui.div([@ui.text("Another card")]).style(emphasized),
+  @ui.view([
+    @ui.view([@ui.text("Hello")]).style(card),
+    @ui.view([@ui.text("Another card")]).style(emphasized),
   ])
   .flex_col()
   .gap(12)
@@ -66,7 +66,7 @@ Use `.grid_cols(3)` for equal columns or `.grid_template_columns("220px 1fr")` f
 
 ```moonbit
 fn grid() -> @ui.Element {
-  @ui.div([@ui.text("Sidebar"), @ui.text("Content")])
+  @ui.view([@ui.text("Sidebar"), @ui.text("Content")])
   .grid_template_columns("220px 1fr")
   .display("grid")
   .gap(16)

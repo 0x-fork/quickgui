@@ -16,14 +16,14 @@ const transform = (body: string) => {
 };
 
 test("text, button content, fluent properties, and source nodes bind independently", () => {
-  const output = transform(`@ui.div([
+  const output = transform(`@ui.view([
     @ui.text("Count: \\{count.get()}"),
     @ui.button("Save \\{count.get()}").disabled(busy.get()).on_click(() => save(count.get())),
     @ui.input().value(name.get()).placeholder(placeholder()),
     @ui.checkbox([]).checked(checked.get()).on_checked_change(checked.set),
     @ui.svg(icon.get()), @ui.image(path.get()), @ui.markdown(read_markdown()),
   ])`);
-  expect(output.code).toContain('@ui.div([]).bind_content(() => { "Count: \\{count.get()}" })');
+  expect(output.code).toContain('@ui.view([]).bind_content(() => { "Count: \\{count.get()}" })');
   expect(output.code).toContain('.bind_content(() => { "Save \\{count.get()}" })');
   expect(output.code).toContain(".on_click(() => save(count.get()))");
   expect(output.code).toContain(".on_checked_change(checked.set)");
@@ -32,7 +32,7 @@ test("text, button content, fluent properties, and source nodes bind independent
 });
 
 test("styles merge in declaration order even across handlers and later static overrides", () => {
-  const output = transform(`@ui.div([]).style(@ui.style().bg(theme.get()))
+  const output = transform(`@ui.view([]).style(@ui.style().bg(theme.get()))
     .width(width.get()).on_click(() => save()).px(12).width(100)
     .hover(s => s.opacity(hover_opacity.get()))`);
   expect(output.code).toContain(
@@ -52,7 +52,7 @@ test("styles on each side of a slot stay bound to their own node", () => {
 
 test("static literals, setup snapshots, event factories, and explicit bindings stay static", () => {
   const output = transform(`let initial = count.get()
-    @ui.div([@ui.text("Count: \\{initial}"), @ui.div([]).bind_content(() => count.get().to_string())])
+    @ui.view([@ui.text("Count: \\{initial}"), @ui.view([]).bind_content(() => count.get().to_string())])
       .bg(@ui.rgb8(1, 2, 3)).width(100)
       .bind_style(() => @ui.style().opacity(count.get()))
       .hover(s => s.bg(@ui.rgb8(3, 4, 5)))
@@ -64,7 +64,7 @@ test("static literals, setup snapshots, event factories, and explicit bindings s
 });
 
 test("conditional children use branch selectors and keep sibling positions", () => {
-  const output = transform(`@ui.div([
+  const output = transform(`@ui.view([
     @ui.text("before"),
     if count.get() > 10 { @ui.text("high") } else if count.get() > 0 { @ui.text("low") } else { @ui.text("zero") },
     @ui.text("after"),
@@ -83,7 +83,7 @@ test("conditional children use branch selectors and keep sibling positions", () 
 
 test("fluent children also compile their nested views", () => {
   const output = transform(
-    "@ui.div([]).children([@ui.text(label())]).child(@ui.input().value(value.get()))",
+    "@ui.view([]).children([@ui.text(label())]).child(@ui.input().value(value.get()))",
   );
   expect(output.bindings).toBe(2);
   expect(output.code).toContain("bind_content");
@@ -100,7 +100,7 @@ test("aliases come from the real package import, not the spelling ui", () => {
   ).toEqual(["gui"]);
   const source = 'fn view() { @gui.text("\\{count.get()}")\n @ui.text("\\{count.get()}") }';
   const output = transformMoonbit(parser, source, "view.mbt", ["gui"]);
-  expect(output.code).toContain("@gui.div([]).bind_content(");
+  expect(output.code).toContain("@gui.view([]).bind_content(");
   expect(output.code).toContain('@ui.text("\\{count.get()}")');
 });
 
@@ -130,13 +130,13 @@ test("invalid syntax fails explicitly rather than leaving a nonreactive snapshot
 
 test("view constructor props and handlers are rejected with a fluent migration hint", () => {
   expect(() => transform('@ui.button("Save", on_click=save)')).toThrow("Use .on_click(...)");
-  expect(() => transform("@ui.div([], style=@ui.style())")).toThrow("Use .style(...)");
+  expect(() => transform("@ui.view([], style=@ui.style())")).toThrow("Use .style(...)");
   expect(() => transform("@ui.input(value=name())")).toThrow("Use .value(...)");
 });
 
 test("multiline interpolation and raw strings retain their line boundaries", () => {
   const result = transform(
-    "@ui.div([@ui.text(\n$| Count: \\{count.get()}\n), @ui.text(\n#| literal \\{value}\n)])",
+    "@ui.view([@ui.text(\n$| Count: \\{count.get()}\n), @ui.text(\n#| literal \\{value}\n)])",
   );
   expect(result.bindings).toBe(1);
   expect(result.code).toContain("$| Count: \\{count.get()}\n");
@@ -145,7 +145,7 @@ test("multiline interpolation and raw strings retain their line boundaries", () 
 
 test("spread children and array-returning helpers bind collections without misidentifying elements", () => {
   const source =
-    'fn rows() -> Array[@ui.Element] { [] }\nfn view() { @ui.div([@ui.text("before"), ..items.get().map(item => @ui.text(item)), @ui.text("after")])\n @ui.div(rows()) }';
+    'fn rows() -> Array[@ui.Element] { [] }\nfn view() { @ui.view([@ui.text("before"), ..items.get().map(item => @ui.text(item)), @ui.text("after")])\n @ui.view(rows()) }';
   const output = transformMoonbit(parser, source, "view.mbt");
   parseMoonbit(parser, output.code, "generated.mbt").delete();
   expect(output.code).toContain(".bind_content(() => { items.get().map(");

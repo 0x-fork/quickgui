@@ -6,7 +6,7 @@
 //!
 //! Run with `cargo run --release --example base_ui_components`.
 
-use std::time::{Duration, Instant};
+use web_time::{Duration, Instant};
 
 use quickgui::{
     Application, Avatar, AvatarLoadingStatus, AvatarState, CheckboxGroup, CheckboxGroupState,
@@ -68,6 +68,8 @@ impl Palette {
 }
 
 struct BaseUiGallery {
+    #[cfg(target_arch = "wasm32")]
+    docs_component: String,
     palette: Palette,
     avatar: AvatarState,
     colors: CheckboxGroupState,
@@ -82,6 +84,8 @@ struct BaseUiGallery {
 impl BaseUiGallery {
     fn new() -> Self {
         Self {
+            #[cfg(target_arch = "wasm32")]
+            docs_component: String::new(),
             palette: Palette::dark(),
             avatar: AvatarState::new().delay(Duration::from_millis(200)),
             colors: CheckboxGroupState::new(["red", "green", "blue"]).checked(["green"]),
@@ -156,6 +160,27 @@ impl View for BaseUiGallery {
         self.log.set_geometry(SCROLL_VIEWPORT, SCROLL_CONTENT);
 
         let palette = self.palette;
+        #[cfg(target_arch = "wasm32")]
+        if !self.docs_component.is_empty() {
+            let content = match self.docs_component.as_str() {
+                "avatar" => self.avatar_section(cx),
+                "checkbox-group" => self.checkbox_group_section(cx),
+                "preview-card" => self.preview_card_section(cx),
+                "scroll-area" => self.scroll_area_section(cx),
+                "otp-field" => self.otp_section(cx),
+                _ => self.navigation_section(cx),
+            };
+            return div()
+                .size_full()
+                .p(20.0)
+                .flex_col()
+                .items_center()
+                .justify_center()
+                .bg(palette.background)
+                .text_color(palette.foreground)
+                .child(content);
+        }
+
         let body = div()
             .flex_col()
             .gap(16.0)
@@ -714,4 +739,12 @@ fn indicator_box(palette: &Palette, state: ToggleState) -> Element {
         .rounded(4.0)
         .bg(fill)
         .border(1.0, palette.border)
+}
+
+/// Focused presentation of the same native example for browser documentation.
+#[cfg(target_arch = "wasm32")]
+pub fn docs_demo(component: String) -> impl quickgui::View {
+    let mut view = BaseUiGallery::new();
+    view.docs_component = component;
+    view
 }

@@ -1,4 +1,5 @@
 use super::*;
+use web_time::{Duration, Instant};
 
 use std::{
     io::{self, Read, Write},
@@ -8,7 +9,6 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
     thread::{self, JoinHandle},
-    time::{Duration, Instant},
 };
 
 use interprocess::{
@@ -489,8 +489,8 @@ mod tests {
 
     #[test]
     fn platform_endpoint_supports_a_local_socket_round_trip() {
-        let nonce = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let nonce = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .expect("system clock after Unix epoch")
             .as_nanos();
         let endpoint = endpoint_for(&format!(

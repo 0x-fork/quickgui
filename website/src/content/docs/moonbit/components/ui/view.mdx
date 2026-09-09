@@ -14,7 +14,7 @@ import {
 
 ```moonbit
 fn component_example() -> @ui.Element {
-  @ui.div([@ui.text("Hello")]).size_full().flex_col().gap(12).padding(24)
+  @ui.view([@ui.text("Hello")]).size_full().flex_col().gap(12).padding(24)
 }
 ```
 
@@ -26,7 +26,7 @@ The native core owns interaction, layout, accessibility and animation. These par
 
 | Method | Purpose |
 | --- | --- |
-| `div(...)` | Native component configuration; `bind_` accepts a reactive accessor. (Div) |
+| `view(...)` | Native component configuration; `bind_` accepts a reactive accessor. (View) |
 | `text(...)` | Native component configuration; `bind_` accepts a reactive accessor. (Text) |
 | `size_full(...)` | Native component configuration; `bind_` accepts a reactive accessor. (SizeFull) |
 | `flex_col(...)` | Native component configuration; `bind_` accepts a reactive accessor. (FlexCol) |
