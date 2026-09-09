@@ -82,7 +82,6 @@ export const ja: typeof en = {
     create: "作成して実行",
     edit: "整形とビルド",
     ship: "署名とパッケージ化",
-    note: "TypeScript では Bun 1.4+ と Solid 2、Go では Go 1.23+ が必要です。macOS では Xcode Command Line Tools も必要です。署名と公証には自分の Apple 開発者資格情報を使います。",
   },
   platforms: {
     available: "利用可能",

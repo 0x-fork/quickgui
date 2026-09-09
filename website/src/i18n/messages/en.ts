@@ -80,7 +80,6 @@ export const en = {
     create: "Create and run",
     edit: "Format and build",
     ship: "Sign and package",
-    note: "Use Bun 1.4+ with TypeScript and Solid 2, or install Go 1.23+ for the Go frontend. macOS also needs Xcode Command Line Tools. Signing and notarization use your own Apple developer credentials.",
   },
   platforms: {
     available: "available now",

@@ -40,9 +40,6 @@ export function Quickstart({
           </div>
         ))}
       </div>
-      <p className="border-t border-border px-6 py-5 text-sm leading-relaxed text-muted-foreground sm:px-8">
-        {t("quickstart.note")}
-      </p>
     </section>
   );
 }

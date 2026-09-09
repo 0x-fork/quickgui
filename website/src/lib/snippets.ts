@@ -1,21 +1,13 @@
 export const snippets = {
   typescriptSwiftUi: {
     lang: "tsx",
-    code: `import { Button, Host } from "@quickgui/solid/swift-ui";
-import { buttonStyle } from "@quickgui/solid/swift-ui/modifiers";
-
-function SaveButton() {
-  return (
-    <Host matchContents>
-      <Button
-        label="Save changes"
-        systemImage="checkmark"
-        modifiers={[buttonStyle("glass")]}
-      />
-    </Host>
-  );
-}
-`,
+    code: `<Host matchContents>
+  <Button
+    label="Save changes"
+    systemImage="checkmark"
+    modifiers={[buttonStyle("glass")]}
+  />
+</Host>`,
   },
   typescriptCounter: {
     lang: "tsx",

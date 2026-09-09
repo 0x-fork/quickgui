@@ -82,7 +82,6 @@ export const zh: typeof en = {
     create: "创建并运行",
     edit: "格式化与构建",
     ship: "签名与打包",
-    note: "TypeScript 前端使用 Bun 1.4+ 和 Solid 2；Go 前端需要 Go 1.23+。macOS 还需要 Xcode Command Line Tools。签名和公证使用你自己的 Apple 开发者凭证。",
   },
   platforms: {
     available: "现已可用",
