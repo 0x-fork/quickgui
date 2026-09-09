@@ -119,17 +119,8 @@ func (controller *chatController) view() {
 								nil,
 							)
 						},
-						ui.Style().Flex(1),
-						ui.Style().MinHeight(0),
-						ui.Style().Width("100%"),
-						ui.Style().Padding(20),
-						ui.Style().Gap(14),
-						ui.Style().AlignItems("center"),
-						ui.EstimatedItemHeight(240),
-						ui.Overscan(1),
-						ui.ListAlignment("top"),
-						ui.FollowMode("tail"),
-					)
+					).Flex(1).MinHeight(0).Width("100%").Padding(20).Gap(14).AlignItems("center").EstimatedItemHeight(240).Overscan(1).ListAlignment("top").FollowMode("tail")
+
 					controller.composer()
 				},
 			).Display("flex").FlexDirection("column").Flex(1).MinWidth(0).Height("100%")
@@ -143,10 +134,8 @@ func (controller *chatController) sidebar() {
 			ui.Text("Conversations").FontSize(18).FontWeight(700)
 			ui.Button(
 				"New chat",
-				buttonStyle(),
-				ui.Disabled(controller.busy.Read),
-				ui.OnClick(controller.newConversation),
-			)
+			).Style(buttonStyle()).Disabled(controller.busy.Read).OnClick(controller.newConversation)
+
 			ui.View(
 				func() {
 					ui.KeyedFor(
@@ -156,36 +145,21 @@ func (controller *chatController) sidebar() {
 							ui.Button(
 								func() {
 									ui.Text(
-										func() string { return conversation().Title },
+										conversation().Title,
 									).Width("100%").FontWeight(600).WhiteSpace("nowrap").Overflow("hidden").TextOverflow("ellipsis")
 									ui.Text(
-										func() string {
-											return time.UnixMilli(conversation().UpdatedAt).Format("Jan 2, 15:04")
-										},
+
+										time.UnixMilli(conversation().UpdatedAt).Format("Jan 2, 15:04"),
 									).FontSize(11).TextColor("#94a3b8")
 								},
-								ui.Style().Display("flex"),
-								ui.Style().FlexDirection("column"),
-								ui.Style().Gap(5),
-								ui.Style().Padding(12),
-								ui.Style().Width("100%"),
-								ui.Style().FlexShrink(0),
-								ui.Style().BorderRadius(8),
-								ui.Style().AppRegion("no-drag"),
-								ui.Style().Cursor("default"),
-								ui.Style().UserSelect("none"),
-								ui.Style().Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
-									return s.BackgroundColor("#1c2b42")
-								}),
-								ui.When(
-									func() bool {
-										return controller.state.Read().ActiveConversationID == conversation().ID
-									},
-									ui.Style().BackgroundColor("#263854"),
-								),
-								ui.Disabled(controller.busy.Read),
-								ui.OnClick(func() { controller.selectConversation(conversation().ID) }),
-							)
+							).Display("flex").FlexDirection("column").Gap(5).Padding(12).Width("100%").FlexShrink(0).BorderRadius(8).AppRegion("no-drag").Cursor("default").UserSelect("none").Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
+								return s.BackgroundColor("#1c2b42")
+							}).When(
+								controller.state.Read().ActiveConversationID == conversation().ID,
+
+								ui.Style().BackgroundColor("#263854"),
+							).Disabled(controller.busy.Read).OnClick(func() { controller.selectConversation(conversation().ID) })
+
 						},
 						nil,
 					)
@@ -204,7 +178,7 @@ func (controller *chatController) toolbar() {
 			ui.View(
 				func() {
 					ui.Text(
-						func() string { return controller.current().Title },
+						controller.current().Title,
 					).FontSize(18).FontWeight(700).WhiteSpace("nowrap").TextOverflow("ellipsis").Overflow("hidden")
 					ui.Text(
 						"DeepSeek · native streaming Markdown",
@@ -257,24 +231,13 @@ func messageCard(message func() ChatMessage) {
 					return "DeepSeek"
 				},
 			).FontSize(12).FontWeight(700).TextColor("#93c5fd")
-			ui.Markdown(
-				ui.Style().Width("100%"),
-				ui.Style().FontSize(14),
-				ui.Style().LineHeight(22),
-				ui.Style().TextColor("#e2e8f0"),
-				ui.Style().MarkdownLinkColor("#93c5fd"),
-				ui.Style().MarkdownCodeTextColor("#c4b5fd"),
-				ui.Style().MarkdownCodeBackground("#0b1020"),
-				ui.Style().MarkdownBorderColor("#475569"),
-				ui.Style().MarkdownMutedColor("#94a3b8"),
-				ui.Streaming(func() bool { return message().Streaming }),
-				ui.Value(func() string {
-					if message().Streaming && message().Content == "" {
-						return "_Thinking…_"
-					}
-					return message().Content
-				}),
-			)
+			ui.Markdown().Width("100%").FontSize(14).LineHeight(22).TextColor("#e2e8f0").MarkdownLinkColor("#93c5fd").MarkdownCodeTextColor("#c4b5fd").MarkdownCodeBackground("#0b1020").MarkdownBorderColor("#475569").MarkdownMutedColor("#94a3b8").Streaming(message().Streaming).Value(func() string {
+				if message().Streaming && message().Content == "" {
+					return "_Thinking…_"
+				}
+				return message().Content
+			})
+
 			ui.Show(
 				func() bool { return message().Failed },
 				func() {
@@ -300,19 +263,11 @@ func (controller *chatController) composer() {
 			)
 			ui.View(
 				func() {
-					ui.Input(
-						inputStyle(),
-						ui.Style().Flex(1),
-						ui.Style().MinWidth(0),
-						ui.Value(func() string { return controller.current().Draft }),
-						ui.Placeholder("Message DeepSeek…"),
-						ui.Disabled(controller.busy.Read),
-						ui.OnInput(func(event *native.Event) { controller.setDraft(event.Value) }),
-						ui.OnSubmit(func(event *native.Event) {
-							controller.setDraft(event.Value)
-							controller.send()
-						}),
-					)
+					ui.Input().Style(inputStyle()).Flex(1).MinWidth(0).Value(controller.current().Draft).Placeholder("Message DeepSeek…").Disabled(controller.busy.Read).OnInputEvent(func(event *native.Event) { controller.setDraft(event.Value) }).OnSubmitEvent(func(event *native.Event) {
+						controller.setDraft(event.Value)
+						controller.send()
+					})
+
 					ui.Button(
 						func() string {
 							if controller.busy.Read() {
@@ -320,22 +275,16 @@ func (controller *chatController) composer() {
 							}
 							return "Send"
 						},
-						buttonStyle(),
-						ui.Style().BackgroundColor("#2563eb"),
-						ui.Style().Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
-							return s.BackgroundColor("#3b82f6")
-						}),
-						ui.Disabled(func() bool {
-							return !controller.busy.Read() && strings.TrimSpace(controller.current().Draft) == ""
-						}),
-						ui.OnClick(func() {
-							if controller.busy.Peek() {
-								controller.stop()
-							} else {
-								controller.send()
-							}
-						}),
-					)
+					).Style(buttonStyle()).BackgroundColor("#2563eb").Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
+						return s.BackgroundColor("#3b82f6")
+					}).Disabled(!controller.busy.Read() && strings.TrimSpace(controller.current().Draft) == "").OnClick(func() {
+						if controller.busy.Peek() {
+							controller.stop()
+						} else {
+							controller.send()
+						}
+					})
+
 				},
 			).Display("flex").Width("100%").Gap(10).AlignItems("center")
 			ui.Text(
@@ -364,15 +313,8 @@ func (controller *chatController) providerSettings() {
 			).FontSize(12).LineHeight(18).TextColor("#94a3b8")
 			ui.View(
 				func() {
-					ui.Input(
-						inputStyle(),
-						ui.Style().Flex(1),
-						ui.Style().MinWidth(0),
-						ui.Value(value),
-						ui.Password(func() bool { return !reveal() }),
-						ui.Disabled(controller.credentialBusy.Read),
-						ui.OnInput(func(event *native.Event) { setValue(event.Value) }),
-					)
+					ui.Input().Style(inputStyle()).Flex(1).MinWidth(0).Value(value()).Password(!reveal()).Disabled(controller.credentialBusy.Read).OnInputEvent(func(event *native.Event) { setValue(event.Value) })
+
 					ui.Button(
 						func() string {
 							if reveal() {
@@ -380,85 +322,76 @@ func (controller *chatController) providerSettings() {
 							}
 							return "Reveal"
 						},
-						buttonStyle(),
-						ui.OnClick(func() { setReveal(!reveal()) }),
-					)
+					).Style(buttonStyle()).OnClick(func() { setReveal(!reveal()) })
+
 				},
 			).Display("flex").Gap(8).AlignItems("center")
 			ui.Text(
-				errorText,
+				errorText(),
 			).FontSize(12).TextColor("#fca5a5").MinHeight(18)
 			ui.View().Flex(1)
 			ui.View(
 				func() {
 					ui.Button(
 						"Remove key",
-						buttonStyle(),
-						ui.Style().TextColor("#fca5a5"),
-						ui.Disabled(controller.credentialBusy.Read),
-						ui.OnClick(func() {
-							controller.credentialBusy.Write(true)
-							native.SecureStorage.Delete(
-								credentialService(),
-								credentialAccount,
-								func(_ bool, err error) {
-									controller.credentialBusy.Write(false)
-									if err != nil {
-										if !window.Closed {
-											setError(err.Error())
-										}
-										return
+					).Style(buttonStyle()).TextColor("#fca5a5").Disabled(controller.credentialBusy.Read).OnClick(func() {
+						controller.credentialBusy.Write(true)
+						native.SecureStorage.Delete(
+							credentialService(),
+							credentialAccount,
+							func(_ bool, err error) {
+								controller.credentialBusy.Write(false)
+								if err != nil {
+									if !window.Closed {
+										setError(err.Error())
 									}
-									controller.key.Write("")
-									controller.status.Write("API key removed.")
-									close()
-								},
-							)
-						}),
-					)
+									return
+								}
+								controller.key.Write("")
+								controller.status.Write("API key removed.")
+								close()
+							},
+						)
+					})
+
 					ui.View().Flex(1)
 					ui.Button(
 						"Cancel",
-						buttonStyle(),
-						ui.Disabled(controller.credentialBusy.Read),
-						ui.OnClick(close),
-					)
+					).Style(buttonStyle()).Disabled(controller.credentialBusy.Read).OnClick(close)
+
 					ui.Button(
 						"Save",
-						buttonStyle(),
-						ui.Style().BackgroundColor("#2563eb"),
-						ui.Disabled(controller.credentialBusy.Read),
-						ui.OnClick(func() {
-							secret := strings.TrimSpace(value())
-							if secret == "" || len(secret) > 2048 || strings.ContainsAny(secret, "\r\n") {
-								setError("Enter a single-line API key of up to 2,048 characters.")
-								return
-							}
-							controller.credentialBusy.Write(true)
-							setError("")
-							native.SecureStorage.SetText(
-								credentialService(),
-								credentialAccount,
-								secret,
-								func(saved bool, err error) {
-									controller.credentialBusy.Write(false)
-									if err != nil || !saved {
-										if !window.Closed {
-											if err != nil {
-												setError(err.Error())
-											} else {
-												setError("The credential store did not save the API key.")
-											}
+					).Style(buttonStyle()).BackgroundColor("#2563eb").Disabled(controller.credentialBusy.Read).OnClick(func() {
+						secret := strings.TrimSpace(value())
+						if secret == "" || len(secret) > 2048 || strings.ContainsAny(secret, "\r\n") {
+							setError("Enter a single-line API key of up to 2,048 characters.")
+							return
+						}
+						controller.credentialBusy.Write(true)
+						setError("")
+						native.SecureStorage.SetText(
+							credentialService(),
+							credentialAccount,
+							secret,
+							func(saved bool, err error) {
+								controller.credentialBusy.Write(false)
+								if err != nil || !saved {
+									if !window.Closed {
+										if err != nil {
+											setError(err.Error())
+										} else {
+											setError("The credential store did not save the API key.")
 										}
-										return
 									}
-									controller.key.Write(secret)
-									controller.status.Write("API key saved.")
-									close()
-								},
-							)
-						}),
-					)
+									return
+								}
+								controller.key.Write(secret)
+								controller.status.Write("API key saved.")
+								close()
+							},
+						)
+					})
+
 				},
 			).Display("flex").Gap(8).AlignItems("center")
 		},

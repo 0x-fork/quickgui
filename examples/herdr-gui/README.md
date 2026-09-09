@@ -21,7 +21,7 @@ bun packages/cli/src/cli.ts dev --project examples/herdr-gui
 Application edits rebuild only Go. The shared library is loaded in process with purego; no CGO or frontend IPC is used.
 
 ```console
-CGO_ENABLED=0 go -C examples/herdr-gui test ./...
+bun packages/cli/src/cli.ts test --project examples/herdr-gui
 bun packages/cli/src/cli.ts fmt --project examples/herdr-gui
 ```
 

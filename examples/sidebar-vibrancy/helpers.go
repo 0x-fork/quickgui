@@ -29,9 +29,8 @@ var effectStates = []choice{
 }
 
 func checkmark() {
-	ui.SVG(
-		ui.Value(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4L19 6"/></svg>`),
-	).Width(14).Height(14).FlexShrink(0).TextColor("#2563eb")
+	ui.SVG().Value(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 4 4L19 6"/></svg>`).
+		Width(14).Height(14).FlexShrink(0).TextColor("#2563eb")
 }
 
 func readout(label string, value any) {

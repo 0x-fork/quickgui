@@ -9,7 +9,7 @@ func ViewExample() {
 	ui.View(
 		func() {
 			ui.Text("Hello from Go")
-			ui.Button("Continue", ui.OnClick(func() {}))
+			ui.Button("Continue").OnClick(func() {})
 		},
 	).Padding(20).Gap(12)
 }
@@ -23,7 +23,7 @@ func ViewExample() {
 func DisclosureExample() {
 	open, setOpen := ui.CreateSignal(false)
 	ui.View(func() {
-		ui.Button("Toggle details", ui.OnClick(func() { setOpen(!open()) }))
+		ui.Button("Toggle details").OnClick(func() { setOpen(!open()) })
 		ui.Show(
 			open,
 			func() { ui.Text("Details") },
@@ -49,18 +49,18 @@ func KeyedListExample() {
 	ui.View(func() {
 		ui.Button(
 			"Reorder and rename",
-			ui.OnClick(func() {
-				setPeople([]ListPerson{{2, "Grace"}, {1, "Ada Lovelace"}})
-			}),
-		)
+		).OnClick(func() {
+			setPeople([]ListPerson{{2, "Grace"}, {1, "Ada Lovelace"}})
+		})
+
 		ui.KeyedFor(
 			people,
 			func(person ListPerson) any { return person.ID },
 			func(person func() ListPerson, index func() int) {
 				ui.Text(
-					index,
+					index(),
 					": ",
-					func() string { return person().Name },
+					person().Name,
 				)
 			},
 			func() { ui.Text("No people") },
@@ -88,7 +88,7 @@ func LoadingPanel(load func(context.Context) (string, error)) {
 			setResult(value)
 		},
 	)
-	ui.Text(result)
+	ui.Text(result())
 }
 ```
 
@@ -99,10 +99,10 @@ func LoadingPanel(load func(context.Context) (string, error)) {
 ```go
 func CloseButton() {
 	window := native.CurrentWindow()
-	ui.Button("Close window", ui.OnClick(func() { window.Close() }))
+	ui.Button("Close window").OnClick(func() { window.Close() })
 }
 ```
 
 ## チェック・テスト・デバッグ
 
-アプリのモジュールで `CGO_ENABLED=0` を設定して `go test ./...` を実行します。`quickgui fmt --check` で書式を確認します。アプリはネイティブ Go 実行ファイルなので、通常の Go 診断やデバッガーは元のソースを使用します。
+アプリのモジュールで `quickgui test` を実行すると、開発ビルドと同じビューコンパイラーを使ってテストできます。型は `quickgui check`、書式は `quickgui fmt --check` で確認します。ビルドには `CGO_ENABLED=0` を使います。Go の診断とスタックフレームは元のソース位置を保ちますが、デバッガーには生成された getter 引数が表示されます。直接 `go test` を実行するとビューコンパイラーを経由しないため、リアクティブな式には明示的なアクセサーが必要です。

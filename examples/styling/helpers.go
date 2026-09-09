@@ -39,12 +39,15 @@ func Panel(title string, children func()) {
 	warm := warmPalette.Use()
 	ui.View(
 		func() {
-			ui.Text(title, captionStyle)
+			ui.Text(title).Style(captionStyle)
 			children()
 		},
-		panelStyle,
-		ui.When(warm, ui.Style().BackgroundColor("#30231c"), ui.Style().BorderColor("#594338")),
+	).Style(panelStyle).When(
+		warm,
+		ui.Style().BackgroundColor("#30231c"),
+		ui.Style().BorderColor("#594338"),
 	)
+
 }
 
 func swatch(label string, options ...any) {

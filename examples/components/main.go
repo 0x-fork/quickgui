@@ -198,7 +198,7 @@ func Gallery() {
 						func() {
 							row(func() {
 								ui.Text(
-									func() string { return current().Label },
+									current().Label,
 								).FontSize(15).FontWeight(700)
 								ui.Text(
 									func() string {

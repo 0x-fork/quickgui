@@ -14,10 +14,8 @@ import (
 
 ```go
 func ShaderExample(source string, parameters func() []float64) {
-	ui.Shader(
-		ui.Value(source),
-		ui.ShaderParameters(parameters),
-	).Width(320).Height(180)
+	ui.Shader().Value(source).ShaderParameters(parameters).
+		Width(320).Height(180)
 }
 ```
 

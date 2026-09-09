@@ -45,20 +45,10 @@ func Styling() {
 						).FontSize(14).FontWeight(700)
 						ui.Button(
 							"Switch palette",
-							ui.Style().Height(28),
-							ui.Style().PaddingLeft(12),
-							ui.Style().PaddingRight(12),
-							ui.Style().BorderRadius(7),
-							ui.Style().BackgroundColor("#1b2434"),
-							ui.Style().TextColor(ink),
-							ui.Style().FontSize(12),
-							ui.Style().AppRegion("no-drag"),
-							ui.Style().UserSelect("none"),
-							ui.Style().Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
-								return s.BackgroundColor("#243047")
-							}),
-							ui.OnClick(func() { setWarm(!warm()) }),
-						)
+						).Height(28).PaddingLeft(12).PaddingRight(12).BorderRadius(7).BackgroundColor("#1b2434").TextColor(ink).FontSize(12).AppRegion("no-drag").UserSelect("none").Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
+							return s.BackgroundColor("#243047")
+						}).OnClick(func() { setWarm(!warm()) })
+
 					},
 				).Display("flex").Height(52).FlexShrink(0).AlignItems("center").JustifyContent("space-between").PaddingLeft(96).PaddingRight(20).AppRegion("drag")
 				ui.View(
@@ -76,13 +66,10 @@ func Styling() {
 					},
 				).Flex(1).MinHeight(0).OverflowY("scroll").Padding(20).Display("grid").GridTemplateColumns("1fr 1fr").Gap(16)
 			},
-			ui.Style().Display("flex"),
-			ui.Style().FlexDirection("column"),
-			ui.Style().Width("100%"),
-			ui.Style().Height("100%"),
-			ui.Style().BackgroundColor("#0b0f17"),
-			ui.Style().TextColor(ink),
-			ui.When(warm, ui.Style().BackgroundColor("#251b13")),
+		).Display("flex").FlexDirection("column").Width("100%").Height("100%").BackgroundColor("#0b0f17").TextColor(ink).When(
+			warm,
+			ui.Style().BackgroundColor("#251b13"),
 		)
+
 	})
 }

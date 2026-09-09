@@ -4,7 +4,7 @@ QuickGUI applications are ordinary Go programs. `purego` loads the prebuilt Rust
 
 ## Components
 
-Every component is a `func()` declaration, including window roots, routes, conditional branches, and children blocks. Pass it directly as `WindowOptions.Component`; QuickGUI collects its nodes and owns their lifetime. Components can declare zero, one, or several roots without a return or fragment wrapper.
+Components declare zero or more children implicitly and have no return value. Pass a `func()` root as `WindowOptions.Component`, and call child components inside a children block. Native constructors also accept existing child nodes directly. The compiler keeps plain typed props and native view expressions reactive without accessor wrappers or annotations. Node-returning component factories are unsupported.
 
 ```go
 package main
@@ -41,7 +41,7 @@ func Counter() {
 	count, setCount := ui.CreateSignal(0)
 	ui.View(
 		ui.Text("Fine-grained native UI").FontSize(28).FontWeight(700),
-		ui.Text("Count: ", count),
+		ui.Text("Count: ", count()),
 		ui.Button("Increment").
 			OnClick(func() { setCount(count() + 1) }).
 			Padding(12).
@@ -58,7 +58,7 @@ func Counter() {
 }
 ```
 
-Components and `func() { ... }` children blocks run once when mounted. UI calls inside a block declare children in order; nested blocks keep their own parent. Ordinary `if` and `for` statements are useful for static construction. Reading a signal inside an accessor subscribes that binding; setting it changes the affected native properties or text nodes. Event handlers batch writes automatically. Use `ui.Batch` to group writes outside an event. Pass string or numeric accessors directly as children: `ui.Text("Count: ", count)` retains the prefix and updates only the number. Numbers use typed `strconv` conversions. Calling `count()` while mounting captures its current value; pass the accessor itself or a `func() int` for derived values. Use `strconv` and concatenation when a property needs one combined string, such as an input value or accessibility label.
+Components and child blocks run once when mounted. Their UI declarations attach to the current parent. Use ordinary `if` and `for` for static construction, and `ui.Show` or `ui.For` for changing child structure. With the QuickGUI CLI, direct reads such as `ui.Text("Count: ", count())` and `LineItem(product, quantity())` become fine-grained bindings. Component parameters keep plain types such as `Product` and `int`; declaration functions and forwarding helpers are recognized across local packages. Setup assignments such as `initial := count()` remain snapshots. Ordinary function values and parameters used as mutable local storage keep normal Go evaluation. Explicit accessors also work, including with raw Go commands. Event handlers batch writes automatically; use `ui.Batch` to group writes outside an event.
 
 Pass children or content to constructors, then chain properties, styles, and handlers:
 
@@ -94,7 +94,7 @@ ui.Button("Toggle selection").
 	Padding(12).
 	Bg("#ccc").
 	RoundedLg().
-	When(selected, ui.Style().BackgroundColor("#2563eb"), ui.Style().TextColor("white")).
+	When(selected(), ui.Style().BackgroundColor("#2563eb"), ui.Style().TextColor("white")).
 	OnClick(func() { setSelected(!selected()) })
 ```
 
@@ -139,21 +139,21 @@ ui.Show(
 
 `Show` accepts component functions for its content and optional fallback. It creates children lazily and disposes them when hidden. `For` reuses unchanged rows by a comparable key; `KeyedFor` gives each retained row an item accessor so changing its data preserves local state. Keys must be unique. Removed rows release their effects and native listeners. Window closure disposes the entire component tree and outstanding component background work.
 
-`ui.Dynamic(func() ui.Component { ... })` selects a component reactively. Only the selector reruns; bindings inside the selected component keep updating its retained nodes. Return `nil` from the selector to render nothing. List callbacks also declare their children directly:
+`ui.Dynamic(func() ui.Component { ... })` selects a component reactively. Only the selector reruns; bindings inside the selected component keep updating its retained nodes. Return `nil` from the selector to render nothing. List callbacks declare their row children:
 
 ```go
 ui.For(
 	items,
 	func(item Item, index func() int) {
 		ui.Text(item.Name)
-		ui.Text(index)
+		ui.Text(index())
 	},
 	func(item Item) any { return item.ID },
 	nil,
 )
 ```
 
-Use `.Ref(func(node *native.Node) { ... })` for a node handle, such as a popover anchor. It runs once at its position in the fluent chain. Pass `element.Node` to low-level native APIs. Component callbacks remain `func()`.
+Use `.Ref(func(node *native.Node) { ... })` for a node handle, such as a popover anchor. It runs once at its position in the fluent chain. Pass `element.Node` to low-level native APIs. Component functions use `func()`; native constructors still return builders for fluent modifiers and node references.
 
 ## Background work
 
@@ -170,7 +170,7 @@ Go and Rust exchange bounded binary mutation batches and copied event data throu
 - `reactive`: signals, memos, batching, effects, owners, and contexts.
 - `host`: the purego C ABI adapter and a replaceable host interface for tests.
 
-Compound controls accept the same children blocks after their typed props, so descendants inherit their root context: `ui.Tabs.Root(props, func() { ... })`. Pass strings or string accessors directly as children to text and buttons. Primitives configure styles and events with fluent methods. `ui.Child(node)` inserts a previously constructed detached node in a block. The `Props.Children` form remains available for programmatic composition. Families include `Checkbox`, `Switch`, `Tabs`, `Dialog`, `Popover`, `SystemPopover`, `Slider`, `Select`, `Combobox`, `Menu`, `Table`, `Tree`, and `Toast`. Their native behavior remains in Rust. `ui.SwiftUI` provides the macOS SwiftUI control gallery and reverse-hosted QuickGUI views.
+Compound controls accept `func()` child blocks after their typed props so descendants inherit their context. Declare multiple sibling nodes in the same block. Pass strings or string accessors directly to text and buttons, and chain styles and handlers on primitive builders. Use `ui.Child(existingNode)` to declare a detached node created outside the current block. Constructors automatically declare new nodes. The `Props.Children` form remains available for programmatic composition. Families include `Checkbox`, `Switch`, `Tabs`, `Dialog`, `Popover`, `SystemPopover`, `Slider`, `Select`, `Combobox`, `Menu`, `Table`, `Tree`, and `Toast`. Their native behavior remains in Rust. `ui.SwiftUI` provides the macOS SwiftUI control gallery and reverse-hosted QuickGUI views.
 
 See [counter](../examples/counter/main.go), [components](../examples/components/main.go), [routing](../examples/routing/main.go), [SwiftUI](../examples/swift-ui/main.go), and the full [Quick Git](../examples/quick-git/main.go) application.
 
@@ -215,7 +215,9 @@ bun run build:native
 bun packages/cli/src/cli.ts dev --project examples/counter
 ```
 
-Application edits only rebuild Go. To build directly without the CLI:
+Application edits only rebuild Go. Use `quickgui check` and `quickgui test` so applications use the same view compiler as development builds.
+
+Direct Go commands bypass the view compiler and require explicit accessors:
 
 ```console
 CGO_ENABLED=0 go -C examples/counter build -o /tmp/quickgui-counter .

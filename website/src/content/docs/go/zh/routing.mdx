@@ -69,7 +69,7 @@ func NestedRouterExample() {
 ```go
 func BackButton() {
 	router := ui.UseRouter()
-	ui.Button("Back", ui.OnClick(router.Back))
+	ui.Button("Back").OnClick(router.Back)
 }
 ```
 
@@ -92,11 +92,11 @@ func ParameterRouterExample() {
 					ui.View(func() {
 						ui.Text(
 							"Project: ",
-							func() string { return params()["name"] },
+							params()["name"],
 						)
 						ui.Text(
 							"Tab: ",
-							func() string { return search()["tab"] },
+							search()["tab"],
 						)
 					})
 				},

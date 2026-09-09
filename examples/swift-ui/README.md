@@ -15,7 +15,7 @@ bun packages/cli/src/cli.ts dev --project examples/swift-ui
 Check the application without CGO:
 
 ```console
-CGO_ENABLED=0 go -C examples/swift-ui test ./...
+bun packages/cli/src/cli.ts test --project examples/swift-ui
 ```
 
 See [main.go](main.go) and the [Go guide](../../docs/go.md). macOS packaging uses Xcode Command Line Tools; Go 1.23+ and Bun are required.

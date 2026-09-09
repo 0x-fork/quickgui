@@ -20,17 +20,17 @@ feedUrl = "https://downloads.example.com/my-app/appcast-{target}.xml"
 
 ```go
 updates := updater.Start(updater.Options{}, func(event updater.Event) {
-    if event.Error != "" {
-        log.Print(event.Error)
-    }
-    if event.QuitRequired {
-        native.App.Quit(false, nil)
-    }
-    // 将状态、版本和进度写入 UI signal。
+	if event.Error != "" {
+		log.Print(event.Error)
+	}
+	if event.QuitRequired {
+		native.App.Quit(false, nil)
+	}
+	// 将状态、版本和进度写入 UI signal。
 }, func(err error) {
-    if err != nil {
-        log.Print(err)
-    }
+	if err != nil {
+		log.Print(err)
+	}
 })
 ```
 

@@ -16,11 +16,11 @@ import (
 ```go
 func TextAreaExample() {
 	value, setValue := ui.CreateSignal("")
-	ui.TextArea(
-		ui.Value(value),
-		ui.Placeholder("Write here"),
-		ui.OnInput(func(event *native.Event) { setValue(event.Value) }),
-	).Width(320).Height(96)
+	ui.TextArea().
+		Value(value()).
+		Placeholder("Write here").
+		OnInputEvent(func(event *native.Event) { setValue(event.Value) }).
+		Width(320).Height(96)
 }
 ```
 

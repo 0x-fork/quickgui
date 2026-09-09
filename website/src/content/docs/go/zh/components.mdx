@@ -2,34 +2,56 @@ QuickGUI 将无样式基础组件与具备无障碍行为的复合控件组合�
 
 ## 定义组件
 
-Go 组件返回 `*ui.Element` 或 `*native.Node`。参数使用普通类型，子节点直接组合。编译器根据返回类型识别组件，因此 `CounterLabel(count())` 无需注解或 `ui.View(func() { ... })` 包装即可保持响应式。窗口根组件可直接传入函数。
+Go 组件隐式声明子节点，不返回值。参数使用普通类型；编译器会识别构建 UI 或调用其他组件的函数，因此 `CounterLabel(count())` 无需注解即可保持响应式。窗口根组件、路由和子节点块使用 `func()`，不支持返回节点的组件工厂。
 
 ```go
-func CounterLabel(count int) *ui.Element {
-	return ui.Text("Count: ", count).FontSize(20)
+func CounterLabel(count int) {
+	ui.Text("Count: ", count).FontSize(20)
 }
 
-func ComponentExample() *ui.Element {
+func ComponentExample() {
 	count, setCount := ui.CreateSignal(0)
-	return ui.View(
-		CounterLabel(count()),
-		ui.Button("Increment").OnClick(func() { setCount(count() + 1) }),
-	)
+	ui.View(func() {
+		CounterLabel(count())
+		ui.Button("Increment").OnClick(func() { setCount(count() + 1) })
+	})
+}
+```
+
+结构体参数也使用普通 Go 类型。更新 `quantity` 只改变绑定的文本，`LineItem` 和它的节点会保持挂载。
+
+```go
+type Product struct {
+	ID    string
+	Name  string
+	Price int
+}
+
+func LineItem(product Product, quantity int) {
+	ui.Text(product.Name, " × ", quantity, " = $", product.Price*quantity)
+}
+
+func Cart() {
+	quantity, setQuantity := ui.CreateSignal(1)
+	ui.View(func() {
+		LineItem(Product{ID: "mug", Name: "Mug", Price: 12}, quantity())
+		ui.Button("Add one").OnClick(func() { setQuantity(quantity() + 1) })
+	})
 }
 ```
 
 容器可以直接接收子节点，如下所示。子节点回调是可选的，仅在挂载时执行一次；需要延迟构建或继承复合控件上下文时再使用。事件处理器仍使用回调。
 
 ```go
-func CardComponent(title string, children ...any) *ui.Element {
-	return ui.View(
+func CardComponent(title string, children ...any) {
+	ui.View(
 		ui.Text(title).FontWeight(600),
 		children,
 	).Padding(20).Gap(12).FlexCol()
 }
 
-func CardComposition() *ui.Element {
-	return CardComponent("Account",
+func CardComposition() {
+	CardComponent("Account",
 		ui.Text("Manage your account settings."),
 		ui.Button("Save").OnClick(func() { log.Print("Saved") }),
 	)
@@ -44,15 +66,16 @@ func CardComposition() *ui.Element {
 func ButtonExample(save func()) {
 	ui.Button(
 		"Save changes",
-		ui.Style().Height(40),
-		ui.Style().PaddingLeft(16),
-		ui.Style().PaddingRight(16),
-		ui.Style().BackgroundColor("#2563eb"),
-		ui.Style().TextColor("white"),
-		ui.Style().BorderRadius(8),
-		ui.Style().Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor("#3b82f6") }),
-		ui.OnClick(save),
-	)
+	).
+		Height(40).
+		PaddingLeft(16).
+		PaddingRight(16).
+		BackgroundColor("#2563eb").
+		TextColor("white").
+		BorderRadius(8).
+		Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor("#3b82f6") }).
+		OnClick(save)
+
 }
 ```
 

@@ -6,18 +6,21 @@ import (
 	"github.com/egoist/quickgui/go/ui"
 )
 
-func MappedLabel(value int, location func(string, int)) *ui.Element {
+func MappedLabel(value int, location func(string, int)) {
 	_, file, line, _ := runtime.Caller(0) // setup location
 	location(file, line)
-	return ui.Text(value, func() string {
-		_, file, line, _ := runtime.Caller(0) // binding location
-		location(file, line)
-		return "mapped"
-	})
+	ui.Text(
+		value,
+		func() string {
+			_, file, line, _ := runtime.Caller(0) // binding location
+			location(file, line)
+			return "mapped"
+		},
+	)
 }
 
-func PanicLabel(value int) *ui.Element {
-	return ui.Text(func() string {
+func PanicLabel(value int) {
+	ui.Text(func() string {
 		if value > 0 {
 			panic("mapped prop panic") // panic location
 		}
@@ -25,10 +28,10 @@ func PanicLabel(value int) *ui.Element {
 	})
 }
 
-func GenericLabel[T ~int](value T) *ui.Element {
-	return ui.Text(int(value))
+func GenericLabel[T ~int](value T) {
+	ui.Text(int(value))
 }
 
-func VariadicLabel(value int, children ...any) *ui.Element {
-	return ui.View(ui.Text(value), children)
+func VariadicLabel(value int, children ...any) {
+	ui.View(ui.Text(value), children)
 }

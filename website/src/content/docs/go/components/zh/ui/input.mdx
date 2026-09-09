@@ -16,11 +16,11 @@ import (
 ```go
 func InputExample() {
 	value, setValue := ui.CreateSignal("")
-	ui.Input(
-		ui.Value(value),
-		ui.Placeholder("Write here"),
-		ui.OnInput(func(event *native.Event) { setValue(event.Value) }),
-	).Width(320).Height(32)
+	ui.Input().
+		Value(value()).
+		Placeholder("Write here").
+		OnInputEvent(func(event *native.Event) { setValue(event.Value) }).
+		Width(320).Height(32)
 }
 ```
 

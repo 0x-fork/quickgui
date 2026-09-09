@@ -26,12 +26,8 @@ const (
 var refreshIcon string
 
 func icon(svg string, size float64, color func() string) {
-	gui.SVG(
-		gui.Style().Width(size),
-		gui.Style().Height(size),
-		gui.Style().FlexShrink(0),
-		gui.Value(func() string { return strings.ReplaceAll(svg, "currentColor", color()) }),
-	)
+	gui.SVG().Width(size).Height(size).FlexShrink(0).Value(func() string { return strings.ReplaceAll(svg, "currentColor", color()) })
+
 }
 
 func toolbarIcon(svg string) {

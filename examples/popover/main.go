@@ -146,7 +146,7 @@ func Popovers() {
 							ui.View(
 								func() {
 									ui.Text(
-										status,
+										status(),
 									).TextColor("#b8c4d6").FontSize(13)
 								},
 							).Display("flex").MinHeight(50).AlignItems("center").JustifyContent("center").PaddingLeft(16).PaddingRight(16).BackgroundColor("#10151e").BorderColor("#293244").BorderWidth(1).BorderRadius(9)

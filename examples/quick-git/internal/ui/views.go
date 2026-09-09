@@ -79,7 +79,7 @@ func fileList(list model.ListID) {
 						label,
 					).FontSize(11).FontWeight(600).TextColor(app.Theme().TextTertiary)
 					gui.Text(
-						func() int { return len(store.ListItems(list)) },
+						len(store.ListItems(list)),
 					).FontSize(11).TextColor(app.Theme().TextTertiary)
 					gui.View().Flex(1)
 					gui.Show(
@@ -91,16 +91,16 @@ func fileList(list model.ListID) {
 							}
 							gui.Button(
 								text,
-								gui.Disabled(store.Busy() != nil),
-								gui.OnClick(func() {
-									if list == model.ListUnstaged {
-										store.StageAll()
-									} else {
-										store.UnstageAll()
-									}
-								}),
+
 								app.Theme().Button("secondary"),
-							)
+							).Disabled(store.Busy() != nil).OnClick(func() {
+								if list == model.ListUnstaged {
+									store.StageAll()
+								} else {
+									store.UnstageAll()
+								}
+							})
+
 						},
 					)
 				},
@@ -200,7 +200,7 @@ func changeTable(list model.ListID) {
 								},
 								func() {
 									gui.Text(
-										func() string { return string(row().Item.Code) },
+										string(row().Item.Code),
 									).Width(16).FontWeight(700).TextColor(StatusColor(app.Theme(), string(row().Item.Code)))
 								},
 							)
@@ -305,7 +305,7 @@ func changeName(list model.ListID, item func() git.ChangeItem) {
 	gui.View(
 		func() {
 			gui.Text(
-				func() string { return item().Path },
+				item().Path,
 			).Flex(1).MinWidth(0).FontSize(13).LineClamp(1)
 			gui.Show(
 				func() bool { return counts() != "" },
@@ -401,17 +401,12 @@ func commitComposer() {
 	gui.View(
 		func() {
 			gui.Input(
-				gui.Placeholder("Commit summary"),
-				gui.Value(func() string { return store.Subject() }),
-				gui.OnInput(func(event *native.Event) { store.SetSubject(event.Value) }),
-				gui.OnSubmit(func(*native.Event) { store.Commit() }),
+
 				app.Theme().InputStyle(),
-			)
-			gui.TextArea(
-				gui.Placeholder("Description"),
-				gui.Value(func() string { return store.Body() }),
-				gui.OnInput(func(event *native.Event) { store.SetBody(event.Value) }),
-			).Display("flex").Width("100%").MinHeight(72).PaddingLeft(7).PaddingRight(7).PaddingTop(4).PaddingBottom(4).BackgroundColor(app.Theme().Input).TextColor(app.Theme().Text).BorderWidth(1).BorderColor(app.Theme().InputBorder).BorderRadius(6).FontSize(UIFontSize)
+			).Placeholder("Commit summary").Value(store.Subject()).OnInputEvent(func(event *native.Event) { store.SetSubject(event.Value) }).OnSubmitEvent(func(*native.Event) { store.Commit() })
+
+			gui.TextArea().Placeholder("Description").Value(store.Body()).OnInputEvent(func(event *native.Event) { store.SetBody(event.Value) }).
+				Display("flex").Width("100%").MinHeight(72).PaddingLeft(7).PaddingRight(7).PaddingTop(4).PaddingBottom(4).BackgroundColor(app.Theme().Input).TextColor(app.Theme().Text).BorderWidth(1).BorderColor(app.Theme().InputBorder).BorderRadius(6).FontSize(UIFontSize)
 			gui.View(
 				func() {
 					CheckRow("Amend", store.Amend, store.SetAmend)
@@ -426,18 +421,18 @@ func commitComposer() {
 									}
 									return "Generate"
 								},
-								gui.Disabled(store.Generating() != nil),
-								gui.OnClick(func() { store.GenerateMessage("") }),
+
 								app.Theme().Button("secondary"),
-							)
+							).Disabled(store.Generating() != nil).OnClick(func() { store.GenerateMessage("") })
+
 						},
 					)
 					gui.Button(
 						"Commit",
-						gui.Disabled(!store.CanCommit()),
-						gui.OnClick(func() { store.Commit() }),
+
 						app.Theme().Button("primary"),
-					)
+					).Disabled(!store.CanCommit()).OnClick(func() { store.Commit() })
+
 				},
 			).Display("flex").FlexDirection("row").AlignItems("center").Gap(8)
 		},
@@ -533,58 +528,62 @@ func diffActions() {
 							if mode == "staged" {
 								gui.Button(
 									"Unstage "+strconv.Itoa(lineCount)+" Lines",
-									gui.OnClick(func() { store.ApplySelectedLines("unstage") }),
+
 									app.Theme().Button("primary"),
-								)
+								).OnClick(func() { store.ApplySelectedLines("unstage") })
+
 								return
 
 							}
 
 							gui.Button(
 								"Discard Lines…",
-								gui.OnClick(func() { store.ApplySelectedLines("discard") }),
+
 								app.Theme().Button("danger"),
-							)
+							).OnClick(func() { store.ApplySelectedLines("discard") })
+
 							gui.Button(
 								"Stage "+strconv.Itoa(lineCount)+" Lines",
-								gui.OnClick(func() { store.ApplySelectedLines("stage") }),
+
 								app.Theme().Button("primary"),
-							)
+							).OnClick(func() { store.ApplySelectedLines("stage") })
 
 						},
 						func() {
 							if mode == "staged" {
 								gui.Button(
 									"Unstage File",
-									gui.OnClick(func() {
-										if item := store.ActiveItem(); item != nil {
-											store.UnstageItems([]git.ChangeItem{*item})
-										}
-									}),
+
 									app.Theme().Button("secondary"),
-								)
+								).OnClick(func() {
+									if item := store.ActiveItem(); item != nil {
+										store.UnstageItems([]git.ChangeItem{*item})
+									}
+								})
+
 								return
 
 							}
 
 							gui.Button(
 								"Discard…",
-								gui.OnClick(func() {
-									if item := store.ActiveItem(); item != nil {
-										confirmDiscard(app, []git.ChangeItem{*item})
-									}
-								}),
+
 								app.Theme().Button("danger"),
-							)
+							).OnClick(func() {
+								if item := store.ActiveItem(); item != nil {
+									confirmDiscard(app, []git.ChangeItem{*item})
+								}
+							})
+
 							gui.Button(
 								"Stage File",
-								gui.OnClick(func() {
-									if item := store.ActiveItem(); item != nil {
-										store.StageItems([]git.ChangeItem{*item})
-									}
-								}),
+
 								app.Theme().Button("primary"),
-							)
+							).OnClick(func() {
+								if item := store.ActiveItem(); item != nil {
+									store.StageItems([]git.ChangeItem{*item})
+								}
+							})
 
 						},
 					)
@@ -717,7 +716,7 @@ func diffTableRow(row func() git.DiffRow, index func() int) {
 						},
 						func() {
 							gui.Text(
-								func() int { return *row().OldLineNumber },
+								*row().OldLineNumber,
 								numberStyle,
 							)
 						},
@@ -738,7 +737,7 @@ func diffTableRow(row func() git.DiffRow, index func() int) {
 						},
 						func() {
 							gui.Text(
-								func() int { return *row().NewLineNumber },
+								*row().NewLineNumber,
 								numberStyle,
 							)
 						},
@@ -767,7 +766,7 @@ func diffTableRow(row func() git.DiffRow, index func() int) {
 								},
 							).Width(12).FlexShrink(0)
 							gui.Text(
-								func() string { return row().Text },
+								row().Text,
 							).Flex(1).MinWidth(0).FontFamily("monospace").FontSize(MonoFontSize).TextColor(textColor).WhiteSpace("nowrap")
 							gui.Show(
 								func() bool {
@@ -781,16 +780,17 @@ func diffTableRow(row func() git.DiffRow, index func() int) {
 											}
 											return "Stage hunk"
 										},
-										gui.OnClick(func() {
-											current := row()
-											if store.Diff().Target.Kind == "staged" {
-												store.UnstageHunk(current.FileIndex, current.HunkIndex)
-												return
-											}
-											store.StageHunk(current.FileIndex, current.HunkIndex)
-										}),
+
 										app.Theme().Button("secondary"),
-									).Height(16).FontFamily("system-ui").FontSize(11).LineHeight(14).PaddingLeft(6).PaddingRight(6).BorderRadius(4)
+									).OnClick(func() {
+										current := row()
+										if store.Diff().Target.Kind == "staged" {
+											store.UnstageHunk(current.FileIndex, current.HunkIndex)
+											return
+										}
+										store.StageHunk(current.FileIndex, current.HunkIndex)
+									}).
+										Height(16).FontFamily("system-ui").FontSize(11).LineHeight(14).PaddingLeft(6).PaddingRight(6).BorderRadius(4)
 								},
 							)
 						},
@@ -920,7 +920,7 @@ func historyTableRow(row func() visibleItem[git.Commit], graphWidth func() float
 						func() {
 							commitRefs(func() []git.CommitRef { return row().Item.Refs })
 							gui.Text(
-								func() string { return row().Item.Subject },
+								row().Item.Subject,
 							).Flex(1).FontSize(12.5).LineClamp(1).MinWidth(0)
 						},
 					).Display("flex").Flex(1).MinWidth(0).FlexDirection("row").AlignItems("center").Gap(6)
@@ -936,7 +936,7 @@ func historyTableRow(row func() visibleItem[git.Commit], graphWidth func() float
 				},
 				func() {
 					gui.Text(
-						func() string { return row().Item.AuthorName },
+						row().Item.AuthorName,
 					).FontSize(11).TextColor(app.Theme().TextTertiary).LineClamp(1)
 				},
 			)
@@ -947,9 +947,8 @@ func historyTableRow(row func() visibleItem[git.Commit], graphWidth func() float
 				},
 				func() {
 					gui.Text(
-						func() string {
-							return git.RelativeTime(row().Item.AuthorTime, time.Now())
-						},
+
+						git.RelativeTime(row().Item.AuthorTime, time.Now()),
 					).FontSize(11).TextColor(app.Theme().TextTertiary).TextAlign("right")
 				},
 			)
@@ -1097,7 +1096,7 @@ func commitFileTable() {
 								},
 								func() {
 									gui.Text(
-										func() string { return row().Item.Status },
+										row().Item.Status,
 									).Width(16).FontWeight(700).TextColor(StatusColor(app.Theme(), row().Item.Status))
 								},
 							)
@@ -1108,7 +1107,7 @@ func commitFileTable() {
 								},
 								func() {
 									gui.Text(
-										func() string { return row().Item.Path },
+										row().Item.Path,
 									).Flex(1).MinWidth(0).LineClamp(1)
 								},
 							)
@@ -1197,9 +1196,10 @@ func BranchesView() {
 					).FontSize(11).FontWeight(700).TextTransform("uppercase").TextColor(app.Theme().TextTertiary).Flex(1)
 					gui.Button(
 						"New Branch",
-						gui.OnClick(func() { app.OpenDialog(DialogRequest{Kind: DialogNewBranch}) }),
+
 						app.Theme().Button("primary"),
-					)
+					).OnClick(func() { app.OpenDialog(DialogRequest{Kind: DialogNewBranch}) })
+
 				},
 			).Display("flex").FlexDirection("row").AlignItems("center").Height(32).Gap(8)
 			gui.For(
@@ -1222,29 +1222,28 @@ func BranchesView() {
 								branch.ShortSha,
 							).FontSize(11).TextColor(app.Theme().TextTertiary)
 						},
-						gui.OnClick(func() {}),
-						gui.OnDoubleClick(func(*native.Event) {
-							if !branch.Current {
-								store.SwitchBranch(branch.Name)
-							}
-						}),
-						gui.OnContextMenu(func(*native.Event) {
-							native.PopupMenu(
-								app.Window,
-								[]native.MenuItem{
-									{Label: "Switch to Branch", Click: func() { store.SwitchBranch(branch.Name) }},
-									{Label: "New Branch from Here…", Click: func() { app.OpenDialog(DialogRequest{Kind: DialogNewBranch, From: branch.Name}) }},
-									{Label: "Copy Branch Name", Click: func() { native.WriteClipboardText(branch.Name) }},
-									{Type: "separator"},
-									{Label: "Delete Branch…", Click: func() { store.DeleteBranch(branch.Name, true) }},
-								},
-								nil,
-								nil,
-								func(error) {},
-							)
-						}),
+
 						rowStyle(app.Theme(), branch.Current),
-					)
+					).OnClick(func() {}).OnDoubleClick(func(*native.Event) {
+						if !branch.Current {
+							store.SwitchBranch(branch.Name)
+						}
+					}).OnContextMenu(func(*native.Event) {
+						native.PopupMenu(
+							app.Window,
+							[]native.MenuItem{
+								{Label: "Switch to Branch", Click: func() { store.SwitchBranch(branch.Name) }},
+								{Label: "New Branch from Here…", Click: func() { app.OpenDialog(DialogRequest{Kind: DialogNewBranch, From: branch.Name}) }},
+								{Label: "Copy Branch Name", Click: func() { native.WriteClipboardText(branch.Name) }},
+								{Type: "separator"},
+								{Label: "Delete Branch…", Click: func() { store.DeleteBranch(branch.Name, true) }},
+							},
+							nil,
+							nil,
+							func(error) {},
+						)
+					})
+
 				},
 				func(branch git.BranchRef) any { return branch.FullName },
 				nil,
@@ -1291,9 +1290,10 @@ func WorktreesView() {
 					).FontSize(11).FontWeight(700).TextTransform("uppercase").TextColor(app.Theme().TextTertiary).Flex(1)
 					gui.Button(
 						"New Worktree",
-						gui.OnClick(func() { app.OpenDialog(DialogRequest{Kind: DialogNewWorktree}) }),
+
 						app.Theme().Button("primary"),
-					)
+					).OnClick(func() { app.OpenDialog(DialogRequest{Kind: DialogNewWorktree}) })
+
 				},
 			).Display("flex").FlexDirection("row").AlignItems("center").Height(32)
 			gui.For(
@@ -1308,38 +1308,38 @@ func WorktreesView() {
 						func() {
 							gui.Text(label).Flex(1).LineClamp(1)
 							gui.Text(
-								gui.Style().FontSize(11),
-								gui.Style().TextColor(app.Theme().TextTertiary),
+
 								filepath.Base(worktree.Path),
-							)
+							).FontSize(11).TextColor(app.Theme().TextTertiary)
+
 						},
-						gui.OnClick(func() { store.SelectWorktree(worktree.Path) }),
-						gui.OnContextMenu(func(*native.Event) {
-							items := []native.MenuItem{
-								{Label: "Reveal in Finder", Click: func() {
-									native.ShowItemInFolder(
-										worktree.Path,
-										func(error) {},
-									)
-								}},
-								{Label: "Copy Path", Click: func() { native.WriteClipboardText(worktree.Path) }},
-							}
-							if !worktree.Main {
-								items = append(items, native.MenuItem{Type: "separator"}, native.MenuItem{
-									Label: "Remove Worktree",
-									Click: func() { store.RemoveWorktree(worktree.Path, false) },
-								})
-							}
-							native.PopupMenu(
-								app.Window,
-								items,
-								nil,
-								nil,
-								func(error) {},
-							)
-						}),
+
 						rowStyle(app.Theme(), active),
-					)
+					).OnClick(func() { store.SelectWorktree(worktree.Path) }).OnContextMenu(func(*native.Event) {
+						items := []native.MenuItem{
+							{Label: "Reveal in Finder", Click: func() {
+								native.ShowItemInFolder(
+									worktree.Path,
+									func(error) {},
+								)
+							}},
+							{Label: "Copy Path", Click: func() { native.WriteClipboardText(worktree.Path) }},
+						}
+						if !worktree.Main {
+							items = append(items, native.MenuItem{Type: "separator"}, native.MenuItem{
+								Label: "Remove Worktree",
+								Click: func() { store.RemoveWorktree(worktree.Path, false) },
+							})
+						}
+						native.PopupMenu(
+							app.Window,
+							items,
+							nil,
+							nil,
+							func(error) {},
+						)
+					})
+
 				},
 				func(worktree git.Worktree) any { return worktree.Path },
 				nil,
@@ -1360,10 +1360,10 @@ func StashesView() {
 					).FontSize(11).FontWeight(700).TextTransform("uppercase").TextColor(app.Theme().TextTertiary).Flex(1)
 					gui.Button(
 						"Stash Changes",
-						gui.Disabled(store.ChangeCount() == 0),
-						gui.OnClick(func() { app.OpenDialog(DialogRequest{Kind: DialogStash}) }),
+
 						app.Theme().Button("primary"),
-					)
+					).Disabled(store.ChangeCount() == 0).OnClick(func() { app.OpenDialog(DialogRequest{Kind: DialogStash}) })
+
 				},
 			).Display("flex").FlexDirection("row").AlignItems("center").Height(32)
 			gui.Show(
@@ -1384,30 +1384,33 @@ func StashesView() {
 									).Display("flex").Flex(1).MinWidth(0).FlexDirection("column")
 									gui.Button(
 										"Apply",
-										gui.OnClick(func() { store.StashApply(stash.Ref) }),
+
 										app.Theme().Button("secondary"),
-									)
+									).OnClick(func() { store.StashApply(stash.Ref) })
+
 									gui.Button(
 										"Pop",
-										gui.OnClick(func() { store.StashPop(stash.Ref) }),
+
 										app.Theme().Button("secondary"),
-									)
+									).OnClick(func() { store.StashPop(stash.Ref) })
+
 								},
-								gui.OnContextMenu(func(*native.Event) {
-									native.PopupMenu(
-										app.Window,
-										[]native.MenuItem{
-											{Label: "Apply", Click: func() { store.StashApply(stash.Ref) }},
-											{Label: "Pop", Click: func() { store.StashPop(stash.Ref) }},
-											{Label: "Drop", Click: func() { store.StashDrop(stash.Ref) }},
-										},
-										nil,
-										nil,
-										func(error) {},
-									)
-								}),
+
 								rowStyle(app.Theme(), false),
-							)
+							).OnContextMenu(func(*native.Event) {
+								native.PopupMenu(
+									app.Window,
+									[]native.MenuItem{
+										{Label: "Apply", Click: func() { store.StashApply(stash.Ref) }},
+										{Label: "Pop", Click: func() { store.StashPop(stash.Ref) }},
+										{Label: "Drop", Click: func() { store.StashDrop(stash.Ref) }},
+									},
+									nil,
+									nil,
+									func(error) {},
+								)
+							})
+
 						},
 						func(stash git.StashEntry) any { return stash.Ref },
 						nil,

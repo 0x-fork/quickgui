@@ -68,9 +68,9 @@ func agentSheet(m *model) {
 													TextColor(m.color(func(t theme) string { return t.TextTertiary })).
 													FontSize(12)},
 												func() {
-													ui.Text(func() string {
-														return "Start a real CLI in " + m.activeSpace().Name
-													})
+													ui.Text(
+														"Start a real CLI in " + m.activeSpace().Name,
+													)
 												},
 											)
 										},
@@ -103,37 +103,34 @@ func agentSheet(m *model) {
 																	read().Label,
 																).FontSize(12).FontWeight(620)
 																ui.Text(
-																	func() string {
-																		return choose(read().installed(), "Available", "Not found")
-																	},
+
+																	choose(read().installed(), "Available", "Not found"),
 																).TextColor(m.color(func(t theme) string { return t.TextGhost })).FontSize(10)
 															},
 														).Display("flex").FlexDirection("column").Gap(2)
 													},
-													ui.AriaLabel(read().Label),
-													ui.Disabled(func() bool { return !read().installed() }),
-													ui.OnClick(func() {
-														m.SelectedLauncherID.Write(read().ID)
-													}),
-												).Display("flex").Flex(1).MinWidth(0).Height(54).AlignItems("center").Gap(8).PaddingLeft(8).PaddingRight(8).
-													BackgroundColor(func() string {
-														return choose(selected(), m.theme().Selected, "transparent")
-													}).
-													TextColor(func() string {
-														return choose(read().installed(), m.theme().Text, m.theme().TextGhost)
-													}).
-													BorderColor(func() string {
-														return choose(selected(), m.theme().Accent, m.theme().Border)
-													}).BorderWidth(1).BorderRadius(6).
+												).AriaLabel(read().Label).Disabled(!read().installed()).OnClick(func() {
+													m.SelectedLauncherID.Write(read().ID)
+												}).
+													Display("flex").Flex(1).MinWidth(0).Height(54).AlignItems("center").Gap(8).PaddingLeft(8).PaddingRight(8).
+													BackgroundColor(
+														choose(selected(), m.theme().Selected, "transparent"),
+													).
+													TextColor(
+														choose(read().installed(), m.theme().Text, m.theme().TextGhost),
+													).
+													BorderColor(
+														choose(selected(), m.theme().Accent, m.theme().Border),
+													).BorderWidth(1).BorderRadius(6).
 													Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
 														return s.
 															BackgroundColor(func() string {
 																return choose(read().installed(), m.theme().Hover, "transparent")
 															})
 													}).
-													Opacity(func() float64 {
-														return choose(read().installed(), 1.0, .5)
-													}).Cursor("default")
+													Opacity(
+														choose(read().installed(), 1.0, .5),
+													).Cursor("default")
 											},
 											nil,
 										)
@@ -150,19 +147,14 @@ func agentSheet(m *model) {
 							})
 							formGroup(func() {
 								formLabel(m, "Initial instruction · optional")
-								ui.TextArea(
-									ui.AriaLabel("Initial instruction"),
-									ui.Value(m.Prompt.Read),
-									ui.Placeholder("What should this agent work on?"),
-									ui.OnInput(func(e *native.Event) { m.Prompt.Write(ui.InputValue(e)) }),
-									ui.Ref(func(node *native.Node) {
-										native.SetBoolean(
-											node,
-											protocol.AutoFocus,
-											true,
-										)
-									}),
-								).Display("flex").Height(88).Width("100%").PaddingLeft(10).PaddingRight(10).PaddingTop(9).PaddingBottom(9).BackgroundColor(m.color(func(t theme) string { return t.Terminal })).TextColor(m.color(func(t theme) string { return t.Text })).BorderColor(m.color(func(t theme) string { return t.BorderStrong })).BorderWidth(1).BorderRadius(6).FontSize(12.5).
+								ui.TextArea().AriaLabel("Initial instruction").Value(m.Prompt.Read).Placeholder("What should this agent work on?").OnInputEvent(func(e *native.Event) { m.Prompt.Write(ui.InputValue(e)) }).Ref(func(node *native.Node) {
+									native.SetBoolean(
+										node,
+										protocol.AutoFocus,
+										true,
+									)
+								}).
+									Display("flex").Height(88).Width("100%").PaddingLeft(10).PaddingRight(10).PaddingTop(9).PaddingBottom(9).BackgroundColor(m.color(func(t theme) string { return t.Terminal })).TextColor(m.color(func(t theme) string { return t.Text })).BorderColor(m.color(func(t theme) string { return t.BorderStrong })).BorderWidth(1).BorderRadius(6).FontSize(12.5).
 									FocusStyle(func(s ui.StyleBuilder) ui.StyleBuilder {
 										return s.OutlineWidth(1).OutlineColor(m.color(func(t theme) string { return t.Accent }))
 									})
@@ -194,18 +186,16 @@ func agentSheet(m *model) {
 									ui.Button(
 										"Cancel",
 										m.buttonStyle(false),
-										ui.OnClick(m.closeAgentSheet),
-									)
+									).OnClick(m.closeAgentSheet)
+
 									disabled := func() bool { return m.CatalogLoading.Read() || !m.selectedLauncher().installed() }
 									ui.Button(
-										func() string {
-											return "Start " + m.selectedLauncher().Label
-										},
+
+										"Start "+m.selectedLauncher().Label,
+
 										m.buttonStyle(true),
-										ui.Disabled(disabled),
-										ui.Style().Opacity(func() float64 { return choose(disabled(), .45, 1.0) }),
-										ui.OnClick(m.launchAgent),
-									)
+									).Disabled(disabled).Opacity(choose(disabled(), .45, 1.0)).OnClick(m.launchAgent)
+
 								},
 							).Display("flex").JustifyContent("flex-end").Gap(8)
 						},

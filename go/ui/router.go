@@ -224,7 +224,7 @@ func renderRouteBranch(chain func() []renderedRoute, index int, fallback Compone
 					outlet()
 					return
 				}
-				Child(entry.component)
+				entry.component()
 			})
 		}
 	})

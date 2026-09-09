@@ -2,34 +2,56 @@ QuickGUI combines unstyled primitives with accessible compound controls. Compose
 
 ## Defining components
 
-A Go component returns `*ui.Element` or `*native.Node`. Use plain typed props and compose children directly. The return type identifies the component, so `CounterLabel(count())` stays reactive without annotations or a `ui.View(func() { ... })` wrapper. Window roots accept the component function directly.
+A Go component declares its children implicitly and has no return value. Use ordinary typed props: the compiler recognizes functions that construct UI or call other components, so `CounterLabel(count())` stays reactive without annotations. Window roots, routes, and child blocks use `func()`. Node-returning functions are not supported as component factories.
 
 ```go
-func CounterLabel(count int) *ui.Element {
-	return ui.Text("Count: ", count).FontSize(20)
+func CounterLabel(count int) {
+	ui.Text("Count: ", count).FontSize(20)
 }
 
-func ComponentExample() *ui.Element {
+func ComponentExample() {
 	count, setCount := ui.CreateSignal(0)
-	return ui.View(
-		CounterLabel(count()),
-		ui.Button("Increment").OnClick(func() { setCount(count() + 1) }),
-	)
+	ui.View(func() {
+		CounterLabel(count())
+		ui.Button("Increment").OnClick(func() { setCount(count() + 1) })
+	})
+}
+```
+
+Struct props use ordinary Go types too. Updating `quantity` changes the bound text while `LineItem` and its nodes remain mounted.
+
+```go
+type Product struct {
+	ID    string
+	Name  string
+	Price int
+}
+
+func LineItem(product Product, quantity int) {
+	ui.Text(product.Name, " × ", quantity, " = $", product.Price*quantity)
+}
+
+func Cart() {
+	quantity, setQuantity := ui.CreateSignal(1)
+	ui.View(func() {
+		LineItem(Product{ID: "mug", Name: "Mug", Price: 12}, quantity())
+		ui.Button("Add one").OnClick(func() { setQuantity(quantity() + 1) })
+	})
 }
 ```
 
 Containers can accept children directly, as shown below. A children callback is optional and runs once when mounted; use it when construction must happen lazily or inside a compound control’s context. Event handlers remain callbacks.
 
 ```go
-func CardComponent(title string, children ...any) *ui.Element {
-	return ui.View(
+func CardComponent(title string, children ...any) {
+	ui.View(
 		ui.Text(title).FontWeight(600),
 		children,
 	).Padding(20).Gap(12).FlexCol()
 }
 
-func CardComposition() *ui.Element {
-	return CardComponent("Account",
+func CardComposition() {
+	CardComponent("Account",
 		ui.Text("Manage your account settings."),
 		ui.Button("Save").OnClick(func() { log.Print("Saved") }),
 	)
@@ -38,21 +60,22 @@ func CardComposition() *ui.Element {
 
 ## Primitives
 
-Start with `ui.View`, `ui.Text`, `ui.Button`, and `ui.Input`. Options and text can be passed directly. A `func() { ... }` argument groups multiple children under the current parent.
+Start with `ui.View`, `ui.Text`, `ui.Button`, and `ui.Input`. Pass content or children to constructors, then chain styles, properties, and handlers. A `func() { ... }` argument declares children under the current parent.
 
 ```go
 func ButtonExample(save func()) {
 	ui.Button(
 		"Save changes",
-		ui.Style().Height(40),
-		ui.Style().PaddingLeft(16),
-		ui.Style().PaddingRight(16),
-		ui.Style().BackgroundColor("#2563eb"),
-		ui.Style().TextColor("white"),
-		ui.Style().BorderRadius(8),
-		ui.Style().Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor("#3b82f6") }),
-		ui.OnClick(save),
-	)
+	).
+		Height(40).
+		PaddingLeft(16).
+		PaddingRight(16).
+		BackgroundColor("#2563eb").
+		TextColor("white").
+		BorderRadius(8).
+		Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor("#3b82f6") }).
+		OnClick(save)
+
 }
 ```
 

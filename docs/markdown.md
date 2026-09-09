@@ -64,10 +64,13 @@ the source with `ui.Value` and the streaming state with `ui.Streaming`:
 func Answer() {
 	answer, _ := ui.CreateSignal("## Response\n\nWaiting for input.")
 	streaming, _ := ui.CreateSignal(false)
-	ui.Markdown(
-		ui.Value(answer),
-		ui.Streaming(streaming),
-	).TextColor("#e4e4e7").FontSize(15).LineHeight(23).MarkdownLinkColor("#60a5fa").MarkdownCodeBackground("#090b10").MarkdownBorderColor("#343843")
+	ui.Markdown().Value(answer()).Streaming(streaming).
+		TextColor("#e4e4e7").
+		FontSize(15).
+		LineHeight(23).
+		MarkdownLinkColor("#60a5fa").
+		MarkdownCodeBackground("#090b10").
+		MarkdownBorderColor("#343843")
 }
 ```
 

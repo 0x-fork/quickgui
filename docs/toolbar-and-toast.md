@@ -307,10 +307,10 @@ func Notices() {
 			toasts := ui.UseToastManager()
 			ui.Button(
 				"Notify",
-				ui.OnClick(func() {
-					toasts.Add(ui.ToastRequest{Title: "Saved", Type: ui.ToastSuccess})
-				}),
-			)
+			).OnClick(func() {
+				toasts.Add(ui.ToastRequest{Title: "Saved", Type: ui.ToastSuccess})
+			})
+
 			ui.Toast.Viewport(
 				ui.ToastViewportProps{},
 				func() {

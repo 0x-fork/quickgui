@@ -29,28 +29,28 @@ Start after `native.Run` reports readiness, outside components. Share the handle
 
 ```go
 import (
-    "log"
-    "github.com/egoist/quickgui/go/native"
-    "github.com/egoist/quickgui/go/updater"
+	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/updater"
+	"log"
 )
 
 var updates *updater.Updater
 
 func startUpdater() {
-    updates = updater.Start(updater.Options{}, func(event updater.Event) {
-        if event.Error != "" {
-            log.Print(event.Error)
-        }
-        if event.QuitRequired {
-            // Runs the app's ordinary quit hooks; save or cancel there as usual.
-            native.App.Quit(false, nil)
-        }
-        // Feed event.Status and event.Version into UI signals for an update banner.
-    }, func(err error) {
-        if err != nil {
-            log.Print(err)
-        }
-    })
+	updates = updater.Start(updater.Options{}, func(event updater.Event) {
+		if event.Error != "" {
+			log.Print(event.Error)
+		}
+		if event.QuitRequired {
+			// Runs the app's ordinary quit hooks; save or cancel there as usual.
+			native.App.Quit(false, nil)
+		}
+		// Feed event.Status and event.Version into UI signals for an update banner.
+	}, func(err error) {
+		if err != nil {
+			log.Print(err)
+		}
+	})
 }
 ```
 

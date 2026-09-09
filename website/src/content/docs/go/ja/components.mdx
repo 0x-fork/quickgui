@@ -2,34 +2,56 @@ QuickGUI はスタイルなしのプリミティブとアクセシブルな複�
 
 ## コンポーネントの定義
 
-Go コンポーネントは `*ui.Element` または `*native.Node` を返します。通常の型の props と子ノードを直接組み合わせます。戻り値の型でコンポーネントを識別するため、`CounterLabel(count())` は注釈や `ui.View(func() { ... })` のラッパーなしで更新されます。ウィンドウには関数を直接渡せます。
+Go コンポーネントは子ノードを暗黙に宣言し、値を返しません。props には通常の型を使います。コンパイラーは UI を構築する関数や他のコンポーネントを呼ぶ関数を識別するため、`CounterLabel(count())` は注釈なしでリアクティブになります。ウィンドウ、ルート、子ノードのブロックには `func()` を使います。ノードを返すコンポーネントファクトリーはサポートしません。
 
 ```go
-func CounterLabel(count int) *ui.Element {
-	return ui.Text("Count: ", count).FontSize(20)
+func CounterLabel(count int) {
+	ui.Text("Count: ", count).FontSize(20)
 }
 
-func ComponentExample() *ui.Element {
+func ComponentExample() {
 	count, setCount := ui.CreateSignal(0)
-	return ui.View(
-		CounterLabel(count()),
-		ui.Button("Increment").OnClick(func() { setCount(count() + 1) }),
-	)
+	ui.View(func() {
+		CounterLabel(count())
+		ui.Button("Increment").OnClick(func() { setCount(count() + 1) })
+	})
+}
+```
+
+構造体の props にも通常の Go の型を使います。`quantity` を更新すると、`LineItem` とそのノードを再構築せずに、バインドされたテキストが変わります。
+
+```go
+type Product struct {
+	ID    string
+	Name  string
+	Price int
+}
+
+func LineItem(product Product, quantity int) {
+	ui.Text(product.Name, " × ", quantity, " = $", product.Price*quantity)
+}
+
+func Cart() {
+	quantity, setQuantity := ui.CreateSignal(1)
+	ui.View(func() {
+		LineItem(Product{ID: "mug", Name: "Mug", Price: 12}, quantity())
+		ui.Button("Add one").OnClick(func() { setQuantity(quantity() + 1) })
+	})
 }
 ```
 
 コンテナーは以下のように子ノードを直接受け取れます。子のコールバックは任意で、マウント時に一度実行されます。遅延構築や複合コントロールのコンテキストが必要な場合に使います。イベントハンドラーは引き続きコールバックです。
 
 ```go
-func CardComponent(title string, children ...any) *ui.Element {
-	return ui.View(
+func CardComponent(title string, children ...any) {
+	ui.View(
 		ui.Text(title).FontWeight(600),
 		children,
 	).Padding(20).Gap(12).FlexCol()
 }
 
-func CardComposition() *ui.Element {
-	return CardComponent("Account",
+func CardComposition() {
+	CardComponent("Account",
 		ui.Text("Manage your account settings."),
 		ui.Button("Save").OnClick(func() { log.Print("Saved") }),
 	)
@@ -44,15 +66,16 @@ func CardComposition() *ui.Element {
 func ButtonExample(save func()) {
 	ui.Button(
 		"Save changes",
-		ui.Style().Height(40),
-		ui.Style().PaddingLeft(16),
-		ui.Style().PaddingRight(16),
-		ui.Style().BackgroundColor("#2563eb"),
-		ui.Style().TextColor("white"),
-		ui.Style().BorderRadius(8),
-		ui.Style().Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor("#3b82f6") }),
-		ui.OnClick(save),
-	)
+	).
+		Height(40).
+		PaddingLeft(16).
+		PaddingRight(16).
+		BackgroundColor("#2563eb").
+		TextColor("white").
+		BorderRadius(8).
+		Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor("#3b82f6") }).
+		OnClick(save)
+
 }
 ```
 

@@ -12,9 +12,9 @@ func TextExample() {
 	ui.View(func() {
 		ui.Text(
 			"Count: ",
-			count,
+			count(),
 		).FontSize(20)
-		ui.Button("Increment", ui.OnClick(func() { setCount(count() + 1) }))
+		ui.Button("Increment").OnClick(func() { setCount(count() + 1) })
 	})
 }
 ```
@@ -28,8 +28,8 @@ func DerivedExample() {
 	count, setCount := ui.CreateSignal(0)
 	doubled := ui.CreateMemo(func() int { return count() * 2 })
 	ui.View(func() {
-		ui.Text("Doubled: ", doubled)
-		ui.Button("Increment", ui.OnClick(func() { setCount(count() + 1) }))
+		ui.Text("Doubled: ", doubled())
+		ui.Button("Increment").OnClick(func() { setCount(count() + 1) })
 	})
 }
 ```
@@ -49,17 +49,17 @@ func EffectExample() {
 		ui.OnCleanup(func() { log.Print("Unsubscribe: ", current) })
 	})
 	ui.View(func() {
-		ui.Text("Watching: ", topic)
+		ui.Text("Watching: ", topic())
 		ui.Button(
 			"Switch topic",
-			ui.OnClick(func() {
-				if topic() == "Inbox" {
-					setTopic("Archive")
-				} else {
-					setTopic("Inbox")
-				}
-			}),
-		)
+		).OnClick(func() {
+			if topic() == "Inbox" {
+				setTopic("Archive")
+			} else {
+				setTopic("Inbox")
+			}
+		})
+
 	})
 }
 ```
@@ -82,8 +82,8 @@ func BatchedExample() {
 		})
 	}
 	ui.View(func() {
-		ui.Text(first, " ", last)
-		ui.Button("Apply profile", ui.OnClick(applyProfile))
+		ui.Text(first(), " ", last())
+		ui.Button("Apply profile").OnClick(applyProfile)
 	})
 }
 ```

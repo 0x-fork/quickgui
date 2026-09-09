@@ -243,15 +243,14 @@ func checkbox(props ui.CheckboxProps, caption any) {
 					ui.Show(
 						func() bool { return props.Checked() != false },
 						func() {
-							ui.SVG(
-								ui.Value(func() string {
-									path := "M3 6l2 2 4-4"
-									if props.Checked() == ui.CheckedIndeterminate {
-										path = "M3 6h6"
-									}
-									return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12"><path d="` + path + `" fill="none" stroke="` + p().OnAccent + `" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`
-								}),
-							).Width(12).Height(12).FlexShrink(0)
+							ui.SVG().Value(func() string {
+								path := "M3 6l2 2 4-4"
+								if props.Checked() == ui.CheckedIndeterminate {
+									path = "M3 6h6"
+								}
+								return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12"><path d="` + path + `" fill="none" stroke="` + p().OnAccent + `" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+							}).
+								Width(12).Height(12).FlexShrink(0)
 						},
 					)
 				},

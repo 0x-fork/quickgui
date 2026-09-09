@@ -57,12 +57,12 @@ func content(kind, description string, close func()) {
 			ui.View(
 				func() {
 					ui.Button(
-						func() { ui.Text("Count: ", count) },
-						buttonStyle,
+						func() { ui.Text("Count: ", count()) },
+
 						actionStyle,
-						ui.OnClick(func() { setCount(count() + 1) }),
-					)
-					ui.Button("Close", buttonStyle, actionStyle, ui.OnClick(close))
+					).Style(buttonStyle).OnClick(func() { setCount(count() + 1) })
+
+					ui.Button("Close", actionStyle).Style(buttonStyle).OnClick(close)
 				},
 			).Display("flex").Gap(10)
 		},

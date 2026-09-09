@@ -90,7 +90,7 @@ func SelectableButton() {
 	button := ui.Style().Padding(12).Bg("#e5e7eb").
 		Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.Opacity(0.85) })
 	ui.Button("Toggle selection").Style(button).
-		When(selected, ui.Style().Bg("#2563eb").TextColor("white")).
+		When(selected(), ui.Style().Bg("#2563eb").TextColor("white")).
 		OnClick(func() { setSelected(!selected()) })
 }
 ```

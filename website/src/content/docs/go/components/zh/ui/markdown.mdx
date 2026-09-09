@@ -14,7 +14,7 @@ import (
 
 ```go
 func MarkdownExample(source func() string, streaming func() bool) {
-	ui.Markdown(ui.Value(source), ui.Streaming(streaming)).Width("100%")
+	ui.Markdown().Value(source()).Streaming(streaming).Width("100%")
 }
 ```
 

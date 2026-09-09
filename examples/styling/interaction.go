@@ -69,8 +69,8 @@ func InteractionStates() {
 									).FontSize(12).TextColor(ink)
 								},
 								actionStyle,
-								ui.AriaLabel(title+" Rename"),
-							)
+							).AriaLabel(title + " Rename")
+
 							ui.Button(
 								func() {
 									ui.Text(
@@ -78,68 +78,46 @@ func InteractionStates() {
 									).FontSize(12).TextColor(ink)
 								},
 								actionStyle,
-								ui.Disabled(true),
-								ui.AriaLabel(title+" Share"),
-							)
+							).Disabled(true).AriaLabel(title + " Share")
+
 						},
 						rowStyle,
-						ui.Group(true),
-					)
+					).Group(true)
+
 				}
 			},
-			ui.Style().Display("flex"),
-			ui.Style().FlexDirection("column"),
-			ui.Style().Gap(12),
-			ui.Group("list"),
-		)
+		).Display("flex").FlexDirection("column").Gap(12).Group("list")
+
 		ui.View(
 			"Drag swatch",
 			centered,
-			ui.Style().Height(30),
-			ui.Style().BorderRadius(8),
-			ui.Style().BackgroundColor("#1d4ed8"),
-			ui.Style().TextColor(ink),
-			ui.Style().FontSize(12),
-			ui.Style().UserSelect("none"),
-			ui.Style().Dragging(func(s ui.StyleBuilder) ui.StyleBuilder { return s.Opacity(0.45) }),
-			ui.Draggable(ui.DragSource{ID: "swatch", Text: "swatch"}),
-		)
+		).Height(30).BorderRadius(8).BackgroundColor("#1d4ed8").TextColor(ink).FontSize(12).UserSelect("none").Dragging(func(s ui.StyleBuilder) ui.StyleBuilder { return s.Opacity(0.45) }).Draggable(ui.DragSource{
+			ID:   "swatch",
+			Text: "swatch",
+		})
+
 		ui.View(
 			func() {
 				ui.Text(
-					dropStatus,
+					dropStatus(),
 				).FontSize(12).TextColor(muted)
 			},
 			centered,
-			ui.Style().Height(54),
-			ui.Style().PaddingLeft(12),
-			ui.Style().PaddingRight(12),
-			ui.Style().BorderRadius(12),
-			ui.Style().BorderWidth(1),
-			ui.Style().BorderStyle("dashed"),
-			ui.Style().BorderColor(panelBorder),
-			ui.Style().Transition("background-color 120ms, border-color 120ms"),
-			ui.Style().Dragging(func(s ui.StyleBuilder) ui.StyleBuilder { return s.Opacity(0.6) }),
-			ui.Style().
-				DragOver(func(s ui.StyleBuilder) ui.StyleBuilder {
-					return s.BorderColor("#38bdf8").Background("#38bdf826")
-				}),
-			ui.DropKinds([]string{"files", "local"}),
-			ui.OnDrop(func(event *native.Event) {
-				if drop := ui.DropFromEvent(event); drop != nil {
-					setDropStatus("Dropped " + drop.ID)
-				}
-			}),
-			ui.OnFilesDropped(func(event *native.Event) {
-				if drop := ui.DropFromEvent(event); drop != nil {
-					setDropStatus("Dropped " + strconv.Itoa(len(drop.Paths)) + " file(s)")
-				}
-			}),
-			ui.Draggable(ui.DragSource{
-				ID:   "drop-zone",
-				Text: "drop-zone",
-			}),
-		)
+		).Height(54).PaddingLeft(12).PaddingRight(12).BorderRadius(12).BorderWidth(1).BorderStyle("dashed").BorderColor(panelBorder).Transition("background-color 120ms, border-color 120ms").Dragging(func(s ui.StyleBuilder) ui.StyleBuilder { return s.Opacity(0.6) }).DragOver(func(s ui.StyleBuilder) ui.StyleBuilder {
+			return s.BorderColor("#38bdf8").Background("#38bdf826")
+		}).DropKinds([]string{"files", "local"}).OnDrop(func(event *native.Event) {
+			if drop := ui.DropFromEvent(event); drop != nil {
+				setDropStatus("Dropped " + drop.ID)
+			}
+		}).OnFilesDropped(func(event *native.Event) {
+			if drop := ui.DropFromEvent(event); drop != nil {
+				setDropStatus("Dropped " + strconv.Itoa(len(drop.Paths)) + " file(s)")
+			}
+		}).Draggable(ui.DragSource{
+			ID:   "drop-zone",
+			Text: "drop-zone",
+		})
+
 	})
 }
 

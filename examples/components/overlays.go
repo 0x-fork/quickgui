@@ -38,7 +38,7 @@ func menuLabel(caption string) {
 	state := ui.UseMenuItemState()
 	ui.Text(
 		caption,
-	).TextColor(func() string { return choose(state().Highlighted, p().Accent, p().Ink) }).Flex(1)
+	).TextColor(choose(state().Highlighted, p().Accent, p().Ink)).Flex(1)
 }
 func ContextMenuDemo() {
 	command, setCommand := ui.CreateSignal("nothing yet")
@@ -141,23 +141,11 @@ func SystemContextMenuDemo() {
 	panel("System context menu", "The operating system draws this menu. Actions update the readout below; reopen it to see the current checkmarks.", func() {
 		ui.View(
 			"Right-click here for the system menu",
-			ui.Style().Display("flex"),
-			ui.Style().Height(96),
-			ui.Style().AlignItems("center"),
-			ui.Style().JustifyContent("center"),
-			ui.Style().BorderRadius(10),
-			ui.Style().BorderWidth(1),
-			ui.Style().BorderStyle("dashed"),
-			ui.Style().BorderColor(color(func(p palette) string { return p.Border })),
-			ui.Style().BackgroundColor(color(func(p palette) string { return p.PanelAlt })),
-			ui.Style().TextColor(color(func(p palette) string { return p.Muted })),
-			ui.Style().AppRegion("no-drag"),
-			ui.Style().UserSelect("none"),
-			ui.OnContextMenu(func(event *native.Event) {
-				event.PreventDefault()
-				open()
-			}),
-		)
+		).Display("flex").Height(96).AlignItems("center").JustifyContent("center").BorderRadius(10).BorderWidth(1).BorderStyle("dashed").BorderColor(color(func(p palette) string { return p.Border })).BackgroundColor(color(func(p palette) string { return p.PanelAlt })).TextColor(color(func(p palette) string { return p.Muted })).AppRegion("no-drag").UserSelect("none").OnContextMenu(func(event *native.Event) {
+			event.PreventDefault()
+			open()
+		})
+
 		row(func() { button("Open system menu", open) })
 		note(func() string { return "menu " + status() + " · last action " + action() })
 		note(func() string { return "hidden files " + strconv.FormatBool(showHidden()) + " · sort by " + sortBy() })

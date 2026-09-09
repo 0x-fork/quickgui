@@ -42,29 +42,31 @@ func openDetailsWindow() {
 		MinimumWidth:  320,
 		MinimumHeight: 200,
 		Background:    "#111827",
-		Component: func() *ui.Element {
+		Component: func() {
 			window := native.CurrentWindow()
-			return ui.View(
+			ui.View(
+				func() {
+					ui.Text(
+						"Created while the app is running",
+					).FontSize(22).
+						FontWeight(700)
 
-				ui.Text(
-					"Created while the app is running",
-				).FontSize(22).
-					FontWeight(700),
+					ui.Text(
+						"This window has its own retained tree and native lifecycle.",
+					).TextColor("#94a3b8").LineHeight(21)
 
-				ui.Text(
-					"This window has its own retained tree and native lifecycle.",
-				).TextColor("#94a3b8").LineHeight(21),
+					ui.Button(
+						"Close window",
+					).OnClick(func() { window.Close() }).
+						Display("flex").
+						Height(40).
+						AlignItems("center").
+						JustifyContent("center").
+						BackgroundColor("#334155").
+						BorderRadius(9).
+						Cursor("default")
 
-				ui.Button(
-					"Close window",
-				).OnClick(func() { window.Close() }).
-					Display("flex").
-					Height(40).
-					AlignItems("center").
-					JustifyContent("center").
-					BackgroundColor("#334155").
-					BorderRadius(9).
-					Cursor("default"),
+				},
 			).Display("flex").
 				FlexDirection("column").
 				Width("100%").
@@ -79,13 +81,10 @@ func openDetailsWindow() {
 	})
 }
 
-func Counter() *ui.Element {
+func Counter() {
 	count, setCount := ui.CreateSignal(0)
-
-	return ui.View(
-
+	ui.View(
 		ui.View(
-
 			ui.Text("QuickGUI · Go").FontWeight(600),
 		).Display("flex").
 			Height(52).
@@ -97,79 +96,77 @@ func Counter() *ui.Element {
 			BorderWidth(1),
 
 		ui.View(
+			func() {
+				ui.View(
+					func() {
+						ui.Text(
+							"Fine-grained native UI",
+						).FontSize(28).
+							LineHeight(36).
+							FontWeight(700)
 
-			ui.View(
+						ui.Text(
+							"Signals update only the changed text node. The application is ordinary Go, " +
+								"and QuickGUI retains layout, sleeps while clean, and redraws once per mutation batch.",
+						).TextColor("#94a3b8").
+							FontSize(14).
+							LineHeight(21)
 
-				ui.Text(
-					"Fine-grained native UI",
-				).FontSize(28).
-					LineHeight(36).
-					FontWeight(700),
+						CountLabel(count())
 
-				ui.Text(
-					"Signals update only the changed text node. The application is ordinary Go, "+
-						"and QuickGUI retains layout, sleeps while clean, and redraws once per mutation batch.",
-				).TextColor("#94a3b8").
-					FontSize(14).
-					LineHeight(21),
+						ui.Show(
+							count() >= 5,
+							func() {
+								ui.Text(
+									"Five or more clicks: the row above was created on demand.",
+								).TextColor("#fbbf24").
+									FontSize(14)
 
-				CountLabel(count()).TextColor("#bfdbfe").
-					When(
-						count() >= 5,
-						ui.Style().TextColor("#fbbf24"),
-					).
-					FontSize(20).
-					FontWeight(600),
+							},
+						)
+						ui.Button(
+							"Increment",
+						).OnClick(func() { setCount(count() + 1) }).
+							Display("flex").
+							Height(44).
+							AlignItems("center").
+							JustifyContent("center").
+							BackgroundColor("#2563eb").
+							TextColor("white").
+							BorderRadius(9).
+							Cursor("default").
+							AppRegion("no-drag").
+							UserSelect("none").
+							Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
+								return s.BackgroundColor("#3b82f6")
+							})
 
-				ui.Show(
-					count() >= 5,
-					func() *ui.Element {
-						return ui.Text(
-							"Five or more clicks: the row above was created on demand.",
-						).TextColor("#fbbf24").
-							FontSize(14)
+						ui.Button(
+							"Open window",
+						).OnClick(func() { openDetailsWindow() }).
+							Display("flex").
+							Height(44).
+							AlignItems("center").
+							JustifyContent("center").
+							BackgroundColor("#334155").
+							TextColor("white").
+							BorderRadius(9).
+							Cursor("default").
+							AppRegion("no-drag").
+							UserSelect("none")
 
 					},
-				),
-				ui.Button(
-					"Increment",
-				).OnClick(func() { setCount(count() + 1) }).
-					Display("flex").
-					Height(44).
-					AlignItems("center").
-					JustifyContent("center").
-					BackgroundColor("#2563eb").
-					TextColor("white").
-					BorderRadius(9).
-					Cursor("default").
-					AppRegion("no-drag").
-					UserSelect("none").
-					Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
-						return s.BackgroundColor("#3b82f6")
-					}),
+				).Display("flex").
+					FlexDirection("column").
+					Width(420).
+					Gap(18).
+					Padding(28).
+					BackgroundColor("#111827").
+					BorderColor("#334155").
+					BorderWidth(1).
+					BorderRadius(16)
 
-				ui.Button(
-					"Open window",
-				).OnClick(func() { openDetailsWindow() }).
-					Display("flex").
-					Height(44).
-					AlignItems("center").
-					JustifyContent("center").
-					BackgroundColor("#334155").
-					TextColor("white").
-					BorderRadius(9).
-					Cursor("default").
-					AppRegion("no-drag").
-					UserSelect("none"),
-			).Display("flex").
-				FlexDirection("column").
-				Width(420).
-				Gap(18).
-				Padding(28).
-				BackgroundColor("#111827").
-				BorderColor("#334155").
-				BorderWidth(1).
-				BorderRadius(16),
+			},
 		).Display("flex").
 			Flex(1).
 			MinHeight(0).
@@ -185,6 +182,10 @@ func Counter() *ui.Element {
 
 }
 
-func CountLabel(count int) *ui.Element {
-	return ui.Text("Count: ", count)
+func CountLabel(count int) {
+	ui.Text("Count: ", count).
+		TextColor("#bfdbfe").
+		When(count >= 5, ui.Style().TextColor("#fbbf24")).
+		FontSize(20).
+		FontWeight(600)
 }

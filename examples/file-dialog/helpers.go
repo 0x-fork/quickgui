@@ -71,14 +71,14 @@ var buttonStyle = ui.Style().
 	Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor("#30394a") })
 
 func button(label string, disabled func() bool, click func()) {
-	ui.Button(label, buttonStyle, ui.Disabled(disabled), ui.OnClick(click))
+	ui.Button(label).Style(buttonStyle).Disabled(disabled()).OnClick(click)
 }
 
 func dialogStatus(status func() string, pending func() bool) {
 	ui.View(
 		func() {
 			ui.Text(
-				status,
+				status(),
 			).FontSize(13).LineHeight(19).TextAlign("center").UserSelect("text").
 				TextColor(func() string {
 					if pending() {

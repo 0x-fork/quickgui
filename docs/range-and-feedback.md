@@ -438,11 +438,11 @@ func VolumeSlider() {
 				Index: &thumb,
 				PartProps: ui.PartProps{Style: ui.Style().
 					Opacity(func() float64 {
-					if slider().Dragging {
-						return 0.8
-					}
-					return 1
-				})},
+						if slider().Dragging {
+							return 0.8
+						}
+						return 1
+					})},
 			})
 		},
 	)

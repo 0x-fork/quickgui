@@ -25,14 +25,10 @@ func icon(name string, size float64, color func() string) {
 	dynamicIcon(func() string { return name }, size, color)
 }
 func dynamicIcon(name func() string, size float64, color func() string) {
-	ui.SVG(
-		ui.Style().Width(size),
-		ui.Style().Height(size),
-		ui.Style().FlexShrink(0),
-		ui.Value(func() string {
-			return strings.ReplaceAll(svgFrame+icons[name()]+"</svg>", "currentColor", color())
-		}),
-	)
+	ui.SVG().Width(size).Height(size).FlexShrink(0).Value(func() string {
+		return strings.ReplaceAll(svgFrame+icons[name()]+"</svg>", "currentColor", color())
+	})
+
 }
 func statusGlyph(m *model, status func() string, compact bool) {
 	size := choose(compact, 12.0, 14.0)

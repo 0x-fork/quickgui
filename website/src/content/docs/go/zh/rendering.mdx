@@ -9,7 +9,7 @@ func ViewExample() {
 	ui.View(
 		func() {
 			ui.Text("Hello from Go")
-			ui.Button("Continue", ui.OnClick(func() {}))
+			ui.Button("Continue").OnClick(func() {})
 		},
 	).Padding(20).Gap(12)
 }
@@ -23,7 +23,7 @@ func ViewExample() {
 func DisclosureExample() {
 	open, setOpen := ui.CreateSignal(false)
 	ui.View(func() {
-		ui.Button("Toggle details", ui.OnClick(func() { setOpen(!open()) }))
+		ui.Button("Toggle details").OnClick(func() { setOpen(!open()) })
 		ui.Show(
 			open,
 			func() { ui.Text("Details") },
@@ -49,18 +49,18 @@ func KeyedListExample() {
 	ui.View(func() {
 		ui.Button(
 			"Reorder and rename",
-			ui.OnClick(func() {
-				setPeople([]ListPerson{{2, "Grace"}, {1, "Ada Lovelace"}})
-			}),
-		)
+		).OnClick(func() {
+			setPeople([]ListPerson{{2, "Grace"}, {1, "Ada Lovelace"}})
+		})
+
 		ui.KeyedFor(
 			people,
 			func(person ListPerson) any { return person.ID },
 			func(person func() ListPerson, index func() int) {
 				ui.Text(
-					index,
+					index(),
 					": ",
-					func() string { return person().Name },
+					person().Name,
 				)
 			},
 			func() { ui.Text("No people") },
@@ -88,7 +88,7 @@ func LoadingPanel(load func(context.Context) (string, error)) {
 			setResult(value)
 		},
 	)
-	ui.Text(result)
+	ui.Text(result())
 }
 ```
 
@@ -99,10 +99,10 @@ func LoadingPanel(load func(context.Context) (string, error)) {
 ```go
 func CloseButton() {
 	window := native.CurrentWindow()
-	ui.Button("Close window", ui.OnClick(func() { window.Close() }))
+	ui.Button("Close window").OnClick(func() { window.Close() })
 }
 ```
 
 ## 检查、测试与调试
 
-在应用模块中设置 `CGO_ENABLED=0` 并运行 `go test ./...`，通过 `quickgui fmt --check` 检查格式。应用是原生 Go 可执行文件，普通 Go 诊断和调试工具直接使用原始源码。
+在应用模块中运行 `quickgui test`，让测试使用与开发构建相同的视图编译器。通过 `quickgui check` 检查类型，通过 `quickgui fmt --check` 检查格式。构建使用 `CGO_ENABLED=0`。Go 诊断和调用栈保留原始源码位置；调试器仍会显示生成的 getter 参数。直接运行 `go test` 会绕过视图编译器，响应式表达式需要显式访问器。

@@ -15,7 +15,7 @@ func TestPlainPropsRetainNodesAndDisposeBindings(t *testing.T) {
 		defer dispose()
 		quantity, setQuantity := ui.CreateSignal(1)
 		product, setProduct := ui.CreateSignal(Product{ID: "mug", Name: "Mug", Price: 12})
-		item := ForwardedItem(product(), quantity(), func() { setQuantity(quantity() + 1) })
+		item := native.CollectChildren(func() { ForwardedItem(product(), quantity(), func() { setQuantity(quantity() + 1) }) })[0]
 		parent := ui.View(item)
 		labels := append([]*native.Node(nil), item.Children...)
 		check := func(want []string) {
@@ -39,7 +39,7 @@ func TestPlainPropsRetainNodesAndDisposeBindings(t *testing.T) {
 		if parent.Pending.MutationCount()-before != 2 {
 			t.Fatal("unrelated props mutated")
 		}
-		native.RemoveNode(parent.Node, item.Node)
+		native.RemoveNode(parent.Node, item)
 		before = parent.Pending.MutationCount()
 		setQuantity(4)
 		if parent.Pending.MutationCount() != before {
@@ -54,9 +54,9 @@ func TestPropShadowingAndFirstClassSnapshot(t *testing.T) {
 	reactive.CreateRoot(func(dispose func()) struct{} {
 		defer dispose()
 		value, setValue := ui.CreateSignal("initial")
-		label := Label(value())
+		label := native.CollectChildren(func() { Label(value()) })[0]
 		build := Label
-		snapshot := build(value())
+		snapshot := native.CollectChildren(func() { build(value()) })[0]
 		shadowed := func(Label func() string) string { return Label() }(value)
 		if shadowed != "initial" {
 			t.Fatal("a callback shadowing a component changed meaning")
@@ -77,7 +77,7 @@ func TestEventTimeMutationDoesNotBecomeAPersistentBinding(t *testing.T) {
 	reactive.CreateRoot(func(dispose func()) struct{} {
 		defer dispose()
 		value, setValue := ui.CreateSignal("clicked")
-		node := EventSnapshot(value())
+		node := native.CollectChildren(func() { EventSnapshot(value()) })[0]
 		node.Children[1].Listeners[0].Listener(&native.Event{})
 		before := node.Pending.MutationCount()
 		setValue("later")

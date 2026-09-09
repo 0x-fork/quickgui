@@ -206,7 +206,7 @@ func MeasuredTabs() {
 			)
 			ui.Text(
 				"Direction: ",
-				func() string { return state().ActivationDirection },
+				state().ActivationDirection,
 			)
 		},
 	)

@@ -73,7 +73,7 @@ func Navigation() {
 			ui.View(
 				func() {
 					ui.Text(
-						func() string { return location().Href },
+						location().Href,
 					).FontFamily("monospace").FontSize(12).TextColor(muted)
 				},
 			).Display("flex").Height(34).FlexShrink(0).AlignItems("center").PaddingLeft(20).PaddingRight(20).BackgroundColor("#0e1526").BorderBottomWidth(1).BorderColor(border)

@@ -20,8 +20,8 @@ func ToastExample() {
 			manager := ui.UseToastManager()
 			ui.Button(
 				"Save",
-				ui.OnClick(func() { manager.Add(ui.ToastRequest{Title: "Saved", Type: "success"}) }),
-			)
+			).OnClick(func() { manager.Add(ui.ToastRequest{Title: "Saved", Type: "success"}) })
+
 			ui.Toast.Viewport(
 				ui.ToastViewportProps{},
 				func() {

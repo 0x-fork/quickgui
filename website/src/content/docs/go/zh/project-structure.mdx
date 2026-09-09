@@ -23,7 +23,7 @@ func ViewExample() {
 	ui.View(
 		func() {
 			ui.Text("Hello from Go")
-			ui.Button("Continue", ui.OnClick(func() {}))
+			ui.Button("Continue").OnClick(func() {})
 		},
 	).Padding(20).Gap(12)
 }

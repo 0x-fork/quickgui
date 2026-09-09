@@ -42,8 +42,8 @@ func workspace(m *model) {
 									ui.Button(
 										"New Tab",
 										m.buttonStyle(false),
-										ui.OnClick(func() { m.newTerminal(m.activeSpace()) }),
-									)
+									).OnClick(func() { m.newTerminal(m.activeSpace()) })
+
 								},
 							).Display("flex").Flex(1).MinWidth(0).MinHeight(0).FlexDirection("column").AlignItems("center").JustifyContent("center").Gap(9).BackgroundColor(m.color(func(t theme) string { return t.Terminal }))
 						},
@@ -76,14 +76,12 @@ func workspace(m *model) {
 									ui.Button(
 										"Restart",
 										m.buttonStyle(false),
-										ui.Style().Height(22),
-										ui.Style().FontSize(10.5),
-										ui.OnClick(func() {
-											if p := m.activePane(); p != nil {
-												m.restartPane(p)
-											}
-										}),
-									)
+									).Height(22).FontSize(10.5).OnClick(func() {
+										if p := m.activePane(); p != nil {
+											m.restartPane(p)
+										}
+									})
+
 								},
 								func() {
 									iconButton(m, "Dismiss error", "close", 22, func() { m.Error.Write("") })
@@ -111,40 +109,19 @@ func tabBar(m *model) {
 									ui.Button(
 										func() {
 											ui.Text(
-												func() string {
-													return tabTitle(tab(), m.Panes.Read())
-												},
+
+												tabTitle(tab(), m.Panes.Read()),
 											).FontSize(12.5).FontWeight(560).LineClamp(1).TextOverflow("ellipsis")
 										},
-										ui.AriaLabel("Select terminal tab"),
-										ui.Style().Display("flex"),
-										ui.Style().Width("100%"),
-										ui.Style().MinWidth(0),
-										ui.Style().Height(28),
-										ui.Style().AlignItems("center"),
-										ui.Style().PaddingLeft(10),
-										ui.Style().PaddingRight(func() int { return choose(active(), 30, 10) }),
-										ui.Style().BackgroundColor("transparent"),
-										ui.Style().
-											TextColor(func() string {
-												return choose(active(), m.theme().Text, m.theme().TextTertiary)
-											}),
-										ui.Style().
-											Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
-												return s.
-													BackgroundColor(func() string {
-														return choose(active(), m.theme().SelectedStrong, m.theme().Hover)
-													})
-											}),
-										ui.Style().
-											Active(func(s ui.StyleBuilder) ui.StyleBuilder {
-												return s.BackgroundColor(m.color(func(t theme) string { return t.Active }))
-											}),
-										ui.Style().BorderRadius(6),
-										ui.Style().Cursor("default"),
-										ui.Style().AppRegion("no-drag"),
-										ui.OnClick(func() { m.selectTab(tab()) }),
-									)
+									).AriaLabel("Select terminal tab").Display("flex").Width("100%").MinWidth(0).Height(28).AlignItems("center").PaddingLeft(10).PaddingRight(choose(active(), 30, 10)).BackgroundColor("transparent").TextColor(choose(active(), m.theme().Text, m.theme().TextTertiary)).Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
+										return s.
+											BackgroundColor(func() string {
+												return choose(active(), m.theme().SelectedStrong, m.theme().Hover)
+											})
+									}).Active(func(s ui.StyleBuilder) ui.StyleBuilder {
+										return s.BackgroundColor(m.color(func(t theme) string { return t.Active }))
+									}).BorderRadius(6).Cursor("default").AppRegion("no-drag").OnClick(func() { m.selectTab(tab()) })
+
 									ui.Show(
 										active,
 										func() {
@@ -155,20 +132,8 @@ func tabBar(m *model) {
 										},
 									)
 								},
-								ui.Style().Position("relative"),
-								ui.Style().Display("flex"),
-								ui.Style().MinWidth(74),
-								ui.Style().MaxWidth(170),
-								ui.Style().Height(28),
-								ui.Style().FlexShrink(1),
-								ui.Style().AlignItems("center"),
-								ui.Style().
-									BackgroundColor(func() string {
-										return choose(active(), m.theme().Selected, "transparent")
-									}),
-								ui.Style().BorderRadius(6),
-								ui.Group("tab"),
-							)
+							).Position("relative").Display("flex").MinWidth(74).MaxWidth(170).Height(28).FlexShrink(1).AlignItems("center").BackgroundColor(choose(active(), m.theme().Selected, "transparent")).BorderRadius(6).Group("tab")
+
 						},
 						nil,
 					)
@@ -181,34 +146,12 @@ func tabBar(m *model) {
 					icon("plus", 13, m.color(func(t theme) string { return t.TextSecondary }))
 					ui.Text("Agent")
 				},
-				ui.AriaLabel("New agent"),
-				ui.FocusOnPointer(ptr(false)),
-				ui.Style().Display("flex"),
-				ui.Style().Height(24),
-				ui.Style().FlexShrink(0),
-				ui.Style().AlignItems("center"),
-				ui.Style().JustifyContent("center"),
-				ui.Style().Gap(5),
-				ui.Style().PaddingLeft(9),
-				ui.Style().PaddingRight(9),
-				ui.Style().TextColor(m.color(func(t theme) string { return t.TextSecondary })),
-				ui.Style().BackgroundColor("transparent"),
-				ui.Style().
-					Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
-						return s.BackgroundColor(m.color(func(t theme) string { return t.Hover }))
-					}),
-				ui.Style().
-					Active(func(s ui.StyleBuilder) ui.StyleBuilder {
-						return s.BackgroundColor(m.color(func(t theme) string { return t.Active }))
-					}),
-				ui.Style().Transition(colorTransition),
-				ui.Style().BorderRadius(5),
-				ui.Style().FontSize(11.5),
-				ui.Style().FontWeight(600),
-				ui.Style().Cursor("default"),
-				ui.Style().AppRegion("no-drag"),
-				ui.OnClick(m.openAgentSheet),
-			)
+			).AriaLabel("New agent").FocusOnPointer(ptr(false)).Display("flex").Height(24).FlexShrink(0).AlignItems("center").JustifyContent("center").Gap(5).PaddingLeft(9).PaddingRight(9).TextColor(m.color(func(t theme) string { return t.TextSecondary })).BackgroundColor("transparent").Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
+				return s.BackgroundColor(m.color(func(t theme) string { return t.Hover }))
+			}).Active(func(s ui.StyleBuilder) ui.StyleBuilder {
+				return s.BackgroundColor(m.color(func(t theme) string { return t.Active }))
+			}).Transition(colorTransition).BorderRadius(5).FontSize(11.5).FontWeight(600).Cursor("default").AppRegion("no-drag").OnClick(m.openAgentSheet)
+
 			ui.View().Width(1).Height(16).FlexShrink(0).MarginLeft(2).MarginRight(2).BackgroundColor(m.color(func(t theme) string { return t.BorderStrong }))
 			iconButton(m, "Split right", "columns", 24, func() { m.splitTerminal("horizontal") })
 			iconButton(m, "Split down", "rows", 24, func() { m.splitTerminal("vertical") })
@@ -226,25 +169,14 @@ func tabSurface(m *model, tab func() workspaceTab) {
 				nil,
 			)
 		},
-		ui.Style().Position("absolute"),
-		ui.Style().Display("flex"),
-		ui.Style().Top(0),
-		ui.Style().Right(0),
-		ui.Style().Bottom(0),
-		ui.Style().Left(0),
-		ui.Style().MinWidth(0),
-		ui.Style().MinHeight(0),
-		ui.Style().Gap(5),
-		ui.Style().FlexDirection("row"),
-		ui.When(
-			func() bool { return tab().Direction == "vertical" },
-			ui.Style().FlexDirection("column"),
-		),
-		ui.When(
-			func() bool { return tab().ID != m.ActiveTabID.Read() },
-			ui.Style().Visibility("hidden"),
-		),
+	).Position("absolute").Display("flex").Top(0).Right(0).Bottom(0).Left(0).MinWidth(0).MinHeight(0).Gap(5).FlexDirection("row").When(
+		tab().Direction == "vertical",
+		ui.Style().FlexDirection("column"),
+	).When(
+		func() bool { return tab().ID != m.ActiveTabID.Read() },
+		ui.Style().Visibility("hidden"),
 	)
+
 }
 func terminalPane(m *model, p *pane) {
 	directory := ""

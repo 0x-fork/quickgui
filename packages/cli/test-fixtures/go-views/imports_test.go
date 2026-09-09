@@ -14,7 +14,7 @@ func TestImportedComponentAndPlainStructProps(t *testing.T) {
 	reactive.CreateRoot(func(dispose func()) struct{} {
 		defer dispose()
 		quantity, setQuantity := ui.CreateSignal(1)
-		label := parts.Label(parts.Props{Name: "Mug", Quantity: quantity()})
+		label := native.CollectChildren(func() { parts.Label(parts.Props{Name: "Mug", Quantity: quantity()}) })[0]
 		first, second := label.Children[0], label.Children[1]
 		before := label.Pending.MutationCount()
 		setQuantity(2)

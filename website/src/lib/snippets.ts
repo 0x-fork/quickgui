@@ -4,14 +4,12 @@ export const snippets = {
     code: `func Counter() {
 	count, setCount := ui.CreateSignal(0)
 	ui.View(
-		ui.Text("Fine-grained native UI").FontSize(28).FontWeight(700),
 		ui.Text("Count: ", count),
 		ui.Button("Increment").
 			OnClick(func() { setCount(count() + 1) }).
 			Padding(12).
 			RoundedLg().
-			Bg("#2563eb").
-			Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.Bg("#3b82f6") }),
+			Bg("#2563eb")
 	).FlexCol().
 		SizeFull().
 		ItemsCenter().
@@ -31,15 +29,16 @@ export const snippets = {
     @ui.button("Increment")
     .on_click(() => set_count(count() + 1))
     .padding(12)
-    .border_radius(8)
-    .bg(@ui.rgb8(24, 24, 27))
-    .text_color(@ui.rgb8(255, 255, 255)),
+    .rounded_lg()
+    .bg(@ui.rgb8(37, 99, 235)),
   ])
-  .size_full()
   .flex_col()
+  .size_full()
   .items_center()
   .justify_center()
-  .gap(12)
+  .gap(20)
+  .bg(@ui.rgb8(9, 13, 22))
+  .text_color(@ui.rgb8(226, 232, 240))
 }
 `,
   },

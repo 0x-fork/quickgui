@@ -300,9 +300,10 @@ func Welcome() {
 					).FontSize(13).TextColor(app.Theme().TextSecondary).TextAlign("center").LineHeight(19)
 					gui.Button(
 						"Open Repository…",
-						gui.OnClick(func() { app.OpenRepository() }),
+
 						app.Theme().Button("primary"),
-					)
+					).OnClick(func() { app.OpenRepository() })
+
 					gui.Show(
 						func() bool { return len(store.RecentRepositories()) > 0 },
 						func() {
@@ -325,18 +326,15 @@ func Welcome() {
 													gui.View(
 														func() {
 															gui.Text(
-																gui.Style().FontSize(13),
-																gui.Style().FontWeight(600),
-																gui.Style().TextColor(app.Theme().Text),
-																gui.Style().LineClamp(1),
+
 																filepath.Base(path),
-															)
+															).FontSize(13).FontWeight(600).TextColor(app.Theme().Text).LineClamp(1)
+
 															gui.Text(
-																gui.Style().FontSize(11),
-																gui.Style().TextColor(app.Theme().TextTertiary),
-																gui.Style().LineClamp(1),
+
 																shorten(filepath.Dir(path)),
-															)
+															).FontSize(11).TextColor(app.Theme().TextTertiary).LineClamp(1)
+
 														},
 													).Display("flex").Flex(1).MinWidth(0).FlexDirection("column")
 													gui.Show(
@@ -350,9 +348,8 @@ func Welcome() {
 														},
 													)
 												},
-												gui.Disabled(store.Opening() != ""),
-												gui.OnClick(func() { app.OpenRepositoryPath(path) }),
-											).Display("flex").FlexDirection("row").AlignItems("center").Gap(10).Height(40).PaddingLeft(10).PaddingRight(10).BorderRadius(8).BackgroundColor("transparent").Cursor("default").
+											).Disabled(store.Opening() != "").OnClick(func() { app.OpenRepositoryPath(path) }).
+												Display("flex").FlexDirection("row").AlignItems("center").Gap(10).Height(40).PaddingLeft(10).PaddingRight(10).BorderRadius(8).BackgroundColor("transparent").Cursor("default").
 												Hover(func(s gui.StyleBuilder) gui.StyleBuilder {
 													return s.BackgroundColor(app.Theme().Hover)
 												}).DisabledStyle(func(s gui.StyleBuilder) gui.StyleBuilder {
@@ -396,7 +393,7 @@ func Sidebar() {
 					gui.View(
 						func() {
 							gui.Text(
-								func() string { return store.RepositoryName() },
+								store.RepositoryName(),
 							).FontSize(13).FontWeight(700).TextColor(app.Theme().Text).LineClamp(1)
 							gui.Text(
 								func() string {
@@ -415,9 +412,8 @@ func Sidebar() {
 					).Display("flex").Flex(1).MinWidth(0).FlexDirection("column").Gap(1)
 					icon(chevronDownIcon, 14, func() string { return app.Theme().TextTertiary })
 				},
-				gui.AriaLabel("Repository actions"),
-				gui.OnClick(func() { repositoryMenu(app) }),
-			).Display("flex").FlexDirection("row").AlignItems("center").Gap(9).Height(44).FlexShrink(0).PaddingLeft(8).PaddingRight(8).MarginBottom(6).BorderRadius(8).BackgroundColor("transparent").Cursor("default").
+			).AriaLabel("Repository actions").OnClick(func() { repositoryMenu(app) }).
+				Display("flex").FlexDirection("row").AlignItems("center").Gap(9).Height(44).FlexShrink(0).PaddingLeft(8).PaddingRight(8).MarginBottom(6).BorderRadius(8).BackgroundColor("transparent").Cursor("default").
 				Hover(func(s gui.StyleBuilder) gui.StyleBuilder {
 					return s.BackgroundColor(app.Theme().Hover)
 				})
@@ -530,19 +526,17 @@ func navRow(label string, selected func() bool, trailing any, onClick func()) {
 				gui.Child(trailing)
 			}
 		},
-		gui.AriaLabel(label),
-		gui.When(selected, gui.Selected(true)),
-		gui.OnClick(func() { onClick() }),
+
 		rowStyle(app.Theme(), false),
-		gui.When(
-			selected,
-			gui.Style().BackgroundColor(func() string { return app.Theme().Selection }),
-			gui.Style().
-				Hover(func(s gui.StyleBuilder) gui.StyleBuilder {
-					return s.BackgroundColor(app.Theme().Selection)
-				}),
-		),
+	).AriaLabel(label).When(selected(), gui.Selected(true)).OnClick(func() { onClick() }).When(
+		selected,
+		gui.Style().BackgroundColor(func() string { return app.Theme().Selection }),
+		gui.Style().
+			Hover(func(s gui.StyleBuilder) gui.StyleBuilder {
+				return s.BackgroundColor(app.Theme().Selection)
+			}),
 	)
+
 }
 
 func sectionRow(label string, count func() int, selected func() bool, onClick, action func()) {
@@ -564,25 +558,25 @@ func sectionRow(label string, count func() int, selected func() bool, onClick, a
 						func() bool { return count() > 0 },
 						func() {
 							gui.Text(
-								count,
+								count(),
 							).FontSize(11).FontWeight(600).TextColor(app.Theme().TextTertiary)
 						},
 					)
 				},
-				gui.OnClick(func() { onClick() }),
-			).Display("flex").Flex(1).MinWidth(0).FlexDirection("row").AlignItems("center").Gap(6).Height(22).PaddingLeft(9).PaddingRight(6).BorderRadius(6).BackgroundColor("transparent").Cursor("default").
+			).OnClick(func() { onClick() }).
+				Display("flex").Flex(1).MinWidth(0).FlexDirection("row").AlignItems("center").Gap(6).Height(22).PaddingLeft(9).PaddingRight(6).BorderRadius(6).BackgroundColor("transparent").Cursor("default").
 				Hover(func(s gui.StyleBuilder) gui.StyleBuilder {
 					return s.BackgroundColor(app.Theme().Hover)
 				})
 			gui.Button(
 				func() { toolbarIcon(plusIcon) },
-				gui.AriaLabel("Add "+strings.ToLower(label)),
-				gui.OnClick(func() { action() }),
+
 				app.Theme().IconButton(),
-			)
+			).AriaLabel("Add " + strings.ToLower(label)).OnClick(func() { action() })
+
 		},
-		gui.Group(true),
-	).Display("flex").FlexDirection("row").AlignItems("center").Gap(4).MarginTop(14).PaddingRight(2)
+	).Group(true).
+		Display("flex").FlexDirection("row").AlignItems("center").Gap(4).MarginTop(14).PaddingRight(2)
 }
 
 func repositoryMenu(app AppContext) {

@@ -21,7 +21,7 @@ func TestGeneratedDiagnosticUsesOriginalFileLineAndColumn(t *testing.T) {
 	}
 	config := types.Config{Importer: sourceImporter{func(string) (*types.Package, error) { return ui, nil }}}
 	const filename = "/workspace/cart.go"
-	const input = "package cart\nimport gui \"github.com/egoist/quickgui/go/ui\"\n\nfunc Label(quantity int) *gui.Element {\n\treturn gui.Text(quantity)\n}\n"
+	const input = "package cart\nimport gui \"github.com/egoist/quickgui/go/ui\"\n\nfunc Label(quantity int) {\n\tgui.Text(quantity)\n}\n"
 	file, err := parser.ParseFile(fs, filename, input, parser.ParseComments)
 	if err != nil {
 		t.Fatal(err)
@@ -48,7 +48,81 @@ func TestGeneratedDiagnosticUsesOriginalFileLineAndColumn(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = config.Check("example/cart", generatedSet, []*ast.File{generated}, nil)
-	if err == nil || !strings.HasPrefix(err.Error(), filename+":5:18:") {
+	if err == nil || !strings.HasPrefix(err.Error(), filename+":5:11:") {
 		t.Fatalf("diagnostic must refer to the original prop expression, got %v", err)
+	}
+}
+
+func TestComponentsAreInferredFromDeclarationsAndForwardingCalls(t *testing.T) {
+	fs := token.NewFileSet()
+	sdk, err := parser.ParseFile(fs, "ui.go", `package ui
+
+type Element struct{}
+func Text(children ...any) *Element { return nil }
+func (e *Element) Width(value any) *Element { return e }
+`, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ui, err := new(types.Config).Check(uiPath, fs, []*ast.File{sdk}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const source = `package app
+import gui "github.com/egoist/quickgui/go/ui"
+func Forward(value int) { (Label)(value) }
+func Label(value int) { gui.Text(value) }
+func Chained(value int) { gui.Text(value).Width(value) }
+func Handle(value int) *gui.Element { return gui.Text(value) }
+func Setup(value int) { callback := func() { gui.Text(value) }; _ = callback }
+func Mutate(node *gui.Element, value int) { node.Width(value) }
+func Shadow(Label func()) { Label() }
+type Widget struct{}
+func (Widget) Label(value int) { gui.Text(value) }
+`
+	file, err := parser.ParseFile(fs, "app.go", source, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := &types.Info{Types: map[ast.Expr]types.TypeAndValue{}, Defs: map[*ast.Ident]types.Object{}, Uses: map[*ast.Ident]types.Object{}, Implicits: map[ast.Node]types.Object{}, Selections: map[*ast.SelectorExpr]*types.Selection{}}
+	config := types.Config{Importer: sourceImporter{func(string) (*types.Package, error) { return ui, nil }}}
+	pkg, err := config.Check("app", fs, []*ast.File{file}, info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	components := map[string]Component{}
+	for changed := true; changed; {
+		changed = false
+		for _, decl := range file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || !IsComponent(fn, info, components) {
+				continue
+			}
+			key := componentKey(info.Defs[fn.Name])
+			if _, exists := components[key]; exists {
+				continue
+			}
+			component, err := Describe(fn, info)
+			if err != nil {
+				t.Fatal(err)
+			}
+			components[key] = component
+			changed = true
+		}
+	}
+	if len(components) != 3 || components["app.Forward"].Name == "" || components["app.Label"].Name == "" || components["app.Chained"].Name == "" {
+		t.Fatalf("incorrect component boundaries: %v", components)
+	}
+	output, err := Source(fs, file, []byte(source), pkg, info, components)
+	if err != nil {
+		t.Fatal(err)
+	}
+	generatedSet := token.NewFileSet()
+	generated, err := parser.ParseFile(generatedSet, "generated.go", output, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := config.Check("app", generatedSet, []*ast.File{generated}, nil); err != nil {
+		t.Fatalf("ordinary helpers or a same-named method changed meaning: %v", err)
 	}
 }

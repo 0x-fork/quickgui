@@ -60,33 +60,15 @@ func Vibrancy() {
 										).FontSize(12).FontWeight(600)
 										ui.Show(selected, checkmark)
 									},
-									ui.Style().Display("flex"),
-									ui.Style().Width("100%"),
-									ui.Style().Height(31),
-									ui.Style().FlexShrink(0),
-									ui.Style().AlignItems("center"),
-									ui.Style().JustifyContent("space-between"),
-									ui.Style().PaddingLeft(11),
-									ui.Style().PaddingRight(11),
-									ui.Style().BackgroundColor("transparent"),
-									ui.Style().BorderColor("transparent"),
-									ui.Style().BorderWidth(1),
-									ui.Style().BorderRadius(7),
-									ui.Style().TextColor("#263247"),
-									ui.Style().Cursor("default"),
-									ui.Style().AppRegion("no-drag"),
-									ui.Style().UserSelect("none"),
-									ui.When(
-										selected,
-										ui.Style().BackgroundColor("#ffffff52"),
-										ui.Style().BorderColor("#ffffff70"),
-									),
-									ui.Selected(selected),
-									ui.OnClick(func() {
-										setMaterial(option.value)
-										window.SetVibrancy(option.value)
-									}),
-								)
+								).Display("flex").Width("100%").Height(31).FlexShrink(0).AlignItems("center").JustifyContent("space-between").PaddingLeft(11).PaddingRight(11).BackgroundColor("transparent").BorderColor("transparent").BorderWidth(1).BorderRadius(7).TextColor("#263247").Cursor("default").AppRegion("no-drag").UserSelect("none").When(
+									selected,
+									ui.Style().BackgroundColor("#ffffff52"),
+									ui.Style().BorderColor("#ffffff70"),
+								).Selected(selected).OnClick(func() {
+									setMaterial(option.value)
+									window.SetVibrancy(option.value)
+								})
+
 							}
 						},
 					).Display("flex").FlexDirection("column").Flex(1).MinHeight(0).Gap(3).PaddingLeft(10).PaddingRight(10).PaddingBottom(10).OverflowY("auto")
@@ -101,33 +83,15 @@ func Vibrancy() {
 										selected := func() bool { return state() == option.value }
 										ui.Button(
 											option.label,
-											ui.Style().Display("flex"),
-											ui.Style().Flex(1),
-											ui.Style().Height(27),
-											ui.Style().MinWidth(0),
-											ui.Style().AlignItems("center"),
-											ui.Style().JustifyContent("center"),
-											ui.Style().BackgroundColor("#ffffff24"),
-											ui.Style().BorderColor("#ffffff3d"),
-											ui.Style().BorderWidth(1),
-											ui.Style().BorderRadius(6),
-											ui.Style().TextColor("#445168"),
-											ui.Style().FontSize(10),
-											ui.Style().FontWeight(600),
-											ui.Style().Cursor("default"),
-											ui.Style().AppRegion("no-drag"),
-											ui.Style().UserSelect("none"),
-											ui.When(
-												selected,
-												ui.Style().BackgroundColor("#ffffff5c"),
-												ui.Style().BorderColor("#ffffff7a"),
-											),
-											ui.Selected(selected),
-											ui.OnClick(func() {
-												setState(option.value)
-												window.SetVisualEffectState(option.value)
-											}),
-										)
+										).Display("flex").Flex(1).Height(27).MinWidth(0).AlignItems("center").JustifyContent("center").BackgroundColor("#ffffff24").BorderColor("#ffffff3d").BorderWidth(1).BorderRadius(6).TextColor("#445168").FontSize(10).FontWeight(600).Cursor("default").AppRegion("no-drag").UserSelect("none").When(
+											selected,
+											ui.Style().BackgroundColor("#ffffff5c"),
+											ui.Style().BorderColor("#ffffff7a"),
+										).Selected(selected).OnClick(func() {
+											setState(option.value)
+											window.SetVisualEffectState(option.value)
+										})
+
 									}
 								},
 							).Display("flex").Gap(5)
@@ -139,7 +103,7 @@ func Vibrancy() {
 				func() {
 					ui.View(
 						func() {
-							ui.Text(material).FontSize(13).FontWeight(700)
+							ui.Text(material()).FontSize(13).FontWeight(700)
 						},
 					).Display("flex").Height(52).FlexShrink(0).AlignItems("center").JustifyContent("center").BorderColor("#e2e8f0").BorderBottomWidth(1).AppRegion("drag")
 					ui.View(

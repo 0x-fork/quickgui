@@ -98,20 +98,20 @@ func OpenFolderButton() {
 	window := native.CurrentWindow()
 	ui.Button(
 		"Open folder",
-		ui.OnClick(func() {
-			native.ShowOpenDialog(
-				native.OpenDialogOptions{
-					Window:     window,
-					Title:      "Open folder",
-					Properties: []string{"openDirectory"},
-				},
-				func(result native.OpenDialogResult, err error) {
-					if err == nil && !result.Canceled {
-						fmt.Println(result.FilePaths)
-					}
-				},
-			)
-		}),
-	)
+	).OnClick(func() {
+		native.ShowOpenDialog(
+			native.OpenDialogOptions{
+				Window:     window,
+				Title:      "Open folder",
+				Properties: []string{"openDirectory"},
+			},
+			func(result native.OpenDialogResult, err error) {
+				if err == nil && !result.Canceled {
+					fmt.Println(result.FilePaths)
+				}
+			},
+		)
+	})
+
 }
 ```

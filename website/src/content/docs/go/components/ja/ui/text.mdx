@@ -18,9 +18,9 @@ func TextExample() {
 	ui.View(func() {
 		ui.Text(
 			"Count: ",
-			count,
+			count(),
 		).FontSize(20)
-		ui.Button("Increment", ui.OnClick(func() { setCount(count() + 1) }))
+		ui.Button("Increment").OnClick(func() { setCount(count() + 1) })
 	})
 }
 ```

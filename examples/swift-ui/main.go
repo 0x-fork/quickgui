@@ -245,7 +245,7 @@ func pane(state *galleryState, body func()) {
 			ui.View(
 				func() {
 					ui.Text(
-						func() string { return state.current().Label },
+						state.current().Label,
 					).TextColor("#20242c").FontSize(15).FontWeight(700)
 					ui.Text(
 						"Native SwiftUI · QuickGUI state",
@@ -293,7 +293,7 @@ func demoPage(description string, status func() string, control ui.Component) {
 					ui.Text(
 						"NATIVE STATE",
 					).TextColor("#727985").FontSize(11).FontWeight(700)
-					ui.Text(status).TextColor("#252a33").FontSize(12)
+					ui.Text(status()).TextColor("#252a33").FontSize(12)
 				},
 			).Display("flex").FlexDirection("row").AlignItems("center").JustifyContent("space-between").Gap(16).Width("100%").MinHeight(42).PaddingLeft(14).PaddingRight(14).BorderRadius(10).BackgroundColor("#eceef2")
 		},
@@ -463,15 +463,12 @@ func demoControl(state *galleryState) {
 					OnValueChange: func(next string, _ *native.Event) { state.setName(next) },
 					OnSubmit:      func(*native.Event) { state.setSubmitted("text field") },
 				}))
-				ui.Input(
-					ui.Value(state.name),
-					ui.Placeholder("Framework input bound to the same value"),
-					ui.OnInput(func(event *native.Event) {
-						if text, ok := event.ValueOK(); ok {
-							state.setName(text)
-						}
-					}),
-				).Width(360).Height(28).FlexShrink(0).PaddingLeft(8).PaddingRight(8).TextColor("#111827").BackgroundColor("#ffffff").BorderWidth(1).BorderColor("#d1d5db").BorderRadius(6).
+				ui.Input().Value(state.name).Placeholder("Framework input bound to the same value").OnInputEvent(func(event *native.Event) {
+					if text, ok := event.ValueOK(); ok {
+						state.setName(text)
+					}
+				}).
+					Width(360).Height(28).FlexShrink(0).PaddingLeft(8).PaddingRight(8).TextColor("#111827").BackgroundColor("#ffffff").BorderWidth(1).BorderColor("#d1d5db").BorderRadius(6).
 					FocusStyle(func(s ui.StyleBuilder) ui.StyleBuilder {
 						return s.BorderColor("#2563eb").Outline("3px solid #2563eb55")
 					})
@@ -519,18 +516,16 @@ func demoControl(state *galleryState) {
 										ui.Text(
 											"QuickGUI inside SwiftUI",
 										).TextColor("#111827").FontSize(15).FlexShrink(0)
-										ui.Input(
-											ui.Value(state.name),
-											ui.OnInput(func(event *native.Event) {
-												if text, ok := event.ValueOK(); ok {
-													state.setName(text)
-												}
-											}),
-										).Width("100%").Height(36).FlexShrink(0).Padding(8).TextColor("#111827").BackgroundColor("#ffffff").BorderWidth(1).BorderColor("#d1d5db").BorderRadius(8)
+										ui.Input().Value(state.name).OnInputEvent(func(event *native.Event) {
+											if text, ok := event.ValueOK(); ok {
+												state.setName(text)
+											}
+										}).
+											Width("100%").Height(36).FlexShrink(0).Padding(8).TextColor("#111827").BackgroundColor("#ffffff").BorderWidth(1).BorderColor("#d1d5db").BorderRadius(8)
 										ui.Button(
-											func() string { return "Save " + state.name() },
-											ui.OnClick(func() { state.setOpen(false) }),
-										).Width("100%").Height(34).FlexShrink(0).Padding(8).TextColor("#ffffff").BackgroundColor("#2563eb").BorderRadius(8).JustifyContent("center")
+											"Save " + state.name(),
+										).OnClick(func() { state.setOpen(false) }).
+											Width("100%").Height(34).FlexShrink(0).Padding(8).TextColor("#ffffff").BackgroundColor("#2563eb").BorderRadius(8).JustifyContent("center")
 									},
 								).Display("flex").FlexDirection("column").Width(300).Height("100%").Padding(20).Gap(12).OverflowY("auto").BackgroundColor("transparent")
 							},

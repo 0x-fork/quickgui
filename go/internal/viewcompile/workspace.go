@@ -79,6 +79,18 @@ func Prepare(directory, output string, patterns []string, tests bool, tags, goos
 	if err != nil {
 		return "", err
 	}
+	// A dev watcher and a test run have different source graphs. Keep their
+	// manifests and pruning separate so neither can delete the other's inputs.
+	identity, err := json.Marshal(struct {
+		Tests          bool
+		Tags, OS, Arch string
+		Patterns       []string
+	}{tests, tags, goos, goarch, patterns})
+	if err != nil {
+		return "", err
+	}
+	partition := sha256.Sum256(identity)
+	output = filepath.Join(output, fmt.Sprintf("%x", partition[:8]))
 	environment := append(os.Environ(), "CGO_ENABLED=0", "GOOS="+goos, "GOARCH="+goarch)
 	var flags []string
 	if tags != "" {
@@ -179,27 +191,31 @@ func Prepare(directory, output string, patterns []string, tests bool, tags, goos
 				return "", err
 			}
 		}
-		for path, pkg := range sources {
-			for _, file := range pkg.files {
-				if ast.IsGenerated(file) {
-					continue
-				}
-				for _, decl := range file.Decls {
-					fn, ok := decl.(*ast.FuncDecl)
-					if !ok || !IsComponent(fn, pkg.info) {
+		for changed := true; changed; {
+			changed = false
+			for path, pkg := range sources {
+				for _, file := range pkg.files {
+					if ast.IsGenerated(file) {
 						continue
 					}
-					if _, exists := components[path+"."+fn.Name.Name]; exists {
-						continue
+					for _, decl := range file.Decls {
+						fn, ok := decl.(*ast.FuncDecl)
+						if !ok || !IsComponent(fn, pkg.info, components) {
+							continue
+						}
+						if _, exists := components[path+"."+fn.Name.Name]; exists {
+							continue
+						}
+						component, err := Describe(fn, pkg.info)
+						if err != nil {
+							return "", fmt.Errorf("%s: %w", fs.Position(fn.Pos()), err)
+						}
+						if pkg.pkg.Scope().Lookup(component.Generated) != nil {
+							return "", fmt.Errorf("%s: reserved generated name %s", fs.Position(fn.Pos()), component.Generated)
+						}
+						components[path+"."+component.Name] = component
+						changed = true
 					}
-					component, err := Describe(fn, pkg.info)
-					if err != nil {
-						return "", fmt.Errorf("%s: %w", fs.Position(fn.Pos()), err)
-					}
-					if pkg.pkg.Scope().Lookup(component.Generated) != nil {
-						return "", fmt.Errorf("%s: reserved generated name %s", fs.Position(fn.Pos()), component.Generated)
-					}
-					components[path+"."+component.Name] = component
 				}
 			}
 		}

@@ -9,7 +9,7 @@ func ViewExample() {
 	ui.View(
 		func() {
 			ui.Text("Hello from Go")
-			ui.Button("Continue", ui.OnClick(func() {}))
+			ui.Button("Continue").OnClick(func() {})
 		},
 	).Padding(20).Gap(12)
 }
@@ -23,7 +23,7 @@ Use `ui.Show` when state should mount or remove children. A normal Go `if` runs 
 func DisclosureExample() {
 	open, setOpen := ui.CreateSignal(false)
 	ui.View(func() {
-		ui.Button("Toggle details", ui.OnClick(func() { setOpen(!open()) }))
+		ui.Button("Toggle details").OnClick(func() { setOpen(!open()) })
 		ui.Show(
 			open,
 			func() { ui.Text("Details") },
@@ -49,18 +49,18 @@ func KeyedListExample() {
 	ui.View(func() {
 		ui.Button(
 			"Reorder and rename",
-			ui.OnClick(func() {
-				setPeople([]ListPerson{{2, "Grace"}, {1, "Ada Lovelace"}})
-			}),
-		)
+		).OnClick(func() {
+			setPeople([]ListPerson{{2, "Grace"}, {1, "Ada Lovelace"}})
+		})
+
 		ui.KeyedFor(
 			people,
 			func(person ListPerson) any { return person.ID },
 			func(person func() ListPerson, index func() int) {
 				ui.Text(
-					index,
+					index(),
 					": ",
-					func() string { return person().Name },
+					person().Name,
 				)
 			},
 			func() { ui.Text("No people") },
@@ -88,7 +88,7 @@ func LoadingPanel(load func(context.Context) (string, error)) {
 			setResult(value)
 		},
 	)
-	ui.Text(result)
+	ui.Text(result())
 }
 ```
 
@@ -99,10 +99,10 @@ Capture `native.CurrentWindow()` while the component is mounting, then use the c
 ```go
 func CloseButton() {
 	window := native.CurrentWindow()
-	ui.Button("Close window", ui.OnClick(func() { window.Close() }))
+	ui.Button("Close window").OnClick(func() { window.Close() })
 }
 ```
 
 ## Checking, testing, and debugging
 
-Run `go test ./...` with `CGO_ENABLED=0` from the app module for Go tests. Use `quickgui fmt --check` to check source formatting. The application is a native Go executable, so ordinary Go diagnostics and debugging tools use the original source files.
+Run `quickgui test` from the app module so tests use the same view compiler as development builds. Use `quickgui check` for type checking and `quickgui fmt --check` for formatting. Builds use `CGO_ENABLED=0`. Go diagnostics and stack frames retain original source locations; generated getter parameters remain visible in debuggers. Raw `go test` bypasses the view compiler and requires explicit accessors for reactive expressions.

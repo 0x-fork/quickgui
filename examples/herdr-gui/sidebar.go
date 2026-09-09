@@ -16,11 +16,10 @@ func sidebar(m *model) {
 						func() {
 							dynamicIcon(func() string { return choose(m.Appearance.Read() == "dark", "sun", "moon") }, 14, m.color(func(t theme) string { return t.TextTertiary }))
 						},
-						ui.AriaLabel("Toggle light or dark appearance"),
-						ui.FocusOnPointer(ptr(false)),
+
 						m.iconStyle(24),
-						ui.OnClick(m.toggleTheme),
-					)
+					).AriaLabel("Toggle light or dark appearance").FocusOnPointer(ptr(false)).OnClick(m.toggleTheme)
+
 				},
 			).Display("flex").Height(40).FlexShrink(0).AlignItems("center").PaddingLeft(78).PaddingRight(8).PaddingTop(2).AppRegion("drag")
 			sidebarSection(m.SectionRatio.Read, func() {
@@ -38,17 +37,8 @@ func sidebar(m *model) {
 				func() {
 					ui.View().Width("100%").Height(1).BackgroundColor(m.color(func(t theme) string { return t.Border }))
 				},
-				ui.AriaLabel("Resize sidebar sections"),
-				ui.Style().Display("flex"),
-				ui.Style().Height(7),
-				ui.Style().FlexShrink(0),
-				ui.Style().AlignItems("center"),
-				ui.Style().PaddingLeft(8),
-				ui.Style().PaddingRight(8),
-				ui.Style().Cursor("ns-resize"),
-				ui.Style().AppRegion("no-drag"),
-				ui.OnPointer(m.handleSectionPointer),
-			)
+			).AriaLabel("Resize sidebar sections").Display("flex").Height(7).FlexShrink(0).AlignItems("center").PaddingLeft(8).PaddingRight(8).Cursor("ns-resize").AppRegion("no-drag").OnPointer(m.handleSectionPointer)
+
 			sidebarSection(func() float64 { return 1 - m.SectionRatio.Read() }, func() {
 				sectionHeader(m, "Agents", "grouped", nil)
 				sidebarList(func() {
@@ -74,21 +64,13 @@ func sidebar(m *model) {
 		func() {
 			ui.View().Width(1).Height("100%").BackgroundColor(m.color(func(t theme) string { return t.Border }))
 		},
-		ui.AriaLabel("Resize sidebar"),
-		ui.Style().Position("relative"),
-		ui.Style().Display("flex"),
-		ui.Style().Width(1),
-		ui.Style().FlexShrink(0),
-		ui.HitSlopLeft(5),
-		ui.Style().Cursor("ew-resize"),
-		ui.Style().AppRegion("no-drag"),
-		ui.OnPointer(m.handleSidebarPointer),
-	)
+	).AriaLabel("Resize sidebar").Position("relative").Display("flex").Width(1).FlexShrink(0).HitSlopLeft(5).Cursor("ew-resize").AppRegion("no-drag").OnPointer(m.handleSidebarPointer)
+
 }
 func sidebarSection(grow func() float64, children ui.Component) {
 	ui.View(
 		children,
-	).Display("flex").FlexBasis(0).FlexGrow(grow).MinHeight(0).FlexDirection("column").PaddingLeft(8).PaddingRight(8)
+	).Display("flex").FlexBasis(0).FlexGrow(grow()).MinHeight(0).FlexDirection("column").PaddingLeft(8).PaddingRight(8)
 }
 func sidebarList(children ui.Component) {
 	ui.View(
@@ -157,7 +139,7 @@ func spaceRow(m *model, s space) {
 								func() bool { return len(agents()) > 0 },
 								func() {
 									ui.Text(
-										func() string { return fmt.Sprint(len(agents())) },
+										fmt.Sprint(len(agents())),
 									).TextColor(m.color(func(t theme) string { return t.TextGhost })).FontSize(11.5).LineHeight(16)
 								},
 							)
@@ -165,12 +147,10 @@ func spaceRow(m *model, s space) {
 						rowMeta(m, shortPath(s.Path, m.Home))
 					})
 				},
-				ui.AriaLabel("Open "+s.Name+" space"),
-				ui.FocusOnPointer(ptr(false)),
+
 				m.rowStyle(selected),
-				ui.Style().PaddingRight(func() int { return choose(selected(), 30, 8) }),
-				ui.OnClick(func() { m.selectSpace(s) }),
-			)
+			).AriaLabel("Open " + s.Name + " space").FocusOnPointer(ptr(false)).PaddingRight(choose(selected(), 30, 8)).OnClick(func() { m.selectSpace(s) })
+
 			ui.Show(
 				func() bool { return selected() && len(m.Spaces.Read()) > 1 },
 				func() {
@@ -209,17 +189,16 @@ func agentRow(m *model, p *pane) {
 					rowMeta(m, func() string { return agentLabel(p.Status.Read().Agent) })
 					ui.View().Flex(1)
 					ui.Text(
-						func() string { return statusLabel(p.Status.Read().AgentStatus) },
+						statusLabel(p.Status.Read().AgentStatus),
 					).
-						TextColor(func() string {
-							return choose(p.Status.Read().AgentStatus == "blocked", m.theme().Danger, m.theme().TextGhost)
-						}).FontSize(11.5).LineHeight(15)
+						TextColor(
+							choose(p.Status.Read().AgentStatus == "blocked", m.theme().Danger, m.theme().TextGhost),
+						).FontSize(11.5).LineHeight(15)
 				})
 			})
 		},
-		ui.AriaLabel("Open detected agent"),
-		ui.FocusOnPointer(ptr(false)),
+
 		m.rowStyle(func() bool { return m.ActivePaneID.Read() == p.ID }),
-		ui.OnClick(func() { m.selectPane(p) }),
-	)
+	).AriaLabel("Open detected agent").FocusOnPointer(ptr(false)).OnClick(func() { m.selectPane(p) })
+
 }

@@ -7,6 +7,6 @@ type Props struct {
 	Quantity int
 }
 
-func Label(props Props) *ui.Element {
-	return ui.Text(props.Name, props.Quantity)
+func Label(props Props) {
+	ui.Text(props.Name, props.Quantity)
 }

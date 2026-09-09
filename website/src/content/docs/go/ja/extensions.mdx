@@ -45,8 +45,14 @@ import "github.com/egoist/quickgui/go/ui"
 
 func Notice(message func() string, styles ...ui.StyleBuilder) {
 	ui.Text(
-		message,
-	).Padding(12).BackgroundColor("#eff6ff").TextColor("#1e40af").BorderRadius(8).Style(ui.Style().Merge(styles...))
+		message(),
+	).
+		Padding(12).
+		BackgroundColor("#eff6ff").
+		TextColor("#1e40af").
+		BorderRadius(8).
+		Style(ui.Style().
+			Merge(styles...))
 }
 ```
 

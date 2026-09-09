@@ -61,20 +61,11 @@ func button(label string, click func(), options ...any) {
 func historyButton(label, path string, click func(), disabled func() bool) {
 	ui.Button(
 		func() {
-			ui.SVG(
-				ui.Value(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#e8edf7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="` + path + `"/></svg>`),
-			).Width(17).Height(17)
+			ui.SVG().Value(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#e8edf7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="` + path + `"/></svg>`).
+				Width(17).Height(17)
 		},
-		buttonStyle,
-		ui.Style().Width(34),
-		ui.Style().Height(30),
-		ui.Style().PaddingLeft(0),
-		ui.Style().PaddingRight(0),
-		ui.Style().BorderRadius(7),
-		ui.AriaLabel(label),
-		ui.Disabled(disabled),
-		ui.OnClick(click),
-	)
+	).Style(buttonStyle).Width(34).Height(30).PaddingLeft(0).PaddingRight(0).BorderRadius(7).AriaLabel(label).Disabled(disabled()).OnClick(click)
+
 }
 
 func page(title, description any, children ...any) {

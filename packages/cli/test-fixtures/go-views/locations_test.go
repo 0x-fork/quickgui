@@ -72,10 +72,11 @@ func TestGenericAndVariadicProps(t *testing.T) {
 	reactive.CreateRoot(func(dispose func()) struct{} {
 		defer dispose()
 		value, setValue := ui.CreateSignal(1)
-		a, b := GenericLabel(value()), GenericLabel[int](value())
-		c := VariadicLabel(value(), "child")
+		a := native.CollectChildren(func() { GenericLabel(value()) })[0]
+		b := native.CollectChildren(func() { GenericLabel[int](value()) })[0]
+		c := native.CollectChildren(func() { VariadicLabel(value(), "child") })[0]
 		children := []any{"spread"}
-		d := VariadicLabel(value(), children...)
+		d := native.CollectChildren(func() { VariadicLabel(value(), children...) })[0]
 		setValue(2)
 		if a.Children[0].Text != "2" || b.Children[0].Text != "2" || c.Children[0].Children[0].Text != "2" || d.Children[0].Children[0].Text != "2" {
 			t.Fatal("generic or variadic props stopped tracking")

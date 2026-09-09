@@ -39,9 +39,10 @@ func Toolbar() {
 						},
 					).MinWidth(0).LineClamp(1)
 				},
-				gui.OnClick(func() { store.SetView(model.ViewBranches) }),
+
 				app.Theme().Button("secondary"),
-			).FlexDirection("row").Height(28).MaxWidth(260).BackgroundColor("transparent").BorderWidth(0)
+			).OnClick(func() { store.SetView(model.ViewBranches) }).
+				FlexDirection("row").Height(28).MaxWidth(260).BackgroundColor("transparent").BorderWidth(0)
 			gui.Show(
 				func() bool {
 					status := store.Status()
@@ -51,19 +52,19 @@ func Toolbar() {
 					gui.View(
 						func() {
 							toolbarIcon(pushIcon)
-							gui.Text(func() string { return fmt.Sprint(store.Status().Ahead) })
+							gui.Text(fmt.Sprint(store.Status().Ahead))
 							toolbarIcon(pullIcon)
-							gui.Text(func() string { return fmt.Sprint(store.Status().Behind) })
+							gui.Text(fmt.Sprint(store.Status().Behind))
 						},
-						gui.AriaLabel("Upstream commit counts"),
-					).Display("flex").AlignItems("center").Gap(3).FontSize(11).TextColor(app.Theme().TextSecondary).AppRegion("no-drag")
+					).AriaLabel("Upstream commit counts").
+						Display("flex").AlignItems("center").Gap(3).FontSize(11).TextColor(app.Theme().TextSecondary).AppRegion("no-drag")
 				},
 			)
 			gui.Show(
 				func() bool { return store.Conflicts() > 0 },
 				func() {
 					gui.Text(
-						func() string { return strconv.Itoa(store.Conflicts()) + " conflicted" },
+						strconv.Itoa(store.Conflicts()) + " conflicted",
 					).FontSize(11).FontWeight(600).TextColor(app.Theme().Warning).AppRegion("no-drag")
 				},
 			)
@@ -129,9 +130,10 @@ func toolbarBusy() {
 				func() {
 					gui.Button(
 						"Cancel",
-						gui.OnClick(store.CancelBusy),
+
 						app.Theme().Button("secondary"),
-					)
+					).OnClick(store.CancelBusy)
+
 				},
 			)
 		},
@@ -147,9 +149,8 @@ func toolbarButton(label, icon string, click func(), disabled func() bool, iconO
 				gui.Text(label)
 			}
 		},
-		gui.AriaLabel(label),
-		gui.OnClick(click),
-		gui.Disabled(disabled),
+
 		app.Theme().Button("secondary"),
-	).FlexDirection("row").Height(28).BorderRadius(7)
+	).AriaLabel(label).OnClick(click).Disabled(disabled).
+		FlexDirection("row").Height(28).BorderRadius(7)
 }

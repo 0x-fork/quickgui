@@ -16,15 +16,16 @@ import (
 func ButtonExample(save func()) {
 	ui.Button(
 		"Save changes",
-		ui.Style().Height(40),
-		ui.Style().PaddingLeft(16),
-		ui.Style().PaddingRight(16),
-		ui.Style().BackgroundColor("#2563eb"),
-		ui.Style().TextColor("white"),
-		ui.Style().BorderRadius(8),
-		ui.Style().Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor("#3b82f6") }),
-		ui.OnClick(save),
-	)
+	).
+		Height(40).
+		PaddingLeft(16).
+		PaddingRight(16).
+		BackgroundColor("#2563eb").
+		TextColor("white").
+		BorderRadius(8).
+		Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor("#3b82f6") }).
+		OnClick(save)
+
 }
 ```
 

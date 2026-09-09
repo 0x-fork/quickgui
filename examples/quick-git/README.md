@@ -15,7 +15,7 @@ bun packages/cli/src/cli.ts dev --project examples/quick-git
 Check the application without CGO:
 
 ```console
-CGO_ENABLED=0 go -C examples/quick-git test ./...
+bun packages/cli/src/cli.ts test --project examples/quick-git
 ```
 
 See [main.go](main.go) and the [Go guide](../../docs/go.md). macOS packaging uses Xcode Command Line Tools; Go 1.23+ and Bun are required.

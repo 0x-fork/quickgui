@@ -29,7 +29,11 @@ func ScrollAreaExample() {
 					Overflow("hidden")},
 				func() {
 					ui.ScrollArea.Content(
-						ui.PartProps{Style: func() ui.StyleBuilder { return ui.Style().Transform(fmt.Sprintf("translateY(%gpx)", -state().Offset.Y)) }},
+						ui.PartProps{Style: func() ui.StyleBuilder {
+							return ui.Style().
+								Transform(fmt.Sprintf("translateY(%gpx)", -state().
+									Offset.Y))
+						}},
 						func() {
 							for index := range 40 {
 								ui.Text("Row ", index).Height(22)

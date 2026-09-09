@@ -111,16 +111,15 @@ func SystemAPIs() {
 								ui.Button(
 									item.label,
 									buttonStyle,
-									ui.Disabled(busy),
-									ui.OnClick(func() { state.run(item) }),
-								)
+								).Disabled(busy()).OnClick(func() { state.run(item) })
+
 							}
 						},
 					).Display("flex").FlexWrap("wrap").Gap(10)
 					ui.View(
 						func() {
 							ui.Text(
-								status,
+								status(),
 							).FontSize(13).LineHeight(19).UserSelect("text").FontFamily("monospace").
 								TextColor(func() string {
 									if busy() {

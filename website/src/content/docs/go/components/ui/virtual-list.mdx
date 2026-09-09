@@ -20,11 +20,8 @@ func VirtualListExample(rows []string) {
 				ui.Text(row).Height(36)
 			}
 		},
-		ui.Style().Height(320),
-		ui.EstimatedItemHeight(36),
-		ui.Overscan(6),
-		ui.FollowMode("normal"),
-	)
+	).Height(320).EstimatedItemHeight(36).Overscan(6).FollowMode("normal")
+
 }
 ```
 

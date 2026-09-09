@@ -253,12 +253,10 @@ func newBranchDialog() {
 				"Name",
 			).FontSize(12).FontWeight(600).TextColor(app.Theme().TextSecondary)
 			gui.Input(
-				gui.Placeholder("feature/great-idea"),
-				gui.Value(func() string { return name() }),
-				gui.OnInput(func(event *native.Event) { setName(event.Value) }),
-				gui.OnSubmit(func(*native.Event) { submit() }),
+
 				app.Theme().InputStyle(),
-			)
+			).Placeholder("feature/great-idea").Value(name()).OnInputEvent(func(event *native.Event) { setName(event.Value) }).OnSubmitEvent(func(*native.Event) { submit() })
+
 			gui.Show(
 				func() bool { return problem() != "" || exists() },
 				func() {
@@ -300,7 +298,7 @@ func newBranchDialog() {
 				},
 				func() {
 					gui.Text(
-						func() string { return base() },
+						base(),
 					).FontSize(13).TextColor(app.Theme().Text)
 				},
 			)
@@ -313,10 +311,10 @@ func newBranchDialog() {
 			}
 			return "Create"
 		},
-		gui.Disabled(!valid()),
-		gui.OnClick(func() { submit() }),
+
 		app.Theme().Button("primary"),
-	))
+	).Disabled(!valid()).OnClick(func() { submit() }),
+	)
 }
 
 func newWorktreeDialog() {
@@ -350,37 +348,38 @@ func newWorktreeDialog() {
 				"Branch",
 			).FontSize(12).FontWeight(600).TextColor(app.Theme().TextSecondary)
 			gui.Input(
-				gui.Value(func() string { return branch() }),
-				gui.OnInput(func(event *native.Event) {
-					setBranch(event.Value)
-					setPath(store.SuggestWorktreePath(event.Value))
-				}),
+
 				app.Theme().InputStyle(),
-			)
+			).Value(branch()).OnInputEvent(func(event *native.Event) {
+				setBranch(event.Value)
+				setPath(store.SuggestWorktreePath(event.Value))
+			})
+
 			gui.Show(
 				func() bool { return problem() != "" },
 				func() {
 					gui.Text(
-						gui.Style().FontSize(11.5),
-						gui.Style().TextColor(app.Theme().Danger),
+
 						problem(),
-					)
+					).FontSize(11.5).TextColor(app.Theme().Danger)
+
 				},
 			)
 			gui.Text(
 				"Path",
 			).FontSize(12).FontWeight(600).TextColor(app.Theme().TextSecondary)
 			gui.Input(
-				gui.Value(func() string { return path() }),
-				gui.OnInput(func(event *native.Event) { setPath(event.Value) }),
+
 				app.Theme().InputStyle(),
-			)
+			).Value(path()).OnInputEvent(func(event *native.Event) { setPath(event.Value) })
+
 		},
 	).Display("flex").FlexDirection("column").Gap(10), gui.Button(
 		"Add Worktree",
-		gui.OnClick(func() { submit() }),
+
 		app.Theme().Button("primary"),
-	))
+	).OnClick(func() { submit() }),
+	)
 }
 
 func stashDialog() {
@@ -395,17 +394,16 @@ func stashDialog() {
 	dialogFrame("Stash Changes", "Saves local changes and returns the working tree to HEAD.", gui.View(
 		func() {
 			gui.Input(
-				gui.Placeholder("Optional message"),
-				gui.Value(func() string { return message() }),
-				gui.OnInput(func(event *native.Event) { setMessage(event.Value) }),
-				gui.OnSubmit(func(*native.Event) { submit() }),
+
 				app.Theme().InputStyle(),
-			)
+			).Placeholder("Optional message").Value(message()).OnInputEvent(func(event *native.Event) { setMessage(event.Value) }).OnSubmitEvent(func(*native.Event) { submit() })
+
 			CheckRow("Include untracked files", include, setInclude)
 		},
 	).Display("flex").FlexDirection("column").Gap(10), gui.Button(
 		"Stash",
-		gui.OnClick(func() { submit() }),
+
 		app.Theme().Button("primary"),
-	))
+	).OnClick(func() { submit() }),
+	)
 }

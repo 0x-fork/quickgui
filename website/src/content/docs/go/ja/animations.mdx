@@ -8,8 +8,14 @@
 func HoverAction() {
 	ui.Button(
 		"Continue",
-	).Padding(12).BorderRadius(8).BackgroundColor("#334155").TextColor("white").Opacity(0.85).Transition("background-color 160ms ease-out, opacity 160ms ease-out").
-			Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor("#2563eb").Opacity(1) })
+	).
+		Padding(12).
+		BorderRadius(8).
+		BackgroundColor("#334155").
+		TextColor("white").
+		Opacity(0.85).
+		Transition("background-color 160ms ease-out, opacity 160ms ease-out").
+		Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor("#2563eb").Opacity(1) })
 }
 ```
 
@@ -22,17 +28,20 @@ func AnimatedSelection() {
 	selected, setSelected := ui.CreateSignal(false)
 	ui.View(
 		func() {
-			ui.Button("Toggle emphasis", ui.OnClick(func() { setSelected(!selected()) }))
+			ui.Button("Toggle emphasis").OnClick(func() { setSelected(!selected()) })
 			ui.View(
 				"Your selection",
-				ui.Style().Padding(20),
-				ui.Style().BorderRadius(12),
-				ui.Style().BackgroundColor("#334155"),
-				ui.Style().TextColor("white"),
-				ui.Style().Opacity(0.6),
-				ui.Style().Transition("background-color 180ms ease-out, opacity 180ms ease-out"),
-				ui.When(selected, ui.Style().BackgroundColor("#2563eb"), ui.Style().Opacity(1)),
-			)
+			).
+				Padding(20).
+				BorderRadius(12).
+				BackgroundColor("#334155").
+				TextColor("white").
+				Opacity(0.6).
+				Transition("background-color 180ms ease-out, opacity 180ms ease-out").
+				When(selected, ui.Style().
+					BackgroundColor("#2563eb"), ui.Style().
+					Opacity(1))
+
 		},
 	).Display("flex").FlexDirection("column").Gap(12)
 }
@@ -49,13 +58,13 @@ func CappedTransition() {
 	ui.Button(
 		"Hover me",
 	).Padding(12).BackgroundColor("#334155").TextColor("white").Opacity(0.8).
-			Transition(ui.TransitionDeclaration{
+		Transition(ui.TransitionDeclaration{
 			Properties: []string{"background-color", "opacity"},
 			Duration:   180 * time.Millisecond,
 			Easing:     "ease-out",
 			MaxFps:     30,
 		}).
-			Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor("#2563eb").Opacity(1) })
+		Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor("#2563eb").Opacity(1) })
 }
 ```
 
@@ -106,9 +115,8 @@ Go UI API は描画プロパティのトランジションとアニメーショ�
 
 ```go
 func AnimatedImage(path string) {
-	ui.Image(
-		ui.Value(path),
-	).Width(96).Height(96).ObjectFit("contain")
+	ui.Image().Value(path).
+		Width(96).Height(96).ObjectFit("contain")
 }
 ```
 
