@@ -5,8 +5,8 @@
 ポインターが入るときも離れるときも適用されるよう、トランジションは基本スタイルに指定します。`Active`、`Focus`、`Expanded`、`DragOver` などの描画状態にも使えます。
 
 ```go
-func HoverAction() {
-	ui.Button(
+func HoverAction() *ui.Element {
+	return ui.Button(
 		"Continue",
 	).
 		Padding(12).
@@ -24,25 +24,23 @@ func HoverAction() {
 シグナルや `ui.When` で目標値を変更します。次のカードは色と不透明度が変化しても、同じノードと子要素を保持します。
 
 ```go
-func AnimatedSelection() {
+func AnimatedSelection() *ui.Element {
 	selected, setSelected := ui.CreateSignal(false)
-	ui.View(
-		func() {
-			ui.Button("Toggle emphasis").OnClick(func() { setSelected(!selected()) })
-			ui.View(
-				"Your selection",
-			).
-				Padding(20).
-				BorderRadius(12).
-				BackgroundColor("#334155").
-				TextColor("white").
-				Opacity(0.6).
-				Transition("background-color 180ms ease-out, opacity 180ms ease-out").
-				When(selected, ui.Style().
-					BackgroundColor("#2563eb"), ui.Style().
-					Opacity(1))
+	return ui.View(
 
-		},
+		ui.Button("Toggle emphasis").OnClick(func() { setSelected(!selected()) }),
+		ui.View(
+			"Your selection",
+		).
+			Padding(20).
+			BorderRadius(12).
+			BackgroundColor("#334155").
+			TextColor("white").
+			Opacity(0.6).
+			Transition("background-color 180ms ease-out, opacity 180ms ease-out").
+			When(selected, ui.Style().
+				BackgroundColor("#2563eb"), ui.Style().
+				Opacity(1)),
 	).Display("flex").FlexDirection("column").Gap(12)
 }
 ```
@@ -54,8 +52,8 @@ func AnimatedSelection() {
 複数のプロパティで時間設定を共有する場合は `ui.TransitionDeclaration` を使います。この例の時間指定には `time` のインポートが必要です。
 
 ```go
-func CappedTransition() {
-	ui.Button(
+func CappedTransition() *ui.Element {
+	return ui.Button(
 		"Hover me",
 	).Padding(12).BackgroundColor("#334155").TextColor("white").Opacity(0.8).
 		Transition(ui.TransitionDeclaration{
@@ -114,8 +112,8 @@ Go UI API は描画プロパティのトランジションとアニメーショ�
 アニメーション GIF または WebP のパスを `ui.Image` に渡します。ネイティブデコーダーがフレームとファイルの繰り返し設定を保持するため、Go のタイマーや毎フレームのシグナル更新は不要です。
 
 ```go
-func AnimatedImage(path string) {
-	ui.Image().Value(path).
+func AnimatedImage(path string) *ui.Element {
+	return ui.Image().Value(path).
 		Width(96).Height(96).ObjectFit("contain")
 }
 ```

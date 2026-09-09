@@ -14,22 +14,22 @@ import (
 ## Usage
 
 ```go
-func FieldExample() {
+func FieldExample() *native.Node {
 	email, setEmail := ui.CreateSignal("")
-	ui.Field.Root(
+	return ui.Field.Root(
 		ui.FieldRootProps{
 			Required: true,
 			Filled:   func() bool { return email() != "" },
 		},
-		func() {
-			ui.Field.Label(ui.FieldLabelProps{}, "Email")
-			ui.Field.Control(ui.FieldControlProps{InputPartProps: ui.InputPartProps{
-				Value:       email,
-				Placeholder: "you@example.com",
-				OnInput:     func(event *native.Event) { setEmail(event.Value) },
-			}})
-			ui.Field.Description(ui.PartProps{}, "Used for receipts")
-			ui.Field.Error(ui.PartProps{}, "Enter a valid email address")
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Field.Label(ui.FieldLabelProps{}, "Email"),
+				ui.Field.Control(ui.FieldControlProps{InputPartProps: ui.InputPartProps{
+					Value:       email,
+					Placeholder: "you@example.com",
+					OnInput:     func(event *native.Event) { setEmail(event.Value) },
+				}}),
+				ui.Field.Description(ui.PartProps{}, "Used for receipts"),
+				ui.Field.Error(ui.PartProps{}, "Enter a valid email address")})
 		},
 	)
 }

@@ -13,18 +13,18 @@ import (
 ## Usage
 
 ```go
-func FieldsetExample(saving func() bool) {
-	ui.Fieldset.Root(
+func FieldsetExample(saving func() bool) *native.Node {
+	return ui.Fieldset.Root(
 		ui.PartProps{Disabled: saving},
-		func() {
-			ui.Fieldset.Legend(ui.PartProps{}, "Profile")
-			ui.Field.Root(
-				ui.FieldRootProps{},
-				func() {
-					ui.Field.Label(ui.FieldLabelProps{}, "Name")
-					ui.Field.Control(ui.FieldControlProps{InputPartProps: ui.InputPartProps{Placeholder: "Ada"}})
-				},
-			)
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Fieldset.Legend(ui.PartProps{}, "Profile"),
+				ui.Field.Root(
+					ui.FieldRootProps{},
+					func() *native.Node {
+						return ui.Fragment([]*native.Node{ui.Field.Label(ui.FieldLabelProps{}, "Name"),
+							ui.Field.Control(ui.FieldControlProps{InputPartProps: ui.InputPartProps{Placeholder: "Ada"}})})
+					},
+				)})
 		},
 	)
 }

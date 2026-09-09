@@ -2,15 +2,14 @@
 
 ## 渲染模型
 
-窗口根组件、路由、条件分支和子节点块统一使用 `func()`。组件直接声明零个或多个子节点，无需返回节点，并在挂载时执行一次。块内的 UI 调用会添加到该块的父节点。静态结构使用普通 Go `if` 和 `for`；需要信号改变子节点结构时使用 `ui.Show` 或 `ui.For`。
+所有组件和 UI 构建回调都返回 `*ui.Element` 或 `*native.Node`。子节点直接传入，多个同级节点可返回 `ui.Fragment(...)`。编译器会拒绝丢弃 UI 构建结果和无返回值的声明块。事件和 effect 回调仍使用普通签名。用 `ui.Show` 和 `ui.For` 表达响应式子节点结构。
 
 ```go
-func ViewExample() {
-	ui.View(
-		func() {
-			ui.Text("Hello from Go")
-			ui.Button("Continue").OnClick(func() {})
-		},
+func ViewExample() *ui.Element {
+	return ui.View(
+
+		ui.Text("Hello from Go"),
+		ui.Button("Continue").OnClick(func() {}),
 	).Padding(20).Gap(12)
 }
 ```
@@ -20,15 +19,15 @@ func ViewExample() {
 当状态需要挂载或移除子节点时，使用 `ui.Show`。普通 Go `if` 只在构造时执行。条件保持在同一分支时，子节点会保留；移除分支时会清理其绑定。
 
 ```go
-func DisclosureExample() {
+func DisclosureExample() *ui.Element {
 	open, setOpen := ui.CreateSignal(false)
-	ui.View(func() {
-		ui.Button("Toggle details").OnClick(func() { setOpen(!open()) })
+	return ui.View(
+		ui.Button("Toggle details").OnClick(func() { setOpen(!open()) }),
 		ui.Show(
 			open,
-			func() { ui.Text("Details") },
-		)
-	})
+			func() *ui.Element { return ui.Text("Details") },
+		),
+	)
 }
 ```
 
@@ -44,28 +43,28 @@ type ListPerson struct {
 	Name string
 }
 
-func KeyedListExample() {
+func KeyedListExample() *ui.Element {
 	people, setPeople := ui.CreateSignal([]ListPerson{{1, "Ada"}, {2, "Grace"}})
-	ui.View(func() {
+	return ui.View(
 		ui.Button(
 			"Reorder and rename",
 		).OnClick(func() {
 			setPeople([]ListPerson{{2, "Grace"}, {1, "Ada Lovelace"}})
-		})
+		}),
 
 		ui.KeyedFor(
 			people,
 			func(person ListPerson) any { return person.ID },
-			func(person func() ListPerson, index func() int) {
-				ui.Text(
+			func(person func() ListPerson, index func() int) *ui.Element {
+				return ui.Text(
 					index(),
 					": ",
 					person().Name,
 				)
 			},
-			func() { ui.Text("No people") },
-		)
-	})
+			func() *ui.Element { return ui.Text("No people") },
+		),
+	)
 }
 ```
 
@@ -76,7 +75,7 @@ func KeyedListExample() {
 在组件挂载时启动后台任务。`load` 在 UI goroutine 之外执行，并应遵守上下文的取消信号；完成回调可以安全写入信号。移除组件所属分支或关闭窗口时，上下文会被取消，过期的完成回调也不会再执行。这个例子使用标准库的 `context` 包。
 
 ```go
-func LoadingPanel(load func(context.Context) (string, error)) {
+func LoadingPanel(load func(context.Context) (string, error)) *ui.Element {
 	result, setResult := ui.CreateSignal("Loading…")
 	ui.Async(
 		load,
@@ -88,7 +87,7 @@ func LoadingPanel(load func(context.Context) (string, error)) {
 			setResult(value)
 		},
 	)
-	ui.Text(result())
+	return ui.Text(result())
 }
 ```
 
@@ -97,12 +96,12 @@ func LoadingPanel(load func(context.Context) (string, error)) {
 在组件挂载时捕获 `native.CurrentWindow()`，之后在回调中使用该窗口。不要从无关的 goroutine 中查询当前窗口。窗口事件与原生请求通过异步回调返回。
 
 ```go
-func CloseButton() {
+func CloseButton() *ui.Element {
 	window := native.CurrentWindow()
-	ui.Button("Close window").OnClick(func() { window.Close() })
+	return ui.Button("Close window").OnClick(func() { window.Close() })
 }
 ```
 
 ## 检查、测试与调试
 
-在应用模块中运行 `quickgui test`，让测试使用与开发构建相同的视图编译器。通过 `quickgui check` 检查类型，通过 `quickgui fmt --check` 检查格式。构建使用 `CGO_ENABLED=0`。Go 诊断和调用栈保留原始源码位置；调试器仍会显示生成的 getter 参数。直接运行 `go test` 会绕过视图编译器，响应式表达式需要显式访问器。
+在应用模块中运行 `quickgui test`，使用与开发构建相同的视图编译器，通过 `quickgui fmt --check` 检查格式。应用是原生 Go 可执行文件，普通 Go 诊断和调试工具直接使用原始源码。

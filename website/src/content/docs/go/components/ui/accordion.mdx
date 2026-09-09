@@ -13,23 +13,23 @@ import (
 ## Usage
 
 ```go
-func AccordionExample() {
-	ui.Accordion.Root(
+func AccordionExample() *native.Node {
+	return ui.Accordion.Root(
 		ui.AccordionRootProps{Multiple: true},
-		func() {
-			ui.Accordion.Item(
+		func() *native.Node {
+			return ui.Accordion.Item(
 				ui.AccordionItemProps{Value: "details"},
-				func() {
-					ui.Accordion.Header(
+				func() *native.Node {
+					return ui.Fragment([]*native.Node{ui.Accordion.Header(
 						ui.PartProps{},
-						func() {
-							ui.Accordion.Trigger(
+						func() *native.Node {
+							return ui.Accordion.Trigger(
 								ui.PartProps{},
 								"Details",
 							)
 						},
-					)
-					ui.Accordion.Panel(ui.PartProps{}, "Mounted when opened")
+					),
+						ui.Accordion.Panel(ui.PartProps{}, "Mounted when opened")})
 				},
 			)
 		},

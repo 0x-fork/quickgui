@@ -13,33 +13,33 @@ import (
 ## 使い方
 
 ```go
-func AlertDialogExample() {
-	ui.AlertDialog.Root(
+func AlertDialogExample() *native.Node {
+	return ui.AlertDialog.Root(
 		ui.DialogRootProps{},
-		func() {
-			ui.AlertDialog.Trigger(ui.PartProps{}, "Open dialog")
-			ui.AlertDialog.Portal(
-				ui.PartProps{},
-				func() {
-					ui.AlertDialog.Backdrop(ui.PartProps{})
-					ui.AlertDialog.Viewport(
-						ui.PartProps{},
-						func() {
-							ui.AlertDialog.Popup(
-								ui.DialogPopupProps{},
-								func() {
-									ui.AlertDialog.Title(ui.PartProps{}, "Confirm action")
-									ui.AlertDialog.Description(
-										ui.PartProps{},
-										"Review the details before continuing.",
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.AlertDialog.Trigger(ui.PartProps{}, "Open dialog"),
+				ui.AlertDialog.Portal(
+					ui.PartProps{},
+					func() *native.Node {
+						return ui.Fragment([]*native.Node{ui.AlertDialog.Backdrop(ui.PartProps{}),
+							ui.AlertDialog.Viewport(
+								ui.PartProps{},
+								func() *native.Node {
+									return ui.AlertDialog.Popup(
+										ui.DialogPopupProps{},
+										func() *native.Node {
+											return ui.Fragment([]*native.Node{ui.AlertDialog.Title(ui.PartProps{}, "Confirm action"),
+												ui.AlertDialog.Description(
+													ui.PartProps{},
+													"Review the details before continuing.",
+												),
+												ui.AlertDialog.Close(ui.PartProps{}, "Cancel")})
+										},
 									)
-									ui.AlertDialog.Close(ui.PartProps{}, "Cancel")
 								},
-							)
-						},
-					)
-				},
-			)
+							)})
+					},
+				)})
 		},
 	)
 }

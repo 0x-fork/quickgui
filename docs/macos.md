@@ -215,7 +215,7 @@ func OpenVibrantWindow() {
 		Background:        "transparent",
 		Vibrancy:          "sidebar",
 		VisualEffectState: "followWindow",
-		Component:         func() { ui.Text("Native sidebar material") },
+		Component:         func() *ui.Element { return ui.Text("Native sidebar material") },
 	})
 	window.SetVibrancy("under-window")
 	window.SetVisualEffectState("active")
@@ -317,12 +317,12 @@ text-field submissions, and popover presentation without blocking the AppKit mai
 QuickGUI UI applications adapt those same descriptors into typed reactive components:
 
 ```go
-func NativeVolume() {
+func NativeVolume() *native.Node {
 	volume, setVolume := ui.CreateSignal(0.5)
-	ui.SwiftUI.Host(
+	return ui.SwiftUI.Host(
 		ui.SwiftUIHostProps{MatchContents: true},
-		func() {
-			ui.SwiftUI.Slider(ui.SwiftUISliderProps{
+		func() *native.Node {
+			return ui.SwiftUI.Slider(ui.SwiftUISliderProps{
 				Label:         "Volume",
 				Value:         volume,
 				Min:           0,

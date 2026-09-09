@@ -1,7 +1,7 @@
 Go 元素和 `ui.Style()` 使用相同的链式样式方法，包括 `.P4()`、`.MxAuto()`、`.GridCols(3)` 和 `.RoundedLg()`。构造函数接收子节点，可复用样式通过 `.Style(shared)` 应用。
 
 ```go
-ui.View(ui.Text("hello"), ui.Input().Value("xxx")).
+return ui.View(ui.Text("hello"), ui.Input().Value("xxx")).
 	FlexCol().PaddingLeft(20).RoundedLg().TextAlign("center")
 ```
 
@@ -10,8 +10,8 @@ ui.View(ui.Text("hello"), ui.Input().Value("xxx")).
 声明按顺序应用，同一属性以后面的值为准，包括显式的零值。数值长度使用逻辑像素，字符串也支持百分比。
 
 ```go
-func Card() {
-	ui.View(ui.Text("Hello").TextColor("#e2e8f0")).
+func Card() *ui.Element {
+	return ui.View(ui.Text("Hello").TextColor("#e2e8f0")).
 		Padding(20).BorderRadius(12).Bg("#111827")
 }
 ```
@@ -21,10 +21,10 @@ func Card() {
 `.Style(base).Style(overrides)` 按顺序合并声明。使用 `.Merge(...)` 组合可复用的样式构建器。重复的交互状态也会合并其属性。
 
 ```go
-func MergedCard() {
+func MergedCard() *ui.Element {
 	base := ui.Style().Padding(20).BorderRadius(8).Bg("#111827")
 	overrides := ui.Style().BorderRadius(12)
-	ui.View("Merged styles").Style(base).Style(overrides)
+	return ui.View("Merged styles").Style(base).Style(overrides)
 }
 ```
 
@@ -33,11 +33,13 @@ func MergedCard() {
 `ui.Style()` 返回 `ui.StyleBuilder`。每个方法都返回新值，不会修改共享样式；派生样式时需要保存返回值。通过 `.Style(...)` 或复合部件的 `PartProps.Style` 字段应用样式。部件也接受构建器切片及返回这些值的访问器。属性访问器保持响应式，并为每个挂载的节点独立绑定。
 
 ```go
-func SharedCard() {
+func SharedCard() *native.Node {
+	var children []*native.Node
 	card := ui.Style().Padding(20).BorderRadius(12)
 	emphasized := card.PaddingLeft(28).Bg("#1e293b")
-	ui.View("Hello").Style(card).Bg("#111827")
-	ui.View("Another card").Style(emphasized)
+	children = append(children, ui.View("Hello").Style(card).Bg("#111827").Node)
+	children = append(children, ui.View("Another card").Style(emphasized).Node)
+	return ui.Fragment(children)
 }
 ```
 
@@ -48,8 +50,8 @@ func SharedCard() {
 通过 `.Flex()`、`.FlexRow()` 或 `.FlexCol()` 设置弹性布局。为需要滚动的子节点设置 `.MinHeight(0)` 或 `.MinWidth(0)`，使其能够收缩。
 
 ```go
-func Row() {
-	ui.View(
+func Row() *ui.Element {
+	return ui.View(
 		ui.Text("Flexible content").Flex1().MinWidth(0),
 		ui.Button("Action").FlexShrink(0),
 	).Flex().Gap(12).ItemsCenter()
@@ -61,8 +63,8 @@ func Row() {
 网格支持轨道字符串。元素和样式构建器都提供与 Rust 相同的布局辅助方法。
 
 ```go
-func Grid() {
-	ui.View(ui.Text("Sidebar"), ui.Text("Content")).
+func Grid() *ui.Element {
+	return ui.View(ui.Text("Sidebar"), ui.Text("Content")).
 		Display("grid").GridTemplateColumns("220px 1fr").Gap(16)
 }
 ```
@@ -72,8 +74,8 @@ func Grid() {
 文本样式沿节点树继承。颜色支持十六进制、`rgb()`/`rgba()` 和打包的 RGBA 值。子节点只需覆盖不同的属性；内边距和边框不会继承。
 
 ```go
-func TypographyExample() {
-	ui.View(
+func TypographyExample() *ui.Element {
+	return ui.View(
 		ui.Text("Inbox").FontSize(24).FontWeight(600),
 		ui.Text("All caught up."),
 	).TextColor("#334155").FontSize(14).Padding(20)
@@ -85,11 +87,11 @@ func TypographyExample() {
 元素和样式构建器的 `.Hover(...)`、`.Active(...)`、`.FocusStyle(...)`、`.DisabledStyle(...)` 和 `.SelectedStyle(...)` 都接收回调。状态由原生核心处理。在基础样式上添加 `.Transition(...)` 可动画化绘制变化，详见[过渡与动画](/docs/go/animations)。
 
 ```go
-func SelectableButton() {
+func SelectableButton() *ui.Element {
 	selected, setSelected := ui.CreateSignal(false)
 	button := ui.Style().Padding(12).Bg("#e5e7eb").
 		Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.Opacity(0.85) })
-	ui.Button("Toggle selection").Style(button).
+	return ui.Button("Toggle selection").Style(button).
 		When(selected(), ui.Style().Bg("#2563eb").TextColor("white")).
 		OnClick(func() { setSelected(!selected()) })
 }
@@ -100,8 +102,8 @@ func SelectableButton() {
 `.Group(true)` 创建未命名分组，`.Group("card")` 创建具名分组。`.GroupHover(...)` 跟随最近的祖先分组，`.GroupHoverNamed("card", ...)` 跟随最近的同名祖先。规则按声明顺序累积，节点自身的悬停样式优先覆盖重叠属性。
 
 ```go
-func GroupExample() {
-	ui.View(
+func GroupExample() *ui.Element {
+	return ui.View(
 		ui.Text("Changes when the card is hovered").
 			TextColor("#64748b").
 			GroupHoverNamed("card", func(s ui.StyleBuilder) ui.StyleBuilder {

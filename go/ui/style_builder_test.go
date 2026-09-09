@@ -57,6 +57,7 @@ func TestFluentStyleInteractionCallbacksMergeWithoutMutatingSharedValues(t *test
 			if got := read(base); got.BackgroundColor != "#112233" || got.Opacity != nil {
 				t.Fatal("merging an interaction style mutated its base")
 			}
+
 		})
 	}
 	base := Style().GroupHoverNamed("card", func(s StyleBuilder) StyleBuilder { return s.Opacity(.5) })

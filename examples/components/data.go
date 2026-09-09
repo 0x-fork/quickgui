@@ -11,10 +11,10 @@ import (
 	"github.com/egoist/quickgui/go/ui"
 )
 
-func ScrollAreaDemo() {
+func ScrollAreaDemo() *ui.Element {
 	state, setState := ui.CreateSignal(ui.ScrollAreaState{})
-	panel("Scroll area", "Forty rows in a fixed viewport. Scroll offsets, overflow flags, and thumb geometry come from the native scroll model.", func() {
-		ui.ScrollArea.Root(
+	return panel("Scroll area", "Forty rows in a fixed viewport. Scroll offsets, overflow flags, and thumb geometry come from the native scroll model.", func() *native.Node {
+		return ui.Fragment([]*native.Node{ui.ScrollArea.Root(
 			ui.ScrollAreaRootProps{
 				ViewportSize: func() ui.Extent {
 					return ui.Extent{
@@ -35,8 +35,8 @@ func ScrollAreaDemo() {
 					Gap(4).
 					Height(160)},
 			},
-			func() {
-				ui.ScrollArea.Viewport(
+			func() *native.Node {
+				return ui.Fragment([]*native.Node{ui.ScrollArea.Viewport(
 					ui.PartProps{Style: ui.Style().
 						Width(320).
 						Height(160).
@@ -45,8 +45,8 @@ func ScrollAreaDemo() {
 						BorderWidth(1).
 						BorderColor(color(func(p palette) string { return p.Border })).
 						Overflow("hidden")},
-					func() {
-						ui.ScrollArea.Content(
+					func() *native.Node {
+						return ui.ScrollArea.Content(
 							ui.PartProps{Style: func() ui.StyleBuilder {
 								return ui.Style().
 									Display("flex").
@@ -54,44 +54,46 @@ func ScrollAreaDemo() {
 									PaddingLeft(10).
 									Transform("translateY(" + strconv.FormatFloat(-state().Offset.Y, 'g', -1, 64) + "px)")
 							}},
-							func() {
+							func() *native.Node {
+								var children_ []*native.Node
 								for i := range 40 {
-									ui.Text(
-										"log line " + strconv.Itoa(i+1),
-									).FontSize(12).Height(22).FlexShrink(0).LineHeight(22).TextColor(color(func(p palette) string { return p.Muted }))
+									children_ = append(children_, ui.Text(
+										"log line "+strconv.Itoa(i+1),
+									).FontSize(12).Height(22).FlexShrink(0).LineHeight(22).TextColor(color(func(p palette) string { return p.Muted })).Node)
 								}
+								return ui.Fragment(children_)
 							},
 						)
 					},
-				)
-				ui.ScrollArea.Scrollbar(
-					ui.ScrollAreaScrollbarProps{
-						Orientation: "vertical",
-						PartProps: ui.PartProps{Style: ui.Style().
-							Width(8).
-							Height(160).
-							BackgroundColor(color(func(p palette) string { return p.Track })).
-							BorderRadius(4)},
-					},
-					func() {
-						live := ui.UseScrollAreaState()
-						ui.ScrollArea.Thumb(ui.ScrollAreaThumbProps{
+				),
+					ui.ScrollArea.Scrollbar(
+						ui.ScrollAreaScrollbarProps{
 							Orientation: "vertical",
-							PartProps: ui.PartProps{Style: func() ui.StyleBuilder {
-								return ui.Style().
-									Width(8).
-									BorderRadius(4).
-									BackgroundColor(choose(live().Scrolling, p().Accent, p().Border))
-							}},
-						})
-					},
-				)
+							PartProps: ui.PartProps{Style: ui.Style().
+								Width(8).
+								Height(160).
+								BackgroundColor(color(func(p palette) string { return p.Track })).
+								BorderRadius(4)},
+						},
+						func() *native.Node {
+							live := ui.UseScrollAreaState()
+							return ui.ScrollArea.Thumb(ui.ScrollAreaThumbProps{
+								Orientation: "vertical",
+								PartProps: ui.PartProps{Style: func() ui.StyleBuilder {
+									return ui.Style().
+										Width(8).
+										BorderRadius(4).
+										BackgroundColor(choose(live().Scrolling, p().Accent, p().Border))
+								}},
+							})
+						},
+					)})
 			},
-		)
-		note(func() string {
-			s := state()
-			return "offset " + strconv.FormatFloat(s.Offset.Y, 'f', 0, 64) + " · scrolling " + strconv.FormatBool(s.Scrolling) + " · overflow " + strconv.FormatBool(s.HasOverflowY) + " · start " + strconv.FormatBool(s.OverflowYStart) + " · end " + strconv.FormatBool(s.OverflowYEnd)
-		})
+		),
+			note(func() string {
+				s := state()
+				return "offset " + strconv.FormatFloat(s.Offset.Y, 'f', 0, 64) + " · scrolling " + strconv.FormatBool(s.Scrolling) + " · overflow " + strconv.FormatBool(s.HasOverflowY) + " · start " + strconv.FormatBool(s.OverflowYStart) + " · end " + strconv.FormatBool(s.OverflowYEnd)
+			}).Node})
 	})
 }
 
@@ -104,7 +106,7 @@ type visibleAsset struct {
 	Asset asset
 }
 
-func TableDemo() {
+func TableDemo() *ui.Element {
 	assets := make([]asset, 5000)
 	for i := range assets {
 		assets[i] = asset{Name: fmt.Sprintf("asset-%04d.png", i), Size: 8 + (i*37)%4000}
@@ -142,8 +144,8 @@ func TableDemo() {
 		return rows
 	}
 	columns := []ui.TableColumnDeclaration{{ID: "name", Label: "Name", Track: "1fr", MinWidth: ptr(140.0), Sortable: true, RowHeader: true}, {ID: "size", Label: "Size", Width: ptr(140.0), MinWidth: ptr(90.0), Align: "right", Sortable: true}}
-	panel("Table", "Five thousand sortable rows. Only the visible range is mounted. Drag column edges, select multiple rows, or double-click to activate.", func() {
-		ui.Table.Root(
+	return panel("Table", "Five thousand sortable rows. Only the visible range is mounted. Drag column edges, select multiple rows, or double-click to activate.", func() *native.Node {
+		return ui.Fragment([]*native.Node{ui.Table.Root(
 			ui.TableRootProps{
 				Columns:              func() []ui.TableColumnDeclaration { return columns },
 				RowCount:             func() float64 { return float64(len(assets)) },
@@ -173,9 +175,10 @@ func TableDemo() {
 					BackgroundColor(color(func(p palette) string { return p.PanelAlt })).
 					OverflowY("scroll")},
 			},
-			func() {
+			func() *native.Node {
+				var children_ []*native.Node
 				for _, column := range columns {
-					ui.Table.Header(
+					children_ = append(children_, ui.Table.Header(
 						ui.TableHeaderProps{
 							Column: column.ID,
 							PartProps: ui.PartProps{Style: ui.Style().
@@ -185,8 +188,8 @@ func TableDemo() {
 								FontWeight(700).
 								TextColor(color(func(p palette) string { return p.Faint }))},
 						},
-						func() {
-							ui.Text(func() string {
+						func() *ui.Element {
+							return ui.Text(func() string {
 								order := sort()
 								marker := ""
 								if order != nil && order.Column == column.ID {
@@ -195,51 +198,52 @@ func TableDemo() {
 								return strings.ToUpper(column.Label) + marker
 							})
 						},
-					)
+					))
 				}
-				ui.KeyedFor(
+				children_ = append(children_, ui.KeyedFor(
 					visible,
 					func(entry visibleAsset) any { return entry.Row },
-					func(entry func() visibleAsset, _ func() int) {
-						ui.Table.Row(
+					func(entry func() visibleAsset, _ func() int) *native.Node {
+						return ui.Table.Row(
 							ui.TableRowProps{Index: func() int { return entry().Row }},
-							func() {
-								ui.Table.Cell(
+							func() *native.Node {
+								return ui.Fragment([]*native.Node{ui.Table.Cell(
 									ui.TableCellProps{
 										Column:    "name",
 										PartProps: ui.PartProps{Style: ui.Style().PaddingLeft(10)},
 									},
-									func() {
-										label(func() string { return entry().Asset.Name })
+									func() *ui.Element {
+										return label(func() string { return entry().Asset.Name })
 									},
-								)
-								ui.Table.Cell(
-									ui.TableCellProps{
-										Column: "size",
-										PartProps: ui.PartProps{Style: ui.Style().
-											PaddingRight(10).
-											JustifyContent("flex-end")},
-									},
-									func() {
-										muted(func() string { return strconv.Itoa(entry().Asset.Size) + " KB" })
-									},
-								)
+								),
+									ui.Table.Cell(
+										ui.TableCellProps{
+											Column: "size",
+											PartProps: ui.PartProps{Style: ui.Style().
+												PaddingRight(10).
+												JustifyContent("flex-end")},
+										},
+										func() *ui.Element {
+											return muted(func() string { return strconv.Itoa(entry().Asset.Size) + " KB" })
+										},
+									)})
 							},
 						)
 					},
 					nil,
-				)
+				))
+				return ui.Fragment(children_)
 			},
-		)
-		note(func() string {
-			selected := 0
-			for _, span := range selection() {
-				if len(span) >= 2 {
-					selected += span[1] - span[0] + 1
+		),
+			note(func() string {
+				selected := 0
+				for _, span := range selection() {
+					if len(span) >= 2 {
+						selected += span[1] - span[0] + 1
+					}
 				}
-			}
-			return fmt.Sprintf("rows %d–%d of %d · %d selected · sort %+v · widths %s · activated %s", visibleRange().Start, visibleRange().End, len(assets), selected, sort(), widths(), activated())
-		})
+				return fmt.Sprintf("rows %d–%d of %d · %d selected · sort %+v · widths %s · activated %s", visibleRange().Start, visibleRange().End, len(assets), selected, sort(), widths(), activated())
+			}).Node})
 	})
 }
 
@@ -260,7 +264,7 @@ func flattenTree(nodes []ui.TreeNodeDeclaration, depth int, expanded []string, l
 		}
 	}
 }
-func TreeDemo() {
+func TreeDemo() *ui.Element {
 	nodes := []ui.TreeNodeDeclaration{{ID: "src", Label: "src", Children: []ui.TreeNodeDeclaration{{ID: "src/main.go", Label: "main.go"}, {ID: "src/ui.go", Label: "ui.go"}, {ID: "src/element", Label: "element", Pending: true}}}, {ID: "docs", Label: "docs", Children: []ui.TreeNodeDeclaration{{ID: "docs/native.md", Label: "native.md"}, {ID: "docs/tabs.md", Label: "tabs.md"}}}}
 	expanded, setExpanded := ui.CreateSignal([]string{"src"})
 	selected, setSelected := ui.CreateSignal[*string](nil)
@@ -275,8 +279,8 @@ func TreeDemo() {
 		start := min(len(rows), max(0, window.Start))
 		return rows[start:min(len(rows), max(start, window.End))]
 	}
-	panel("Tree", "Expand the pending element branch to request its children once. Arrow keys navigate, and double-click reports activation.", func() {
-		ui.Tree.Root(
+	return panel("Tree", "Expand the pending element branch to request its children once. Arrow keys navigate, and double-click reports activation.", func() *native.Node {
+		return ui.Fragment([]*native.Node{ui.Tree.Root(
 			ui.TreeRootProps{
 				Nodes:                func() []ui.TreeNodeDeclaration { return nodes },
 				Expanded:             expanded,
@@ -304,12 +308,12 @@ func TreeDemo() {
 					BackgroundColor(color(func(p palette) string { return p.PanelAlt })).
 					OverflowY("scroll")},
 			},
-			func() {
-				ui.KeyedFor(
+			func() *native.Node {
+				return ui.KeyedFor(
 					visible,
 					func(row flatTreeRow) any { return row.Node.ID },
-					func(row func() flatTreeRow, _ func() int) {
-						ui.Tree.Row(
+					func(row func() flatTreeRow, _ func() int) *native.Node {
+						return ui.Tree.Row(
 							ui.TreeRowProps{
 								NodeID: row().Node.ID,
 								PartProps: ui.PartProps{Style: func() ui.StyleBuilder {
@@ -320,15 +324,17 @@ func TreeDemo() {
 										PaddingLeft(10 + row().Depth*16)
 								}},
 							},
-							func() { label(func() string { return row().Node.Label }) },
+							func() *ui.Element {
+								return label(func() string { return row().Node.Label })
+							},
 						)
 					},
 					nil,
 				)
 			},
-		)
-		note(func() string {
-			return "expanded [" + strings.Join(expanded(), ", ") + "] · selected " + textValue(selected()) + " · activated " + activated() + " · load requests " + strconv.Itoa(asked())
-		})
+		),
+			note(func() string {
+				return "expanded [" + strings.Join(expanded(), ", ") + "] · selected " + textValue(selected()) + " · activated " + activated() + " · load requests " + strconv.Itoa(asked())
+			}).Node})
 	})
 }

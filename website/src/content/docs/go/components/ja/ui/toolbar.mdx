@@ -13,15 +13,15 @@ import (
 ## 使い方
 
 ```go
-func ToolbarExample() {
-	ui.Toolbar.Root(
+func ToolbarExample() *native.Node {
+	return ui.Toolbar.Root(
 		ui.ToolbarRootProps{
 			Items:         []ui.ComponentItem{{Value: "select"}, {Value: "draw"}},
 			DefaultActive: "select",
 		},
-		func() {
-			ui.Toolbar.Item(ui.ToolbarItemProps{Value: "select"}, "Select")
-			ui.Toolbar.Item(ui.ToolbarItemProps{Value: "draw"}, "Draw")
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Toolbar.Item(ui.ToolbarItemProps{Value: "select"}, "Select"),
+				ui.Toolbar.Item(ui.ToolbarItemProps{Value: "draw"}, "Draw")})
 		},
 	)
 }

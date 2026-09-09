@@ -5,11 +5,11 @@
 コントロールは `ui.SwiftUI.Host` の中で作成します。Host はネイティブビューの境界を定義し、内容に応じてサイズを決められます。
 
 ```go
-func SwiftUiHostExample() {
-	ui.SwiftUI.Host(
+func SwiftUiHostExample() *native.Node {
+	return ui.SwiftUI.Host(
 		ui.SwiftUIHostProps{MatchContents: true},
-		func() {
-			ui.SwiftUI.Button(ui.SwiftUIButtonProps{Label: "Continue"})
+		func() *native.Node {
+			return ui.SwiftUI.Button(ui.SwiftUIButtonProps{Label: "Continue"})
 		},
 	)
 }
@@ -24,12 +24,12 @@ Button、Slider、Toggle、ProgressView、Stepper、TextField、SecureField、Pi
 アクセサーをバインドし、ネイティブコールバックが返した値を保存します。SwiftUI コントロールと QuickGUI ノードは同じシグナルを共有できます。DatePicker はミリ秒単位の Unix タイムスタンプを使います。
 
 ```go
-func SwiftUiToggleExample() {
+func SwiftUiToggleExample() *native.Node {
 	on, setOn := ui.CreateSignal(true)
-	ui.SwiftUI.Host(
+	return ui.SwiftUI.Host(
 		ui.SwiftUIHostProps{MatchContents: true},
-		func() {
-			ui.SwiftUI.Toggle(ui.SwiftUIToggleProps{
+		func() *native.Node {
+			return ui.SwiftUI.Toggle(ui.SwiftUIToggleProps{
 				IsOn:         on,
 				Label:        "Notifications",
 				OnIsOnChange: func(next bool, _ *native.Event) { setOn(next) },

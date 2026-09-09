@@ -14,9 +14,9 @@ import (
 ## Usage
 
 ```go
-func TextAreaExample() {
+func TextAreaExample() *ui.Element {
 	value, setValue := ui.CreateSignal("")
-	ui.TextArea().
+	return ui.TextArea().
 		Value(value()).
 		Placeholder("Write here").
 		OnInputEvent(func(event *native.Event) { setValue(event.Value) }).

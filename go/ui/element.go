@@ -15,6 +15,14 @@ type Element struct {
 	update    func()
 }
 
+// NativeNode exposes this builder's retained node to windows and lazy components.
+func (element *Element) NativeNode() *native.Node {
+	if element == nil {
+		return nil
+	}
+	return element.Node
+}
+
 func newElement(tag uint8, arguments []any) *Element {
 	element := &Element{Node: native.CreateElement(tag)}
 	configured := false

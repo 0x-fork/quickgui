@@ -15,9 +15,9 @@ func TestRemovingDynamicNodesDisposesSubscriptions(t *testing.T) {
 		visible, setVisible := CreateSignal(true)
 		renders := 0
 		parent := View(Props{})
-		region := Show(visible, func() {
+		region := Show(visible, func() *Element {
 			renders++
-			Input(Props{Value: value, Children: value})
+			return Input(Props{Value: value, Children: value})
 		})
 		native.InsertNode(parent.Node, region, nil)
 		native.RemoveNode(parent.Node, region)
@@ -88,9 +88,9 @@ func TestShowCreatesChildrenOnDemand(t *testing.T) {
 		visible, setVisible := CreateSignal(false)
 		created := 0
 		parent := View(Props{})
-		sentinel := Show(func() bool { return visible() }, func() {
+		sentinel := Show(func() bool { return visible() }, func() *Element {
 			created++
-			Text(Props{Children: "shown"})
+			return Text(Props{Children: "shown"})
 		})
 		native.InsertNode(parent.Node, sentinel, nil)
 		if created != 0 {

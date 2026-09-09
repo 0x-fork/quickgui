@@ -10,10 +10,10 @@ type Product struct {
 
 var builds int
 
-func LineItem(product Product, quantity int, add func()) {
+func LineItem(product Product, quantity int, add func()) *ui.Element {
 	builds++
 	initial := quantity
-	ui.View(
+	return ui.View(
 		ui.Text(product.Name),
 		ui.Text(quantity),
 		ui.Text(product.Price*quantity),
@@ -22,23 +22,23 @@ func LineItem(product Product, quantity int, add func()) {
 	).Width(quantity * 20)
 }
 
-func ForwardedItem(product Product, quantity int, add func()) {
-	LineItem(product, quantity, add)
+func ForwardedItem(product Product, quantity int, add func()) *ui.Element {
+	return LineItem(product, quantity, add)
 }
 
-func Label(value string) {
+func Label(value string) *ui.Element {
 	initial := value
-	ui.View(
+	return ui.View(
 		ui.Text(value),
 		ui.Text(initial),
-		ui.View(func() {
+		ui.View(func() *ui.Element {
 			value := "shadowed"
-			ui.Text(value)
+			return ui.Text(value)
 		}),
 	)
 }
 
-func EventSnapshot(value string) {
+func EventSnapshot(value string) *ui.Element {
 	input := ui.Input().Value("initial")
-	ui.View(input, ui.Button("Apply").OnClick(func() { input.Value(value) }))
+	return ui.View(input, ui.Button("Apply").OnClick(func() { input.Value(value) }))
 }

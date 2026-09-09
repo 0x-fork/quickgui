@@ -13,13 +13,15 @@ import (
 ## 使い方
 
 ```go
-func TimeFieldExample() {
-	ui.TimeField.Root(
+func TimeFieldExample() *native.Node {
+	return ui.TimeField.Root(
 		ui.TimeFieldRootProps{DefaultValue: "09:30", Hour12: true},
-		func() {
+		func() *native.Node {
+			var children []*native.Node
 			for _, segment := range []string{"hour", "minute", "period"} {
-				ui.TimeField.Segment(ui.TimeFieldSegmentProps{Segment: segment})
+				children = append(children, ui.TimeField.Segment(ui.TimeFieldSegmentProps{Segment: segment}))
 			}
+			return ui.Fragment(children)
 		},
 	)
 }

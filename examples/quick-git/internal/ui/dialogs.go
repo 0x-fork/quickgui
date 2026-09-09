@@ -6,31 +6,33 @@ import (
 	"quickgui.example/quick-git/internal/git"
 )
 
-func Dialogs() {
+func Dialogs() *native.Node {
 	app := UseApp()
-	gui.Show(
-		func() bool { return app.Dialog().Kind != DialogNone },
-		func() {
+	return gui.Show(
+		app.Dialog().Kind != DialogNone,
+		func() *native.Node {
+			var children []*native.Node
 			switch app.Dialog().Kind {
 			case DialogNewBranch:
-				newBranchDialog()
-				return
+				children = append(children, newBranchDialog())
+				return gui.Fragment(children)
 			case DialogNewWorktree:
-				newWorktreeDialog()
-				return
+				children = append(children, newWorktreeDialog())
+				return gui.Fragment(children)
 			case DialogStash:
-				stashDialog()
-				return
+				children = append(children, stashDialog())
+				return gui.Fragment(children)
 			default:
-				return
+				return gui.Fragment(children)
 			}
+			return gui.Fragment(children)
 		},
 	)
 }
 
-func dialogFrame(title, description string, body *gui.Element, actions *gui.Element) {
+func dialogFrame(title, description string, body *gui.Element, actions *gui.Element) *native.Node {
 	app := UseApp()
-	gui.Dialog.Root(
+	return gui.Dialog.Root(
 		gui.DialogRootProps{
 			Open: func() bool { return true },
 			OnOpenChange: func(open bool, _ gui.DialogOpenChangeDetails) {
@@ -40,8 +42,8 @@ func dialogFrame(title, description string, body *gui.Element, actions *gui.Elem
 			},
 			ExitDuration: 0,
 		},
-		func() {
-			gui.Dialog.Portal(
+		func() *native.Node {
+			return gui.Dialog.Portal(
 				gui.PartProps{
 					Style: gui.Style().
 						Position("absolute").
@@ -53,8 +55,8 @@ func dialogFrame(title, description string, body *gui.Element, actions *gui.Elem
 						AlignItems("center").
 						JustifyContent("center"),
 				},
-				func() {
-					gui.Dialog.Backdrop(gui.PartProps{
+				func() *native.Node {
+					return gui.Fragment([]*native.Node{gui.Dialog.Backdrop(gui.PartProps{
 						Style: gui.Style().
 							Position("absolute").
 							Top(0).
@@ -62,78 +64,77 @@ func dialogFrame(title, description string, body *gui.Element, actions *gui.Elem
 							Bottom(0).
 							Left(0).
 							BackgroundColor(app.Theme().Scrim),
-					})
-					gui.Dialog.Popup(
-						gui.DialogPopupProps{
-							PartProps: gui.PartProps{
-								Style: gui.Style().
-									Display("flex").
-									FlexDirection("column").
-									Width(440).
-									Gap(14).
-									Padding(20).
-									BackgroundColor(app.Theme().Raised).
-									BorderWidth(1).
-									BorderColor(app.Theme().BorderStrong).
-									BorderRadius(10),
-							},
-						},
-						func() {
-							gui.Dialog.Title(
-								gui.PartProps{},
-								func() {
-									gui.Text(
-										title,
-									).FontSize(15).FontWeight(700).TextColor(app.Theme().Text)
-								},
-							)
-							gui.Show(
-								func() bool { return description != "" },
-								func() {
-									gui.Dialog.Description(
-										gui.PartProps{},
-										func() {
-											gui.Text(
-												description,
-											).FontSize(12.5).LineHeight(18).TextColor(app.Theme().TextSecondary)
-										},
-									)
-								},
-							)
-							gui.Dialog.Viewport(
-								gui.PartProps{
+					}),
+						gui.Dialog.Popup(
+							gui.DialogPopupProps{
+								PartProps: gui.PartProps{
 									Style: gui.Style().
 										Display("flex").
 										FlexDirection("column").
-										Gap(12).
-										Padding(2),
+										Width(440).
+										Gap(14).
+										Padding(20).
+										BackgroundColor(app.Theme().Raised).
+										BorderWidth(1).
+										BorderColor(app.Theme().BorderStrong).
+										BorderRadius(10),
 								},
-								func() { gui.Child(body) },
-							)
-							gui.View(
-								func() {
-									gui.Dialog.Close(
+							},
+							func() *native.Node {
+								return gui.Fragment([]*native.Node{gui.Dialog.Title(
+									gui.PartProps{},
+									func() *gui.Element {
+										return gui.Text(
+											title,
+										).FontSize(15).FontWeight(700).TextColor(app.Theme().Text)
+									},
+								),
+									gui.Show(
+										description != "",
+										func() *native.Node {
+											return gui.Dialog.Description(
+												gui.PartProps{},
+												func() *gui.Element {
+													return gui.Text(
+														description,
+													).FontSize(12.5).LineHeight(18).TextColor(app.Theme().TextSecondary)
+												},
+											)
+										},
+									),
+									gui.Dialog.Viewport(
 										gui.PartProps{
-											Style: app.Theme().Button("secondary"),
+											Style: gui.Style().
+												Display("flex").
+												FlexDirection("column").
+												Gap(12).
+												Padding(2),
 										},
-										func() {
-											gui.Text("Cancel")
-										},
-									)
-									gui.Child(actions)
-								},
-							).Display("flex").FlexDirection("row").JustifyContent("flex-end").Gap(8).MarginTop(4)
-						},
-					)
+										body,
+									),
+									gui.View(
+
+										gui.Dialog.Close(
+											gui.PartProps{
+												Style: app.Theme().Button("secondary"),
+											},
+											func() *gui.Element {
+												return gui.Text("Cancel")
+											},
+										),
+										actions,
+									).Display("flex").FlexDirection("row").JustifyContent("flex-end").Gap(8).MarginTop(4).Node})
+							},
+						)})
 				},
 			)
 		},
 	)
 }
 
-func CheckRow(label string, checked func() bool, onChange func(bool)) {
+func CheckRow(label string, checked func() bool, onChange func(bool)) *native.Node {
 	app := UseApp()
-	gui.Checkbox.Root(
+	return gui.Checkbox.Root(
 		gui.CheckboxProps{
 			PartProps: gui.PartProps{
 				Style: gui.Style().
@@ -153,19 +154,19 @@ func CheckRow(label string, checked func() bool, onChange func(bool)) {
 			Checked:         func() gui.CheckedState { return checked() },
 			OnCheckedChange: func(next bool, _ *native.Event) { onChange(next) },
 		},
-		func() {
-			gui.Checkbox.Indicator(
+		func() *native.Node {
+			return gui.Fragment([]*native.Node{gui.Checkbox.Indicator(
 				gui.PartProps{
 					Style: func() gui.StyleBuilder { return checkboxBox(app.Theme(), checked()) },
 				},
-				func() {
-					gui.Show(
+				func() *native.Node {
+					return gui.Show(
 						checked,
-						func() { checkboxMark(true) },
+						func() *gui.Element { return checkboxMark(true) },
 					)
 				},
-			)
-			gui.Text(label).FontSize(12.5).TextColor(app.Theme().Text)
+			),
+				gui.Text(label).FontSize(12.5).TextColor(app.Theme().Text).Node})
 		},
 	)
 }
@@ -190,15 +191,15 @@ func checkboxBox(theme Theme, checked bool) gui.StyleBuilder {
 		BackgroundColor(background)
 }
 
-func checkboxMark(checked bool) {
+func checkboxMark(checked bool) *gui.Element {
 	if !checked {
-		return
+		return nil
 	}
 	app := UseApp()
-	icon(checkIcon, 12, func() string { return app.Theme().TextOnAccent })
+	return icon(checkIcon, 12, func() string { return app.Theme().TextOnAccent })
 }
 
-func newBranchDialog() {
+func newBranchDialog() *native.Node {
 	app := UseApp()
 	store := app.Store
 	name, setName := gui.CreateSignal("")
@@ -247,63 +248,62 @@ func newBranchDialog() {
 		}
 		return items
 	}
-	dialogFrame("New Branch", "", gui.View(
-		func() {
-			gui.Text(
-				"Name",
-			).FontSize(12).FontWeight(600).TextColor(app.Theme().TextSecondary)
-			gui.Input(
+	return dialogFrame("New Branch", "", gui.View(
 
-				app.Theme().InputStyle(),
-			).Placeholder("feature/great-idea").Value(name()).OnInputEvent(func(event *native.Event) { setName(event.Value) }).OnSubmitEvent(func(*native.Event) { submit() })
+		gui.Text(
+			"Name",
+		).FontSize(12).FontWeight(600).TextColor(app.Theme().TextSecondary),
+		gui.Input(
 
-			gui.Show(
-				func() bool { return problem() != "" || exists() },
-				func() {
-					text := problem()
-					if text == "" {
-						text = "A branch with this name already exists."
+			app.Theme().InputStyle(),
+		).Placeholder("feature/great-idea").Value(name()).OnInputEvent(func(event *native.Event) { setName(event.Value) }).OnSubmitEvent(func(*native.Event) { submit() }),
+
+		gui.Show(
+			problem() != "" || exists(),
+			func() *gui.Element {
+				text := problem()
+				if text == "" {
+					text = "A branch with this name already exists."
+				}
+				return gui.Text(
+					text,
+				).FontSize(11.5).TextColor(app.Theme().Danger)
+			},
+		),
+		gui.Text(
+			"Based on",
+		).FontSize(12).FontWeight(600).TextColor(app.Theme().TextSecondary),
+		gui.Select.Root(
+			gui.SelectRootProps{
+				PickerSourceProps: gui.PickerSourceProps{
+					PartProps: gui.PartProps{
+						AriaLabel: "Base branch",
+						Style: gui.Style().
+							Merge(app.Theme().InputStyle()).
+							FlexDirection("row").
+							AlignItems("center").
+							JustifyContent("space-between").
+							Gap(8),
+					},
+					Items: options,
+				},
+				Value: func() *string {
+					value := base()
+					return &value
+				},
+				OnValueChange: func(value *string, _ *native.Event) {
+					if value != nil {
+						setBase(*value)
 					}
-					gui.Text(
-						text,
-					).FontSize(11.5).TextColor(app.Theme().Danger)
 				},
-			)
-			gui.Text(
-				"Based on",
-			).FontSize(12).FontWeight(600).TextColor(app.Theme().TextSecondary)
-			gui.Select.Root(
-				gui.SelectRootProps{
-					PickerSourceProps: gui.PickerSourceProps{
-						PartProps: gui.PartProps{
-							AriaLabel: "Base branch",
-							Style: gui.Style().
-								Merge(app.Theme().InputStyle()).
-								FlexDirection("row").
-								AlignItems("center").
-								JustifyContent("space-between").
-								Gap(8),
-						},
-						Items: options,
-					},
-					Value: func() *string {
-						value := base()
-						return &value
-					},
-					OnValueChange: func(value *string, _ *native.Event) {
-						if value != nil {
-							setBase(*value)
-						}
-					},
-				},
-				func() {
-					gui.Text(
-						base(),
-					).FontSize(13).TextColor(app.Theme().Text)
-				},
-			)
-			CheckRow("Switch to the new branch", checkout, setCheckout)
-		},
+			},
+			func() *gui.Element {
+				return gui.Text(
+					base(),
+				).FontSize(13).TextColor(app.Theme().Text)
+			},
+		),
+		CheckRow("Switch to the new branch", checkout, setCheckout),
 	).Display("flex").FlexDirection("column").Gap(10), gui.Button(
 		func() string {
 			if checkout() {
@@ -317,7 +317,7 @@ func newBranchDialog() {
 	)
 }
 
-func newWorktreeDialog() {
+func newWorktreeDialog() *native.Node {
 	app := UseApp()
 	store := app.Store
 	initialBranch := app.Dialog().Branch
@@ -341,39 +341,37 @@ func newWorktreeDialog() {
 		}
 		store.AddWorktree(path(), "", branch(), "")
 	}
-	dialogFrame("New Worktree", "Adds a linked working tree beside this repository.", gui.View(
-		func() {
-			CheckRow("Create a new branch", createNew, setCreateNew)
-			gui.Text(
-				"Branch",
-			).FontSize(12).FontWeight(600).TextColor(app.Theme().TextSecondary)
-			gui.Input(
+	return dialogFrame("New Worktree", "Adds a linked working tree beside this repository.", gui.View(
 
-				app.Theme().InputStyle(),
-			).Value(branch()).OnInputEvent(func(event *native.Event) {
-				setBranch(event.Value)
-				setPath(store.SuggestWorktreePath(event.Value))
-			})
+		CheckRow("Create a new branch", createNew, setCreateNew),
+		gui.Text(
+			"Branch",
+		).FontSize(12).FontWeight(600).TextColor(app.Theme().TextSecondary),
+		gui.Input(
 
-			gui.Show(
-				func() bool { return problem() != "" },
-				func() {
-					gui.Text(
+			app.Theme().InputStyle(),
+		).Value(branch()).OnInputEvent(func(event *native.Event) {
+			setBranch(event.Value)
+			setPath(store.SuggestWorktreePath(event.Value))
+		}),
 
-						problem(),
-					).FontSize(11.5).TextColor(app.Theme().Danger)
+		gui.Show(
+			problem() != "",
+			func() *gui.Element {
+				return gui.Text(
 
-				},
-			)
-			gui.Text(
-				"Path",
-			).FontSize(12).FontWeight(600).TextColor(app.Theme().TextSecondary)
-			gui.Input(
+					problem(),
+				).FontSize(11.5).TextColor(app.Theme().Danger)
 
-				app.Theme().InputStyle(),
-			).Value(path()).OnInputEvent(func(event *native.Event) { setPath(event.Value) })
+			},
+		),
+		gui.Text(
+			"Path",
+		).FontSize(12).FontWeight(600).TextColor(app.Theme().TextSecondary),
+		gui.Input(
 
-		},
+			app.Theme().InputStyle(),
+		).Value(path()).OnInputEvent(func(event *native.Event) { setPath(event.Value) }),
 	).Display("flex").FlexDirection("column").Gap(10), gui.Button(
 		"Add Worktree",
 
@@ -382,7 +380,7 @@ func newWorktreeDialog() {
 	)
 }
 
-func stashDialog() {
+func stashDialog() *native.Node {
 	app := UseApp()
 	store := app.Store
 	message, setMessage := gui.CreateSignal("")
@@ -391,15 +389,14 @@ func stashDialog() {
 		app.CloseDialog()
 		store.StashPush(message(), include())
 	}
-	dialogFrame("Stash Changes", "Saves local changes and returns the working tree to HEAD.", gui.View(
-		func() {
-			gui.Input(
+	return dialogFrame("Stash Changes", "Saves local changes and returns the working tree to HEAD.", gui.View(
 
-				app.Theme().InputStyle(),
-			).Placeholder("Optional message").Value(message()).OnInputEvent(func(event *native.Event) { setMessage(event.Value) }).OnSubmitEvent(func(*native.Event) { submit() })
+		gui.Input(
 
-			CheckRow("Include untracked files", include, setInclude)
-		},
+			app.Theme().InputStyle(),
+		).Placeholder("Optional message").Value(message()).OnInputEvent(func(event *native.Event) { setMessage(event.Value) }).OnSubmitEvent(func(*native.Event) { submit() }),
+
+		CheckRow("Include untracked files", include, setInclude),
 	).Display("flex").FlexDirection("column").Gap(10), gui.Button(
 		"Stash",
 

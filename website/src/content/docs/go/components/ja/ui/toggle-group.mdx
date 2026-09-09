@@ -14,18 +14,18 @@ import (
 ## 使い方
 
 ```go
-func ToggleGroupExample() {
+func ToggleGroupExample() *native.Node {
 	values, setValues := ui.CreateSignal([]string{"bold"})
-	ui.ToggleGroup.Root(
+	return ui.ToggleGroup.Root(
 		ui.ToggleGroupProps{
 			Multiple:      true,
 			Value:         values,
 			Items:         []ui.ComponentItem{{Value: "bold"}, {Value: "italic"}},
 			OnValueChange: func(next []string, _ *native.Event) { setValues(next) },
 		},
-		func() {
-			ui.ToggleGroup.Item(ui.ToggleGroupItemProps{Value: "bold"}, "Bold")
-			ui.ToggleGroup.Item(ui.ToggleGroupItemProps{Value: "italic"}, "Italic")
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.ToggleGroup.Item(ui.ToggleGroupItemProps{Value: "bold"}, "Bold"),
+				ui.ToggleGroup.Item(ui.ToggleGroupItemProps{Value: "italic"}, "Italic")})
 		},
 	)
 }

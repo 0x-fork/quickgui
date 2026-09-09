@@ -61,10 +61,10 @@ the 4 MiB source bound applies to the direct Rust API.
 the source with `ui.Value` and the streaming state with `ui.Streaming`:
 
 ```go
-func Answer() {
+func Answer() *ui.Element {
 	answer, _ := ui.CreateSignal("## Response\n\nWaiting for input.")
 	streaming, _ := ui.CreateSignal(false)
-	ui.Markdown().Value(answer()).Streaming(streaming).
+	return ui.Markdown().Value(answer()).Streaming(streaming).
 		TextColor("#e4e4e7").
 		FontSize(15).
 		LineHeight(23).

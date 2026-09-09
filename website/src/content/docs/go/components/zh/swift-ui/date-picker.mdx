@@ -15,12 +15,12 @@ import (
 ## 用法
 
 ```go
-func SwiftUiDatePickerExample() {
+func SwiftUiDatePickerExample() *native.Node {
 	value, setValue := ui.CreateSignal(float64(time.Now().UnixMilli()))
-	ui.SwiftUI.Host(
+	return ui.SwiftUI.Host(
 		ui.SwiftUIHostProps{MatchContents: true},
-		func() {
-			ui.SwiftUI.DatePicker(ui.SwiftUIDatePickerProps{
+		func() *native.Node {
+			return ui.SwiftUI.DatePicker(ui.SwiftUIDatePickerProps{
 				Value:               value,
 				DisplayedComponents: "dateAndTime",
 				OnValueChange:       func(next float64, _ *native.Event) { setValue(next) },

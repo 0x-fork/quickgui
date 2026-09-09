@@ -15,11 +15,11 @@ func TestDirectChildrenAndConditionsTrackWithoutCallbackWrappers(t *testing.T) {
 		value, setValue := ui.CreateSignal(1)
 		visible, setVisible := ui.CreateSignal(true)
 		cleaned := 0
-		roots := native.CollectChildren(func() {
-			ValueCard(value(), visible(), func() { cleaned++ })
+		roots := native.CollectChildren(func() *ui.Element {
+			return ValueCard(value(), visible(), func() { cleaned++ })
 		})
 		if len(roots) != 1 {
-			t.Fatal("expected one declared root")
+			t.Fatal("expected one returned root")
 		}
 		root := roots[0]
 		label, branch := root.Children[0], root.Children[1]
@@ -40,17 +40,17 @@ func TestDirectChildrenAndConditionsTrackWithoutCallbackWrappers(t *testing.T) {
 	})
 }
 
-func TestImplicitDeclarationDefinesTheComponentBoundary(t *testing.T) {
+func TestNativeNodeReturnDefinesTheComponentBoundary(t *testing.T) {
 	native.ResetTreeStateForTests()
 	reactive.CreateRoot(func(dispose func()) struct{} {
 		defer dispose()
 		value, setValue := ui.CreateSignal(1)
-		node := native.CollectChildren(func() { DeclaredNodeLabel(value()) })[0]
+		node := RawNodeLabel(value())
 		initial := ordinaryValue(value())
 		snapshot := ui.View(ui.Text(initial))
 		setValue(2)
 		if node.Children[0].Text != "2" || snapshot.Children[0].Children[0].Text != "1" {
-			t.Fatal("only a declaration component should carry reactive props")
+			t.Fatal("only a declared node return should create a component prop boundary")
 		}
 		return struct{}{}
 	})

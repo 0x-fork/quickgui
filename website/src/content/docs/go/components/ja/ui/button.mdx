@@ -13,8 +13,8 @@ import (
 ## 使い方
 
 ```go
-func ButtonExample(save func()) {
-	ui.Button(
+func ButtonExample(save func()) *ui.Element {
+	return ui.Button(
 		"Save changes",
 	).
 		Height(40).

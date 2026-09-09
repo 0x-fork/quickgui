@@ -31,9 +31,9 @@ import (
 	extension "{{GO_MODULE}}"
 )
 
-func App() {
+func App() *ui.Element {
 	message, _ := ui.CreateSignal("Hello")
-	extension.Notice(message, ui.Style().FontSize(18))
+	return extension.Notice(message, ui.Style().FontSize(18))
 }
 ```
 

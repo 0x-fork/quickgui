@@ -13,25 +13,25 @@ import (
 ## 用法
 
 ```go
-func PopoverExample() {
-	ui.Popover.Root(
+func PopoverExample() *native.Node {
+	return ui.Popover.Root(
 		ui.PopoverRootProps{},
-		func() {
-			ui.Popover.Trigger(ui.PopoverTriggerProps{}, "Account")
-			ui.Popover.Positioner(
-				ui.PopoverPositionerProps{},
-				func() {
-					ui.Popover.Popup(
-						ui.PopoverPopupProps{PartProps: ui.PartProps{Style: ui.Style().
-							Width(240).
-							Padding(16)}},
-						func() {
-							ui.Popover.Title(ui.PartProps{}, "Account")
-							ui.Popover.Close(ui.PartProps{}, "Done")
-						},
-					)
-				},
-			)
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Popover.Trigger(ui.PopoverTriggerProps{}, "Account"),
+				ui.Popover.Positioner(
+					ui.PopoverPositionerProps{},
+					func() *native.Node {
+						return ui.Popover.Popup(
+							ui.PopoverPopupProps{PartProps: ui.PartProps{Style: ui.Style().
+								Width(240).
+								Padding(16)}},
+							func() *native.Node {
+								return ui.Fragment([]*native.Node{ui.Popover.Title(ui.PartProps{}, "Account"),
+									ui.Popover.Close(ui.PartProps{}, "Done")})
+							},
+						)
+					},
+				)})
 		},
 	)
 }

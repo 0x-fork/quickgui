@@ -5,11 +5,11 @@
 在 `ui.SwiftUI.Host` 内创建控件。Host 定义原生视图边界，并可根据内容确定自身尺寸。
 
 ```go
-func SwiftUiHostExample() {
-	ui.SwiftUI.Host(
+func SwiftUiHostExample() *native.Node {
+	return ui.SwiftUI.Host(
 		ui.SwiftUIHostProps{MatchContents: true},
-		func() {
-			ui.SwiftUI.Button(ui.SwiftUIButtonProps{Label: "Continue"})
+		func() *native.Node {
+			return ui.SwiftUI.Button(ui.SwiftUIButtonProps{Label: "Continue"})
 		},
 	)
 }
@@ -24,12 +24,12 @@ func SwiftUiHostExample() {
 绑定访问器，并保存原生回调返回的值。SwiftUI 控件与 QuickGUI 节点可以共享同一个信号。DatePicker 使用以毫秒表示的 Unix 时间戳。
 
 ```go
-func SwiftUiToggleExample() {
+func SwiftUiToggleExample() *native.Node {
 	on, setOn := ui.CreateSignal(true)
-	ui.SwiftUI.Host(
+	return ui.SwiftUI.Host(
 		ui.SwiftUIHostProps{MatchContents: true},
-		func() {
-			ui.SwiftUI.Toggle(ui.SwiftUIToggleProps{
+		func() *native.Node {
+			return ui.SwiftUI.Toggle(ui.SwiftUIToggleProps{
 				IsOn:         on,
 				Label:        "Notifications",
 				OnIsOnChange: func(next bool, _ *native.Event) { setOn(next) },

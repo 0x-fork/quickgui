@@ -1,15 +1,15 @@
 export const snippets = {
   counter: {
     lang: "go",
-    code: `func Counter() {
+    code: `func Counter() *ui.Element {
 	count, setCount := ui.CreateSignal(0)
-	ui.View(
-		ui.Text("Count: ", count),
+	return ui.View(
+		ui.Text("Count: ", count()),
 		ui.Button("Increment").
 			OnClick(func() { setCount(count() + 1) }).
 			Padding(12).
 			RoundedLg().
-			Bg("#2563eb")
+			Bg("#2563eb"),
 	).FlexCol().
 		SizeFull().
 		ItemsCenter().
@@ -77,10 +77,10 @@ func openWindow() {
   },
   swiftUi: {
     lang: "go",
-    code: `ui.SwiftUI.Host(
+    code: `return ui.SwiftUI.Host(
 	ui.SwiftUIHostProps{MatchContents: true},
-	func() {
-		ui.SwiftUI.Button(ui.SwiftUIButtonProps{
+	func() *native.Node {
+		return ui.SwiftUI.Button(ui.SwiftUIButtonProps{
 			Label:       "Save changes",
 			SystemImage: "checkmark",
 			Modifiers: []ui.SwiftUIModifier{

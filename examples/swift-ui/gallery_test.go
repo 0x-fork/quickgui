@@ -13,7 +13,7 @@ func TestNavigationReplacesControlAndPreservesSharedState(t *testing.T) {
 	reactive.CreateRoot(func(dispose func()) struct{} {
 		defer dispose()
 		state := newGalleryState()
-		roots := native.CollectChildren(func() { renderDemo(state) })
+		roots := native.CollectChildren(func() *native.Node { return renderDemo(state) })
 		find := func(tag uint8) *native.Node {
 			var visit func(*native.Node) *native.Node
 			visit = func(node *native.Node) *native.Node {

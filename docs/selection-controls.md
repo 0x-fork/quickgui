@@ -162,14 +162,14 @@ derives its state from that group's declared values. Standalone parent checkboxe
 use a `ChildrenChecked` accessor; the core folds the values into on, mixed, or off:
 
 ```go
-func ParentCheckbox() {
-	ui.Checkbox.Root(
+func ParentCheckbox() *native.Node {
+	return ui.Checkbox.Root(
 		ui.CheckboxProps{
 			Parent:          true,
 			ChildrenChecked: func() []bool { return []bool{true, false, true} },
 		},
-		func() {
-			ui.Checkbox.Indicator(ui.PartProps{})
+		func() *native.Node {
+			return ui.Checkbox.Indicator(ui.PartProps{})
 		},
 	)
 }
@@ -181,19 +181,19 @@ The core owns roles, toggle semantics, click/Space activation, focus, cursor, an
 window-drag exclusion.
 
 ```go
-func ReleaseNotification() {
+func ReleaseNotification() *native.Node {
 	enabled, setEnabled := ui.CreateSignal(false)
-	ui.Checkbox.Root(
+	return ui.Checkbox.Root(
 		ui.CheckboxProps{
 			Checked:         func() ui.CheckedState { return enabled() },
 			OnCheckedChange: func(value bool, _ *native.Event) { setEnabled(value) },
 		},
-		func() {
-			ui.Checkbox.Indicator(ui.PartProps{Style: ui.Style().
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Checkbox.Indicator(ui.PartProps{Style: ui.Style().
 				Width(12).
 				Height(12).
-				BackgroundColor("#2563eb")})
-			ui.Text("Email me about releases")
+				BackgroundColor("#2563eb")}),
+				ui.Text("Email me about releases").Node})
 		},
 	)
 }

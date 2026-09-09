@@ -14,12 +14,12 @@ import (
 ## Usage
 
 ```go
-func SwiftUiSecureFieldExample() {
+func SwiftUiSecureFieldExample() *native.Node {
 	text, setText := ui.CreateSignal("")
-	ui.SwiftUI.Host(
+	return ui.SwiftUI.Host(
 		ui.SwiftUIHostProps{MatchContents: true},
-		func() {
-			ui.SwiftUI.SecureField(ui.SwiftUITextFieldProps{
+		func() *native.Node {
+			return ui.SwiftUI.SecureField(ui.SwiftUITextFieldProps{
 				Value:         text,
 				Placeholder:   "Enter text",
 				OnValueChange: func(next string, _ *native.Event) { setText(next) },

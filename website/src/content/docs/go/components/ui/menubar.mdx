@@ -13,13 +13,15 @@ import (
 ## Usage
 
 ```go
-func MenubarExample() {
-	ui.Menubar.Root(
+func MenubarExample() *native.Node {
+	return ui.Menubar.Root(
 		ui.MenubarRootProps{Count: 2},
-		func() {
+		func() *native.Node {
+			var children []*native.Node
 			for index, label := range []string{"File", "Edit"} {
-				ui.Menubar.Item(ui.MenubarItemProps{Index: &index}, label)
+				children = append(children, ui.Menubar.Item(ui.MenubarItemProps{Index: &index}, label))
 			}
+			return ui.Fragment(children)
 		},
 	)
 }

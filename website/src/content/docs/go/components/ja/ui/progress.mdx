@@ -13,16 +13,16 @@ import (
 ## 使い方
 
 ```go
-func ProgressExample(progress func() *float64) {
-	ui.Progress.Root(
+func ProgressExample(progress func() *float64) *native.Node {
+	return ui.Progress.Root(
 		ui.ProgressProps{Value: progress, Max: 100},
-		func() {
-			ui.Progress.Label(ui.PartProps{}, "Uploading")
-			ui.Progress.Track(
-				ui.PartProps{},
-				func() { ui.Progress.Indicator(ui.PartProps{}) },
-			)
-			ui.Progress.Value(ui.PartProps{})
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Progress.Label(ui.PartProps{}, "Uploading"),
+				ui.Progress.Track(
+					ui.PartProps{},
+					func() *native.Node { return ui.Progress.Indicator(ui.PartProps{}) },
+				),
+				ui.Progress.Value(ui.PartProps{})})
 		},
 	)
 }

@@ -13,34 +13,34 @@ import (
 ## Usage
 
 ```go
-func NavigationMenuExample() {
-	ui.NavigationMenu.Root(
+func NavigationMenuExample() *native.Node {
+	return ui.NavigationMenu.Root(
 		ui.NavigationMenuRootProps{
 			Items: []ui.ComponentItem{{Value: "products"}},
 			Delay: 100,
 		},
-		func() {
-			ui.NavigationMenu.List(
+		func() *native.Node {
+			return ui.NavigationMenu.List(
 				ui.PartProps{},
-				func() {
-					ui.NavigationMenu.Item(
+				func() *native.Node {
+					return ui.NavigationMenu.Item(
 						ui.NavigationMenuItemProps{Value: "products"},
-						func() {
-							ui.NavigationMenu.Trigger(ui.NavigationMenuPartProps{}, "Products")
-							ui.NavigationMenu.Positioner(
-								ui.NavigationMenuPartProps{},
-								func() {
-									ui.NavigationMenu.Popup(
-										ui.NavigationMenuPartProps{},
-										func() {
-											ui.NavigationMenu.Link(
-												ui.NavigationMenuLinkProps{Value: "overview"},
-												"Overview",
-											)
-										},
-									)
-								},
-							)
+						func() *native.Node {
+							return ui.Fragment([]*native.Node{ui.NavigationMenu.Trigger(ui.NavigationMenuPartProps{}, "Products"),
+								ui.NavigationMenu.Positioner(
+									ui.NavigationMenuPartProps{},
+									func() *native.Node {
+										return ui.NavigationMenu.Popup(
+											ui.NavigationMenuPartProps{},
+											func() *native.Node {
+												return ui.NavigationMenu.Link(
+													ui.NavigationMenuLinkProps{Value: "overview"},
+													"Overview",
+												)
+											},
+										)
+									},
+								)})
 						},
 					)
 				},

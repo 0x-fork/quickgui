@@ -13,11 +13,11 @@ import (
 ## Usage
 
 ```go
-func SwiftUiHostExample() {
-	ui.SwiftUI.Host(
+func SwiftUiHostExample() *native.Node {
+	return ui.SwiftUI.Host(
 		ui.SwiftUIHostProps{MatchContents: true},
-		func() {
-			ui.SwiftUI.Button(ui.SwiftUIButtonProps{Label: "Continue"})
+		func() *native.Node {
+			return ui.SwiftUI.Button(ui.SwiftUIButtonProps{Label: "Continue"})
 		},
 	)
 }

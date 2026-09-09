@@ -15,13 +15,13 @@ import (
 ## 使い方
 
 ```go
-func ContextMenuExample() {
-	ui.ContextMenu.Root(
+func ContextMenuExample() *native.Node {
+	return ui.ContextMenu.Root(
 		ui.ContextMenuRootProps{
 			Items:    func() []ui.MenuItemDeclaration { return []ui.MenuItemDeclaration{{ID: "copy", Label: "Copy"}} },
 			OnSelect: func(item ui.MenuSelectDetails, _ *native.Event) { fmt.Println(item.ID) },
 		},
-		func() { ui.ContextMenu.Trigger(ui.ContextMenuTriggerProps{}, "Right-click here") },
+		func() *native.Node { return ui.ContextMenu.Trigger(ui.ContextMenuTriggerProps{}, "Right-click here") },
 	)
 }
 ```

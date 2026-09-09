@@ -640,35 +640,35 @@ because the core normalizes keys to a layout-independent command identity. See
 `TooltipProvider`/`TooltipState` compound is bound separately as `Tooltip`:
 
 ```go
-func SaveTooltip() {
+func SaveTooltip() *native.Node {
 	hoverable, closeOnClick := true, false
 	gap, margin := 7.0, 8.0
-	ui.Tooltip.Provider(
+	return ui.Tooltip.Provider(
 		ui.TooltipProviderProps{Delay: 600, CloseDelay: 200, Timeout: 400},
-		func() {
-			ui.Tooltip.Root(
+		func() *native.Node {
+			return ui.Tooltip.Root(
 				ui.TooltipRootProps{TrackCursorAxis: "x", Hoverable: &hoverable},
-				func() {
-					ui.Tooltip.Trigger(
+				func() *native.Node {
+					return ui.Fragment([]*native.Node{ui.Tooltip.Trigger(
 						ui.TooltipTriggerProps{Delay: 120, CloseOnClick: &closeOnClick},
 						"Save",
-					)
-					ui.Tooltip.Positioner(
-						ui.TooltipPositionerProps{
-							Side:             "top",
-							SideOffset:       &gap,
-							CollisionPadding: &margin,
-						},
-						func() {
-							ui.Tooltip.Popup(
-								ui.PartProps{},
-								func() {
-									ui.Text("Save the current draft")
-									ui.Tooltip.Arrow(ui.PartProps{})
-								},
-							)
-						},
-					)
+					),
+						ui.Tooltip.Positioner(
+							ui.TooltipPositionerProps{
+								Side:             "top",
+								SideOffset:       &gap,
+								CollisionPadding: &margin,
+							},
+							func() *native.Node {
+								return ui.Tooltip.Popup(
+									ui.PartProps{},
+									func() *native.Node {
+										return ui.Fragment([]*native.Node{ui.Text("Save the current draft").Node,
+											ui.Tooltip.Arrow(ui.PartProps{})})
+									},
+								)
+							},
+						)})
 				},
 			)
 		},

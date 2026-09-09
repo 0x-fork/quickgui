@@ -226,8 +226,8 @@ func (popoverMenuAPI) Popup(props PopoverMenuPopupProps, children ...any) *nativ
 	props.Children = withPartChildren(props.Children, children)
 
 	state := requireContext(popoverMenuContext, "PopoverMenu.Popup", "PopoverMenu.Root")
-	return Show(func() bool { return state.isOpen() && state.trigger.Read() != nil }, func() {
-		createPopoverMenuPopup(props, state)
+	return Show(func() bool { return state.isOpen() && state.trigger.Read() != nil }, func() *native.Node {
+		return createPopoverMenuPopup(props, state)
 	})
 }
 

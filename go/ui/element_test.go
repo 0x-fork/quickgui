@@ -14,8 +14,9 @@ func TestFluentChildrenDeclareOneRetainedRoot(t *testing.T) {
 	reactive.CreateRoot(func(dispose func()) struct{} {
 		defer dispose()
 		var view *Element
-		roots := native.CollectChildren(func() {
+		roots := native.CollectChildren(func() *Element {
 			view = View(Text("hello"), Input().Value("xxx")).Flex().PaddingLeft(20).TextAlign("center")
+			return view
 		})
 		if len(roots) != 1 || roots[0] != view.Node || len(view.Children) != 2 {
 			t.Fatal("nested constructor arguments escaped their parent or were declared twice")
@@ -74,10 +75,10 @@ func TestFluentBindingsStayIndependentAndChildrenKeepTheirOwners(t *testing.T) {
 		width, color, text := reactive.NewSignal(100), reactive.NewSignal("#112233"), reactive.NewSignal("first")
 		mounts, cleanups := 0, 0
 		parent := View()
-		view := View(func() {
+		view := View(func() *Element {
 			mounts++
 			OnCleanup(func() { cleanups++ })
-			Text(text.Read)
+			return Text(text.Read)
 		}).Width(width.Read).Bg(color.Read).PaddingLeft(20)
 		native.InsertNode(parent.Node, view.Node, nil)
 		child := view.Children[0]
@@ -148,6 +149,7 @@ func TestFluentConfigurationIsImmediateInsideBatchesAndEventsBatchWrites(t *test
 					t.Fatal("Ref ran before the fluent declarations were applied")
 				}
 			})
+
 		})
 		input.Listeners[0].Listener(&native.Event{Value: "typed"})
 		if reads != 2 || refs != 1 || label.Children[0].Text != "typed" {

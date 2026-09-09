@@ -21,23 +21,22 @@ func main() {
 	}
 }
 
-func App() {
+func App() *ui.Element {
 	message, setMessage := ui.CreateSignal("Hello from an independent native library")
-	ui.View(
-		func() {
-			ui.Text(message())
-			ui.Button(
-				"Call extension",
-			).OnClick(func() {
-				echo.Send("The stock core loaded @acme/quickgui-echo 1.0.0", func(reply string, err error) {
-					if err != nil {
-						setMessage(err.Error())
-						return
-					}
-					setMessage(reply)
-				})
-			}).
-				Padding(12).BackgroundColor("#2563eb").TextColor("white").BorderRadius(8)
-		},
+	return ui.View(
+
+		ui.Text(message()),
+		ui.Button(
+			"Call extension",
+		).OnClick(func() {
+			echo.Send("The stock core loaded @acme/quickgui-echo 1.0.0", func(reply string, err error) {
+				if err != nil {
+					setMessage(err.Error())
+					return
+				}
+				setMessage(reply)
+			})
+		}).
+			Padding(12).BackgroundColor("#2563eb").TextColor("white").BorderRadius(8),
 	).Display("flex").FlexDirection("column").Padding(24).Gap(16)
 }

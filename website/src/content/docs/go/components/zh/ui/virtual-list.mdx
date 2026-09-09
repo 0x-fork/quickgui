@@ -13,12 +13,14 @@ import (
 ## 用法
 
 ```go
-func VirtualListExample(rows []string) {
-	ui.VirtualList(
-		func() {
+func VirtualListExample(rows []string) *ui.Element {
+	return ui.VirtualList(
+		func() *native.Node {
+			var children []*native.Node
 			for _, row := range rows {
-				ui.Text(row).Height(36)
+				children = append(children, ui.Text(row).Height(36).Node)
 			}
+			return ui.Fragment(children)
 		},
 	).Height(320).EstimatedItemHeight(36).Overscan(6).FollowMode("normal")
 

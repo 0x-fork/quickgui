@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestDeclarationChildrenRejectReturningFactories(t *testing.T) {
+func TestConstructionRequiresExplicitNodeUse(t *testing.T) {
 	fs := token.NewFileSet()
 	sdk, err := parser.ParseFile(fs, "ui.go", `package ui
 type Element struct{}
@@ -30,19 +30,18 @@ func (e *Element) OnClick(handler func()) *Element { return e }
 		name, body string
 		invalid    bool
 	}{
-		{"view declaration", `func App() { gui.View() }`, false},
-		{"text declaration", `func App() { gui.Text("child") }`, false},
-		{"button chain", `func App() { gui.Button("child").Width(20) }`, false},
-		{"void component", `func Child() { gui.Text("child") }; func App() { Child() }`, false},
-		{"void children", `func App() { gui.View(func() { gui.Text("child") }) }`, false},
-		{"named void children", `func App() { body := func() { gui.Text("child") }; gui.View(body) }`, false},
-		{"direct native children", `func App() { gui.View(gui.Text("child")) }`, false},
-		{"returning factory", `func App() { gui.View(func() *gui.Element { return gui.Text("child") }) }`, true},
-		{"named returning factory", `func Child() *gui.Element { return gui.Text("child") }; func App() { gui.View(Child) }`, true},
-		{"nested returning factory", `func Child() *gui.Element { return nil }; func App() { gui.View([]any{Child}) }`, true},
-		{"ordinary node helper", `func Node() *gui.Element { return gui.Text("child") }; func App() { gui.View(Node()) }`, false},
-		{"assigned node and mutation", `func App() { view := gui.View(); view.Width(20) }`, false},
-		{"event callback", `func App() { view := gui.View(); gui.Button("change").OnClick(func() { view.Width(20) }) }`, false},
+		{"view", `func App() { gui.View() }`, true},
+		{"text", `func App() { gui.Text("lost") }`, true},
+		{"button chain", `func App() { gui.Button("lost").Width(20) }`, true},
+		{"custom component", `func Child() *gui.Element { return gui.Text("child") }; func App() { Child() }`, true},
+		{"blank assignment", `func App() { _ = gui.View() }`, true},
+		{"void children", `func App() *gui.Element { return gui.View(func() {}) }`, true},
+		{"named void children", `func App() *gui.Element { body := func() {}; return gui.View(body) }`, true},
+		{"deferred construction", `func App() { defer gui.View() }`, true},
+		{"returned children", `func App() *gui.Element { return gui.View(gui.Text("child")) }`, false},
+		{"returning factory", `func App() *gui.Element { return gui.View(func() *gui.Element { return gui.Text("child") }) }`, false},
+		{"assigned node and mutation", `func App() *gui.Element { view := gui.View(); view.Width(20); return view }`, false},
+		{"event callback", `func App() *gui.Element { view := gui.View(); return gui.Button("change").OnClick(func() { view.Width(20) }) }`, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			file, err := parser.ParseFile(fs, "app.go", "package app\nimport gui \""+uiPath+"\"\n"+test.body, 0)

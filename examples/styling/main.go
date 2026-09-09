@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/reactive"
 	"github.com/egoist/quickgui/go/ui"
 )
 
@@ -33,39 +34,35 @@ func main() {
 	}
 }
 
-func Styling() {
+func Styling() *ui.Element {
 	warm, setWarm := ui.CreateSignal(false)
-	warmPalette.Provide(warm, func() {
-		ui.View(
-			func() {
-				ui.View(
-					func() {
-						ui.Text(
-							"Declared styling",
-						).FontSize(14).FontWeight(700)
-						ui.Button(
-							"Switch palette",
-						).Height(28).PaddingLeft(12).PaddingRight(12).BorderRadius(7).BackgroundColor("#1b2434").TextColor(ink).FontSize(12).AppRegion("no-drag").UserSelect("none").Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
-							return s.BackgroundColor("#243047")
-						}).OnClick(func() { setWarm(!warm()) })
+	return reactive.Provide(warmPalette, (func() bool)(warm), func() *ui.Element {
+		return ui.View(
 
-					},
-				).Display("flex").Height(52).FlexShrink(0).AlignItems("center").JustifyContent("space-between").PaddingLeft(96).PaddingRight(20).AppRegion("drag")
-				ui.View(
-					func() {
-						TextAlignment()
-						TextStyling()
-						Direction()
-						Gradients()
-						BordersAndOutlines()
-						Filters()
-						Transforms()
-						InteractionStates()
-						StickyHeaders()
-						ScrollSnap()
-					},
-				).Flex(1).MinHeight(0).OverflowY("scroll").Padding(20).Display("grid").GridTemplateColumns("1fr 1fr").Gap(16)
-			},
+			ui.View(
+
+				ui.Text(
+					"Declared styling",
+				).FontSize(14).FontWeight(700),
+				ui.Button(
+					"Switch palette",
+				).Height(28).PaddingLeft(12).PaddingRight(12).BorderRadius(7).BackgroundColor("#1b2434").TextColor(ink).FontSize(12).AppRegion("no-drag").UserSelect("none").Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
+					return s.BackgroundColor("#243047")
+				}).OnClick(func() { setWarm(!warm()) }),
+			).Display("flex").Height(52).FlexShrink(0).AlignItems("center").JustifyContent("space-between").PaddingLeft(96).PaddingRight(20).AppRegion("drag"),
+			ui.View(
+
+				TextAlignment(),
+				TextStyling(),
+				Direction(),
+				Gradients(),
+				BordersAndOutlines(),
+				Filters(),
+				Transforms(),
+				InteractionStates(),
+				StickyHeaders(),
+				ScrollSnap(),
+			).Flex(1).MinHeight(0).OverflowY("scroll").Padding(20).Display("grid").GridTemplateColumns("1fr 1fr").Gap(16),
 		).Display("flex").FlexDirection("column").Width("100%").Height("100%").BackgroundColor("#0b0f17").TextColor(ink).When(
 			warm,
 			ui.Style().BackgroundColor("#251b13"),

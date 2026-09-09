@@ -14,14 +14,17 @@ import (
 ## 用法
 
 ```go
-func SwitchExample() {
+func SwitchExample() *native.Node {
 	on, setOn := ui.CreateSignal(false)
-	ui.Switch.Root(
+	return ui.Switch.Root(
 		ui.SwitchProps{
 			Checked:         on,
 			OnCheckedChange: func(next bool, _ *native.Event) { setOn(next) },
 		},
-		func() { ui.Switch.Thumb(ui.PartProps{}); ui.Text("Notifications") },
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Switch.Thumb(ui.PartProps{}), ui.Text("Notifications").
+				Node})
+		},
 	)
 }
 ```

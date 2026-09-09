@@ -13,19 +13,19 @@ import (
 ## 用法
 
 ```go
-func TabsExample() {
-	ui.Tabs.Root(
+func TabsExample() *native.Node {
+	return ui.Tabs.Root(
 		ui.TabsRootProps{DefaultValue: "overview", Activation: "automatic"},
-		func() {
-			ui.Tabs.List(
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Tabs.List(
 				ui.PartProps{},
-				func() {
-					ui.Tabs.Tab(ui.TabsTabProps{Value: "overview"}, "Overview")
-					ui.Tabs.Tab(ui.TabsTabProps{Value: "settings"}, "Settings")
+				func() *native.Node {
+					return ui.Fragment([]*native.Node{ui.Tabs.Tab(ui.TabsTabProps{Value: "overview"}, "Overview"),
+						ui.Tabs.Tab(ui.TabsTabProps{Value: "settings"}, "Settings")})
 				},
-			)
-			ui.Tabs.Panel(ui.TabsPanelProps{Value: "overview"}, "Overview content")
-			ui.Tabs.Panel(ui.TabsPanelProps{Value: "settings"}, "Settings content")
+			),
+				ui.Tabs.Panel(ui.TabsPanelProps{Value: "overview"}, "Overview content"),
+				ui.Tabs.Panel(ui.TabsPanelProps{Value: "settings"}, "Settings content")})
 		},
 	)
 }

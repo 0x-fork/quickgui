@@ -300,41 +300,41 @@ The `ui` package exposes `Field.Root`, `Label`, `Control`, `Description`, `Error
 the accepted triggers and delay through `OnValidationChange`.
 
 ```go
-func AccountForm() {
+func AccountForm() *native.Node {
 	email, setEmail := ui.CreateSignal("")
 	saving, _ := ui.CreateSignal(false)
-	ui.Fieldset.Root(
+	return ui.Fieldset.Root(
 		ui.PartProps{Disabled: saving},
-		func() {
-			ui.Fieldset.Legend(ui.PartProps{}, "Account")
-			ui.Field.Root(
-				ui.FieldRootProps{
-					Required:               true,
-					Invalid:                func() bool { return email() == "" },
-					ValidationMessage:      func() string { return "Enter an address" },
-					ValidationMode:         "onChange",
-					ValidationDebounceTime: 250,
-					OnValidationChange: func(details ui.FieldValidationDetails, _ *native.Event) {
-						log.Print(details.Triggers, details.Delay)
-					},
-				},
-				func() {
-					ui.Field.Item(
-						ui.PartProps{},
-						func() {
-							ui.Field.Label(ui.FieldLabelProps{}, "Email")
-							ui.Field.Control(ui.FieldControlProps{InputPartProps: ui.InputPartProps{
-								Value:       email,
-								Placeholder: "you@example.com",
-								OnInput:     func(event *native.Event) { setEmail(ui.InputValue(event)) },
-							}})
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Fieldset.Legend(ui.PartProps{}, "Account"),
+				ui.Field.Root(
+					ui.FieldRootProps{
+						Required:               true,
+						Invalid:                func() bool { return email() == "" },
+						ValidationMessage:      func() string { return "Enter an address" },
+						ValidationMode:         "onChange",
+						ValidationDebounceTime: 250,
+						OnValidationChange: func(details ui.FieldValidationDetails, _ *native.Event) {
+							log.Print(details.Triggers, details.Delay)
 						},
-					)
-					ui.Field.Description(ui.PartProps{}, "We never share it.")
-					ui.Field.Validity(ui.FieldValidityProps{})
-					ui.Field.Error(ui.PartProps{}, "Enter an address")
-				},
-			)
+					},
+					func() *native.Node {
+						return ui.Fragment([]*native.Node{ui.Field.Item(
+							ui.PartProps{},
+							func() *native.Node {
+								return ui.Fragment([]*native.Node{ui.Field.Label(ui.FieldLabelProps{}, "Email"),
+									ui.Field.Control(ui.FieldControlProps{InputPartProps: ui.InputPartProps{
+										Value:       email,
+										Placeholder: "you@example.com",
+										OnInput:     func(event *native.Event) { setEmail(ui.InputValue(event)) },
+									}})})
+							},
+						),
+							ui.Field.Description(ui.PartProps{}, "We never share it."),
+							ui.Field.Validity(ui.FieldValidityProps{}),
+							ui.Field.Error(ui.PartProps{}, "Enter an address")})
+					},
+				)})
 		},
 	)
 }

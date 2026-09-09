@@ -2,19 +2,19 @@ QuickGUI はスタイルなしのプリミティブとアクセシブルな複�
 
 ## コンポーネントの定義
 
-Go コンポーネントは子ノードを暗黙に宣言し、値を返しません。props には通常の型を使います。コンパイラーは UI を構築する関数や他のコンポーネントを呼ぶ関数を識別するため、`CounterLabel(count())` は注釈なしでリアクティブになります。ウィンドウ、ルート、子ノードのブロックには `func()` を使います。ノードを返すコンポーネントファクトリーはサポートしません。
+Go コンポーネントは `*ui.Element` または `*native.Node` を返します。通常の型の props と子ノードを直接組み合わせます。戻り値の型でコンポーネントを識別するため、`CounterLabel(count())` は注釈や `ui.View(func() { ... })` のラッパーなしで更新されます。ウィンドウには関数を直接渡せます。
 
 ```go
-func CounterLabel(count int) {
-	ui.Text("Count: ", count).FontSize(20)
+func CounterLabel(count int) *ui.Element {
+	return ui.Text("Count: ", count).FontSize(20)
 }
 
-func ComponentExample() {
+func ComponentExample() *ui.Element {
 	count, setCount := ui.CreateSignal(0)
-	ui.View(func() {
-		CounterLabel(count())
-		ui.Button("Increment").OnClick(func() { setCount(count() + 1) })
-	})
+	return ui.View(
+		CounterLabel(count()),
+		ui.Button("Increment").OnClick(func() { setCount(count() + 1) }),
+	)
 }
 ```
 
@@ -27,31 +27,31 @@ type Product struct {
 	Price int
 }
 
-func LineItem(product Product, quantity int) {
-	ui.Text(product.Name, " × ", quantity, " = $", product.Price*quantity)
+func LineItem(product Product, quantity int) *ui.Element {
+	return ui.Text(product.Name, " × ", quantity, " = $", product.Price*quantity)
 }
 
-func Cart() {
+func Cart() *ui.Element {
 	quantity, setQuantity := ui.CreateSignal(1)
-	ui.View(func() {
-		LineItem(Product{ID: "mug", Name: "Mug", Price: 12}, quantity())
-		ui.Button("Add one").OnClick(func() { setQuantity(quantity() + 1) })
-	})
+	return ui.View(
+		LineItem(Product{ID: "mug", Name: "Mug", Price: 12}, quantity()),
+		ui.Button("Add one").OnClick(func() { setQuantity(quantity() + 1) }),
+	)
 }
 ```
 
 コンテナーは以下のように子ノードを直接受け取れます。子のコールバックは任意で、マウント時に一度実行されます。遅延構築や複合コントロールのコンテキストが必要な場合に使います。イベントハンドラーは引き続きコールバックです。
 
 ```go
-func CardComponent(title string, children ...any) {
-	ui.View(
+func CardComponent(title string, children ...any) *ui.Element {
+	return ui.View(
 		ui.Text(title).FontWeight(600),
 		children,
 	).Padding(20).Gap(12).FlexCol()
 }
 
-func CardComposition() {
-	CardComponent("Account",
+func CardComposition() *ui.Element {
+	return CardComponent("Account",
 		ui.Text("Manage your account settings."),
 		ui.Button("Save").OnClick(func() { log.Print("Saved") }),
 	)
@@ -63,8 +63,8 @@ func CardComposition() {
 `ui.View`、`ui.Text`、`ui.Button`、`ui.Input` から始めます。オプションとテキストを直接渡せます。`func() { ... }` 引数は複数の子を現在の親の下にまとめます。
 
 ```go
-func ButtonExample(save func()) {
-	ui.Button(
+func ButtonExample(save func()) *ui.Element {
+	return ui.Button(
 		"Save changes",
 	).
 		Height(40).
@@ -84,19 +84,19 @@ func ButtonExample(save func()) {
 複合コンポーネントは `ui.Tabs.Root`、`ui.Tabs.List`、`ui.Tabs.Panel` などのパーツを公開します。コアがロール、キーボード操作、フォーカス、状態を処理します。コンテキストが存在するように、パーツはルートの子要素コールバック内で作成してください。
 
 ```go
-func TabsExample() {
-	ui.Tabs.Root(
+func TabsExample() *native.Node {
+	return ui.Tabs.Root(
 		ui.TabsRootProps{DefaultValue: "overview", Activation: "automatic"},
-		func() {
-			ui.Tabs.List(
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Tabs.List(
 				ui.PartProps{},
-				func() {
-					ui.Tabs.Tab(ui.TabsTabProps{Value: "overview"}, "Overview")
-					ui.Tabs.Tab(ui.TabsTabProps{Value: "settings"}, "Settings")
+				func() *native.Node {
+					return ui.Fragment([]*native.Node{ui.Tabs.Tab(ui.TabsTabProps{Value: "overview"}, "Overview"),
+						ui.Tabs.Tab(ui.TabsTabProps{Value: "settings"}, "Settings")})
 				},
-			)
-			ui.Tabs.Panel(ui.TabsPanelProps{Value: "overview"}, "Overview content")
-			ui.Tabs.Panel(ui.TabsPanelProps{Value: "settings"}, "Settings content")
+			),
+				ui.Tabs.Panel(ui.TabsPanelProps{Value: "overview"}, "Overview content"),
+				ui.Tabs.Panel(ui.TabsPanelProps{Value: "settings"}, "Settings content")})
 		},
 	)
 }
@@ -107,14 +107,17 @@ func TabsExample() {
 制御値にはアクセサーを渡し、コールバックでコントロールが受け入れた値を保存します。デフォルト値を使うとコンポーネントが状態を管理します。省略可能なスカラー値はポインター、複数選択はスライスで表します。
 
 ```go
-func CheckboxExample() {
+func CheckboxExample() *native.Node {
 	checked, setChecked := ui.CreateSignal(false)
-	ui.Checkbox.Root(
+	return ui.Checkbox.Root(
 		ui.CheckboxProps{
 			Checked:         func() ui.CheckedState { return checked() },
 			OnCheckedChange: func(next bool, _ *native.Event) { setChecked(next) },
 		},
-		func() { ui.Checkbox.Indicator(ui.PartProps{}, "✓"); ui.Text("Remember me") },
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Checkbox.Indicator(ui.PartProps{}, "✓"), ui.Text("Remember me").
+				Node})
+		},
 	)
 }
 ```

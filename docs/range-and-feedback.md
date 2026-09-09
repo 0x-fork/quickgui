@@ -398,10 +398,10 @@ alongside the existing root, track, and thumb parts, plus `MinStepsBetweenValues
 `ThumbAlignment`, and a bounded `Format` of `"percent"` or `"fraction"`:
 
 ```go
-func VolumeSlider() {
+func VolumeSlider() *native.Node {
 	volume, setVolume := ui.CreateSignal([]float64{50})
 	thumb := 0
-	ui.Slider.Root(
+	return ui.Slider.Root(
 		ui.SliderRootProps{
 			Value:            volume,
 			Min:              0,
@@ -411,10 +411,11 @@ func VolumeSlider() {
 			OnValueChange:    func(values []float64, _ *native.Event) { setVolume(values) },
 			OnValueCommitted: func(values []float64, _ *native.Event) { log.Print(values) },
 		},
-		func() {
+		func() *native.Node {
+			var children []*native.Node
 			slider := ui.UseSliderState()
-			ui.Slider.Label(ui.PartProps{}, "Volume")
-			ui.Slider.Value(
+			children = append(children, ui.Slider.Label(ui.PartProps{}, "Volume"))
+			children = append(children, ui.Slider.Value(
 				ui.PartProps{},
 				func() string {
 					if value := slider().DisplayValue; value != nil {
@@ -422,19 +423,19 @@ func VolumeSlider() {
 					}
 					return ""
 				},
-			)
-			ui.Slider.Control(
+			))
+			children = append(children, ui.Slider.Control(
 				ui.PartProps{},
-				func() {
-					ui.Slider.Track(
+				func() *native.Node {
+					return ui.Slider.Track(
 						ui.PartProps{},
-						func() {
-							ui.Slider.Indicator(ui.PartProps{})
+						func() *native.Node {
+							return ui.Slider.Indicator(ui.PartProps{})
 						},
 					)
 				},
-			)
-			ui.Slider.Thumb(ui.SliderThumbProps{
+			))
+			children = append(children, ui.Slider.Thumb(ui.SliderThumbProps{
 				Index: &thumb,
 				PartProps: ui.PartProps{Style: ui.Style().
 					Opacity(func() float64 {
@@ -443,7 +444,8 @@ func VolumeSlider() {
 						}
 						return 1
 					})},
-			})
+			}))
+			return ui.Fragment(children)
 		},
 	)
 }

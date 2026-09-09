@@ -13,8 +13,8 @@ import (
 ## 用法
 
 ```go
-func SeparatorExample() {
-	ui.Separator.Root(ui.SeparatorProps{
+func SeparatorExample() *native.Node {
+	return ui.Separator.Root(ui.SeparatorProps{
 		Orientation: "horizontal",
 		PartProps:   ui.PartProps{Style: ui.Style().Height(1).BackgroundColor("#d1d5db")},
 	})

@@ -13,12 +13,11 @@ import (
 ## Usage
 
 ```go
-func ViewExample() {
-	ui.View(
-		func() {
-			ui.Text("Hello from Go")
-			ui.Button("Continue").OnClick(func() {})
-		},
+func ViewExample() *ui.Element {
+	return ui.View(
+
+		ui.Text("Hello from Go"),
+		ui.Button("Continue").OnClick(func() {}),
 	).Padding(20).Gap(12)
 }
 ```

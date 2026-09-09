@@ -144,24 +144,24 @@ func TestRouterMountsMatchedChainAndKeepsPageOnParamChange(t *testing.T) {
 		parent := View(Props{})
 		node := Router(RouterProps{
 			Routes: []*RouteDeclaration{
-				Route("/", func() {
+				Route("/", func() *Element {
 					shellCreated++
-					View(Props{Children: []any{
+					return View(Props{Children: []any{
 						Text(Props{Children: "shell"}),
 						Outlet(),
 					}})
-				}, Route("", func() {
+				}, Route("", func() *Element {
 					homeCreated++
 					navigate = UseNavigate()
-					Text(Props{Children: "home"})
-				}), Route("projects/:id", func() {
+					return Text(Props{Children: "home"})
+				}), Route("projects/:id", func() *Element {
 					projectCreated++
 					projectID = UseParam("id")
 					navigate = UseNavigate()
-					Text(Props{Children: func() string { return "project " + projectID() }})
+					return Text(Props{Children: func() string { return "project " + projectID() }})
 				})),
 			},
-			Fallback: func() { Text(Props{Children: "missing"}) },
+			Fallback: func() *Element { return Text(Props{Children: "missing"}) },
 		})
 		native.InsertNode(parent.Node, node, nil)
 		if homeCreated != 1 || projectCreated != 0 {
@@ -207,15 +207,12 @@ func TestRouterRetainsNestedLayoutsAndDisposesOnlyReplacedBranches(t *testing.T)
 	var count func() int
 	var setCount func(int)
 	record := func(name string, children Component) Component {
-		return func() {
+		return func() *Element {
 			mounted[name]++
 			reactive.OnCleanup(func() { disposed[name]++ })
-			nodes[name] = View(func() {
-				Text(name)
-				if children != nil {
-					children()
-				}
-			}).Node
+			view := View(Text(name), children)
+			nodes[name] = view.Node
+			return view
 		}
 	}
 	declare := func(id, path string, component Component, children ...*RouteDeclaration) *RouteDeclaration {
@@ -225,16 +222,18 @@ func TestRouterRetainsNestedLayoutsAndDisposesOnlyReplacedBranches(t *testing.T)
 	}
 	reactive.CreateRoot(func(dispose func()) struct{} {
 		Router(RouterProps{
-			Routes: []*RouteDeclaration{declare("shell", "/", record("shell", func() {
+			Routes: []*RouteDeclaration{declare("shell", "/", record("shell", func() *native.Node {
 				controller = UseRouter()
-				Outlet()
+				return Outlet()
 			}),
-				declare("settings", "settings", record("settings", func() {
+				declare("settings", "settings", record("settings", func() *native.Node {
+					var children_ []*native.Node
 					read, write := reactive.CreateSignal(0)
 					count = read
 					setCount = func(value int) { write(value) }
-					Text(read)
-					Outlet()
+					children_ = append(children_, Text(read).Node)
+					children_ = append(children_, Outlet())
+					return Fragment(children_)
 				}),
 					declare("general", "", record("general", nil)),
 					declare("appearance", "appearance", record("appearance", nil)),
@@ -331,10 +330,10 @@ func TestLinkNavigatesAndSetsRole(t *testing.T) {
 		parent := View(Props{})
 		node := Router(RouterProps{
 			Routes: []*RouteDeclaration{
-				Route("/", func() {
-					Link(LinkProps{
+				Route("/", func() *native.Node {
+					return Link(LinkProps{
 						Href:      "/projects/12",
-						PartProps: PartProps{Children: func() { Text(Props{Children: "Go"}) }},
+						PartProps: PartProps{Children: func() *Element { return Text(Props{Children: "Go"}) }},
 					})
 				}),
 			},

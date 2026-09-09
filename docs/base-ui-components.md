@@ -346,29 +346,31 @@ The `ui` package exposes `Separator`, `Avatar`, `CheckboxGroup`, `PreviewCard`,
 allocates one bounded scope; child callbacks run inside that scope.
 
 ```go
-func ProfileControls() {
+func ProfileControls() *native.Node {
+	var children []*native.Node
 	colors, setColors := ui.CreateSignal([]string{"red"})
-	ui.Avatar.Root(
+	children = append(children, ui.Avatar.Root(
 		ui.AvatarRootProps{
 			PartProps:             ui.PartProps{AriaLabel: "Ada Lovelace"},
 			OnLoadingStatusChange: func(status string, _ *native.Event) { log.Print(status) },
 		},
-		func() {
-			ui.Avatar.Image(ui.AvatarImageProps{Src: "./ada.png"})
-			ui.Avatar.Fallback(ui.AvatarFallbackProps{Delay: 120}, "AL")
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Avatar.Image(ui.AvatarImageProps{Src: "./ada.png"}),
+				ui.Avatar.Fallback(ui.AvatarFallbackProps{Delay: 120}, "AL")})
 		},
-	)
-	ui.CheckboxGroup.Root(
+	))
+	children = append(children, ui.CheckboxGroup.Root(
 		ui.CheckboxGroupProps{
 			AllValues:     []string{"red", "green", "blue"},
 			Value:         colors,
 			OnValueChange: func(value []string, _ *native.Event) { setColors(value) },
 		},
-		func() {
-			ui.Checkbox.Root(ui.CheckboxProps{Parent: true}, "All colours")
-			ui.Checkbox.Root(ui.CheckboxProps{Value: "red"}, "Red")
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Checkbox.Root(ui.CheckboxProps{Parent: true}, "All colours"),
+				ui.Checkbox.Root(ui.CheckboxProps{Value: "red"}, "Red")})
 		},
-	)
+	))
+	return ui.Fragment(children)
 }
 ```
 

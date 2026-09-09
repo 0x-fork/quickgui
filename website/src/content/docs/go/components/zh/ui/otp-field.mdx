@@ -15,9 +15,9 @@ import (
 ## 用法
 
 ```go
-func OtpFieldExample() {
+func OtpFieldExample() *native.Node {
 	code, setCode := ui.CreateSignal("")
-	ui.OtpField.Root(
+	return ui.OtpField.Root(
 		ui.OtpFieldRootProps{
 			Value:          code,
 			Length:         6,
@@ -25,10 +25,12 @@ func OtpFieldExample() {
 			OnValueChange:  func(next string, _ *native.Event) { setCode(next) },
 			OnComplete:     func(value string, _ *native.Event) { fmt.Println("Complete:", value) },
 		},
-		func() {
+		func() *native.Node {
+			var children []*native.Node
 			for index := range 6 {
-				ui.OtpField.Input(ui.OtpFieldInputProps{Index: index})
+				children = append(children, ui.OtpField.Input(ui.OtpFieldInputProps{Index: index}))
 			}
+			return ui.Fragment(children)
 		},
 	)
 }

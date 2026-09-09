@@ -14,9 +14,9 @@ import (
 ## Usage
 
 ```go
-func DateFieldExample() {
+func DateFieldExample() *native.Node {
 	value, setValue := ui.CreateSignal[*string](nil)
-	ui.DateField.Root(
+	return ui.DateField.Root(
 		ui.DateFieldRootProps{
 			Value:         value,
 			Format:        "ymd",
@@ -24,10 +24,12 @@ func DateFieldExample() {
 			Max:           "2026-12-31",
 			OnValueChange: func(next *string, _ *native.Event) { setValue(next) },
 		},
-		func() {
+		func() *native.Node {
+			var children []*native.Node
 			for _, segment := range []string{"year", "month", "day"} {
-				ui.DateField.Segment(ui.DateFieldSegmentProps{Segment: segment})
+				children = append(children, ui.DateField.Segment(ui.DateFieldSegmentProps{Segment: segment}))
 			}
+			return ui.Fragment(children)
 		},
 	)
 }

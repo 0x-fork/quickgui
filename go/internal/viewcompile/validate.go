@@ -9,74 +9,83 @@ import (
 	"strings"
 )
 
-func calledObject(expr ast.Expr, info *types.Info) types.Object {
-	switch value := expr.(type) {
-	case *ast.Ident:
-		return info.Uses[value]
-	case *ast.SelectorExpr:
-		return info.Uses[value.Sel]
-	case *ast.IndexExpr:
-		return calledObject(value.X, info)
-	case *ast.IndexListExpr:
-		return calledObject(value.X, info)
-	case *ast.ParenExpr:
-		return calledObject(value.X, info)
-	}
-	return nil
-}
-
-func componentKey(obj types.Object) string {
-	fn, ok := obj.(*types.Func)
-	if !ok || fn.Pkg() == nil || fn.Type().(*types.Signature).Recv() != nil {
-		return ""
-	}
-	return fn.Pkg().Path() + "." + fn.Name()
-}
-
-// Validate catches unsupported factories in dynamically typed child positions.
-// Typed Component fields, branches, and list renderers are checked by Go itself.
-// Ordinary helpers may return node handles, but are not reactive components.
+// Validate checks the authored program before rewriting it. Node construction
+// has no implicit declaration side effects; each result needs an explicit use.
 func Validate(fs *token.FileSet, file *ast.File, info *types.Info) error {
 	var failures []error
-	var child func(ast.Expr)
-	child = func(expr ast.Expr) {
-		if len(failures) >= 20 {
-			return
-		}
-		if typ := info.TypeOf(expr); typ != nil {
-			if sig, ok := typ.Underlying().(*types.Signature); ok && sig.Results().Len() == 1 && element(sig.Results().At(0).Type()) {
-				failures = append(failures, fmt.Errorf("%s: UI construction callbacks must use func() and declare children implicitly; node-returning component factories are not supported", fs.Position(expr.Pos())))
-				return
-			}
-		}
-		if list, ok := expr.(*ast.CompositeLit); ok {
-			if _, slice := info.TypeOf(list).Underlying().(*types.Slice); slice {
-				for _, item := range list.Elts {
-					if pair, ok := item.(*ast.KeyValueExpr); ok {
-						item = pair.Value
-					}
-					child(item)
-				}
-			}
+	errAt := func(node ast.Node, message string) {
+		if len(failures) < 20 {
+			failures = append(failures, fmt.Errorf("%s: %s", fs.Position(node.Pos()), message))
 		}
 	}
-	ast.Inspect(file, func(node ast.Node) bool {
-		switch value := node.(type) {
+	var constructed func(ast.Expr) bool
+	constructed = func(expr ast.Expr) bool {
+		switch value := expr.(type) {
+		case *ast.ParenExpr:
+			return constructed(value.X)
 		case *ast.CallExpr:
-			obj := calledObject(value.Fun, info)
-			if obj == nil || obj.Pkg() == nil || obj.Pkg().Path() != uiPath {
-				break
-			}
-			if !element(info.TypeOf(value)) && obj.Name() != "Child" {
-				break
+			if !element(info.TypeOf(value)) {
+				return false
 			}
 			if selector, ok := value.Fun.(*ast.SelectorExpr); ok {
 				if selection := info.Selections[selector]; selection != nil && element(selection.Recv()) {
-					break
+					// Setters on an existing node are imperative mutations. A chain
+					// starting with a constructor still has an unused new node.
+					return constructed(selector.X)
 				}
 			}
+			return true
+		}
+		return false
+	}
+	voidCallback := func(expr ast.Expr) bool {
+		typ := info.TypeOf(expr)
+		if typ == nil {
+			return false
+		}
+		signature, ok := typ.Underlying().(*types.Signature)
+		return ok && signature.Results().Len() == 0
+	}
+	unused := func(expr ast.Expr) {
+		if constructed(expr) {
+			errAt(expr, "UI construction results must be returned, assigned to a node, or passed as children; implicit UI declarations are not supported.")
+		}
+	}
+	ast.Inspect(file, func(node ast.Node) bool {
+		if len(failures) >= 20 {
+			return false
+		}
+		switch value := node.(type) {
+		case *ast.ExprStmt:
+			unused(value.X)
+		case *ast.GoStmt:
+			unused(value.Call)
+		case *ast.DeferStmt:
+			unused(value.Call)
+		case *ast.AssignStmt:
+			for i, lhs := range value.Lhs {
+				if id, ok := lhs.(*ast.Ident); ok && id.Name == "_" && i < len(value.Rhs) {
+					unused(value.Rhs[i])
+				}
+			}
+		case *ast.ValueSpec:
+			for i, id := range value.Names {
+				if id.Name == "_" && i < len(value.Values) {
+					unused(value.Values[i])
+				}
+			}
+		case *ast.CallExpr:
+			obj := calledObject(value.Fun, info)
+			if obj == nil || obj.Pkg() == nil || obj.Pkg().Path() != uiPath || !element(info.TypeOf(value)) {
+				break
+			}
+			if selector, ok := value.Fun.(*ast.SelectorExpr); ok && info.Selections[selector] != nil && element(info.Selections[selector].Recv()) {
+				break
+			}
 			for _, arg := range value.Args {
-				child(arg)
+				if voidCallback(arg) {
+					errAt(arg, "UI construction callbacks must return *ui.Element or *native.Node; func() declaration blocks are not supported.")
+				}
 			}
 		case *ast.KeyValueExpr:
 			key, ok := value.Key.(*ast.Ident)
@@ -84,11 +93,11 @@ func Validate(fs *token.FileSet, file *ast.File, info *types.Info) error {
 				break
 			}
 			obj := info.Uses[key]
-			if obj != nil && obj.Pkg() != nil && strings.HasPrefix(obj.Pkg().Path(), "github.com/egoist/quickgui/go/") {
-				child(value.Value)
+			if obj != nil && obj.Pkg() != nil && strings.HasPrefix(obj.Pkg().Path(), "github.com/egoist/quickgui/go/") && voidCallback(value.Value) {
+				errAt(value.Value, "UI components and children callbacks must return a native node; implicit UI declarations are not supported.")
 			}
 		}
-		return len(failures) < 20
+		return true
 	})
 	return errors.Join(failures...)
 }

@@ -1,8 +1,8 @@
 # counter
 
-Implicit components, plain value props, fluent styles, signals, and multiple windows.
+Node-returning components, plain value props, fluent styles, signals, and multiple windows.
 
-The application is Go. Components use `func()` and declare their children implicitly. Pass them directly through `native.WindowOptions.Component`; plain value props and signal reads update individual retained nodes. The Rust shared library is loaded in process using purego.
+The application is Go. Components return `*ui.Element` or `*native.Node`. Pass them directly through `native.WindowOptions.Component`; plain value props and signal reads update individual retained nodes. The Rust shared library is loaded in process using purego.
 
 From the repository root:
 

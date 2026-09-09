@@ -15,29 +15,29 @@ import (
 ## 使い方
 
 ```go
-func MenuExample() {
-	ui.Menu.Root(
+func MenuExample() *native.Node {
+	return ui.Menu.Root(
 		ui.MenuRootProps{},
-		func() {
-			ui.Menu.Trigger(ui.MenuTriggerProps{}, "Actions")
-			ui.Menu.Positioner(
-				ui.MenuPositionerProps{},
-				func() {
-					ui.Menu.Popup(
-						ui.PartProps{},
-						func() {
-							ui.Menu.Item(
-								ui.MenuItemProps{
-									Value:     "copy",
-									Label:     "Copy",
-									PartProps: ui.PartProps{OnClick: func(*native.Event) { fmt.Println("Copy") }},
-								},
-								"Copy",
-							)
-						},
-					)
-				},
-			)
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Menu.Trigger(ui.MenuTriggerProps{}, "Actions"),
+				ui.Menu.Positioner(
+					ui.MenuPositionerProps{},
+					func() *native.Node {
+						return ui.Menu.Popup(
+							ui.PartProps{},
+							func() *native.Node {
+								return ui.Menu.Item(
+									ui.MenuItemProps{
+										Value:     "copy",
+										Label:     "Copy",
+										PartProps: ui.PartProps{OnClick: func(*native.Event) { fmt.Println("Copy") }},
+									},
+									"Copy",
+								)
+							},
+						)
+					},
+				)})
 		},
 	)
 }

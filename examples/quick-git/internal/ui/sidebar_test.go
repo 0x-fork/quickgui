@@ -16,18 +16,11 @@ func TestSidebarSelectionMovesWithoutRemountingRows(t *testing.T) {
 		selected, setSelected := gui.CreateSignal("Changes")
 		theme, _ := gui.CreateSignal(ThemeFor("light"))
 		var changes, history *native.Node
-		root := captureComponent(func() {
-			ProvideApp(AppContext{Theme: theme, Store: &model.Store{}}, func() {
-				gui.View(func() {
-					changes = captureComponent(func() {
-						navRow("Changes", func() bool { return selected() == "Changes" }, func() string { return "3" }, func() { setSelected("Changes") })
-					})
-					gui.Child(changes)
-					history = captureComponent(func() {
-						navRow("History", func() bool { return selected() == "History" }, func() string { return "" }, func() { setSelected("History") })
-					})
-					gui.Child(history)
-				})
+		root := captureComponent(func() *native.Node {
+			return ProvideApp(AppContext{Theme: theme, Store: &model.Store{}}, func() *gui.Element {
+				changes = navRow("Changes", func() bool { return selected() == "Changes" }, func() string { return "3" }, func() { setSelected("Changes") }).Node
+				history = navRow("History", func() bool { return selected() == "History" }, func() string { return "" }, func() { setSelected("History") }).Node
+				return gui.View(changes, history)
 			})
 		})
 		first := root.Children[0]

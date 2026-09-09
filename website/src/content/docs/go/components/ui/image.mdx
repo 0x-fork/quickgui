@@ -13,8 +13,8 @@ import (
 ## Usage
 
 ```go
-func ImageExample(path string) {
-	ui.Image().Value(path).ObjectFit("cover").Width(160).Height(120)
+func ImageExample(path string) *ui.Element {
+	return ui.Image().Value(path).ObjectFit("cover").Width(160).Height(120)
 }
 ```
 

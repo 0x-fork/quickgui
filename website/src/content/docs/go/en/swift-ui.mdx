@@ -5,11 +5,11 @@ The `ui.SwiftUI` family embeds real macOS controls in a Go application. Ordinary
 Create controls inside `ui.SwiftUI.Host`. The host defines the native view boundary and can size itself from its content.
 
 ```go
-func SwiftUiHostExample() {
-	ui.SwiftUI.Host(
+func SwiftUiHostExample() *native.Node {
+	return ui.SwiftUI.Host(
 		ui.SwiftUIHostProps{MatchContents: true},
-		func() {
-			ui.SwiftUI.Button(ui.SwiftUIButtonProps{Label: "Continue"})
+		func() *native.Node {
+			return ui.SwiftUI.Button(ui.SwiftUIButtonProps{Label: "Continue"})
 		},
 	)
 }
@@ -24,12 +24,12 @@ Available controls include Button, Slider, Toggle, ProgressView, Stepper, TextFi
 Bind an accessor and store the value returned by the native callback. A SwiftUI control and a QuickGUI node can share the same signal. DatePicker uses Unix timestamps in milliseconds.
 
 ```go
-func SwiftUiToggleExample() {
+func SwiftUiToggleExample() *native.Node {
 	on, setOn := ui.CreateSignal(true)
-	ui.SwiftUI.Host(
+	return ui.SwiftUI.Host(
 		ui.SwiftUIHostProps{MatchContents: true},
-		func() {
-			ui.SwiftUI.Toggle(ui.SwiftUIToggleProps{
+		func() *native.Node {
+			return ui.SwiftUI.Toggle(ui.SwiftUIToggleProps{
 				IsOn:         on,
 				Label:        "Notifications",
 				OnIsOnChange: func(next bool, _ *native.Event) { setOn(next) },

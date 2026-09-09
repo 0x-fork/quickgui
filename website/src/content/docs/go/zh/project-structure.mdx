@@ -16,15 +16,14 @@ my-app/
 
 ## 应用入口
 
-`main.go` 启动 `native.Run` 并创建窗口。组件和子节点块统一使用 `func()`，按顺序声明子节点，无需返回节点。较大的应用可拆分为普通 Go 包。
+`main.go` 启动 `native.Run` 并创建窗口。组件与延迟构建回调返回 `*ui.Element` 或 `*native.Node`。所有构建的节点必须返回、赋值或传给父节点；不支持隐式声明块。较大的应用可拆分为普通 Go 包。
 
 ```go
-func ViewExample() {
-	ui.View(
-		func() {
-			ui.Text("Hello from Go")
-			ui.Button("Continue").OnClick(func() {})
-		},
+func ViewExample() *ui.Element {
+	return ui.View(
+
+		ui.Text("Hello from Go"),
+		ui.Button("Continue").OnClick(func() {}),
 	).Padding(20).Gap(12)
 }
 ```

@@ -16,15 +16,14 @@ my-app/
 
 ## アプリケーションのエントリ
 
-`main.go` で `native.Run` を開始し、ウィンドウを作成します。コンポーネントと子要素ブロックは同じ `func()` を使い、ノードを返さずに子を順番に宣言します。大きなアプリは通常の Go パッケージに分割できます。
+`main.go` で `native.Run` を開始し、ウィンドウを作成します。コンポーネントと遅延構築コールバックは `*ui.Element` または `*native.Node` を返します。構築したノードは返す、変数に保存する、親へ渡す必要があります。暗黙の宣言ブロックは使えません。
 
 ```go
-func ViewExample() {
-	ui.View(
-		func() {
-			ui.Text("Hello from Go")
-			ui.Button("Continue").OnClick(func() {})
-		},
+func ViewExample() *ui.Element {
+	return ui.View(
+
+		ui.Text("Hello from Go"),
+		ui.Button("Continue").OnClick(func() {}),
 	).Padding(20).Gap(12)
 }
 ```

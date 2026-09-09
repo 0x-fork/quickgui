@@ -21,46 +21,45 @@ var icons = map[string]string{
 	"warning-circle": `<circle cx="12" cy="12" r="8"/><path d="M12 8v4.5M12 16h.01"/>`,
 }
 
-func icon(name string, size float64, color func() string) {
-	dynamicIcon(func() string { return name }, size, color)
+func icon(name string, size float64, color func() string) *ui.Element {
+	return dynamicIcon(func() string { return name }, size, color)
 }
-func dynamicIcon(name func() string, size float64, color func() string) {
-	ui.SVG().Width(size).Height(size).FlexShrink(0).Value(func() string {
+func dynamicIcon(name func() string, size float64, color func() string) *ui.Element {
+	return ui.SVG().Width(size).Height(size).FlexShrink(0).Value(func() string {
 		return strings.ReplaceAll(svgFrame+icons[name()]+"</svg>", "currentColor", color())
 	})
 
 }
-func statusGlyph(m *model, status func() string, compact bool) {
+func statusGlyph(m *model, status func() string, compact bool) *ui.Element {
 	size := choose(compact, 12.0, 14.0)
-	ui.View(
-		func() {
-			dynamicIcon(func() string {
-				switch status() {
-				case "blocked":
-					return "warning-circle"
-				case "working":
-					return "loader"
-				case "idle":
-					return "check-circle"
-				}
-				return "circle"
-			}, size-1, func() string {
-				switch status() {
-				case "blocked":
-					return m.theme().Danger
-				case "working":
-					return m.theme().Working
-				case "idle":
-					return m.theme().Success
-				}
-				return m.theme().TextGhost
-			})
-		},
+	return ui.View(
+
+		dynamicIcon(func() string {
+			switch status() {
+			case "blocked":
+				return "warning-circle"
+			case "working":
+				return "loader"
+			case "idle":
+				return "check-circle"
+			}
+			return "circle"
+		}, size-1, func() string {
+			switch status() {
+			case "blocked":
+				return m.theme().Danger
+			case "working":
+				return m.theme().Working
+			case "idle":
+				return m.theme().Success
+			}
+			return m.theme().TextGhost
+		}),
 	).Display("flex").Width(size).Height(size).FlexShrink(0).AlignItems("center").JustifyContent("center")
 }
-func iconButton(m *model, label, name string, size float64, click func(), options ...any) {
+func iconButton(m *model, label, name string, size float64, click func(), options ...any) *ui.Element {
 	args := []any{ui.AriaLabel(label), ui.FocusOnPointer(ptr(false)), m.iconStyle(size), ui.OnClick(click)}
 	args = append(args, options...)
-	args = append(args, func() { icon(name, 14, m.color(func(t theme) string { return t.TextTertiary })) })
-	ui.Button(args...)
+	args = append(args, func() *ui.Element { return icon(name, 14, m.color(func(t theme) string { return t.TextTertiary })) })
+	return ui.Button(args...)
 }

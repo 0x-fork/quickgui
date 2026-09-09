@@ -14,9 +14,9 @@ import (
 ## Usage
 
 ```go
-func ComboboxExample() {
+func ComboboxExample() *native.Node {
 	value, setValue := ui.CreateSignal[*string](nil)
-	ui.Combobox.Root(ui.ComboboxRootProps{
+	return ui.Combobox.Root(ui.ComboboxRootProps{
 		PickerInputProps: ui.PickerInputProps{
 			PickerSourceProps: ui.PickerSourceProps{Items: func() []ui.OptionDeclaration {
 				return []ui.OptionDeclaration{{Value: "go", Label: "Go"}, {Value: "swift", Label: "Swift"}}

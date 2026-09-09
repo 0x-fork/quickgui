@@ -7,24 +7,22 @@ import (
 	"github.com/egoist/quickgui/go/ui"
 )
 
-func run(options native.WindowOptions, component func()) {
+func run(options native.WindowOptions, component ui.Component) {
 	options.Background = "#0b0e14"
 	options.TitleBarStyle = "hiddenInset"
 	options.TrafficLightPosition = &native.Point{X: 16, Y: 14}
-	options.Component = func() {
-		ui.View(
-			func() {
-				ui.View(
-					func() {
-						ui.Text(
-							options.Title,
-						).FontSize(14).FontWeight(600)
-					},
-				).Display("flex").Height(52).FlexShrink(0).AlignItems("center").JustifyContent("center").AppRegion("drag").BorderColor("#1f2530").BorderBottomWidth(1)
-				ui.View(
-					component,
-				).Display("flex").Flex(1).MinHeight(0).Padding(36).AlignItems("center").JustifyContent("center").OverflowY("auto")
-			},
+	options.Component = func() *ui.Element {
+		return ui.View(
+
+			ui.View(
+
+				ui.Text(
+					options.Title,
+				).FontSize(14).FontWeight(600),
+			).Display("flex").Height(52).FlexShrink(0).AlignItems("center").JustifyContent("center").AppRegion("drag").BorderColor("#1f2530").BorderBottomWidth(1),
+			ui.View(
+				component,
+			).Display("flex").Flex(1).MinHeight(0).Padding(36).AlignItems("center").JustifyContent("center").OverflowY("auto"),
 		).Display("flex").FlexDirection("column").Width("100%").Height("100%").BackgroundColor("#0b0e14").TextColor("#f4f7fb")
 	}
 	if err := native.Run(func() {
@@ -70,22 +68,21 @@ var buttonStyle = ui.Style().
 	UserSelect("none").
 	Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor("#30394a") })
 
-func button(label string, disabled func() bool, click func()) {
-	ui.Button(label).Style(buttonStyle).Disabled(disabled()).OnClick(click)
+func button(label string, disabled func() bool, click func()) *ui.Element {
+	return ui.Button(label).Style(buttonStyle).Disabled(disabled()).OnClick(click)
 }
 
-func dialogStatus(status func() string, pending func() bool) {
-	ui.View(
-		func() {
-			ui.Text(
-				status(),
-			).FontSize(13).LineHeight(19).TextAlign("center").UserSelect("text").
-				TextColor(func() string {
-					if pending() {
-						return "#c7d2fe"
-					}
-					return "#aeb9c9"
-				})
-		},
+func dialogStatus(status func() string, pending func() bool) *ui.Element {
+	return ui.View(
+
+		ui.Text(
+			status(),
+		).FontSize(13).LineHeight(19).TextAlign("center").UserSelect("text").
+			TextColor(func() string {
+				if pending() {
+					return "#c7d2fe"
+				}
+				return "#aeb9c9"
+			}),
 	).Display("flex").MinHeight(64).AlignItems("center").JustifyContent("center").Padding(14).BackgroundColor("#0f131a").BorderColor("#252c38").BorderWidth(1).BorderRadius(9)
 }

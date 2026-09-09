@@ -5,25 +5,25 @@
 Popover 由触发器、定位器和弹出内容组成。方向是偏好值，核心负责处理碰撞；可在根内通过 `ui.UsePopoverPlacement` 读取最终位置。
 
 ```go
-func PopoverExample() {
-	ui.Popover.Root(
+func PopoverExample() *native.Node {
+	return ui.Popover.Root(
 		ui.PopoverRootProps{},
-		func() {
-			ui.Popover.Trigger(ui.PopoverTriggerProps{}, "Account")
-			ui.Popover.Positioner(
-				ui.PopoverPositionerProps{},
-				func() {
-					ui.Popover.Popup(
-						ui.PopoverPopupProps{PartProps: ui.PartProps{Style: ui.Style().
-							Width(240).
-							Padding(16)}},
-						func() {
-							ui.Popover.Title(ui.PartProps{}, "Account")
-							ui.Popover.Close(ui.PartProps{}, "Done")
-						},
-					)
-				},
-			)
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Popover.Trigger(ui.PopoverTriggerProps{}, "Account"),
+				ui.Popover.Positioner(
+					ui.PopoverPositionerProps{},
+					func() *native.Node {
+						return ui.Popover.Popup(
+							ui.PopoverPopupProps{PartProps: ui.PartProps{Style: ui.Style().
+								Width(240).
+								Padding(16)}},
+							func() *native.Node {
+								return ui.Fragment([]*native.Node{ui.Popover.Title(ui.PartProps{}, "Account"),
+									ui.Popover.Close(ui.PartProps{}, "Done")})
+							},
+						)
+					},
+				)})
 		},
 	)
 }
@@ -34,33 +34,33 @@ func PopoverExample() {
 在 `Dialog.Portal` 下创建模态内容。`Dialog.Title` 和 `Dialog.Description` 提供无障碍名称与描述。`AlertDialog` 增加确认语义。受控根会收到新的打开状态及其原因。
 
 ```go
-func DialogExample() {
-	ui.Dialog.Root(
+func DialogExample() *native.Node {
+	return ui.Dialog.Root(
 		ui.DialogRootProps{},
-		func() {
-			ui.Dialog.Trigger(ui.PartProps{}, "Open dialog")
-			ui.Dialog.Portal(
-				ui.PartProps{},
-				func() {
-					ui.Dialog.Backdrop(ui.PartProps{})
-					ui.Dialog.Viewport(
-						ui.PartProps{},
-						func() {
-							ui.Dialog.Popup(
-								ui.DialogPopupProps{},
-								func() {
-									ui.Dialog.Title(ui.PartProps{}, "Confirm action")
-									ui.Dialog.Description(
-										ui.PartProps{},
-										"Review the details before continuing.",
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Dialog.Trigger(ui.PartProps{}, "Open dialog"),
+				ui.Dialog.Portal(
+					ui.PartProps{},
+					func() *native.Node {
+						return ui.Fragment([]*native.Node{ui.Dialog.Backdrop(ui.PartProps{}),
+							ui.Dialog.Viewport(
+								ui.PartProps{},
+								func() *native.Node {
+									return ui.Dialog.Popup(
+										ui.DialogPopupProps{},
+										func() *native.Node {
+											return ui.Fragment([]*native.Node{ui.Dialog.Title(ui.PartProps{}, "Confirm action"),
+												ui.Dialog.Description(
+													ui.PartProps{},
+													"Review the details before continuing.",
+												),
+												ui.Dialog.Close(ui.PartProps{}, "Cancel")})
+										},
 									)
-									ui.Dialog.Close(ui.PartProps{}, "Cancel")
 								},
-							)
-						},
-					)
-				},
-			)
+							)})
+					},
+				)})
 		},
 	)
 }
@@ -71,19 +71,19 @@ func DialogExample() {
 `ui.SystemPopover` 将内容托管在操作系统浮窗中。指定逻辑宽高，然后声明普通 QuickGUI 子节点。
 
 ```go
-func SystemPopoverExample() {
-	ui.SystemPopover.Root(
+func SystemPopoverExample() *native.Node {
+	return ui.SystemPopover.Root(
 		ui.PopoverRootProps{},
-		func() {
-			ui.SystemPopover.Trigger(ui.PopoverTriggerProps{}, "Account")
-			ui.SystemPopover.Content(
-				ui.PopoverContentProps{
-					Width:     240,
-					Height:    120,
-					Placement: "bottom-start",
-				},
-				"Account settings",
-			)
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.SystemPopover.Trigger(ui.PopoverTriggerProps{}, "Account"),
+				ui.SystemPopover.Content(
+					ui.PopoverContentProps{
+						Width:     240,
+						Height:    120,
+						Placement: "bottom-start",
+					},
+					"Account settings",
+				)})
 		},
 	)
 }
@@ -94,9 +94,9 @@ func SystemPopoverExample() {
 原生对话框使用异步回调。在渲染时捕获父窗口，并明确传给请求。取消打开面板时返回 `Canceled: true`。
 
 ```go
-func OpenFolderButton() {
+func OpenFolderButton() *ui.Element {
 	window := native.CurrentWindow()
-	ui.Button(
+	return ui.Button(
 		"Open folder",
 	).OnClick(func() {
 		native.ShowOpenDialog(

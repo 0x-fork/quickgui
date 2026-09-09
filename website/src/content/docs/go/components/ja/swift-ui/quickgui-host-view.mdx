@@ -13,14 +13,14 @@ import (
 ## 使い方
 
 ```go
-func SwiftUiQuickguiHostViewExample() {
-	ui.SwiftUI.Host(
+func SwiftUiQuickguiHostViewExample() *native.Node {
+	return ui.SwiftUI.Host(
 		ui.SwiftUIHostProps{MatchContents: true},
-		func() {
-			ui.SwiftUI.QuickGUIHostView(
+		func() *native.Node {
+			return ui.SwiftUI.QuickGUIHostView(
 				ui.SwiftUIQuickGUIHostViewProps{Width: 320, Height: 180},
-				func() {
-					ui.View(
+				func() *ui.Element {
+					return ui.View(
 						"QuickGUI inside SwiftUI",
 					).Width("100%").Height("100%").Padding(16)
 				},

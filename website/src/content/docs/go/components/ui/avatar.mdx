@@ -13,12 +13,12 @@ import (
 ## Usage
 
 ```go
-func AvatarExample(path string) {
-	ui.Avatar.Root(
+func AvatarExample(path string) *native.Node {
+	return ui.Avatar.Root(
 		ui.AvatarRootProps{PartProps: ui.PartProps{AriaLabel: "Ada Lovelace"}},
-		func() {
-			ui.Avatar.Image(ui.AvatarImageProps{Src: path})
-			ui.Avatar.Fallback(ui.AvatarFallbackProps{}, "AL")
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Avatar.Image(ui.AvatarImageProps{Src: path}),
+				ui.Avatar.Fallback(ui.AvatarFallbackProps{}, "AL")})
 		},
 	)
 }

@@ -10,26 +10,25 @@ import (
 	"github.com/egoist/quickgui/go/reactive"
 )
 
-func TestReturningChildFactoriesAreUnsupported(t *testing.T) {
-	type namedFactory func() *Element
-	for name, factory := range map[string]any{
-		"element": func() *Element { return Text("unused") },
-		"node":    func() *native.Node { return native.CreateText("unused") },
-		"named":   namedFactory(func() *Element { return Text("unused") }),
+func TestVoidConstructionCallbacksAreUnsupported(t *testing.T) {
+	for name, mount := range map[string]func(){
+		"view":          func() { View(func() {}) },
+		"hidden branch": func() { Show(false, func() {}) },
+		"rows":          func() { For(func() []int { return []int{1} }, func(int) {}, nil, nil) },
 	} {
 		t.Run(name, func(t *testing.T) {
 			defer func() {
 				failure := recover()
-				if failure == nil || !strings.Contains(fmt.Sprint(failure), "unsupported QuickGUI child") {
-					t.Fatalf("returning factory was accepted: %v", failure)
+				if failure == nil || !strings.Contains(fmt.Sprint(failure), "must return") {
+					t.Fatalf("void callback was accepted: %v", failure)
 				}
 			}()
-			View(factory)
+			mount()
 		})
 	}
 }
 
-func TestDeclaredChildrenRetainContextAndCleanupWithoutWrapperNodes(t *testing.T) {
+func TestReturnedChildFactoriesRetainContextAndCleanupWithoutWrapperNodes(t *testing.T) {
 	native.ResetTreeStateForTests()
 	reactive.CreateRoot(func(dispose func()) struct{} {
 		defer dispose()
@@ -38,18 +37,19 @@ func TestDeclaredChildrenRetainContextAndCleanupWithoutWrapperNodes(t *testing.T
 		builds, cleaned := 0, 0
 		var child *Element
 		root := reactive.Provide(context, "inside", func() *Element {
-			return View(func() {
+			return View(func() *Element {
 				builds++
 				OnCleanup(func() { cleaned++ })
 				child = Text(context.Use(), value)
+				return child
 			})
 		})
 		if len(root.Children) != 1 || root.Children[0] != child.Node {
-			t.Fatal("declaring a child added a wrapper node")
+			t.Fatal("returning a child added a wrapper node")
 		}
 		setValue("two")
 		if builds != 1 || !reflect.DeepEqual(blockText(root.Node), []string{"inside", "two"}) {
-			t.Fatal("declared child lost context or remounted")
+			t.Fatal("returned child lost context or remounted")
 		}
 		parent := View(root)
 		native.RemoveNode(parent.Node, root.Node)
@@ -60,7 +60,7 @@ func TestDeclaredChildrenRetainContextAndCleanupWithoutWrapperNodes(t *testing.T
 	})
 }
 
-func TestDeclaredConditionalAndKeyedComponentsKeepIdentity(t *testing.T) {
+func TestReturnedConditionalAndKeyedComponentsKeepIdentity(t *testing.T) {
 	native.ResetTreeStateForTests()
 	reactive.CreateRoot(func(dispose func()) struct{} {
 		defer dispose()
@@ -72,43 +72,45 @@ func TestDeclaredConditionalAndKeyedComponentsKeepIdentity(t *testing.T) {
 		visible, setVisible := CreateSignal(true)
 		mounted, cleaned := 0, 0
 		refs := map[int]*native.Node{}
-		root := View(Show(visible, func() {
-			View(KeyedFor(items, func(value item) any { return value.ID }, func(read func() item, _ func() int) {
+		root := View(Show(visible, func() *Element {
+			return View(KeyedFor(items, func(value item) any { return value.ID }, func(read func() item) *Element {
 				mounted++
 				OnCleanup(func() { cleaned++ })
 				node := Text(func() string { return read().Name })
 				refs[read().ID] = node.Node
+				return node
 			}, nil))
 		}))
 		first := refs[1]
 		setItems([]item{{2, "second"}, {1, "first"}})
 		if mounted != 2 || refs[1] != first || !reflect.DeepEqual(blockText(root.Node), []string{"second", "first"}) {
-			t.Fatal("keyed rows lost identity")
+			t.Fatal("returning keyed rows lost identity")
 		}
 		setVisible(false)
 		if cleaned != 2 {
-			t.Fatal("lazy rows leaked their owners")
+			t.Fatal("returned lazy rows leaked their owners")
 		}
 		setVisible(true)
 		if mounted != 4 {
-			t.Fatal("the branch did not remount")
+			t.Fatal("the returned branch did not remount")
 		}
 		return struct{}{}
 	})
 }
 
-func TestProviderChildrenParticipateInDeclarationBlocks(t *testing.T) {
+func TestReturnedProviderChildRemainsTheMountedRoot(t *testing.T) {
 	native.ResetTreeStateForTests()
 	reactive.CreateRoot(func(dispose func()) struct{} {
 		defer dispose()
 		var child *Element
-		roots := native.CollectChildren(func() {
-			Toast.Provider(ToastProviderProps{}, func() {
+		roots := native.CollectChildren(func() *native.Node {
+			return Toast.Provider(ToastProviderProps{}, func() *Element {
 				child = Text("provider child")
+				return child
 			})
 		})
-		if len(roots) != 1 || len(roots[0].Group) != 1 || roots[0].Group[0] != child.Node {
-			t.Fatal("a provider child disappeared from its enclosing declaration block")
+		if len(roots) != 1 || roots[0] != child.Node {
+			t.Fatal("a returned provider child disappeared from its enclosing component")
 		}
 		return struct{}{}
 	})

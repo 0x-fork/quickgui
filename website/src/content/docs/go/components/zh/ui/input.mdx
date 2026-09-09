@@ -14,9 +14,9 @@ import (
 ## 用法
 
 ```go
-func InputExample() {
+func InputExample() *ui.Element {
 	value, setValue := ui.CreateSignal("")
-	ui.Input().
+	return ui.Input().
 		Value(value()).
 		Placeholder("Write here").
 		OnInputEvent(func(event *native.Event) { setValue(event.Value) }).

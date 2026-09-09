@@ -8,12 +8,13 @@ Go applications load one QuickGUI core shared library through purego. Optional b
 
 ```go
 import (
+	"github.com/egoist/quickgui/go/native"
 	"github.com/egoist/quickgui/go/terminal"
 	"github.com/egoist/quickgui/go/ui"
 )
 
-func Console() {
-	terminal.View(terminal.Props{
+func Console() *native.Node {
+	return terminal.View(terminal.Props{
 		Program: "/bin/zsh",
 		Args:    []string{"-l"},
 		Props: ui.Props{

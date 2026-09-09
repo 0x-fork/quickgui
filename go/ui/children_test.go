@@ -19,21 +19,25 @@ func TestKeyedComponentsRetainMultipleRootsAndDisposeRemovedRows(t *testing.T) {
 		items, setItems := CreateSignal([]item{{1, "one"}, {2, "two"}})
 		mounts, cleanups, fallbackMounts, fallbackCleanups := 0, 0, 0, 0
 		refs := map[int]*native.Node{}
-		root := View(func() {
-			Text("before")
-			KeyedFor(items, func(i item) any { return i.ID }, func(read func() item, index func() int) {
-				mounts++
-				id := read().ID
-				OnCleanup(func() { cleanups++ })
-				Text(Ref(func(node *native.Node) { refs[id] = node }), func() string { return read().Label })
-				Text(index)
-			}, func() {
-				fallbackMounts++
-				OnCleanup(func() { fallbackCleanups++ })
-				Text("empty")
-				Text("add an item")
-			})
-			Text("after")
+		root := View(func() *native.Node {
+			return Fragment([]*native.Node{Text("before").Node,
+				KeyedFor(items, func(i item) any { return i.ID }, func(read func() item, index func() int) *native.Node {
+					var children_ []*native.Node
+					mounts++
+					id := read().ID
+					OnCleanup(func() { cleanups++ })
+					children_ = append(children_, Text(Ref(func(node *native.Node) { refs[id] = node }), func() string { return read().Label }).Node)
+					children_ = append(children_, Text(index).Node)
+					return Fragment(children_)
+				}, func() *native.Node {
+					var children_ []*native.Node
+					fallbackMounts++
+					OnCleanup(func() { fallbackCleanups++ })
+					children_ = append(children_, Text("empty").Node)
+					children_ = append(children_, Text("add an item").Node)
+					return Fragment(children_)
+				}),
+				Text("after").Node})
 		})
 		first := refs[1]
 		setItems([]item{{2, "second"}, {1, "first"}})
@@ -66,16 +70,16 @@ func TestChildrenBlocksPreserveNestingAndFineGrainedUpdates(t *testing.T) {
 		value, setValue := CreateSignal("first")
 		mounts := 0
 		var nested *native.Node
-		root := View(Props{}, func() {
+		build := func() *Element {
 			mounts++
-			Text(Props{}, "before")
-			nested = View(Props{}, func() {
+			nestedView := func() *Element {
 				mounts++
-				Text(Props{}, value)
-				Button(Props{}, "Increment")
-			}).Node
-			Text(Props{}, "after")
-		})
+				return View(Text(value), Button("Increment"))
+			}
+			nested = nestedView().Node
+			return View(Text("before"), nested, Text("after"))
+		}
+		root := build()
 		before := root.Pending.MutationCount()
 		Batch(func() { setValue("second"); setValue("third") })
 		if mounts != 2 || len(root.Children) != 3 || root.Children[1] != nested || len(nested.Children) != 2 {
@@ -93,15 +97,19 @@ func TestChildrenBlocksHandleLazyRegionsAndComponentHelpers(t *testing.T) {
 		defer dispose()
 		visible, setVisible := CreateSignal(true)
 		created := 0
-		helper := func() { Text(Props{}, "helper") }
-		root := View(Props{}, func() {
-			helper()
-			Show(visible, func() {
+		helper := func() *Element { return Text(Props{}, "helper") }
+		root := View(Props{}, func() *native.Node {
+			var children_ []*native.Node
+			children_ = append(children_, helper().Node)
+			children_ = append(children_, Show(visible, func() *native.Node {
+				var children_ []*native.Node
 				created++
-				Text(Props{}, "one")
-				Text(Props{}, "two")
-			})
-			Text(Props{}, "end")
+				children_ = append(children_, Text(Props{}, "one").Node)
+				children_ = append(children_, Text(Props{}, "two").Node)
+				return Fragment(children_)
+			}))
+			children_ = append(children_, Text(Props{}, "end").Node)
+			return Fragment(children_)
 		})
 		if got := blockText(root.Node); !reflect.DeepEqual(got, []string{"helper", "one", "two", "end"}) {
 			t.Fatal(got)
@@ -124,13 +132,13 @@ func TestCompoundChildrenInheritContextAndDisposeEffects(t *testing.T) {
 		value, setValue := CreateSignal(0)
 		effects, cleanups := 0, 0
 		parent := View(Props{})
-		root := Tabs.Root(TabsRootProps{DefaultValue: "one"}, func() {
-			Tabs.List(PartProps{}, func() { Tabs.Tab(TabsTabProps{Value: "one"}, "One") })
-			Tabs.Panel(TabsPanelProps{Value: "one"}, func() {
-				CreateRenderEffect(func() { _ = value(); effects++ })
-				OnCleanup(func() { cleanups++ })
-				Text(Props{}, "panel")
-			})
+		root := Tabs.Root(TabsRootProps{DefaultValue: "one"}, func() *native.Node {
+			return Fragment([]*native.Node{Tabs.List(PartProps{}, func() *native.Node { return Tabs.Tab(TabsTabProps{Value: "one"}, "One") }),
+				Tabs.Panel(TabsPanelProps{Value: "one"}, func() *Element {
+					CreateRenderEffect(func() { _ = value(); effects++ })
+					OnCleanup(func() { cleanups++ })
+					return Text(Props{}, "panel")
+				})})
 		})
 		native.InsertNode(parent.Node, root, nil)
 		setValue(1)
@@ -144,15 +152,12 @@ func TestCompoundChildrenInheritContextAndDisposeEffects(t *testing.T) {
 }
 
 func TestChildrenBlockRestoresBuilderAfterPanic(t *testing.T) {
-	func() {
+	func() *Element {
 		defer func() { _ = recover() }()
-		View(Props{}, func() { panic("interrupted build") })
+		return View(Props{}, func() *Element { panic("interrupted build") })
 	}()
 	prebuilt := Text(Props{}, "existing")
-	root := View(Props{}, func() {
-		Child(prebuilt)
-		Child(Text(Props{}, "new"))
-	})
+	root := View(Props{}, prebuilt, Text(Props{}, "new"))
 	if len(root.Children) != 2 || root.Children[0] != prebuilt.Node {
 		t.Fatal("the builder leaked or declared a child twice")
 	}
@@ -163,15 +168,15 @@ func TestDynamicViewSelectionPreservesChildBindings(t *testing.T) {
 		selected, setSelected := CreateSignal(false)
 		value, setValue := CreateSignal("first")
 		mounts, cleanups := 0, 0
-		component := func() {
+		component := func() *Element {
 			mounts++
 			OnCleanup(func() { cleanups++ })
-			Text(value)
+			return Text(value)
 		}
-		root := View(func() {
-			Dynamic(func() Component {
+		root := View(func() *native.Node {
+			return Dynamic(func() Component {
 				if selected() {
-					return func() { Text("other view") }
+					return func() *Element { return Text("other view") }
 				}
 				return component
 			})

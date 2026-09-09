@@ -418,9 +418,10 @@ func createSystemContent(props PopoverContentProps, state *popoverState) *native
 				ViewportMargin:          &margin,
 				DismissOnEscape:         &escape,
 				DismissOnPointerOutside: &outside,
-				Component: func() {
+				Component: func() *native.Node {
 					node := createViewPart(props.PartProps)
 					finishPart(node, props.PartProps)
+					return node
 				},
 			})
 		})
@@ -470,8 +471,8 @@ func (popoverAPI) Content(props PopoverContentProps, children ...any) *native.No
 	props.Children = withPartChildren(props.Children, children)
 
 	state := requirePopover(popoverSurfaceInWindow, "Popover.Content")
-	return Show(func() bool { return state.isOpen() && state.currentAnchor() != nil }, func() {
-		createInWindowContent(props, state)
+	return Show(func() bool { return state.isOpen() && state.currentAnchor() != nil }, func() *native.Node {
+		return createInWindowContent(props, state)
 	})
 }
 
@@ -576,8 +577,8 @@ func (systemPopoverAPI) Content(props PopoverContentProps, children ...any) *nat
 	props.Children = withPartChildren(props.Children, children)
 
 	state := requirePopover(popoverSurfaceSystem, "SystemPopover.Content")
-	return Show(func() bool { return state.isOpen() && state.currentAnchor() != nil }, func() {
-		createSystemContent(props, state)
+	return Show(func() bool { return state.isOpen() && state.currentAnchor() != nil }, func() *native.Node {
+		return createSystemContent(props, state)
 	})
 }
 

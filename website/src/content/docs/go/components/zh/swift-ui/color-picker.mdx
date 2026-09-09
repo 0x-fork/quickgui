@@ -14,12 +14,12 @@ import (
 ## 用法
 
 ```go
-func SwiftUiColorPickerExample() {
+func SwiftUiColorPickerExample() *native.Node {
 	value, setValue := ui.CreateSignal("#2563ebff")
-	ui.SwiftUI.Host(
+	return ui.SwiftUI.Host(
 		ui.SwiftUIHostProps{MatchContents: true},
-		func() {
-			ui.SwiftUI.ColorPicker(ui.SwiftUIColorPickerProps{
+		func() *native.Node {
+			return ui.SwiftUI.ColorPicker(ui.SwiftUIColorPickerProps{
 				Selection:         value,
 				Label:             "Accent",
 				SupportsOpacity:   true,

@@ -14,12 +14,12 @@ import (
 ## Usage
 
 ```go
-func SwiftUiSegmentedControlExample() {
+func SwiftUiSegmentedControlExample() *native.Node {
 	value, setValue := ui.CreateSignal("list")
-	ui.SwiftUI.Host(
+	return ui.SwiftUI.Host(
 		ui.SwiftUIHostProps{MatchContents: true},
-		func() {
-			ui.SwiftUI.SegmentedControl(ui.SwiftUISegmentedControlProps{
+		func() *native.Node {
+			return ui.SwiftUI.SegmentedControl(ui.SwiftUISegmentedControlProps{
 				Selection:         value,
 				Options:           []ui.SwiftUIPickerOption{{Value: "list", Label: "List"}, {Value: "grid", Label: "Grid"}},
 				OnSelectionChange: func(next string, _ *native.Event) { setValue(next) },

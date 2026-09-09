@@ -13,27 +13,27 @@ import (
 ## 用法
 
 ```go
-func SwiftUiPopoverExample() {
+func SwiftUiPopoverExample() *native.Node {
 	open, setOpen := ui.CreateSignal(false)
-	ui.SwiftUI.Host(
+	return ui.SwiftUI.Host(
 		ui.SwiftUIHostProps{MatchContents: true},
-		func() {
-			ui.SwiftUI.Popover.Root(
+		func() *native.Node {
+			return ui.SwiftUI.Popover.Root(
 				ui.SwiftUIPopoverProps{
 					IsPresented:         open,
 					OnIsPresentedChange: setOpen,
 				},
-				func() {
-					ui.SwiftUI.Popover.Trigger(ui.SwiftUIPopoverTriggerProps{Render: func() { ui.SwiftUI.Button(ui.SwiftUIButtonProps{Label: "Account"}) }})
-					ui.SwiftUI.Popover.Content(
-						ui.SwiftUIPopoverContentProps{},
-						func() {
-							ui.SwiftUI.QuickGUIHostView(
-								ui.SwiftUIQuickGUIHostViewProps{Width: 240, Height: 120},
-								"Account settings",
-							)
-						},
-					)
+				func() *native.Node {
+					return ui.Fragment([]*native.Node{ui.SwiftUI.Popover.Trigger(ui.SwiftUIPopoverTriggerProps{Render: func() *native.Node { return ui.SwiftUI.Button(ui.SwiftUIButtonProps{Label: "Account"}) }}),
+						ui.SwiftUI.Popover.Content(
+							ui.SwiftUIPopoverContentProps{},
+							func() *native.Node {
+								return ui.SwiftUI.QuickGUIHostView(
+									ui.SwiftUIQuickGUIHostViewProps{Width: 240, Height: 120},
+									"Account settings",
+								)
+							},
+						)})
 				},
 			)
 		},

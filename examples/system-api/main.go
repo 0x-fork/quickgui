@@ -52,7 +52,7 @@ func main() {
 	}
 }
 
-func SystemAPIs() {
+func SystemAPIs() *ui.Element {
 	window := native.CurrentWindow()
 	status, setStatus := ui.CreateSignal("Primary instance")
 	busy, setBusy := ui.CreateSignal(false)
@@ -92,45 +92,44 @@ func SystemAPIs() {
 			{Label: "Minimize", Role: "minimize-window"}, {Label: "Close", Role: "close-window"},
 		}},
 	})
-	ui.View(
-		func() {
-			ui.View(
-				"Native system APIs",
-			).Display("flex").Height(52).FlexShrink(0).AlignItems("center").JustifyContent("center").FontSize(14).FontWeight(600).AppRegion("drag").BorderColor("#1f2530").BorderBottomWidth(1)
-			ui.View(
-				func() {
-					ui.Text(
-						"Native integrations",
-					).FontSize(26).LineHeight(32).FontWeight(700)
-					ui.Text(
-						"Typed Go APIs for application state, desktop services, notifications, and native resources.",
-					).TextColor("#9aa6b7").FontSize(14).LineHeight(21)
-					ui.View(
-						func() {
-							for _, item := range state.actions() {
-								ui.Button(
-									item.label,
-									buttonStyle,
-								).Disabled(busy()).OnClick(func() { state.run(item) })
+	return ui.View(
 
-							}
-						},
-					).Display("flex").FlexWrap("wrap").Gap(10)
-					ui.View(
-						func() {
-							ui.Text(
-								status(),
-							).FontSize(13).LineHeight(19).UserSelect("text").FontFamily("monospace").
-								TextColor(func() string {
-									if busy() {
-										return "#c7d2fe"
-									}
-									return "#aeb9c9"
-								})
-						},
-					).MinHeight(68).Padding(16).BackgroundColor("#111620").BorderColor("#293242").BorderWidth(1).BorderRadius(10)
+		ui.View(
+			"Native system APIs",
+		).Display("flex").Height(52).FlexShrink(0).AlignItems("center").JustifyContent("center").FontSize(14).FontWeight(600).AppRegion("drag").BorderColor("#1f2530").BorderBottomWidth(1),
+		ui.View(
+
+			ui.Text(
+				"Native integrations",
+			).FontSize(26).LineHeight(32).FontWeight(700),
+			ui.Text(
+				"Typed Go APIs for application state, desktop services, notifications, and native resources.",
+			).TextColor("#9aa6b7").FontSize(14).LineHeight(21),
+			ui.View(
+				func() *native.Node {
+					var children []*native.Node
+					for _, item := range state.actions() {
+						children = append(children, ui.Button(
+							item.label,
+							buttonStyle,
+						).Disabled(busy()).OnClick(func() { state.run(item) }).Node)
+
+					}
+					return ui.Fragment(children)
 				},
-			).Display("flex").FlexDirection("column").Flex(1).MinHeight(0).Gap(18).Padding(28).OverflowY("auto")
-		},
+			).Display("flex").FlexWrap("wrap").Gap(10),
+			ui.View(
+
+				ui.Text(
+					status(),
+				).FontSize(13).LineHeight(19).UserSelect("text").FontFamily("monospace").
+					TextColor(func() string {
+						if busy() {
+							return "#c7d2fe"
+						}
+						return "#aeb9c9"
+					}),
+			).MinHeight(68).Padding(16).BackgroundColor("#111620").BorderColor("#293242").BorderWidth(1).BorderRadius(10),
+		).Display("flex").FlexDirection("column").Flex(1).MinHeight(0).Gap(18).Padding(28).OverflowY("auto"),
 	).Display("flex").FlexDirection("column").Width("100%").Height("100%").BackgroundColor("#0b0e14").TextColor("#f4f7fb")
 }

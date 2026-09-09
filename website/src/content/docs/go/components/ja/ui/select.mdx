@@ -14,9 +14,9 @@ import (
 ## 使い方
 
 ```go
-func SelectExample() {
+func SelectExample() *native.Node {
 	value, setValue := ui.CreateSignal[*string](nil)
-	ui.Select.Root(
+	return ui.Select.Root(
 		ui.SelectRootProps{
 			PickerSourceProps: ui.PickerSourceProps{Items: func() []ui.OptionDeclaration {
 				return []ui.OptionDeclaration{{Value: "go", Label: "Go"}, {Value: "swift", Label: "Swift"}}
@@ -24,7 +24,9 @@ func SelectExample() {
 			Value:         value,
 			OnValueChange: func(next *string, _ *native.Event) { setValue(next) },
 		},
-		func() { ui.Select.Value(ui.PartProps{}); ui.Select.Icon(ui.PartProps{}, "▾") },
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Select.Value(ui.PartProps{}), ui.Select.Icon(ui.PartProps{}, "▾")})
+		},
 	)
 }
 ```

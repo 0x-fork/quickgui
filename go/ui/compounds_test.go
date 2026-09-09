@@ -20,8 +20,8 @@ func TestCheckboxDeclaresTheCorePart(t *testing.T) {
 				setChecked(next)
 			},
 			PartProps: PartProps{
-				Children: func() {
-					Checkbox.Indicator(PartProps{})
+				Children: func() *native.Node {
+					return Checkbox.Indicator(PartProps{})
 				},
 			},
 		})
@@ -42,13 +42,13 @@ func TestDialogAndTableDeclareCoreParts(t *testing.T) {
 		open := func() bool { return true }
 		dialog := Dialog.Root(DialogRootProps{
 			Open: open,
-			Children: func() {
-				Dialog.Portal(PartProps{
-					Children: func() {
-						Dialog.Popup(DialogPopupProps{
-							PartProps: PartProps{Children: func() {
-								Dialog.Title(PartProps{Children: func() {
-									Text(Props{Children: "Title"})
+			Children: func() *native.Node {
+				return Dialog.Portal(PartProps{
+					Children: func() *native.Node {
+						return Dialog.Popup(DialogPopupProps{
+							PartProps: PartProps{Children: func() *native.Node {
+								return Dialog.Title(PartProps{Children: func() *Element {
+									return Text(Props{Children: "Title"})
 								}})
 							}},
 						})
@@ -67,12 +67,12 @@ func TestDialogAndTableDeclareCoreParts(t *testing.T) {
 			RowHeight:    24,
 			HeaderHeight: 0,
 			PartProps: PartProps{
-				Children: func() {
-					Table.Row(TableRowProps{
+				Children: func() *native.Node {
+					return Table.Row(TableRowProps{
 						Index: 0,
-						PartProps: PartProps{Children: func() {
-							Table.Cell(TableCellProps{Column: "name", PartProps: PartProps{
-								Children: func() { Text(Props{Children: "a"}) },
+						PartProps: PartProps{Children: func() *native.Node {
+							return Table.Cell(TableCellProps{Column: "name", PartProps: PartProps{
+								Children: func() *Element { return Text(Props{Children: "a"}) },
 							}})
 						}},
 					})
@@ -94,10 +94,10 @@ func TestToastManagerOwnsTheQueue(t *testing.T) {
 		Toast.Provider(ToastProviderProps{
 			Timeout: 1000,
 			Limit:   2,
-			Children: func() {
+			Children: func() *Element {
 				manager = UseToastManager()
 				manager.Add(ToastRequest{Title: "Saved", Type: ToastSuccess})
-				Text(Props{Children: "ok"})
+				return Text(Props{Children: "ok"})
 			},
 		})
 		if manager == nil {

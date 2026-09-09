@@ -68,12 +68,12 @@ func main() {
 								X: 15,
 								Y: 14,
 							},
-							Component: func() {
+							Component: func() *ui.Element {
 								m := newModel(home, saved)
 								m.Window = native.CurrentWindow()
 								m.persist = writer.save
 								m.connect()
-								appView(m)
+								return appView(m)
 							},
 						})
 						window.On(native.WindowReadyToShow, func(native.WindowEvent) { window.Focus() })

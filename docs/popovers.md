@@ -475,44 +475,44 @@ trigger is the one part the core keeps mounted whether the popover is open or cl
 trigger node carries the declaration and every other part only repeats the compound scope:
 
 ```go
-func AccountPopover() {
+func AccountPopover() *native.Node {
 	open, setOpen := ui.CreateSignal(false)
 	modal, hover := true, true
 	gap, margin := 8.0, 12.0
-	ui.Popover.Root(
+	return ui.Popover.Root(
 		ui.PopoverRootProps{
 			Open:         open,
 			Modal:        &modal,
 			OnOpenChange: func(value bool, _ ui.PopoverOpenChangeDetails) { setOpen(value) },
 		},
-		func() {
-			ui.Popover.Trigger(
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Popover.Trigger(
 				ui.PopoverTriggerProps{
 					OpenOnHover: &hover,
 					Delay:       300,
 					CloseDelay:  100,
 				},
 				"Account",
-			)
-			ui.Popover.Positioner(
-				ui.PopoverPositionerProps{
-					Side:             "bottom",
-					Align:            "end",
-					SideOffset:       &gap,
-					CollisionPadding: &margin,
-				},
-				func() {
-					ui.Popover.Popup(
-						ui.PopoverPopupProps{},
-						func() {
-							ui.Popover.Arrow(ui.PartProps{})
-							ui.Popover.Title(ui.PartProps{}, "Account")
-							ui.Popover.Viewport(ui.PartProps{}, "Account settings")
-							ui.Popover.Close(ui.PartProps{}, "Done")
-						},
-					)
-				},
-			)
+			),
+				ui.Popover.Positioner(
+					ui.PopoverPositionerProps{
+						Side:             "bottom",
+						Align:            "end",
+						SideOffset:       &gap,
+						CollisionPadding: &margin,
+					},
+					func() *native.Node {
+						return ui.Popover.Popup(
+							ui.PopoverPopupProps{},
+							func() *native.Node {
+								return ui.Fragment([]*native.Node{ui.Popover.Arrow(ui.PartProps{}),
+									ui.Popover.Title(ui.PartProps{}, "Account"),
+									ui.Popover.Viewport(ui.PartProps{}, "Account settings"),
+									ui.Popover.Close(ui.PartProps{}, "Done")})
+							},
+						)
+					},
+				)})
 		},
 	)
 }

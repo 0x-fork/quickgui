@@ -14,38 +14,40 @@ import (
 ## 使い方
 
 ```go
-func ScrollAreaExample() {
-	ui.ScrollArea.Root(
+func ScrollAreaExample() *native.Node {
+	return ui.ScrollArea.Root(
 		ui.ScrollAreaRootProps{
 			ViewportSize: func() ui.Extent { return ui.Extent{Width: 320, Height: 160} },
 			ContentSize:  func() ui.Extent { return ui.Extent{Width: 320, Height: 880} },
 		},
-		func() {
+		func() *native.Node {
+			var children []*native.Node
 			state := ui.UseScrollAreaState()
-			ui.ScrollArea.Viewport(
+			children = append(children, ui.ScrollArea.Viewport(
 				ui.PartProps{Style: ui.Style().
 					Width(320).
 					Height(160).
 					Overflow("hidden")},
-				func() {
-					ui.ScrollArea.Content(
+				func() *native.Node {
+					return ui.ScrollArea.Content(
 						ui.PartProps{Style: func() ui.StyleBuilder {
-							return ui.Style().
-								Transform(fmt.Sprintf("translateY(%gpx)", -state().
-									Offset.Y))
+							return ui.Style().Transform(fmt.Sprintf("translateY(%gpx)", -state().Offset.Y))
 						}},
-						func() {
+						func() *native.Node {
+							var children []*native.Node
 							for index := range 40 {
-								ui.Text("Row ", index).Height(22)
+								children = append(children, ui.Text("Row ", index).Height(22).Node)
 							}
+							return ui.Fragment(children)
 						},
 					)
 				},
-			)
-			ui.ScrollArea.Scrollbar(
+			))
+			children = append(children, ui.ScrollArea.Scrollbar(
 				ui.ScrollAreaScrollbarProps{Orientation: "vertical"},
-				func() { ui.ScrollArea.Thumb(ui.ScrollAreaThumbProps{Orientation: "vertical"}) },
-			)
+				func() *native.Node { return ui.ScrollArea.Thumb(ui.ScrollAreaThumbProps{Orientation: "vertical"}) },
+			))
+			return ui.Fragment(children)
 		},
 	)
 }

@@ -6,9 +6,9 @@ import (
 	"github.com/egoist/quickgui/go/ui"
 )
 
-func App() {
+func App() *ui.Element {
 	message, setMessage := ui.CreateSignal("Ready to call the {{TYPE}} extension")
-	ui.View(
+	return ui.View(
 		ui.Text("{{NAME}}").FontSize(24).FontWeight(700),
 		ui.Text(message()).FontSize(16),
 		ui.Button("Call extension").OnClick(func() {

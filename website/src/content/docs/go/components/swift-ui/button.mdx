@@ -15,11 +15,11 @@ import (
 ## Usage
 
 ```go
-func SwiftUiButtonExample() {
-	ui.SwiftUI.Host(
+func SwiftUiButtonExample() *native.Node {
+	return ui.SwiftUI.Host(
 		ui.SwiftUIHostProps{MatchContents: true},
-		func() {
-			ui.SwiftUI.Button(ui.SwiftUIButtonProps{
+		func() *native.Node {
+			return ui.SwiftUI.Button(ui.SwiftUIButtonProps{
 				Label:       "Save",
 				SystemImage: "checkmark",
 				OnPress:     func(*native.Event) { fmt.Println("Saved") },

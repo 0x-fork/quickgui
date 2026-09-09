@@ -13,11 +13,11 @@ import (
 ## Usage
 
 ```go
-func SwiftUiGaugeExample() {
-	ui.SwiftUI.Host(
+func SwiftUiGaugeExample() *native.Node {
+	return ui.SwiftUI.Host(
 		ui.SwiftUIHostProps{MatchContents: true},
-		func() {
-			ui.SwiftUI.Gauge(ui.SwiftUIGaugeProps{
+		func() *native.Node {
+			return ui.SwiftUI.Gauge(ui.SwiftUIGaugeProps{
 				Value: 60,
 				Min:   0,
 				Max:   100,

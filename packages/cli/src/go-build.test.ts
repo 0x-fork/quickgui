@@ -22,49 +22,35 @@ test("Go component overlays preserve authored files, reuse unchanged output, and
   expect(statSync(generated).mtimeMs).toBe(timestamp);
 }, 30_000);
 
-test("Go application compilation accepts declarations and rejects node-returning construction callbacks", async () => {
-  const project = mkdtempSync(join(tmpdir(), "quickgui-declarations-"));
+test("Go application compilation rejects implicit construction at the authored location", async () => {
+  const project = mkdtempSync(join(tmpdir(), "quickgui-explicit-nodes-"));
   try {
     const fixture = resolve(import.meta.dir, "../test-fixtures/go-views");
     const module = readFileSync(join(fixture, "go.mod"), "utf8")
-      .replace("example.test/quickgui-views", "example.test/declarations")
+      .replace("example.test/quickgui-views", "example.test/explicit-nodes")
       .replace("../../../../go", resolve(import.meta.dir, "../../../go"));
     writeFileSync(join(project, "go.mod"), module);
     writeFileSync(join(project, "go.sum"), readFileSync(join(fixture, "go.sum")));
     const path = join(project, "view.go");
     writeFileSync(
       path,
-      `package example
-import "github.com/egoist/quickgui/go/ui"
-func View() {
-  ui.Button("declared")
-}
-`,
+      `package example\nimport "github.com/egoist/quickgui/go/ui"\nfunc View() *ui.Element {\n  return ui.Button("returned")\n}\n`,
     );
     await prepareGoWorkspace(project, ["."]);
     for (const body of [
-      `ui.View(func() *ui.Element { return ui.Text("child") })`,
-      `ui.Show(false, func() *ui.Element { return ui.Text("child") })`,
-      `ui.For(func() []int { return []int{1} }, func(int, func() int) *ui.Element { return ui.Text("row") }, nil, nil)`,
+      `ui.Button("discarded")`,
+      `ui.View(func() { ui.Text("implicit") })`,
+      `ui.Show(false, func() {})`,
+      `ui.For[int](func() []int { return []int{1} }, func(int, func() int) {}, nil, nil)`,
     ]) {
-      const source = `package example
-import "github.com/egoist/quickgui/go/ui"
-func View() {
-  ${body}
-}
-`;
+      const source = `package example\nimport "github.com/egoist/quickgui/go/ui"\nfunc View() {\n  ${body}\n}\n`;
       writeFileSync(path, source);
       await expect(prepareGoWorkspace(project, ["."])).rejects.toThrow(`${path}:4:`);
       expect(readFileSync(path, "utf8")).toBe(source);
     }
     writeFileSync(
       path,
-      `package example
-import "github.com/egoist/quickgui/go/native"
-func Open() {
-  native.NewWindow(native.WindowOptions{Component: func() *native.Node { return nil }})
-}
-`,
+      `package example\nimport "github.com/egoist/quickgui/go/native"\nfunc Open() {\n  native.NewWindow(native.WindowOptions{Component: func() {}})\n}\n`,
     );
     await expect(prepareGoWorkspace(project, ["."])).rejects.toThrow(`${path}:4:`);
   } finally {

@@ -35,13 +35,12 @@ var centered = ui.Style().
 	AlignItems("center").
 	JustifyContent("center")
 
-func Panel(title string, children func()) {
+func Panel(title string, children ui.Component) *ui.Element {
 	warm := warmPalette.Use()
-	ui.View(
-		func() {
-			ui.Text(title).Style(captionStyle)
-			children()
-		},
+	return ui.View(
+
+		ui.Text(title).Style(captionStyle),
+		children,
 	).Style(panelStyle).When(
 		warm,
 		ui.Style().BackgroundColor("#30231c"),
@@ -50,9 +49,9 @@ func Panel(title string, children func()) {
 
 }
 
-func swatch(label string, options ...any) {
-	args := []any{func() { ui.Text(label).FontSize(12).TextColor(ink) }, centered}
-	ui.View(append(args, options...)...)
+func swatch(label string, options ...any) *ui.Element {
+	args := []any{func() *ui.Element { return ui.Text(label).FontSize(12).TextColor(ink) }, centered}
+	return ui.View(append(args, options...)...)
 }
 
 func ptr[T any](value T) *T { return &value }

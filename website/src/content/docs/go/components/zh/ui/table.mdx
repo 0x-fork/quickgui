@@ -13,8 +13,8 @@ import (
 ## 用法
 
 ```go
-func TableExample(rows []string) {
-	ui.Table.Root(
+func TableExample(rows []string) *native.Node {
+	return ui.Table.Root(
 		ui.TableRootProps{
 			Columns: func() []ui.TableColumnDeclaration {
 				return []ui.TableColumnDeclaration{{ID: "name", Label: "Name", Track: "1fr", Sortable: true}}
@@ -24,19 +24,21 @@ func TableExample(rows []string) {
 			HeaderHeight: 28,
 			PartProps:    ui.PartProps{Style: ui.Style().Height(260).OverflowY("scroll")},
 		},
-		func() {
-			ui.Table.Header(ui.TableHeaderProps{Column: "name"}, "Name")
+		func() *native.Node {
+			var children []*native.Node
+			children = append(children, ui.Table.Header(ui.TableHeaderProps{Column: "name"}, "Name"))
 			for index, name := range rows {
-				ui.Table.Row(
+				children = append(children, ui.Table.Row(
 					ui.TableRowProps{Index: index},
-					func() {
-						ui.Table.Cell(
+					func() *native.Node {
+						return ui.Table.Cell(
 							ui.TableCellProps{Column: "name"},
 							name,
 						)
 					},
-				)
+				))
 			}
+			return ui.Fragment(children)
 		},
 	)
 }

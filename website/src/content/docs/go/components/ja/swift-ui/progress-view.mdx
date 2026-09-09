@@ -13,11 +13,11 @@ import (
 ## 使い方
 
 ```go
-func SwiftUiProgressViewExample() {
-	ui.SwiftUI.Host(
+func SwiftUiProgressViewExample() *native.Node {
+	return ui.SwiftUI.Host(
 		ui.SwiftUIHostProps{MatchContents: true},
-		func() {
-			ui.SwiftUI.ProgressView(ui.SwiftUIProgressViewProps{
+		func() *native.Node {
+			return ui.SwiftUI.ProgressView(ui.SwiftUIProgressViewProps{
 				Value: 0.4,
 				Total: 1,
 				Label: "Uploading",

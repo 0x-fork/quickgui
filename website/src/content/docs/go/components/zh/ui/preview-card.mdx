@@ -13,20 +13,20 @@ import (
 ## 用法
 
 ```go
-func PreviewCardExample() {
-	ui.PreviewCard.Root(
+func PreviewCardExample() *native.Node {
+	return ui.PreviewCard.Root(
 		ui.PreviewCardRootProps{Placement: "bottom-start"},
-		func() {
-			ui.PreviewCard.Trigger(ui.PreviewCardTriggerProps{Delay: 350}, "@ada")
-			ui.PreviewCard.Positioner(
-				ui.PartProps{},
-				func() {
-					ui.PreviewCard.Popup(
-						ui.PartProps{},
-						"Ada Lovelace",
-					)
-				},
-			)
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.PreviewCard.Trigger(ui.PreviewCardTriggerProps{Delay: 350}, "@ada"),
+				ui.PreviewCard.Positioner(
+					ui.PartProps{},
+					func() *native.Node {
+						return ui.PreviewCard.Popup(
+							ui.PartProps{},
+							"Ada Lovelace",
+						)
+					},
+				)})
 		},
 	)
 }

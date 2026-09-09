@@ -13,19 +13,19 @@ import (
 ## Usage
 
 ```go
-func SystemPopoverExample() {
-	ui.SystemPopover.Root(
+func SystemPopoverExample() *native.Node {
+	return ui.SystemPopover.Root(
 		ui.PopoverRootProps{},
-		func() {
-			ui.SystemPopover.Trigger(ui.PopoverTriggerProps{}, "Account")
-			ui.SystemPopover.Content(
-				ui.PopoverContentProps{
-					Width:     240,
-					Height:    120,
-					Placement: "bottom-start",
-				},
-				"Account settings",
-			)
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.SystemPopover.Trigger(ui.PopoverTriggerProps{}, "Account"),
+				ui.SystemPopover.Content(
+					ui.PopoverContentProps{
+						Width:     240,
+						Height:    120,
+						Placement: "bottom-start",
+					},
+					"Account settings",
+				)})
 		},
 	)
 }

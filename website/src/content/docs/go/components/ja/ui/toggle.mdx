@@ -14,14 +14,17 @@ import (
 ## 使い方
 
 ```go
-func ToggleExample() {
+func ToggleExample() *native.Node {
 	on, setOn := ui.CreateSignal(false)
-	ui.Toggle.Root(
+	return ui.Toggle.Root(
 		ui.ToggleProps{
 			Pressed:         on,
 			OnPressedChange: func(next bool, _ *native.Event) { setOn(next) },
 		},
-		func() { ui.Toggle.Indicator(ui.PartProps{}); ui.Text("Notifications") },
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Toggle.Indicator(ui.PartProps{}), ui.Text("Notifications").
+				Node})
+		},
 	)
 }
 ```

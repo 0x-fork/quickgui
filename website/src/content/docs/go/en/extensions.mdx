@@ -45,8 +45,8 @@ package notice
 
 import "github.com/egoist/quickgui/go/ui"
 
-func Notice(message func() string, styles ...ui.StyleBuilder) {
-	ui.Text(
+func Notice(message func() string, styles ...ui.StyleBuilder) *ui.Element {
+	return ui.Text(
 		message(),
 	).
 		Padding(12).
@@ -58,7 +58,7 @@ func Notice(message func() string, styles ...ui.StyleBuilder) {
 }
 ```
 
-Call `notice.Notice(message, ui.Style().Padding(16))` inside a component or children block. The accessor stays reactive, and the caller's style merges after the defaults. Component functions declare children without returning a node. Use `ui.OnCleanup` for resources owned by a mounted component; keep application-wide services outside component ownership.
+Return `notice.Notice(message, ui.Style().Padding(16))` or pass its result as a child. The accessor stays reactive, and the caller's style merges after the defaults. Component functions and deferred construction callbacks must return a node. Use `ui.OnCleanup` for resources owned by a mounted component; keep application-wide services outside component ownership.
 
 Publish the module using Go version tags, and document the SDK versions you support. Consumers add it with `go get` using your module path. Transitive imports of `terminal` or `updater` still opt the application into those native extensions, so keep optional integrations in separate packages or build-tagged files.
 

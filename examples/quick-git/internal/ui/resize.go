@@ -6,13 +6,15 @@ import (
 	gui "github.com/egoist/quickgui/go/ui"
 )
 
-func resizablePanel(label string, width func() float64, setWidth func(float64), minimum, maximum float64, children func(), style gui.StyleBuilder) {
+func resizablePanel(label string, width func() float64, setWidth func(float64), minimum, maximum float64, children gui.Component, style gui.StyleBuilder) *native.
 	// Only the fixed panel is mounted. The second size supplies its remaining
 	// resize allowance; the enclosing flex layout owns the rest of the window.
 	// Rust updates the pane directly during a drag, then reports sizes to Go
 	// asynchronously for persistence. No pointer move waits for a Go width echo.
+	Node {
+
 	index := 0
-	gui.Splitter.Root(
+	return gui.Splitter.Root(
 		gui.SplitterRootProps{
 			Value: func() []float64 {
 				size := width()
@@ -30,30 +32,30 @@ func resizablePanel(label string, width func() float64, setWidth func(float64), 
 				MinWidth(0).
 				MinHeight(0)},
 		},
-		func() {
-			gui.Splitter.Pane(
+		func() *native.Node {
+			return gui.Fragment([]*native.Node{gui.Splitter.Pane(
 				gui.SplitterPaneProps{
 					Index:     &index,
 					PartProps: gui.PartProps{Style: style},
 				},
 				children,
-			)
-			gui.Splitter.Handle(gui.SplitterPaneProps{
-				Index: &index,
-				PartProps: gui.PartProps{
-					AriaLabel: label,
-					Ref: func(node *native.Node) {
-						native.SetNumber(node, protocol.HitSlopLeft, 4)
-						native.SetNumber(node, protocol.HitSlopRight, 4)
+			),
+				gui.Splitter.Handle(gui.SplitterPaneProps{
+					Index: &index,
+					PartProps: gui.PartProps{
+						AriaLabel: label,
+						Ref: func(node *native.Node) {
+							native.SetNumber(node, protocol.HitSlopLeft, 4)
+							native.SetNumber(node, protocol.HitSlopRight, 4)
+						},
+						Style: gui.Style().
+							Width(1).
+							FlexShrink(0).
+							Cursor("col-resize").
+							AppRegion("no-drag").
+							BackgroundColor(UseApp().Theme().Border),
 					},
-					Style: gui.Style().
-						Width(1).
-						FlexShrink(0).
-						Cursor("col-resize").
-						AppRegion("no-drag").
-						BackgroundColor(UseApp().Theme().Border),
-				},
-			})
+				})})
 		},
 	)
 }

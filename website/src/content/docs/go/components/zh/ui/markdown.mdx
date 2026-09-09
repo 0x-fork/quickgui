@@ -13,8 +13,8 @@ import (
 ## 用法
 
 ```go
-func MarkdownExample(source func() string, streaming func() bool) {
-	ui.Markdown().Value(source()).Streaming(streaming).Width("100%")
+func MarkdownExample(source func() string, streaming func() bool) *ui.Element {
+	return ui.Markdown().Value(source()).Streaming(streaming).Width("100%")
 }
 ```
 

@@ -14,9 +14,9 @@ import (
 ## 使い方
 
 ```go
-func NumberFieldExample() {
+func NumberFieldExample() *native.Node {
 	value, setValue := ui.CreateSignal(8.0)
-	ui.NumberField.Root(
+	return ui.NumberField.Root(
 		ui.NumberFieldRootProps{
 			Value: func() *float64 { current := value(); return &current },
 			Min:   0,
@@ -28,10 +28,10 @@ func NumberFieldExample() {
 				}
 			},
 		},
-		func() {
-			ui.NumberField.Decrement(ui.PartProps{}, "−")
-			ui.NumberField.Input(ui.NumberFieldInputProps{})
-			ui.NumberField.Increment(ui.PartProps{}, "+")
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.NumberField.Decrement(ui.PartProps{}, "−"),
+				ui.NumberField.Input(ui.NumberFieldInputProps{}),
+				ui.NumberField.Increment(ui.PartProps{}, "+")})
 		},
 	)
 }

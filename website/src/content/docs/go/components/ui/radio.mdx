@@ -14,20 +14,24 @@ import (
 ## Usage
 
 ```go
-func RadioExample() {
+func RadioExample() *native.Node {
 	value, setValue := ui.CreateSignal("system")
-	ui.RadioGroup.Root(
+	return ui.RadioGroup.Root(
 		ui.RadioGroupProps{
 			Value:         func() *string { current := value(); return &current },
 			OnValueChange: func(next string, _ *native.Event) { setValue(next) },
 		},
-		func() {
+		func() *native.Node {
+			var children []*native.Node
 			for _, option := range []string{"light", "dark", "system"} {
-				ui.Radio.Root(
+				children = append(children, ui.Radio.Root(
 					ui.RadioProps{Value: option},
-					func() { ui.Radio.Indicator(ui.PartProps{}); ui.Text(option) },
-				)
+					func() *native.Node {
+						return ui.Fragment([]*native.Node{ui.Radio.Indicator(ui.PartProps{}), ui.Text(option).Node})
+					},
+				))
 			}
+			return ui.Fragment(children)
 		},
 	)
 }

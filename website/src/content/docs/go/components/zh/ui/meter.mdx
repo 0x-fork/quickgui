@@ -13,8 +13,8 @@ import (
 ## 用法
 
 ```go
-func MeterExample(value func() *float64) {
-	ui.Meter.Root(
+func MeterExample(value func() *float64) *native.Node {
+	return ui.Meter.Root(
 		ui.MeterProps{
 			Value:   value,
 			Min:     0,
@@ -23,13 +23,13 @@ func MeterExample(value func() *float64) {
 			High:    80,
 			Optimum: 50,
 		},
-		func() {
-			ui.Meter.Label(ui.PartProps{}, "Disk used")
-			ui.Meter.Track(
-				ui.PartProps{},
-				func() { ui.Meter.Indicator(ui.PartProps{}) },
-			)
-			ui.Meter.Value(ui.PartProps{})
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Meter.Label(ui.PartProps{}, "Disk used"),
+				ui.Meter.Track(
+					ui.PartProps{},
+					func() *native.Node { return ui.Meter.Indicator(ui.PartProps{}) },
+				),
+				ui.Meter.Value(ui.PartProps{})})
 		},
 	)
 }

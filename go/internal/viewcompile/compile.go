@@ -20,44 +20,13 @@ type Component struct {
 	Lazy      []bool
 }
 
-// IsComponent recognizes declaration functions through typed constructor and
-// component calls. Nested callbacks do not turn an outer setup function into a
-// component, and node-returning helpers retain ordinary Go call semantics.
-func IsComponent(fn *ast.FuncDecl, info *types.Info, components map[string]Component) bool {
+// IsComponent uses the declared native return type as the component boundary.
+func IsComponent(fn *ast.FuncDecl, info *types.Info) bool {
 	if fn.Recv != nil || fn.Body == nil {
 		return false
 	}
 	sig := info.Defs[fn.Name].Type().(*types.Signature)
-	if sig.Results().Len() != 0 {
-		return false
-	}
-	found := false
-	ast.Inspect(fn.Body, func(node ast.Node) bool {
-		if found {
-			return false
-		}
-		if _, nested := node.(*ast.FuncLit); nested {
-			return false
-		}
-		call, ok := node.(*ast.CallExpr)
-		if !ok {
-			return true
-		}
-		obj := calledObject(call.Fun, info)
-		if _, known := components[componentKey(obj)]; known {
-			found = true
-		} else if obj != nil && obj.Pkg() != nil && strings.HasPrefix(obj.Pkg().Path(), "github.com/egoist/quickgui/go/") && element(info.TypeOf(call)) {
-			// A fluent setter on an existing element is an ordinary mutation.
-			if selector, ok := call.Fun.(*ast.SelectorExpr); ok {
-				if selection := info.Selections[selector]; selection != nil && element(selection.Recv()) {
-					return true
-				}
-			}
-			found = true
-		}
-		return !found
-	})
-	return found
+	return sig.Results().Len() == 1 && element(sig.Results().At(0).Type())
 }
 
 func Describe(fn *ast.FuncDecl, info *types.Info) (Component, error) {
@@ -69,8 +38,8 @@ func Describe(fn *ast.FuncDecl, info *types.Info) (Component, error) {
 		return c, fmt.Errorf("reactive components require a top-level function with a body")
 	}
 	sig := info.Defs[fn.Name].Type().(*types.Signature)
-	if sig.Results().Len() != 0 {
-		return c, fmt.Errorf("components declare children without returning a value")
+	if sig.Results().Len() != 1 || !element(sig.Results().At(0).Type()) {
+		return c, fmt.Errorf("components must return *ui.Element or *native.Node")
 	}
 	for i := 0; i < sig.Params().Len(); i++ {
 		param := sig.Params().At(i)
@@ -131,11 +100,11 @@ type edit struct {
 // Source uses type-checked object identities, including shadowing and renamed
 // imports, so field names and unrelated functions cannot become prop reads.
 func Source(fs *token.FileSet, file *ast.File, source []byte, pkg *types.Package, info *types.Info, components map[string]Component) ([]byte, error) {
-	if err := Validate(fs, file, info); err != nil {
-		return nil, err
-	}
 	if ast.IsGenerated(file) {
 		return source, nil
+	}
+	if err := Validate(fs, file, info); err != nil {
+		return nil, err
 	}
 	var edits []edit
 	offset := func(pos token.Pos) int { return fs.PositionFor(pos, false).Offset }
@@ -365,7 +334,7 @@ func Source(fs *token.FileSet, file *ast.File, source []byte, pkg *types.Package
 					}
 					invocation := name + "(" + strings.Join(arguments, ", ") + ")"
 					if len(setup) != 0 {
-						invocation = "func() { " + strings.Join(setup, "; ") + "; " + invocation + " }()"
+						invocation = "func() " + typeName(sig.Results().At(0).Type()) + " { " + strings.Join(setup, "; ") + "; return " + invocation + " }()"
 					}
 					replace(value, invocation)
 					break
@@ -478,7 +447,7 @@ func Source(fs *token.FileSet, file *ast.File, source []byte, pkg *types.Package
 		// rewrites preserve physical newlines inside the original body.
 		location := fs.PositionFor(fn.Body.Pos(), false)
 		end := fs.PositionFor(fn.End(), false)
-		generated := header + "{ " + component.Generated + "(" + strings.Join(arguments, ", ") + ") }\n\nfunc " + component.Generated + typeParameters + "(" + strings.Join(params, ", ") + ") " + fmt.Sprintf("/*line %s:%d:%d*/", location.Filename, location.Line, location.Column) + body + fmt.Sprintf("/*line %s:%d:%d*/", end.Filename, end.Line, end.Column)
+		generated := header + "{ return " + component.Generated + "(" + strings.Join(arguments, ", ") + ") }\n\nfunc " + component.Generated + typeParameters + "(" + strings.Join(params, ", ") + ") " + typeName(sig.Results().At(0).Type()) + " " + fmt.Sprintf("/*line %s:%d:%d*/", location.Filename, location.Line, location.Column) + body + fmt.Sprintf("/*line %s:%d:%d*/", end.Filename, end.Line, end.Column)
 		replace(fn, generated)
 	}
 	if problem != nil {
@@ -504,4 +473,28 @@ func Source(fs *token.FileSet, file *ast.File, source []byte, pkg *types.Package
 	}
 	filename := fs.PositionFor(file.Pos(), false).Filename
 	return []byte(fmt.Sprintf("//line %s:1:1\n", filename) + render(0, len(source))), nil
+}
+
+func calledObject(expr ast.Expr, info *types.Info) types.Object {
+	switch value := expr.(type) {
+	case *ast.Ident:
+		return info.Uses[value]
+	case *ast.SelectorExpr:
+		return info.Uses[value.Sel]
+	case *ast.IndexExpr:
+		return calledObject(value.X, info)
+	case *ast.IndexListExpr:
+		return calledObject(value.X, info)
+	case *ast.ParenExpr:
+		return calledObject(value.X, info)
+	}
+	return nil
+}
+
+func componentKey(obj types.Object) string {
+	fn, ok := obj.(*types.Func)
+	if !ok || fn.Pkg() == nil || fn.Type().(*types.Signature).Recv() != nil {
+		return ""
+	}
+	return fn.Pkg().Path() + "." + fn.Name()
 }

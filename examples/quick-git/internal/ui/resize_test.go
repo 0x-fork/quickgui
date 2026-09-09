@@ -16,10 +16,10 @@ func TestNativeResizeReportsSizesWithoutRebuildingPanel(t *testing.T) {
 		defer dispose()
 		width, setWidth := gui.CreateSignal(420.0)
 		theme, _ := gui.CreateSignal(ThemeFor("light"))
-		root := captureComponent(func() {
-			ProvideApp(AppContext{Theme: theme, Store: &model.Store{}}, func() {
-				resizablePanel("Resize history", width, func(next float64) { setWidth(next) }, 260, 1000,
-					func() { gui.Text("Retained selection") }, gui.Style(),
+		root := captureComponent(func() *native.Node {
+			return ProvideApp(AppContext{Theme: theme, Store: &model.Store{}}, func() *native.Node {
+				return resizablePanel("Resize history", width, func(next float64) { setWidth(next) }, 260, 1000,
+					func() *gui.Element { return gui.Text("Retained selection") }, gui.Style(),
 				)
 			})
 		})

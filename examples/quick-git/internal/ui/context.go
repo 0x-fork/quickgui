@@ -35,8 +35,14 @@ type AppContext struct {
 
 var appContext = reactive.CreateContext[AppContext](AppContext{})
 
-func ProvideApp(value AppContext, children func()) {
-	appContext.Provide(value, children)
+func ProvideApp(value AppContext, children gui.Component) *native.Node {
+	return reactive.Provide(appContext, value, func() *native.Node {
+		nodes := native.CollectChildren(children)
+		if len(nodes) == 1 {
+			return nodes[0]
+		}
+		return gui.Fragment(nodes)
+	})
 }
 
 func UseApp() AppContext {

@@ -44,8 +44,9 @@ func TestReadOnlySelectionControlsRefuseChanges(t *testing.T) {
 				props.Value = func() *string { value := "first"; return &value }
 			}
 			var radio *native.Node
-			RadioGroup.Root(props, func() {
+			RadioGroup.Root(props, func() *native.Node {
 				radio = Radio.Root(RadioProps{PartProps: part, Value: "second"})
+				return radio
 			})
 			return radio
 		}},

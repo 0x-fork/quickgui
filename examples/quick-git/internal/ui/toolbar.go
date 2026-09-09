@@ -1,5 +1,7 @@
 package ui
 
+import "github.com/egoist/quickgui/go/native"
+
 import (
 	"fmt"
 	"strconv"
@@ -8,7 +10,7 @@ import (
 	"quickgui.example/quick-git/internal/model"
 )
 
-func Toolbar() {
+func Toolbar() *gui.Element {
 	app := UseApp()
 	store := app.Store
 	busy := func() bool { return store.Busy() != nil }
@@ -20,134 +22,132 @@ func Toolbar() {
 		status := store.Status()
 		return busy() || status == nil || status.Branch == ""
 	}
-	gui.View(
-		func() {
-			gui.Button(
-				func() {
-					toolbarIcon(branchIcon)
-					gui.Text(
-						func() string {
-							if status := store.Status(); status != nil {
-								if status.Branch != "" {
-									return status.Branch
-								}
-								if status.Detached && len(status.HeadSha) >= 7 {
-									return status.HeadSha[:7] + " (detached)"
-								}
-							}
-							return "…"
-						},
-					).MinWidth(0).LineClamp(1)
-				},
+	return gui.View(
 
-				app.Theme().Button("secondary"),
-			).OnClick(func() { store.SetView(model.ViewBranches) }).
-				FlexDirection("row").Height(28).MaxWidth(260).BackgroundColor("transparent").BorderWidth(0)
-			gui.Show(
-				func() bool {
-					status := store.Status()
-					return status != nil && status.HasUpstreamCounts && (status.Ahead > 0 || status.Behind > 0)
+		gui.Button(
+
+			toolbarIcon(branchIcon),
+			gui.Text(
+				func() string {
+					if status := store.Status(); status != nil {
+						if status.Branch != "" {
+							return status.Branch
+						}
+						if status.Detached && len(status.HeadSha) >= 7 {
+							return status.HeadSha[:7] + " (detached)"
+						}
+					}
+					return "…"
 				},
-				func() {
-					gui.View(
-						func() {
-							toolbarIcon(pushIcon)
-							gui.Text(fmt.Sprint(store.Status().Ahead))
-							toolbarIcon(pullIcon)
-							gui.Text(fmt.Sprint(store.Status().Behind))
-						},
-					).AriaLabel("Upstream commit counts").
-						Display("flex").AlignItems("center").Gap(3).FontSize(11).TextColor(app.Theme().TextSecondary).AppRegion("no-drag")
-				},
-			)
-			gui.Show(
-				func() bool { return store.Conflicts() > 0 },
-				func() {
-					gui.Text(
-						strconv.Itoa(store.Conflicts()) + " conflicted",
-					).FontSize(11).FontWeight(600).TextColor(app.Theme().Warning).AppRegion("no-drag")
-				},
-			)
-			gui.View().Flex(1).AppRegion("drag")
-			gui.Show(busy, toolbarBusy)
-			toolbarButton("Fetch", fetchIcon, store.Fetch, busy, false)
-			toolbarButton("Pull", pullIcon, store.Pull, pullDisabled, false)
-			toolbarButton("Push", pushIcon, store.Push, pushDisabled, false)
-			toolbarButton("Refresh", refreshIcon, store.Refresh, busy, true)
-		},
+			).MinWidth(0).LineClamp(1),
+
+			app.Theme().Button("secondary"),
+		).OnClick(func() { store.SetView(model.ViewBranches) }).
+			FlexDirection("row").Height(28).MaxWidth(260).BackgroundColor("transparent").BorderWidth(0),
+		gui.Show(
+			func() bool {
+				status := store.Status()
+				return status != nil && status.HasUpstreamCounts && (status.Ahead > 0 || status.Behind > 0)
+			},
+			func() *gui.Element {
+				return gui.View(
+
+					toolbarIcon(pushIcon),
+					gui.Text(fmt.Sprint(store.Status().Ahead)),
+					toolbarIcon(pullIcon),
+					gui.Text(fmt.Sprint(store.Status().Behind)),
+				).AriaLabel("Upstream commit counts").
+					Display("flex").AlignItems("center").Gap(3).FontSize(11).TextColor(app.Theme().TextSecondary).AppRegion("no-drag")
+			},
+		),
+		gui.Show(
+			store.Conflicts() > 0,
+			func() *gui.Element {
+				return gui.Text(
+					strconv.Itoa(store.Conflicts()) + " conflicted",
+				).FontSize(11).FontWeight(600).TextColor(app.Theme().Warning).AppRegion("no-drag")
+			},
+		),
+		gui.View().Flex(1).AppRegion("drag"),
+		gui.Show(busy, toolbarBusy),
+		toolbarButton("Fetch", fetchIcon, store.Fetch, busy, false),
+		toolbarButton("Pull", pullIcon, store.Pull, pullDisabled, false),
+		toolbarButton("Push", pushIcon, store.Push, pushDisabled, false),
+		toolbarButton("Refresh", refreshIcon, store.Refresh, busy, true),
 	).Display("flex").Height(TitlebarHeight).FlexShrink(0).AlignItems("center").Gap(6).PaddingLeft(14).PaddingRight(12).BorderBottomWidth(1).BorderColor(app.Theme().Border).BackgroundColor(app.Theme().Content).AppRegion("drag")
 }
 
-func toolbarBusy() {
+func toolbarBusy() *gui.Element {
 	app := UseApp()
 	store := app.Store
-	gui.View(
-		func() {
-			gui.Progress.Root(
-				gui.ProgressProps{
-					GaugeFormatProps: gui.GaugeFormatProps{
-						PartProps: gui.PartProps{
-							AriaLabel: "Git operation in progress",
-							Style:     gui.Style().Width(32).Height(4).FlexShrink(0),
-						},
+	return gui.View(
+
+		gui.Progress.Root(
+			gui.ProgressProps{
+				GaugeFormatProps: gui.GaugeFormatProps{
+					PartProps: gui.PartProps{
+						AriaLabel: "Git operation in progress",
+						Style:     gui.Style().Width(32).Height(4).FlexShrink(0),
 					},
-					Indeterminate: func() bool { return true },
 				},
-				func() {
-					gui.Progress.Track(
-						gui.PartProps{
+				Indeterminate: func() bool { return true },
+			},
+			func() *native.Node {
+				return gui.Progress.Track(
+					gui.PartProps{
+						Style: gui.Style().
+							Width("100%").
+							Height(4).
+							BorderRadius(2).
+							BackgroundColor(app.Theme().BorderStrong),
+					},
+					func() *native.Node {
+						return gui.Progress.Indicator(gui.PartProps{
 							Style: gui.Style().
-								Width("100%").
+								Width(12).
 								Height(4).
 								BorderRadius(2).
-								BackgroundColor(app.Theme().BorderStrong),
-						},
-						func() {
-							gui.Progress.Indicator(gui.PartProps{
-								Style: gui.Style().
-									Width(12).
-									Height(4).
-									BorderRadius(2).
-									BackgroundColor(app.Theme().TextSecondary),
-							})
-						},
-					)
-				},
-			)
-			gui.Text(
-				func() string {
-					if busy := store.Busy(); busy != nil {
-						return busy.Label + "…"
-					}
-					return ""
-				},
-			).FontSize(12).TextColor(app.Theme().TextSecondary)
-			gui.Show(
-				func() bool {
-					busy := store.Busy()
-					return busy != nil && busy.Cancel != nil
-				},
-				func() {
-					gui.Button(
-						"Cancel",
+								BackgroundColor(app.Theme().TextSecondary),
+						})
+					},
+				)
+			},
+		),
+		gui.Text(
+			func() string {
+				if busy := store.Busy(); busy != nil {
+					return busy.Label + "…"
+				}
+				return ""
+			},
+		).FontSize(12).TextColor(app.Theme().TextSecondary),
+		gui.Show(
+			func() bool {
+				busy := store.Busy()
+				return busy != nil && busy.Cancel != nil
+			},
+			func() *gui.Element {
+				return gui.Button(
+					"Cancel",
 
-						app.Theme().Button("secondary"),
-					).OnClick(store.CancelBusy)
+					app.Theme().Button("secondary"),
+				).OnClick(store.CancelBusy)
 
-				},
-			)
-		},
+			},
+		),
 	).Display("flex").FlexDirection("row").AlignItems("center").Gap(8).MarginRight(8).AppRegion("no-drag")
 }
 
-func toolbarButton(label, icon string, click func(), disabled func() bool, iconOnly bool) {
+func toolbarButton(label, icon string, click func(), disabled func() bool, iconOnly bool) *gui.Element {
 	app := UseApp()
-	gui.Button(
-		func() {
-			toolbarIcon(icon)
+	return gui.Button(
+		func() *native.Node {
+			var children []*native.Node
+			children = append(children, toolbarIcon(icon).Node)
 			if !iconOnly {
-				gui.Text(label)
+				children = append(children, gui.Text(label).Node)
 			}
+			return gui.Fragment(children)
 		},
 
 		app.Theme().Button("secondary"),

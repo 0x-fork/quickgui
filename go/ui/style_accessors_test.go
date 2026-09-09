@@ -16,7 +16,7 @@ func TestScalarStyleBindingsUpdateIndependentlyAndDispose(t *testing.T) {
 		color := reactive.NewSignal("#112233")
 		mounts := 0
 		parent := View()
-		node := View(styleWidth(width.Read), styleBackgroundColor(color.Read), func() { mounts++; Text("kept") })
+		node := View(styleWidth(width.Read), styleBackgroundColor(color.Read), func() *Element { mounts++; return Text("kept") })
 		native.InsertNode(parent.Node, node.Node, nil)
 		child := node.Children[0]
 		offset := len(parent.Pending.Body())

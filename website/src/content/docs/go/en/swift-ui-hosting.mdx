@@ -5,7 +5,7 @@ SwiftUI modifiers style native controls. Reverse hosting puts an ordinary QuickG
 Apply modifier factories from `ui.SwiftUI` in order through `Modifiers`. Available factories include ButtonStyle, ButtonBorderShape, ControlSize, LabelStyle, Tint, and Disabled.
 
 ```go
-ui.SwiftUI.Button(ui.SwiftUIButtonProps{
+return ui.SwiftUI.Button(ui.SwiftUIButtonProps{
 	Label: "Create project",
 	Modifiers: []ui.SwiftUIModifier{
 		ui.SwiftUI.ButtonStyle("borderedProminent"),
@@ -24,14 +24,14 @@ On supported systems, request the native glass button style with `ui.SwiftUI.But
 `ui.SwiftUI.QuickGUIHostView` owns a QuickGUI subtree inside the native hierarchy. Provide its size and declare children in a callback so they mount under the embedded window’s lifecycle.
 
 ```go
-func SwiftUiQuickguiHostViewExample() {
-	ui.SwiftUI.Host(
+func SwiftUiQuickguiHostViewExample() *native.Node {
+	return ui.SwiftUI.Host(
 		ui.SwiftUIHostProps{MatchContents: true},
-		func() {
-			ui.SwiftUI.QuickGUIHostView(
+		func() *native.Node {
+			return ui.SwiftUI.QuickGUIHostView(
 				ui.SwiftUIQuickGUIHostViewProps{Width: 320, Height: 180},
-				func() {
-					ui.View(
+				func() *ui.Element {
+					return ui.View(
 						"QuickGUI inside SwiftUI",
 					).Width("100%").Height("100%").Padding(16)
 				},
@@ -46,27 +46,27 @@ func SwiftUiQuickguiHostViewExample() {
 The SwiftUI popover composes a native trigger through `Render`. Its content can reverse-host interactive QuickGUI components.
 
 ```go
-func SwiftUiPopoverExample() {
+func SwiftUiPopoverExample() *native.Node {
 	open, setOpen := ui.CreateSignal(false)
-	ui.SwiftUI.Host(
+	return ui.SwiftUI.Host(
 		ui.SwiftUIHostProps{MatchContents: true},
-		func() {
-			ui.SwiftUI.Popover.Root(
+		func() *native.Node {
+			return ui.SwiftUI.Popover.Root(
 				ui.SwiftUIPopoverProps{
 					IsPresented:         open,
 					OnIsPresentedChange: setOpen,
 				},
-				func() {
-					ui.SwiftUI.Popover.Trigger(ui.SwiftUIPopoverTriggerProps{Render: func() { ui.SwiftUI.Button(ui.SwiftUIButtonProps{Label: "Account"}) }})
-					ui.SwiftUI.Popover.Content(
-						ui.SwiftUIPopoverContentProps{},
-						func() {
-							ui.SwiftUI.QuickGUIHostView(
-								ui.SwiftUIQuickGUIHostViewProps{Width: 240, Height: 120},
-								"Account settings",
-							)
-						},
-					)
+				func() *native.Node {
+					return ui.Fragment([]*native.Node{ui.SwiftUI.Popover.Trigger(ui.SwiftUIPopoverTriggerProps{Render: func() *native.Node { return ui.SwiftUI.Button(ui.SwiftUIButtonProps{Label: "Account"}) }}),
+						ui.SwiftUI.Popover.Content(
+							ui.SwiftUIPopoverContentProps{},
+							func() *native.Node {
+								return ui.SwiftUI.QuickGUIHostView(
+									ui.SwiftUIQuickGUIHostViewProps{Width: 240, Height: 120},
+									"Account settings",
+								)
+							},
+						)})
 				},
 			)
 		},

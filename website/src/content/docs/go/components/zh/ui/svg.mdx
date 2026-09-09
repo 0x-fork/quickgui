@@ -13,8 +13,8 @@ import (
 ## 用法
 
 ```go
-func SvgExample() {
-	ui.SVG().
+func SvgExample() *ui.Element {
+	return ui.SVG().
 		Width(20).
 		Height(20).
 		TextColor("#2563eb").

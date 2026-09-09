@@ -8,6 +8,7 @@
 
 ```go
 import (
+	"github.com/egoist/quickgui/go/native"
 	"github.com/egoist/quickgui/go/terminal"
 	"github.com/egoist/quickgui/go/ui"
 )
@@ -16,8 +17,8 @@ import (
 ## 用法
 
 ```go
-func TerminalExample(directory string) {
-	terminal.View(terminal.Props{
+func TerminalExample(directory string) *native.Node {
+	return terminal.View(terminal.Props{
 		Program:          "/bin/zsh",
 		Args:             []string{"-l"},
 		WorkingDirectory: directory,

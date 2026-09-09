@@ -23,7 +23,7 @@ func TestToolbarRetainsButtonsAndUpdatesTaskState(t *testing.T) {
 		conflicts, setConflicts := reactive.CreateSignal(0)
 		store := &model.Store{Status: status, Busy: busy, Conflicts: conflicts}
 		theme, _ := reactive.CreateSignal(ThemeFor("dark"))
-		root := gui.View(func() { ProvideApp(AppContext{Store: store, Theme: theme}, Toolbar) })
+		root := gui.View(ProvideApp(AppContext{Store: store, Theme: theme}, Toolbar))
 		buttons := toolbarButtons(root.Node)
 		if len(buttons) != 5 || buttons["Fetch"] == nil || buttons["Pull"] == nil || buttons["Push"] == nil {
 			t.Fatalf("missing toolbar actions: %v", buttons)

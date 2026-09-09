@@ -6,8 +6,8 @@ import (
 	"github.com/egoist/quickgui/go/ui"
 )
 
-func agentSheet(m *model) {
-	ui.Dialog.Root(
+func agentSheet(m *model) *native.Node {
+	return ui.Dialog.Root(
 		ui.DialogRootProps{
 			Open: m.SheetOpen.Read,
 			OnOpenChange: func(open bool, _ ui.DialogOpenChangeDetails) {
@@ -16,8 +16,8 @@ func agentSheet(m *model) {
 				}
 			},
 		},
-		func() {
-			ui.Dialog.Portal(
+		func() *native.Node {
+			return ui.Dialog.Portal(
 				ui.PartProps{Style: ui.Style().
 					Position("absolute").
 					Top(0).
@@ -28,190 +28,187 @@ func agentSheet(m *model) {
 					AlignItems("center").
 					JustifyContent("center").
 					Padding(24)},
-				func() {
-					ui.Dialog.Backdrop(ui.PartProps{Style: ui.Style().
+				func() *native.Node {
+					return ui.Fragment([]*native.Node{ui.Dialog.Backdrop(ui.PartProps{Style: ui.Style().
 						Position("absolute").
 						Top(0).
 						Right(0).
 						Bottom(0).
 						Left(0).
-						BackgroundColor(m.color(func(t theme) string { return t.Scrim }))})
-					ui.Dialog.Popup(
-						ui.DialogPopupProps{PartProps: ui.PartProps{
-							AriaLabel: "New agent",
-							Style: ui.Style().
-								Display("flex").
-								Width(472).
-								MaxWidth("100%").
-								FlexDirection("column").
-								Gap(17).
-								Padding(20).
-								BackgroundColor(m.color(func(t theme) string { return t.Surface })).
-								BorderColor(m.color(func(t theme) string { return t.BorderStrong })).
-								BorderWidth(1).
-								BorderRadius(9),
-						}},
-						func() {
-							ui.View(
-								func() {
+						BackgroundColor(m.color(func(t theme) string { return t.Scrim }))}),
+						ui.Dialog.Popup(
+							ui.DialogPopupProps{PartProps: ui.PartProps{
+								AriaLabel: "New agent",
+								Style: ui.Style().
+									Display("flex").
+									Width(472).
+									MaxWidth("100%").
+									FlexDirection("column").
+									Gap(17).
+									Padding(20).
+									BackgroundColor(m.color(func(t theme) string { return t.Surface })).
+									BorderColor(m.color(func(t theme) string { return t.BorderStrong })).
+									BorderWidth(1).
+									BorderRadius(9),
+							}},
+							func() *native.Node {
+								return ui.Fragment([]*native.Node{ui.View(
+
 									ui.View(
-										func() {
-											ui.Dialog.Title(
-												ui.PartProps{Style: ui.Style().
-													TextColor(m.color(func(t theme) string { return t.Text })).
-													FontSize(17).
-													FontWeight(720)},
-												"New agent",
-											)
-											ui.Dialog.Description(
-												ui.PartProps{Style: ui.Style().
-													TextColor(m.color(func(t theme) string { return t.TextTertiary })).
-													FontSize(12)},
-												func() {
-													ui.Text(
-														"Start a real CLI in " + m.activeSpace().Name,
-													)
-												},
-											)
-										},
-									).Display("flex").FlexDirection("column").Gap(4)
-									ui.View().Flex(1)
-									iconButton(m, "Close new agent", "close", 26, m.closeAgentSheet)
-								},
-							).Display("flex").AlignItems("flex-start")
-							formGroup(func() {
-								formLabel(m, "Agent")
-								ui.View(
-									func() {
-										ui.KeyedFor(
-											m.Launchers.Read,
-											func(l launcher) any { return l.ID },
-											func(read func() launcher, _ func() int) {
-												selected := func() bool { return read().ID == m.SelectedLauncherID.Read() }
-												ui.Button(
-													func() {
-														ui.View(
-															func() {
+
+										ui.Dialog.Title(
+											ui.PartProps{Style: ui.Style().
+												TextColor(m.color(func(t theme) string { return t.Text })).
+												FontSize(17).
+												FontWeight(720)},
+											"New agent",
+										),
+										ui.Dialog.Description(
+											ui.PartProps{Style: ui.Style().
+												TextColor(m.color(func(t theme) string { return t.TextTertiary })).
+												FontSize(12)},
+											func() *ui.Element {
+												return ui.Text(
+													"Start a real CLI in " + m.activeSpace().Name,
+												)
+											},
+										),
+									).Display("flex").FlexDirection("column").Gap(4),
+									ui.View().Flex(1),
+									iconButton(m, "Close new agent", "close", 26, m.closeAgentSheet),
+								).Display("flex").AlignItems("flex-start").Node,
+									formGroup(func() *native.Node {
+										return ui.Fragment([]*native.Node{formLabel(m, "Agent").Node,
+											ui.View(
+
+												ui.KeyedFor(
+													m.Launchers.Read,
+													func(l launcher) any { return l.ID },
+													func(read func() launcher, _ func() int) *ui.Element {
+														selected := func() bool { return read().ID == m.SelectedLauncherID.Read() }
+														return ui.Button(
+
+															ui.View(
+
 																ui.Text(
 																	read().Mark,
-																).FontSize(13).FontWeight(750)
-															},
-														).Display("flex").Width(24).Height(24).FlexShrink(0).AlignItems("center").JustifyContent("center").BackgroundColor(m.color(func(t theme) string { return t.AccentWash })).BorderRadius(5)
-														ui.View(
-															func() {
+																).FontSize(13).FontWeight(750),
+															).Display("flex").Width(24).Height(24).FlexShrink(0).AlignItems("center").JustifyContent("center").BackgroundColor(m.color(func(t theme) string { return t.AccentWash })).BorderRadius(5),
+															ui.View(
+
 																ui.Text(
 																	read().Label,
-																).FontSize(12).FontWeight(620)
+																).FontSize(12).FontWeight(620),
 																ui.Text(
 
 																	choose(read().installed(), "Available", "Not found"),
-																).TextColor(m.color(func(t theme) string { return t.TextGhost })).FontSize(10)
-															},
-														).Display("flex").FlexDirection("column").Gap(2)
+																).TextColor(m.color(func(t theme) string { return t.TextGhost })).FontSize(10),
+															).Display("flex").FlexDirection("column").Gap(2),
+														).AriaLabel(read().Label).Disabled(!read().installed()).OnClick(func() {
+															m.SelectedLauncherID.Write(read().ID)
+														}).
+															Display("flex").Flex(1).MinWidth(0).Height(54).AlignItems("center").Gap(8).PaddingLeft(8).PaddingRight(8).
+															BackgroundColor(
+																choose(selected(), m.theme().Selected, "transparent"),
+															).
+															TextColor(
+																choose(read().installed(), m.theme().Text, m.theme().TextGhost),
+															).
+															BorderColor(
+																choose(selected(), m.theme().Accent, m.theme().Border),
+															).BorderWidth(1).BorderRadius(6).
+															Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
+																return s.
+																	BackgroundColor(func() string {
+																		return choose(read().installed(), m.theme().Hover, "transparent")
+																	})
+															}).
+															Opacity(
+																choose(read().installed(), 1.0, .5),
+															).Cursor("default")
 													},
-												).AriaLabel(read().Label).Disabled(!read().installed()).OnClick(func() {
-													m.SelectedLauncherID.Write(read().ID)
-												}).
-													Display("flex").Flex(1).MinWidth(0).Height(54).AlignItems("center").Gap(8).PaddingLeft(8).PaddingRight(8).
-													BackgroundColor(
-														choose(selected(), m.theme().Selected, "transparent"),
-													).
-													TextColor(
-														choose(read().installed(), m.theme().Text, m.theme().TextGhost),
-													).
-													BorderColor(
-														choose(selected(), m.theme().Accent, m.theme().Border),
-													).BorderWidth(1).BorderRadius(6).
-													Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
-														return s.
-															BackgroundColor(func() string {
-																return choose(read().installed(), m.theme().Hover, "transparent")
-															})
-													}).
-													Opacity(
-														choose(read().installed(), 1.0, .5),
-													).Cursor("default")
-											},
-											nil,
-										)
-									},
-								).Display("flex").Gap(8)
-								ui.Text(
-									func() string {
-										if m.CatalogLoading.Read() {
-											return "Reading your interactive login-shell PATH…"
-										}
-										return m.selectedLauncher().Description
-									},
-								).TextColor(m.color(func(t theme) string { return t.TextGhost })).FontSize(11)
-							})
-							formGroup(func() {
-								formLabel(m, "Initial instruction · optional")
-								ui.TextArea().AriaLabel("Initial instruction").Value(m.Prompt.Read).Placeholder("What should this agent work on?").OnInputEvent(func(e *native.Event) { m.Prompt.Write(ui.InputValue(e)) }).Ref(func(node *native.Node) {
-									native.SetBoolean(
-										node,
-										protocol.AutoFocus,
-										true,
-									)
-								}).
-									Display("flex").Height(88).Width("100%").PaddingLeft(10).PaddingRight(10).PaddingTop(9).PaddingBottom(9).BackgroundColor(m.color(func(t theme) string { return t.Terminal })).TextColor(m.color(func(t theme) string { return t.Text })).BorderColor(m.color(func(t theme) string { return t.BorderStrong })).BorderWidth(1).BorderRadius(6).FontSize(12.5).
-									FocusStyle(func(s ui.StyleBuilder) ui.StyleBuilder {
-										return s.OutlineWidth(1).OutlineColor(m.color(func(t theme) string { return t.Accent }))
-									})
-							})
-							ui.Show(
-								func() bool {
-									if m.CatalogLoading.Read() {
-										return false
-									}
-									for _, l := range m.Launchers.Read() {
-										if l.installed() {
-											return false
-										}
-									}
-									return true
-								},
-								func() {
-									ui.View(
-										func() {
+													nil,
+												),
+											).Display("flex").Gap(8).Node,
 											ui.Text(
-												"No supported agent CLI was found. You can still open a terminal and run any installed agent; the sidebar detects it automatically.",
-											).TextColor(m.color(func(t theme) string { return t.Warning })).FontSize(11.5).LineHeight(16)
+												func() string {
+													if m.CatalogLoading.Read() {
+														return "Reading your interactive login-shell PATH…"
+													}
+													return m.selectedLauncher().Description
+												},
+											).TextColor(m.color(func(t theme) string { return t.TextGhost })).FontSize(11).Node})
+									}).Node,
+									formGroup(func() *native.Node {
+										return ui.Fragment([]*native.Node{formLabel(m, "Initial instruction · optional").Node,
+											ui.TextArea().AriaLabel("Initial instruction").Value(m.Prompt.Read).Placeholder("What should this agent work on?").OnInputEvent(func(e *native.Event) {
+												m.Prompt.Write(ui.InputValue(e))
+											}).Ref(func(node *native.Node) {
+												native.SetBoolean(
+													node,
+													protocol.AutoFocus,
+													true,
+												)
+											}).
+												Display("flex").Height(88).Width("100%").PaddingLeft(10).PaddingRight(10).PaddingTop(9).PaddingBottom(9).BackgroundColor(m.color(func(t theme) string { return t.Terminal })).TextColor(m.color(func(t theme) string { return t.Text })).BorderColor(m.color(func(t theme) string { return t.BorderStrong })).BorderWidth(1).BorderRadius(6).FontSize(12.5).
+												FocusStyle(func(s ui.StyleBuilder) ui.StyleBuilder {
+													return s.OutlineWidth(1).OutlineColor(m.color(func(t theme) string { return t.Accent }))
+												}).Node})
+									}).Node,
+									ui.Show(
+										func() bool {
+											if m.CatalogLoading.Read() {
+												return false
+											}
+											for _, l := range m.Launchers.Read() {
+												if l.installed() {
+													return false
+												}
+											}
+											return true
 										},
-									).Display("flex").MinHeight(36).AlignItems("center").PaddingLeft(10).PaddingRight(10).PaddingTop(7).PaddingBottom(7).BackgroundColor(m.color(func(t theme) string { return t.AccentWash })).BorderRadius(5)
-								},
-							)
-							ui.View(
-								func() {
-									ui.Button(
-										"Cancel",
-										m.buttonStyle(false),
-									).OnClick(m.closeAgentSheet)
+										func() *ui.Element {
+											return ui.View(
 
-									disabled := func() bool { return m.CatalogLoading.Read() || !m.selectedLauncher().installed() }
-									ui.Button(
+												ui.Text(
+													"No supported agent CLI was found. You can still open a terminal and run any installed agent; the sidebar detects it automatically.",
+												).TextColor(m.color(func(t theme) string { return t.Warning })).FontSize(11.5).LineHeight(16),
+											).Display("flex").MinHeight(36).AlignItems("center").PaddingLeft(10).PaddingRight(10).PaddingTop(7).PaddingBottom(7).BackgroundColor(m.color(func(t theme) string { return t.AccentWash })).BorderRadius(5)
+										},
+									),
+									ui.View(
+										func() *native.Node {
+											var children_ []*native.Node
+											children_ = append(children_, ui.Button(
+												"Cancel",
+												m.buttonStyle(false),
+											).OnClick(m.closeAgentSheet).Node)
 
-										"Start "+m.selectedLauncher().Label,
+											disabled := func() bool { return m.CatalogLoading.Read() || !m.selectedLauncher().installed() }
+											children_ = append(children_, ui.Button(
 
-										m.buttonStyle(true),
-									).Disabled(disabled).Opacity(choose(disabled(), .45, 1.0)).OnClick(m.launchAgent)
+												"Start "+m.selectedLauncher().Label,
 
-								},
-							).Display("flex").JustifyContent("flex-end").Gap(8)
-						},
-					)
+												m.buttonStyle(true),
+											).Disabled(disabled).Opacity(choose(disabled(), .45, 1.0)).OnClick(m.launchAgent).Node)
+											return ui.Fragment(children_)
+
+										},
+									).Display("flex").JustifyContent("flex-end").Gap(8).Node})
+							},
+						)})
 				},
 			)
 		},
 	)
 }
-func formGroup(children ui.Component) {
-	ui.View(
+func formGroup(children ui.Component) *ui.Element {
+	return ui.View(
 		children,
 	).Display("flex").FlexDirection("column").Gap(7)
 }
-func formLabel(m *model, label string) {
-	ui.Text(
+func formLabel(m *model, label string) *ui.Element {
+	return ui.Text(
 		label,
 	).TextColor(m.color(func(t theme) string { return t.TextSecondary })).FontSize(11.5).FontWeight(620)
 }

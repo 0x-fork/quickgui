@@ -134,9 +134,9 @@ controlled state without creating a visible element; its portal supplies the
 viewport overlay root. Give the popup its own size, colors, and spacing.
 
 ```go
-func DeleteProject() {
+func DeleteProject() *native.Node {
 	open, setOpen := ui.CreateSignal(false)
-	ui.AlertDialog.Root(
+	return ui.AlertDialog.Root(
 		ui.DialogRootProps{
 			Open:         open,
 			OnOpenChange: func(value bool, _ ui.DialogOpenChangeDetails) { setOpen(value) },
@@ -145,36 +145,36 @@ func DeleteProject() {
 				log.Print("Dialog transition finished; open: ", open)
 			},
 		},
-		func() {
-			ui.AlertDialog.Trigger(ui.PartProps{}, "Delete project")
-			ui.AlertDialog.Portal(
-				ui.PartProps{},
-				func() {
-					ui.AlertDialog.Backdrop(ui.PartProps{Style: ui.Style().
-						BackgroundColor("#0f172a80")})
-					ui.AlertDialog.Popup(
-						ui.DialogPopupProps{PartProps: ui.PartProps{
-							Style: ui.Style().
-								Width(360).
-								Padding(24).
-								BackgroundColor("white"),
-						}},
-						func() {
-							ui.AlertDialog.Title(ui.PartProps{}, "Delete project?")
-							ui.AlertDialog.Viewport(
-								ui.PartProps{},
-								func() {
-									ui.AlertDialog.Description(
-										ui.PartProps{},
-										"This cannot be undone.",
-									)
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.AlertDialog.Trigger(ui.PartProps{}, "Delete project"),
+				ui.AlertDialog.Portal(
+					ui.PartProps{},
+					func() *native.Node {
+						return ui.Fragment([]*native.Node{ui.AlertDialog.Backdrop(ui.PartProps{Style: ui.Style().
+							BackgroundColor("#0f172a80")}),
+							ui.AlertDialog.Popup(
+								ui.DialogPopupProps{PartProps: ui.PartProps{
+									Style: ui.Style().
+										Width(360).
+										Padding(24).
+										BackgroundColor("white"),
+								}},
+								func() *native.Node {
+									return ui.Fragment([]*native.Node{ui.AlertDialog.Title(ui.PartProps{}, "Delete project?"),
+										ui.AlertDialog.Viewport(
+											ui.PartProps{},
+											func() *native.Node {
+												return ui.AlertDialog.Description(
+													ui.PartProps{},
+													"This cannot be undone.",
+												)
+											},
+										),
+										ui.AlertDialog.Close(ui.PartProps{AriaLabel: "Cancel"}, "Cancel")})
 								},
-							)
-							ui.AlertDialog.Close(ui.PartProps{AriaLabel: "Cancel"}, "Cancel")
-						},
-					)
-				},
-			)
+							)})
+					},
+				)})
 		},
 	)
 }

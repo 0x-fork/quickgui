@@ -2,19 +2,19 @@ QuickGUI 将无样式基础组件与具备无障碍行为的复合控件组合�
 
 ## 定义组件
 
-Go 组件隐式声明子节点，不返回值。参数使用普通类型；编译器会识别构建 UI 或调用其他组件的函数，因此 `CounterLabel(count())` 无需注解即可保持响应式。窗口根组件、路由和子节点块使用 `func()`，不支持返回节点的组件工厂。
+Go 组件返回 `*ui.Element` 或 `*native.Node`。参数使用普通类型，子节点直接组合。编译器根据返回类型识别组件，因此 `CounterLabel(count())` 无需注解或 `ui.View(func() { ... })` 包装即可保持响应式。窗口根组件可直接传入函数。
 
 ```go
-func CounterLabel(count int) {
-	ui.Text("Count: ", count).FontSize(20)
+func CounterLabel(count int) *ui.Element {
+	return ui.Text("Count: ", count).FontSize(20)
 }
 
-func ComponentExample() {
+func ComponentExample() *ui.Element {
 	count, setCount := ui.CreateSignal(0)
-	ui.View(func() {
-		CounterLabel(count())
-		ui.Button("Increment").OnClick(func() { setCount(count() + 1) })
-	})
+	return ui.View(
+		CounterLabel(count()),
+		ui.Button("Increment").OnClick(func() { setCount(count() + 1) }),
+	)
 }
 ```
 
@@ -27,31 +27,31 @@ type Product struct {
 	Price int
 }
 
-func LineItem(product Product, quantity int) {
-	ui.Text(product.Name, " × ", quantity, " = $", product.Price*quantity)
+func LineItem(product Product, quantity int) *ui.Element {
+	return ui.Text(product.Name, " × ", quantity, " = $", product.Price*quantity)
 }
 
-func Cart() {
+func Cart() *ui.Element {
 	quantity, setQuantity := ui.CreateSignal(1)
-	ui.View(func() {
-		LineItem(Product{ID: "mug", Name: "Mug", Price: 12}, quantity())
-		ui.Button("Add one").OnClick(func() { setQuantity(quantity() + 1) })
-	})
+	return ui.View(
+		LineItem(Product{ID: "mug", Name: "Mug", Price: 12}, quantity()),
+		ui.Button("Add one").OnClick(func() { setQuantity(quantity() + 1) }),
+	)
 }
 ```
 
 容器可以直接接收子节点，如下所示。子节点回调是可选的，仅在挂载时执行一次；需要延迟构建或继承复合控件上下文时再使用。事件处理器仍使用回调。
 
 ```go
-func CardComponent(title string, children ...any) {
-	ui.View(
+func CardComponent(title string, children ...any) *ui.Element {
+	return ui.View(
 		ui.Text(title).FontWeight(600),
 		children,
 	).Padding(20).Gap(12).FlexCol()
 }
 
-func CardComposition() {
-	CardComponent("Account",
+func CardComposition() *ui.Element {
+	return CardComponent("Account",
 		ui.Text("Manage your account settings."),
 		ui.Button("Save").OnClick(func() { log.Print("Saved") }),
 	)
@@ -63,8 +63,8 @@ func CardComposition() {
 从 `ui.View`、`ui.Text`、`ui.Button` 和 `ui.Input` 开始。可以直接传入选项与文本。`func() { ... }` 参数将多个子节点分组到当前父节点下。
 
 ```go
-func ButtonExample(save func()) {
-	ui.Button(
+func ButtonExample(save func()) *ui.Element {
+	return ui.Button(
 		"Save changes",
 	).
 		Height(40).
@@ -84,19 +84,19 @@ func ButtonExample(save func()) {
 复合组件族暴露 `ui.Tabs.Root`、`ui.Tabs.List`、`ui.Tabs.Panel` 等部件。核心负责角色、键盘导航、焦点与控件状态。请在根节点的子节点回调中创建部件，以确保上下文已经存在。
 
 ```go
-func TabsExample() {
-	ui.Tabs.Root(
+func TabsExample() *native.Node {
+	return ui.Tabs.Root(
 		ui.TabsRootProps{DefaultValue: "overview", Activation: "automatic"},
-		func() {
-			ui.Tabs.List(
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Tabs.List(
 				ui.PartProps{},
-				func() {
-					ui.Tabs.Tab(ui.TabsTabProps{Value: "overview"}, "Overview")
-					ui.Tabs.Tab(ui.TabsTabProps{Value: "settings"}, "Settings")
+				func() *native.Node {
+					return ui.Fragment([]*native.Node{ui.Tabs.Tab(ui.TabsTabProps{Value: "overview"}, "Overview"),
+						ui.Tabs.Tab(ui.TabsTabProps{Value: "settings"}, "Settings")})
 				},
-			)
-			ui.Tabs.Panel(ui.TabsPanelProps{Value: "overview"}, "Overview content")
-			ui.Tabs.Panel(ui.TabsPanelProps{Value: "settings"}, "Settings content")
+			),
+				ui.Tabs.Panel(ui.TabsPanelProps{Value: "overview"}, "Overview content"),
+				ui.Tabs.Panel(ui.TabsPanelProps{Value: "settings"}, "Settings content")})
 		},
 	)
 }
@@ -107,14 +107,17 @@ func TabsExample() {
 受控值使用访问器，其回调保存控件接受的新值。使用默认值可让组件自己管理状态。可选标量使用指针，多选值使用切片。
 
 ```go
-func CheckboxExample() {
+func CheckboxExample() *native.Node {
 	checked, setChecked := ui.CreateSignal(false)
-	ui.Checkbox.Root(
+	return ui.Checkbox.Root(
 		ui.CheckboxProps{
 			Checked:         func() ui.CheckedState { return checked() },
 			OnCheckedChange: func(next bool, _ *native.Event) { setChecked(next) },
 		},
-		func() { ui.Checkbox.Indicator(ui.PartProps{}, "✓"); ui.Text("Remember me") },
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Checkbox.Indicator(ui.PartProps{}, "✓"), ui.Text("Remember me").
+				Node})
+		},
 	)
 }
 ```

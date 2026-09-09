@@ -22,7 +22,7 @@ func TestFinishPartMountsChildrenAndRef(t *testing.T) {
 	var ref *native.Node
 	reactive.CreateRoot(func(dispose func()) struct{} {
 		node := finishPart(createButtonPart(PartProps{}), PartProps{
-			Children: func() { Text(Props{Children: "ok"}) },
+			Children: func() *Element { return Text(Props{Children: "ok"}) },
 			Ref:      func(n *native.Node) { ref = n },
 		})
 		if ref != node || len(node.Children) != 1 {

@@ -145,31 +145,31 @@ identities. `Value` is a `func() *string`; `nil` means no selection. Leaving it
 unset uses the root's `DefaultValue` and internal signal.
 
 ```go
-func EditorTabs() {
+func EditorTabs() *native.Node {
 	initial := "overview"
 	tab, setTab := ui.CreateSignal(&initial)
-	ui.Tabs.Root(
+	return ui.Tabs.Root(
 		ui.TabsRootProps{
 			Value:         tab,
 			OnValueChange: func(value string, _ *native.Event) { setTab(&value) },
 			Orientation:   "vertical",
 			Activation:    "automatic",
 		},
-		func() {
-			ui.Tabs.List(
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Tabs.List(
 				ui.PartProps{},
-				func() {
-					ui.Tabs.Tab(ui.TabsTabProps{Value: "overview"}, "Overview")
-					ui.Tabs.Tab(
-						ui.TabsTabProps{
-							PartProps: ui.PartProps{Disabled: true},
-							Value:     "usage",
-						},
-						"Usage",
-					)
+				func() *native.Node {
+					return ui.Fragment([]*native.Node{ui.Tabs.Tab(ui.TabsTabProps{Value: "overview"}, "Overview"),
+						ui.Tabs.Tab(
+							ui.TabsTabProps{
+								PartProps: ui.PartProps{Disabled: true},
+								Value:     "usage",
+							},
+							"Usage",
+						)})
 				},
-			)
-			ui.Tabs.Panel(ui.TabsPanelProps{Value: "overview"}, "Project overview")
+			),
+				ui.Tabs.Panel(ui.TabsPanelProps{Value: "overview"}, "Project overview")})
 		},
 	)
 }
@@ -187,27 +187,29 @@ Read them through `ui.UseTabsState()` inside the root's child callback; call the
 accessor inside a reactive text or style binding to follow changes:
 
 ```go
-func MeasuredTabs() {
+func MeasuredTabs() *native.Node {
 	first, second := 0, 1
-	ui.Tabs.Root(
+	return ui.Tabs.Root(
 		ui.TabsRootProps{DefaultValue: "list"},
-		func() {
+		func() *native.Node {
+			var children []*native.Node
 			state := ui.UseTabsState()
-			ui.Tabs.List(
+			children = append(children, ui.Tabs.List(
 				ui.PartProps{},
-				func() {
-					ui.Tabs.Tab(ui.TabsTabProps{Value: "list", Index: &first}, "List")
-					ui.Tabs.Tab(ui.TabsTabProps{Value: "grid", Index: &second}, "Grid")
-					ui.Tabs.Indicator(ui.TabsIndicatorProps{
-						PartProps: ui.PartProps{Style: ui.Style().Height(2)},
-						Placement: "bottom",
-					})
+				func() *native.Node {
+					return ui.Fragment([]*native.Node{ui.Tabs.Tab(ui.TabsTabProps{Value: "list", Index: &first}, "List"),
+						ui.Tabs.Tab(ui.TabsTabProps{Value: "grid", Index: &second}, "Grid"),
+						ui.Tabs.Indicator(ui.TabsIndicatorProps{
+							PartProps: ui.PartProps{Style: ui.Style().Height(2)},
+							Placement: "bottom",
+						})})
 				},
-			)
-			ui.Text(
+			))
+			children = append(children, ui.Text(
 				"Direction: ",
 				state().ActivationDirection,
-			)
+			).Node)
+			return ui.Fragment(children)
 		},
 	)
 }

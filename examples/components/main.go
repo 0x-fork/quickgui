@@ -5,12 +5,13 @@ import (
 	"strconv"
 
 	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/reactive"
 	"github.com/egoist/quickgui/go/ui"
 )
 
 type demo struct {
 	ID, Label, Source string
-	Component         func()
+	Component         ui.Component
 }
 
 var demos = []demo{
@@ -71,7 +72,7 @@ func main() {
 				TitleBarStyle:        "hiddenInset",
 				TrafficLightPosition: &native.Point{X: 16, Y: 18},
 				Background:           lightPalette.Window,
-				Component: func() {
+				Component: func() *native.Node {
 					window := native.CurrentWindow()
 					appearance, setAppearance := ui.CreateSignal("light")
 					size, setSize := ui.CreateSignal(native.Point{X: 1080, Y: 780})
@@ -89,7 +90,7 @@ func main() {
 					ui.OnCleanup(window.On(native.WindowReadyToShow, func(native.WindowEvent) { update() }))
 					ui.OnCleanup(window.On(native.WindowResize, func(native.WindowEvent) { update() }))
 					ui.OnCleanup(window.On(native.WindowAppearance, func(event native.WindowEvent) { setAppearance(event.Appearance) }))
-					galleryContext.Provide(galleryTheme{Appearance: appearance, Size: size}, Gallery)
+					return reactive.Provide(galleryContext, galleryTheme{Appearance: appearance, Size: size}, Gallery)
 				},
 			})
 		}
@@ -104,7 +105,7 @@ func main() {
 	}
 }
 
-func Gallery() {
+func Gallery() *native.Node {
 	selected, setSelected := ui.CreateSignal("accordion")
 	current := func() demo {
 		for _, entry := range demos {
@@ -114,7 +115,7 @@ func Gallery() {
 		}
 		return demos[0]
 	}
-	ui.Tabs.Root(
+	return ui.Tabs.Root(
 		ui.TabsRootProps{
 			Value:         func() *string { return ptr(selected()) },
 			OnValueChange: func(value string, _ *native.Event) { setSelected(value) },
@@ -129,77 +130,76 @@ func Gallery() {
 					TextColor(p().Ink)
 			}},
 		},
-		func() {
-			ui.View(
-				func() {
-					ui.View(
-						func() {
-							ui.Text(
-								"Components",
-							).FontSize(13).FontWeight(700)
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.View(
+
+				ui.View(
+
+					ui.Text(
+						"Components",
+					).FontSize(13).FontWeight(700),
+				).Display("flex").Height(52).FlexShrink(0).AlignItems("center").PaddingLeft(82).AppRegion("drag"),
+				ui.View(
+
+					ui.Tabs.List(
+						ui.PartProps{Style: ui.Style().
+							Display("flex").
+							FlexDirection("column").
+							Gap(1).
+							PaddingLeft(8).
+							PaddingRight(8).
+							PaddingBottom(12)},
+						func() *native.Node {
+							var children []*native.Node
+							for index, entry := range demos {
+								children = append(children, ui.Tabs.Tab(
+									ui.TabsTabProps{
+										Value: entry.ID,
+										Index: ptr(index),
+										PartProps: ui.PartProps{Style: func() ui.StyleBuilder {
+											background, ink, weight := "transparent", p().Ink, 400
+											if selected() == entry.ID {
+												background, ink, weight = p().Accent, p().OnAccent, 600
+											}
+											return ui.Style().
+												Display("flex").
+												AlignItems("center").
+												Height(28).
+												FlexShrink(0).
+												PaddingLeft(10).
+												PaddingRight(10).
+												BorderRadius(7).
+												Cursor("default").
+												UserSelect("none").
+												BackgroundColor(background).
+												TextColor(ink).
+												FontSize(12).
+												FontWeight(weight).
+												Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
+													return s.BackgroundColor(choose(selected() == entry.ID, p().Accent, p().ControlHover))
+												}).
+												FocusStyle(func(s ui.StyleBuilder) ui.StyleBuilder {
+													return s.Outline("2px solid " + p().Accent)
+												}).
+												OutlineOffset(-2)
+										}},
+									},
+									entry.Label,
+								))
+							}
+							return ui.Fragment(children)
 						},
-					).Display("flex").Height(52).FlexShrink(0).AlignItems("center").PaddingLeft(82).AppRegion("drag")
+					),
+				).Display("flex").FlexDirection("column").Flex(1).MinHeight(0).OverflowY("scroll"),
+			).Display("flex").FlexDirection("column").Width(214).FlexShrink(0).Height("100%").BackgroundColor(color(func(p palette) string { return p.Sidebar })).BorderRightWidth(1).BorderColor(color(func(p palette) string { return p.Border })).Node,
+				ui.View(
+
 					ui.View(
-						func() {
-							ui.Tabs.List(
-								ui.PartProps{Style: ui.Style().
-									Display("flex").
-									FlexDirection("column").
-									Gap(1).
-									PaddingLeft(8).
-									PaddingRight(8).
-									PaddingBottom(12)},
-								func() {
-									for index, entry := range demos {
-										ui.Tabs.Tab(
-											ui.TabsTabProps{
-												Value: entry.ID,
-												Index: ptr(index),
-												PartProps: ui.PartProps{Style: func() ui.StyleBuilder {
-													background, ink, weight := "transparent", p().Ink, 400
-													if selected() == entry.ID {
-														background, ink, weight = p().Accent, p().OnAccent, 600
-													}
-													return ui.Style().
-														Display("flex").
-														AlignItems("center").
-														Height(28).
-														FlexShrink(0).
-														PaddingLeft(10).
-														PaddingRight(10).
-														BorderRadius(7).
-														Cursor("default").
-														UserSelect("none").
-														BackgroundColor(background).
-														TextColor(ink).
-														FontSize(12).
-														FontWeight(weight).
-														Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
-															return s.BackgroundColor(choose(selected() == entry.ID, p().Accent, p().ControlHover))
-														}).
-														FocusStyle(func(s ui.StyleBuilder) ui.StyleBuilder {
-															return s.Outline("2px solid " + p().Accent)
-														}).
-														OutlineOffset(-2)
-												}},
-											},
-											entry.Label,
-										)
-									}
-								},
-							)
-						},
-					).Display("flex").FlexDirection("column").Flex(1).MinHeight(0).OverflowY("scroll")
-				},
-			).Display("flex").FlexDirection("column").Width(214).FlexShrink(0).Height("100%").BackgroundColor(color(func(p palette) string { return p.Sidebar })).BorderRightWidth(1).BorderColor(color(func(p palette) string { return p.Border }))
-			ui.View(
-				func() {
-					ui.View(
-						func() {
-							row(func() {
-								ui.Text(
-									current().Label,
-								).FontSize(15).FontWeight(700)
+
+						row(func() *native.Node {
+							return ui.Fragment([]*native.Node{ui.Text(
+								current().Label,
+							).FontSize(15).FontWeight(700).Node,
 								ui.Text(
 									func() string {
 										switch current().Source {
@@ -211,21 +211,21 @@ func Gallery() {
 											return "Base UI part set"
 										}
 									},
-								).FontSize(11).TextColor(color(func(p palette) string { return p.Faint }))
-							})
-							ui.Text(
-								func() string {
-									theme := galleryContext.Use()
-									size := theme.Size()
-									return strconv.Itoa(len(demos)) + " components · " + theme.Appearance() + " appearance · " + strconv.FormatFloat(size.X, 'f', 0, 64) + "×" + strconv.FormatFloat(size.Y, 'f', 0, 64)
-								},
-							).FontSize(11).TextColor(color(func(p palette) string { return p.Faint }))
-						},
-					).Display("flex").AlignItems("center").JustifyContent("space-between").Height(52).FlexShrink(0).PaddingLeft(20).PaddingRight(20).BorderBottomWidth(1).BorderColor(color(func(p palette) string { return p.Border })).AppRegion("drag")
+								).FontSize(11).TextColor(color(func(p palette) string { return p.Faint })).Node})
+						}),
+						ui.Text(
+							func() string {
+								theme := galleryContext.Use()
+								size := theme.Size()
+								return strconv.Itoa(len(demos)) + " components · " + theme.Appearance() + " appearance · " + strconv.FormatFloat(size.X, 'f', 0, 64) + "×" + strconv.FormatFloat(size.Y, 'f', 0, 64)
+							},
+						).FontSize(11).TextColor(color(func(p palette) string { return p.Faint })),
+					).Display("flex").AlignItems("center").JustifyContent("space-between").Height(52).FlexShrink(0).PaddingLeft(20).PaddingRight(20).BorderBottomWidth(1).BorderColor(color(func(p palette) string { return p.Border })).AppRegion("drag"),
 					ui.View(
-						func() {
+						func() *native.Node {
+							var children []*native.Node
 							for _, entry := range demos {
-								ui.Tabs.Panel(
+								children = append(children, ui.Tabs.Panel(
 									ui.TabsPanelProps{
 										Value: entry.ID,
 										PartProps: ui.PartProps{Style: ui.Style().
@@ -236,12 +236,12 @@ func Gallery() {
 											FlexShrink(0)},
 									},
 									entry.Component,
-								)
+								))
 							}
+							return ui.Fragment(children)
 						},
-					).Display("flex").FlexDirection("column").Flex(1).MinHeight(0).Padding(20).Gap(16).OverflowY("scroll")
-				},
-			).Display("flex").FlexDirection("column").Flex(1).MinWidth(0).Height("100%")
+					).Display("flex").FlexDirection("column").Flex(1).MinHeight(0).Padding(20).Gap(16).OverflowY("scroll"),
+				).Display("flex").FlexDirection("column").Flex(1).MinWidth(0).Height("100%").Node})
 		},
 	)
 }

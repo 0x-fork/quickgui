@@ -2,15 +2,14 @@
 
 ## レンダリングモデル
 
-ウィンドウのルート、ルート画面、条件分岐、子要素ブロックはすべて `func()` を使います。コンポーネントはノードを返さず、0 個以上の子要素を宣言し、マウント時に一度実行されます。ブロック内の UI 呼び出しはその親に追加されます。静的な構築には通常の Go の `if` や `for` を使い、シグナルで子構造を変える場合は `ui.Show` や `ui.For` を使います。
+すべてのコンポーネントと UI 構築コールバックは `*ui.Element` または `*native.Node` を返します。子ノードを直接渡し、複数の兄弟には `ui.Fragment(...)` を返します。UI 構築結果の破棄と戻り値のない宣言ブロックはコンパイルエラーになります。イベントやエフェクトのコールバックは従来のシグネチャです。
 
 ```go
-func ViewExample() {
-	ui.View(
-		func() {
-			ui.Text("Hello from Go")
-			ui.Button("Continue").OnClick(func() {})
-		},
+func ViewExample() *ui.Element {
+	return ui.View(
+
+		ui.Text("Hello from Go"),
+		ui.Button("Continue").OnClick(func() {}),
 	).Padding(20).Gap(12)
 }
 ```
@@ -20,15 +19,15 @@ func ViewExample() {
 状態に応じて子をマウントまたは削除するには `ui.Show` を使います。通常の Go の `if` は構築時だけ実行されます。同じ分岐が選ばれている間はノードを保持し、分岐を削除するとバインディングも破棄します。
 
 ```go
-func DisclosureExample() {
+func DisclosureExample() *ui.Element {
 	open, setOpen := ui.CreateSignal(false)
-	ui.View(func() {
-		ui.Button("Toggle details").OnClick(func() { setOpen(!open()) })
+	return ui.View(
+		ui.Button("Toggle details").OnClick(func() { setOpen(!open()) }),
 		ui.Show(
 			open,
-			func() { ui.Text("Details") },
-		)
-	})
+			func() *ui.Element { return ui.Text("Details") },
+		),
+	)
 }
 ```
 
@@ -44,28 +43,28 @@ type ListPerson struct {
 	Name string
 }
 
-func KeyedListExample() {
+func KeyedListExample() *ui.Element {
 	people, setPeople := ui.CreateSignal([]ListPerson{{1, "Ada"}, {2, "Grace"}})
-	ui.View(func() {
+	return ui.View(
 		ui.Button(
 			"Reorder and rename",
 		).OnClick(func() {
 			setPeople([]ListPerson{{2, "Grace"}, {1, "Ada Lovelace"}})
-		})
+		}),
 
 		ui.KeyedFor(
 			people,
 			func(person ListPerson) any { return person.ID },
-			func(person func() ListPerson, index func() int) {
-				ui.Text(
+			func(person func() ListPerson, index func() int) *ui.Element {
+				return ui.Text(
 					index(),
 					": ",
 					person().Name,
 				)
 			},
-			func() { ui.Text("No people") },
-		)
-	})
+			func() *ui.Element { return ui.Text("No people") },
+		),
+	)
 }
 ```
 
@@ -76,7 +75,7 @@ func KeyedListExample() {
 バックグラウンド処理はコンポーネントのマウント時に開始します。`load` は UI goroutine の外で動き、コンテキストのキャンセルに従う必要があります。完了コールバックでは安全にシグナルを書き込めます。所有する分岐の削除やウィンドウの終了時にはコンテキストがキャンセルされ、遅れて届いた完了通知も破棄されます。この例では標準の `context` パッケージを使います。
 
 ```go
-func LoadingPanel(load func(context.Context) (string, error)) {
+func LoadingPanel(load func(context.Context) (string, error)) *ui.Element {
 	result, setResult := ui.CreateSignal("Loading…")
 	ui.Async(
 		load,
@@ -88,7 +87,7 @@ func LoadingPanel(load func(context.Context) (string, error)) {
 			setResult(value)
 		},
 	)
-	ui.Text(result())
+	return ui.Text(result())
 }
 ```
 
@@ -97,12 +96,12 @@ func LoadingPanel(load func(context.Context) (string, error)) {
 コンポーネントのマウント時に `native.CurrentWindow()` を取得し、コールバックではそのウィンドウを使います。無関係な goroutine から取得しないでください。ウィンドウイベントやネイティブリクエストは非同期コールバックで結果を返します。
 
 ```go
-func CloseButton() {
+func CloseButton() *ui.Element {
 	window := native.CurrentWindow()
-	ui.Button("Close window").OnClick(func() { window.Close() })
+	return ui.Button("Close window").OnClick(func() { window.Close() })
 }
 ```
 
 ## チェック・テスト・デバッグ
 
-アプリのモジュールで `quickgui test` を実行すると、開発ビルドと同じビューコンパイラーを使ってテストできます。型は `quickgui check`、書式は `quickgui fmt --check` で確認します。ビルドには `CGO_ENABLED=0` を使います。Go の診断とスタックフレームは元のソース位置を保ちますが、デバッガーには生成された getter 引数が表示されます。直接 `go test` を実行するとビューコンパイラーを経由しないため、リアクティブな式には明示的なアクセサーが必要です。
+アプリのモジュールで `quickgui test` を実行し、開発ビルドと同じビューコンパイラーを使います。`quickgui fmt --check` で書式を確認します。アプリはネイティブ Go 実行ファイルなので、通常の Go 診断やデバッガーは元のソースを使用します。

@@ -4,22 +4,21 @@
 Applications remain valid Go with ordinary parameter types and editor tooling.
 No annotations, CGO, application JavaScript, or extra host processes are involved.
 
-Go components declare their children implicitly and have no return value.
-Window roots, routes, conditional branches, list renderers, and child blocks use
-`func()` callbacks. The runtime collects their detached roots in declaration
-order. Nested child blocks collect independently; nodes attached to a parent or
-owned by a fragment do not become duplicate siblings. A component can declare
-zero, one, or multiple roots without a layout wrapper.
+Go components return `*ui.Element` or `*native.Node`. Compose native children
+and component results directly, such as `return ui.View(Label(count()))`.
+Window roots, routes, conditional branches, list renderers, and deferred child
+callbacks also return nodes. Use `ui.Fragment(...)` for multiple siblings without
+a layout container. Only the returned tree mounts. Implicit declarations and
+void construction callbacks are unsupported.
 
 The compiler uses `go list` for the active target and build tags, and `go/types`
 object identities for parameters, imports, shadowing, and component calls.
-Top-level declaration functions that construct native UI are components.
-Discovery follows calls between declaration functions until it also recognizes
-forwarding components across application packages. Nested callbacks do not turn
-an outer setup function into a component. Methods and helpers returning node
-handles retain ordinary Go call semantics. Node-returning component factories
-are unsupported; dynamically typed child positions receive an original-source
-diagnostic, and typed component positions are checked by Go itself.
+Top-level functions with a native node return type are component boundaries.
+Methods retain ordinary call semantics. Native view expressions still bind
+independently wherever they appear. Discarded UI construction calls, blank
+assignments, and void construction callbacks receive original-source diagnostics.
+Existing-node setters, event handlers, effects, and lifecycle callbacks retain
+their ordinary behavior.
 
 Component implementations receive getters for plain value parameters. Direct
 calls carry live expressions into those getters. Static arguments are evaluated
@@ -28,19 +27,19 @@ Setup assignments remain snapshots. Parameters assigned to or addressed as
 local storage keep ordinary Go value semantics. Ordinary function values retain
 their original signatures and normal eager argument evaluation.
 
-Call components inside child blocks: `ui.View(func() { Label(count()) })`.
-Native constructors also accept existing children directly, such as
-`ui.View(ui.Text(count()))`. Their returned builders support fluent modifiers
-and node references; they do not define a component return boundary.
 `ui.Text(count())`, `.Width(width())`, `.When(selected(), style)`, and
 `ui.Show(visible(), Details)` preserve live reads without accessor wrappers.
-Use `ui.Child(node)` to declare an existing detached node inside a block.
-
 Native scalar text and fluent properties accepting accessors bind independently
 through the existing frontend. The component body runs once. Each retained node
 owns its bindings; unmounting releases them. The compiler adds no scheduling,
 polling, whole-component effects, or native-tree reconstruction. Explicit
 accessors continue to work, including inside untransformed helper methods.
+
+`native.NodeProvider` exposes a frontend builder's native node without a native
+package dependency on `ui`. The runtime invokes unfamiliar frontend factories
+through reflection only at mount time. Ordinary component calls and retained
+binding updates remain direct calls. Unused detached allocations made by a
+factory are retired; they never mount as implicit siblings.
 
 The SDK and registry dependencies are not transformed. Application packages,
 local replacements, and workspace dependencies share component metadata.

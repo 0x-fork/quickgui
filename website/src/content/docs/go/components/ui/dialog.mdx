@@ -13,33 +13,33 @@ import (
 ## Usage
 
 ```go
-func DialogExample() {
-	ui.Dialog.Root(
+func DialogExample() *native.Node {
+	return ui.Dialog.Root(
 		ui.DialogRootProps{},
-		func() {
-			ui.Dialog.Trigger(ui.PartProps{}, "Open dialog")
-			ui.Dialog.Portal(
-				ui.PartProps{},
-				func() {
-					ui.Dialog.Backdrop(ui.PartProps{})
-					ui.Dialog.Viewport(
-						ui.PartProps{},
-						func() {
-							ui.Dialog.Popup(
-								ui.DialogPopupProps{},
-								func() {
-									ui.Dialog.Title(ui.PartProps{}, "Confirm action")
-									ui.Dialog.Description(
-										ui.PartProps{},
-										"Review the details before continuing.",
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Dialog.Trigger(ui.PartProps{}, "Open dialog"),
+				ui.Dialog.Portal(
+					ui.PartProps{},
+					func() *native.Node {
+						return ui.Fragment([]*native.Node{ui.Dialog.Backdrop(ui.PartProps{}),
+							ui.Dialog.Viewport(
+								ui.PartProps{},
+								func() *native.Node {
+									return ui.Dialog.Popup(
+										ui.DialogPopupProps{},
+										func() *native.Node {
+											return ui.Fragment([]*native.Node{ui.Dialog.Title(ui.PartProps{}, "Confirm action"),
+												ui.Dialog.Description(
+													ui.PartProps{},
+													"Review the details before continuing.",
+												),
+												ui.Dialog.Close(ui.PartProps{}, "Cancel")})
+										},
 									)
-									ui.Dialog.Close(ui.PartProps{}, "Cancel")
 								},
-							)
-						},
-					)
-				},
-			)
+							)})
+					},
+				)})
 		},
 	)
 }

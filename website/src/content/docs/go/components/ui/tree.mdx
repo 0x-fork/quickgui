@@ -13,18 +13,18 @@ import (
 ## Usage
 
 ```go
-func TreeExample() {
+func TreeExample() *native.Node {
 	nodes := []ui.TreeNodeDeclaration{{ID: "src", Label: "src", Children: []ui.TreeNodeDeclaration{{ID: "src/main.go", Label: "main.go"}}}}
-	ui.Tree.Root(
+	return ui.Tree.Root(
 		ui.TreeRootProps{
 			Nodes:           func() []ui.TreeNodeDeclaration { return nodes },
 			DefaultExpanded: []string{"src"},
 			RowHeight:       26,
 			PartProps:       ui.PartProps{Style: ui.Style().Height(200)},
 		},
-		func() {
-			ui.Tree.Row(ui.TreeRowProps{NodeID: "src"}, "src")
-			ui.Tree.Row(ui.TreeRowProps{NodeID: "src/main.go"}, "main.go")
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Tree.Row(ui.TreeRowProps{NodeID: "src"}, "src"),
+				ui.Tree.Row(ui.TreeRowProps{NodeID: "src/main.go"}, "main.go")})
 		},
 	)
 }

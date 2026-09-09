@@ -13,23 +13,23 @@ import (
 ## 使い方
 
 ```go
-func TooltipExample() {
-	ui.Tooltip.Provider(
+func TooltipExample() *native.Node {
+	return ui.Tooltip.Provider(
 		ui.TooltipProviderProps{Delay: 500},
-		func() {
-			ui.Tooltip.Root(
+		func() *native.Node {
+			return ui.Tooltip.Root(
 				ui.TooltipRootProps{Side: "top"},
-				func() {
-					ui.Tooltip.Trigger(ui.TooltipTriggerProps{}, "Hover me")
-					ui.Tooltip.Positioner(
-						ui.TooltipPositionerProps{},
-						func() {
-							ui.Tooltip.Popup(
-								ui.PartProps{},
-								"Helpful information",
-							)
-						},
-					)
+				func() *native.Node {
+					return ui.Fragment([]*native.Node{ui.Tooltip.Trigger(ui.TooltipTriggerProps{}, "Hover me"),
+						ui.Tooltip.Positioner(
+							ui.TooltipPositionerProps{},
+							func() *native.Node {
+								return ui.Tooltip.Popup(
+									ui.PartProps{},
+									"Helpful information",
+								)
+							},
+						)})
 				},
 			)
 		},

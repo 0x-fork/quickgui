@@ -13,15 +13,15 @@ import (
 ## 用法
 
 ```go
-func TextExample() {
+func TextExample() *ui.Element {
 	count, setCount := ui.CreateSignal(0)
-	ui.View(func() {
+	return ui.View(
 		ui.Text(
 			"Count: ",
 			count(),
-		).FontSize(20)
-		ui.Button("Increment").OnClick(func() { setCount(count() + 1) })
-	})
+		).FontSize(20),
+		ui.Button("Increment").OnClick(func() { setCount(count() + 1) }),
+	)
 }
 ```
 

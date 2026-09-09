@@ -4,7 +4,7 @@ QuickGUI applications are ordinary Go programs. `purego` loads the prebuilt Rust
 
 ## Components
 
-Components declare zero or more children implicitly and have no return value. Pass a `func()` root as `WindowOptions.Component`, and call child components inside a children block. Native constructors also accept existing child nodes directly. The compiler keeps plain typed props and native view expressions reactive without accessor wrappers or annotations. Node-returning component factories are unsupported.
+Components return a retained native node: `*ui.Element` for the fluent builder or `*native.Node` for lower-level code. Pass a root directly as `WindowOptions.Component`, and compose children as `ui.View(Child(...), ui.Text(count()))`. The compiler recognizes the return type and keeps props and native view expressions reactive without a children callback. Optional callbacks remain available for deferred construction and controls that establish child context.
 
 ```go
 package main
@@ -37,9 +37,9 @@ func main() {
 	}
 }
 
-func Counter() {
+func Counter() *ui.Element {
 	count, setCount := ui.CreateSignal(0)
-	ui.View(
+	return ui.View(
 		ui.Text("Fine-grained native UI").FontSize(28).FontWeight(700),
 		ui.Text("Count: ", count()),
 		ui.Button("Increment").
@@ -58,12 +58,12 @@ func Counter() {
 }
 ```
 
-Components and child blocks run once when mounted. Their UI declarations attach to the current parent. Use ordinary `if` and `for` for static construction, and `ui.Show` or `ui.For` for changing child structure. With the QuickGUI CLI, direct reads such as `ui.Text("Count: ", count())` and `LineItem(product, quantity())` become fine-grained bindings. Component parameters keep plain types such as `Product` and `int`; declaration functions and forwarding helpers are recognized across local packages. Setup assignments such as `initial := count()` remain snapshots. Ordinary function values and parameters used as mutable local storage keep normal Go evaluation. Explicit accessors also work, including with raw Go commands. Event handlers batch writes automatically; use `ui.Batch` to group writes outside an event.
+Components and deferred construction callbacks return a node and run once when mounted. UI nodes are used explicitly: return them, assign them, or pass them as children. Discarded construction calls and `func()` declaration blocks are rejected. Ordinary `if` and `for` statements are useful for static construction. Reading a signal inside an accessor subscribes that binding; setting it changes the affected native properties or text nodes. Event handlers batch writes automatically. Use `ui.Batch` to group writes outside an event. Pass string or numeric accessors directly as children: `ui.Text("Count: ", count)` retains the prefix and updates only the number. Numbers use typed `strconv` conversions. Use direct reads such as `ui.Text(count())` and `CounterLabel(count())` when building with QuickGUI. The compiler preserves their reactivity. A setup assignment such as `initial := count()` remains a snapshot. Use `strconv` and concatenation when a property needs one combined string, such as an input value or accessibility label.
 
 Pass children or content to constructors, then chain properties, styles, and handlers:
 
 ```go
-ui.View(
+return ui.View(
 	ui.Text("hello"),
 	ui.Input().Value("xxx").OnInput(func(value string) { /* save value */ }),
 ).Flex().PaddingLeft(20).TextAlign("center").RoundedLg()
@@ -76,10 +76,12 @@ Rust's layout helpers are available with Go names: `.FlexCol()`, `.FlexRowRevers
 Use `ui.Style().Padding(12).BorderRadius(8)` to share styles or fill a compound control’s `PartProps.Style` field. It returns a reusable `ui.StyleBuilder` value; fluent modifiers and `.Merge(other)` return new values without mutating it. Scalar accessors are bound independently when mounted, without rerunning the component.
 
 ```go
+var children []*native.Node
 card := ui.Style().Padding(20).RoundedLg().
 	Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.Bg("#1e293b") })
-ui.View("Hello").Style(card)
-ui.View("Another card").Style(card.PaddingLeft(28))
+children = append(children, ui.View("Hello").Style(card).Node)
+children = append(children, ui.View("Another card").Style(card.PaddingLeft(28)).Node)
+return ui.Fragment(children)
 ```
 
 Builder `.When(condition, func(s ui.StyleBuilder) ui.StyleBuilder { ... })` takes a boolean setup value. Use the element’s `.When(getter, style)` or a part’s style accessor for reactive conditions. Save the returned value when deriving styles; applying a style keeps a snapshot with its scalar accessors.
@@ -90,7 +92,7 @@ Builder `.When(condition, func(s ui.StyleBuilder) ui.StyleBuilder { ... })` take
 
 ```go
 selected, setSelected := ui.CreateSignal(false)
-ui.Button("Toggle selection").
+return ui.Button("Toggle selection").
 	Padding(12).
 	Bg("#ccc").
 	RoundedLg().
@@ -109,8 +111,8 @@ Use `quickgui fmt --check` in CI or `quickgui fmt --project path/to/app` for ano
 `.Group(true)` marks an unnamed hover group; `.Group("card")` names it. A descendant’s `.GroupHover(...)` follows its nearest ancestor group. `.GroupHoverNamed("card", ...)` follows the nearest ancestor with that name, skipping groups with other names. Elements and reusable style builders accept the same style callbacks.
 
 ```go
-func GroupExample() {
-	ui.View(
+func GroupExample() *ui.Element {
+	return ui.View(
 		ui.Text("Changes when the card is hovered").TextColor("#64748b").
 			GroupHover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.TextColor("#2563eb") }),
 		ui.View(
@@ -129,31 +131,31 @@ Hovering group padding or descendants activates its rules. Repeated group rules 
 ## Conditional content and lists
 
 ```go
-ui.Show(
-	func() bool { return count() >= 5 },
-	func() {
-		ui.Text("Five or more clicks")
+return ui.Show(
+	count() >= 5,
+	func() *ui.Element {
+		return ui.Text("Five or more clicks")
 	},
 )
 ```
 
 `Show` accepts component functions for its content and optional fallback. It creates children lazily and disposes them when hidden. `For` reuses unchanged rows by a comparable key; `KeyedFor` gives each retained row an item accessor so changing its data preserves local state. Keys must be unique. Removed rows release their effects and native listeners. Window closure disposes the entire component tree and outstanding component background work.
 
-`ui.Dynamic(func() ui.Component { ... })` selects a component reactively. Only the selector reruns; bindings inside the selected component keep updating its retained nodes. Return `nil` from the selector to render nothing. List callbacks declare their row children:
+`ui.Dynamic(func() ui.Component { ... })` selects a component reactively. Only the selector reruns; bindings inside the selected component keep updating its retained nodes. Return `nil` from the selector to render nothing. List callbacks also return their row node:
 
 ```go
-ui.For(
+return ui.For(
 	items,
-	func(item Item, index func() int) {
-		ui.Text(item.Name)
-		ui.Text(index())
+	func(item Item, index func() int) *native.Node {
+		return ui.Fragment([]*native.Node{ui.Text(item.Name).Node,
+			ui.Text(index()).Node})
 	},
 	func(item Item) any { return item.ID },
 	nil,
 )
 ```
 
-Use `.Ref(func(node *native.Node) { ... })` for a node handle, such as a popover anchor. It runs once at its position in the fluent chain. Pass `element.Node` to low-level native APIs. Component functions use `func()`; native constructors still return builders for fluent modifiers and node references.
+Use `.Ref(func(node *native.Node) { ... })` for a node handle, such as a popover anchor. It runs once at its position in the fluent chain. Pass `element.Node` to low-level native APIs. Components and construction callbacks must return `*ui.Element` or `*native.Node`.
 
 ## Background work
 
@@ -170,7 +172,7 @@ Go and Rust exchange bounded binary mutation batches and copied event data throu
 - `reactive`: signals, memos, batching, effects, owners, and contexts.
 - `host`: the purego C ABI adapter and a replaceable host interface for tests.
 
-Compound controls accept `func()` child blocks after their typed props so descendants inherit their context. Declare multiple sibling nodes in the same block. Pass strings or string accessors directly to text and buttons, and chain styles and handlers on primitive builders. Use `ui.Child(existingNode)` to declare a detached node created outside the current block. Constructors automatically declare new nodes. The `Props.Children` form remains available for programmatic composition. Families include `Checkbox`, `Switch`, `Tabs`, `Dialog`, `Popover`, `SystemPopover`, `Slider`, `Select`, `Combobox`, `Menu`, `Table`, `Tree`, and `Toast`. Their native behavior remains in Rust. `ui.SwiftUI` provides the macOS SwiftUI control gallery and reverse-hosted QuickGUI views.
+Compound controls accept node-returning callbacks after their typed props so descendants inherit their context. Return `ui.Fragment(...)` when a callback constructs multiple sibling nodes. Pass strings or string accessors directly as children to text and buttons. Primitives configure styles and events with fluent methods. Pass an existing node directly to a parent or to `ui.Fragment(...)`. There is no implicit child-declaration API. The `Props.Children` form remains available for programmatic composition. Families include `Checkbox`, `Switch`, `Tabs`, `Dialog`, `Popover`, `SystemPopover`, `Slider`, `Select`, `Combobox`, `Menu`, `Table`, `Tree`, and `Toast`. Their native behavior remains in Rust. `ui.SwiftUI` provides the macOS SwiftUI control gallery and reverse-hosted QuickGUI views.
 
 See [counter](../examples/counter/main.go), [components](../examples/components/main.go), [routing](../examples/routing/main.go), [SwiftUI](../examples/swift-ui/main.go), and the full [Quick Git](../examples/quick-git/main.go) application.
 

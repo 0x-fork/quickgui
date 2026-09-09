@@ -34,97 +34,94 @@ func visibleWindow[T any](items []T, window gui.VisibleRange) []visibleItem[T] {
 	return rows
 }
 
-func ChangesView() {
+func ChangesView() *gui.Element {
 	app := UseApp()
 	store := app.Store
-	gui.View(
-		func() {
-			resizablePanel("Resize file list", store.ChangesSplit, store.SetChangesSplit, 220, 800,
-				func() {
-					gui.Show(
-						func() bool { return store.ChangeCount() > 0 },
-						func() {
-							fileList(model.ListUnstaged)
-							fileList(model.ListStaged)
-						},
-						func() {
-							emptyState("No local changes", "The working tree matches the last commit.")
-						},
-					)
-					commitComposer()
-				},
-				gui.Style().
-					Display("flex").
-					FlexShrink(0).
-					MinHeight(0).
-					FlexDirection("column"),
-			)
-			DiffPane()
-		},
+	return gui.View(
+
+		resizablePanel("Resize file list", store.ChangesSplit, store.SetChangesSplit, 220, 800,
+			func() *native.Node {
+				return gui.Fragment([]*native.Node{gui.Show(
+					store.ChangeCount() > 0,
+					func() *native.Node {
+						return gui.Fragment([]*native.Node{fileList(model.ListUnstaged).Node,
+							fileList(model.ListStaged).Node})
+					},
+					func() *gui.Element {
+						return emptyState("No local changes", "The working tree matches the last commit.")
+					},
+				),
+					commitComposer().Node})
+			},
+			gui.Style().
+				Display("flex").
+				FlexShrink(0).
+				MinHeight(0).
+				FlexDirection("column"),
+		),
+		DiffPane(),
 	).Display("flex").Flex(1).MinWidth(0).MinHeight(0).FlexDirection("row")
 }
 
-func fileList(list model.ListID) {
+func fileList(list model.ListID) *gui.Element {
 	app := UseApp()
 	store := app.Store
 	label := "Unstaged"
 	if list == model.ListStaged {
 		label = "Staged"
 	}
-	gui.View(
-		func() {
-			gui.View(
-				func() {
-					gui.Text(
-						label,
-					).FontSize(11).FontWeight(600).TextColor(app.Theme().TextTertiary)
-					gui.Text(
-						len(store.ListItems(list)),
-					).FontSize(11).TextColor(app.Theme().TextTertiary)
-					gui.View().Flex(1)
-					gui.Show(
-						func() bool { return len(store.ListItems(list)) > 0 },
-						func() {
-							text := "Stage All"
-							if list == model.ListStaged {
-								text = "Unstage All"
-							}
-							gui.Button(
-								text,
+	return gui.View(
 
-								app.Theme().Button("secondary"),
-							).Disabled(store.Busy() != nil).OnClick(func() {
-								if list == model.ListUnstaged {
-									store.StageAll()
-								} else {
-									store.UnstageAll()
-								}
-							})
+		gui.View(
 
-						},
-					)
-				},
-			).Display("flex").FlexDirection("row").AlignItems("center").Height(32).FlexShrink(0).PaddingLeft(12).PaddingRight(8).Gap(6)
+			gui.Text(
+				label,
+			).FontSize(11).FontWeight(600).TextColor(app.Theme().TextTertiary),
+			gui.Text(
+				len(store.ListItems(list)),
+			).FontSize(11).TextColor(app.Theme().TextTertiary),
+			gui.View().Flex(1),
 			gui.Show(
-				func() bool { return len(store.ListItems(list)) > 0 },
-				func() {
-					changeTable(list)
-				},
-				func() {
-					empty := "No unstaged changes"
+				len(store.ListItems(list)) > 0,
+				func() *gui.Element {
+					text := "Stage All"
 					if list == model.ListStaged {
-						empty = "Nothing staged yet"
+						text = "Unstage All"
 					}
-					gui.Text(
-						empty,
-					).PaddingLeft(12).PaddingBottom(10).FontSize(12).TextColor(app.Theme().TextTertiary)
+					return gui.Button(
+						text,
+
+						app.Theme().Button("secondary"),
+					).Disabled(store.Busy() != nil).OnClick(func() {
+						if list == model.ListUnstaged {
+							store.StageAll()
+						} else {
+							store.UnstageAll()
+						}
+					})
+
 				},
-			)
-		},
+			),
+		).Display("flex").FlexDirection("row").AlignItems("center").Height(32).FlexShrink(0).PaddingLeft(12).PaddingRight(8).Gap(6),
+		gui.Show(
+			len(store.ListItems(list)) > 0,
+			func() *native.Node {
+				return changeTable(list)
+			},
+			func() *gui.Element {
+				empty := "No unstaged changes"
+				if list == model.ListStaged {
+					empty = "Nothing staged yet"
+				}
+				return gui.Text(
+					empty,
+				).PaddingLeft(12).PaddingBottom(10).FontSize(12).TextColor(app.Theme().TextTertiary)
+			},
+		),
 	).Display("flex").FlexDirection("column").MinHeight(0).Flex(1).FlexBasis(0)
 }
 
-func changeTable(list model.ListID) {
+func changeTable(list model.ListID) *native.Node {
 	app := UseApp()
 	store := app.Store
 	visibleRange, setVisibleRange := gui.CreateSignal(gui.VisibleRange{Start: 0, End: 0})
@@ -138,7 +135,7 @@ func changeTable(list model.ListID) {
 		}
 		return ranges
 	}
-	gui.Table.Root(
+	return gui.Table.Root(
 		gui.TableRootProps{
 			PartProps: gui.PartProps{
 				Style: gui.Style().Flex(1).MinHeight(0).OverflowY("scroll"),
@@ -165,12 +162,12 @@ func changeTable(list model.ListID) {
 				store.ToggleStaging(list)
 			},
 		},
-		func() {
-			gui.KeyedFor(
+		func() *native.Node {
+			return gui.KeyedFor(
 				visible,
 				func(row visibleItem[git.ChangeItem]) any { return row.Index },
-				func(row func() visibleItem[git.ChangeItem], _ func() int) {
-					gui.Table.Row(
+				func(row func() visibleItem[git.ChangeItem], _ func() int) *native.Node {
+					return gui.Table.Row(
 						gui.TableRowProps{
 							Index: func() float64 { return float64(row().Index) },
 							PartProps: gui.PartProps{
@@ -183,42 +180,42 @@ func changeTable(list model.ListID) {
 									}),
 							},
 						},
-						func() {
-							gui.Table.Cell(
+						func() *native.Node {
+							return gui.Fragment([]*native.Node{gui.Table.Cell(
 								gui.TableCellProps{
 									Column:    "toggle",
 									PartProps: gui.PartProps{},
 								},
-								func() {
-									stageToggle(list, func() git.ChangeItem { return row().Item })
+								func() *native.Node {
+									return stageToggle(list, func() git.ChangeItem { return row().Item })
 								},
-							)
-							gui.Table.Cell(
-								gui.TableCellProps{
-									Column:    "status",
-									PartProps: gui.PartProps{},
-								},
-								func() {
-									gui.Text(
-										string(row().Item.Code),
-									).Width(16).FontWeight(700).TextColor(StatusColor(app.Theme(), string(row().Item.Code)))
-								},
-							)
-							gui.Table.Cell(
-								gui.TableCellProps{
-									Column: "name",
-									PartProps: gui.PartProps{
-										Style: gui.Style().
-											PaddingRight(8).
-											MinWidth(0),
-										OnContextMenu: func(*native.Event) { changeMenu(app, list, row().Item) },
-										OnDoubleClick: func(*native.Event) { store.ToggleStaging(list) },
+							),
+								gui.Table.Cell(
+									gui.TableCellProps{
+										Column:    "status",
+										PartProps: gui.PartProps{},
 									},
-								},
-								func() {
-									changeName(list, func() git.ChangeItem { return row().Item })
-								},
-							)
+									func() *gui.Element {
+										return gui.Text(
+											string(row().Item.Code),
+										).Width(16).FontWeight(700).TextColor(StatusColor(app.Theme(), string(row().Item.Code)))
+									},
+								),
+								gui.Table.Cell(
+									gui.TableCellProps{
+										Column: "name",
+										PartProps: gui.PartProps{
+											Style: gui.Style().
+												PaddingRight(8).
+												MinWidth(0),
+											OnContextMenu: func(*native.Event) { changeMenu(app, list, row().Item) },
+											OnDoubleClick: func(*native.Event) { store.ToggleStaging(list) },
+										},
+									},
+									func() *gui.Element {
+										return changeName(list, func() git.ChangeItem { return row().Item })
+									},
+								)})
 						},
 					)
 				},
@@ -228,12 +225,12 @@ func changeTable(list model.ListID) {
 	)
 }
 
-func stageToggle(list model.ListID, item func() git.ChangeItem) {
+func stageToggle(list model.ListID, item func() git.ChangeItem) *native.Node {
 	app := UseApp()
 	store := app.Store
 	checked := list == model.ListStaged
 	focus := false
-	gui.Checkbox.Root(
+	return gui.Checkbox.Root(
 		gui.CheckboxProps{
 			PartProps: gui.PartProps{
 				AriaLabel: func() string {
@@ -262,15 +259,15 @@ func stageToggle(list model.ListID, item func() git.ChangeItem) {
 				store.UnstageItems([]git.ChangeItem{current})
 			},
 		},
-		func() {
-			gui.Checkbox.Indicator(
+		func() *native.Node {
+			return gui.Checkbox.Indicator(
 				gui.PartProps{
 					Style: checkboxBox(app.Theme(), checked),
 				},
-				func() {
-					gui.Show(
-						func() bool { return checked },
-						func() { checkboxMark(true) },
+				func() *native.Node {
+					return gui.Show(
+						checked,
+						func() *gui.Element { return checkboxMark(true) },
 					)
 				},
 			)
@@ -278,7 +275,7 @@ func stageToggle(list model.ListID, item func() git.ChangeItem) {
 	)
 }
 
-func changeName(list model.ListID, item func() git.ChangeItem) {
+func changeName(list model.ListID, item func() git.ChangeItem) *gui.Element {
 	app := UseApp()
 	store := app.Store
 	counts := func() string {
@@ -302,20 +299,19 @@ func changeName(list model.ListID, item func() git.ChangeItem) {
 		}
 		return text
 	}
-	gui.View(
-		func() {
-			gui.Text(
-				item().Path,
-			).Flex(1).MinWidth(0).FontSize(13).LineClamp(1)
-			gui.Show(
-				func() bool { return counts() != "" },
-				func() {
-					gui.Text(
-						counts,
-					).FontSize(11).FontFamily("monospace").TextColor(app.Theme().TextTertiary)
-				},
-			)
-		},
+	return gui.View(
+
+		gui.Text(
+			item().Path,
+		).Flex(1).MinWidth(0).FontSize(13).LineClamp(1),
+		gui.Show(
+			counts() != "",
+			func() *gui.Element {
+				return gui.Text(
+					counts,
+				).FontSize(11).FontFamily("monospace").TextColor(app.Theme().TextTertiary)
+			},
+		),
 	).Display("flex").Flex(1).MinWidth(0).FlexDirection("row").AlignItems("center").Gap(6).Height("100%")
 }
 
@@ -395,212 +391,205 @@ func confirmDiscard(app AppContext, items []git.ChangeItem) {
 	)
 }
 
-func commitComposer() {
+func commitComposer() *gui.Element {
 	app := UseApp()
 	store := app.Store
-	gui.View(
-		func() {
-			gui.Input(
+	return gui.View(
 
-				app.Theme().InputStyle(),
-			).Placeholder("Commit summary").Value(store.Subject()).OnInputEvent(func(event *native.Event) { store.SetSubject(event.Value) }).OnSubmitEvent(func(*native.Event) { store.Commit() })
+		gui.Input(
 
-			gui.TextArea().Placeholder("Description").Value(store.Body()).OnInputEvent(func(event *native.Event) { store.SetBody(event.Value) }).
-				Display("flex").Width("100%").MinHeight(72).PaddingLeft(7).PaddingRight(7).PaddingTop(4).PaddingBottom(4).BackgroundColor(app.Theme().Input).TextColor(app.Theme().Text).BorderWidth(1).BorderColor(app.Theme().InputBorder).BorderRadius(6).FontSize(UIFontSize)
-			gui.View(
-				func() {
-					CheckRow("Amend", store.Amend, store.SetAmend)
-					gui.View().Flex(1)
-					gui.Show(
-						func() bool { return len(store.Agents()) > 0 },
-						func() {
-							gui.Button(
-								func() string {
-									if store.Generating() != nil {
-										return "Generating…"
-									}
-									return "Generate"
-								},
+			app.Theme().InputStyle(),
+		).Placeholder("Commit summary").Value(store.Subject()).OnInputEvent(func(event *native.Event) { store.SetSubject(event.Value) }).OnSubmitEvent(func(*native.Event) { store.Commit() }),
 
-								app.Theme().Button("secondary"),
-							).Disabled(store.Generating() != nil).OnClick(func() { store.GenerateMessage("") })
+		gui.TextArea().Placeholder("Description").Value(store.Body()).OnInputEvent(func(event *native.Event) { store.SetBody(event.Value) }).
+			Display("flex").Width("100%").MinHeight(72).PaddingLeft(7).PaddingRight(7).PaddingTop(4).PaddingBottom(4).BackgroundColor(app.Theme().Input).TextColor(app.Theme().Text).BorderWidth(1).BorderColor(app.Theme().InputBorder).BorderRadius(6).FontSize(UIFontSize),
+		gui.View(
 
+			CheckRow("Amend", store.Amend, store.SetAmend),
+			gui.View().Flex(1),
+			gui.Show(
+				len(store.Agents()) > 0,
+				func() *gui.Element {
+					return gui.Button(
+						func() string {
+							if store.Generating() != nil {
+								return "Generating…"
+							}
+							return "Generate"
 						},
-					)
-					gui.Button(
-						"Commit",
 
-						app.Theme().Button("primary"),
-					).Disabled(!store.CanCommit()).OnClick(func() { store.Commit() })
+						app.Theme().Button("secondary"),
+					).Disabled(store.Generating() != nil).OnClick(func() { store.GenerateMessage("") })
 
 				},
-			).Display("flex").FlexDirection("row").AlignItems("center").Gap(8)
-		},
+			),
+			gui.Button(
+				"Commit",
+
+				app.Theme().Button("primary"),
+			).Disabled(!store.CanCommit()).OnClick(func() { store.Commit() }),
+		).Display("flex").FlexDirection("row").AlignItems("center").Gap(8),
 	).Display("flex").FlexDirection("column").FlexShrink(0).Gap(8).Padding(12).BorderTopWidth(1).BorderColor(app.Theme().Border)
 }
 
-func DiffPane() {
+func DiffPane() *gui.Element {
 	app := UseApp()
 	store := app.Store
-	gui.View(
-		func() {
-			gui.Show(
-				func() bool { return store.Diff().Target != nil },
-				func() {
+	return gui.View(
 
-					gui.View(
-						func() {
-							gui.Text(
-								func() string {
-									if target := store.Diff().Target; target != nil {
-										return target.Path
-									}
-									return ""
-								},
-							).Flex(1).MinWidth(0).FontSize(13).FontWeight(600).LineClamp(1)
-							gui.Show(
-								func() bool { return store.DiffStats().Added > 0 },
-								func() {
-									gui.Text(
-										"+" + strconv.Itoa(store.DiffStats().Added),
-									).FontSize(11).FontWeight(700).TextColor(app.Theme().Success).FontFamily("monospace")
-								},
-							)
-							gui.Show(
-								func() bool { return store.DiffStats().Removed > 0 },
-								func() {
-									gui.Text(
-										"-" + strconv.Itoa(store.DiffStats().Removed),
-									).FontSize(11).FontWeight(700).TextColor(app.Theme().Danger).FontFamily("monospace")
-								},
-							)
-							gui.Show(
-								func() bool {
-									return store.Diff().Loading && store.Diff().Diff == nil
-								},
-								func() {
-									gui.Text(
-										"Loading…",
-									).FontSize(11).TextColor(app.Theme().TextTertiary)
-								},
-							)
-							diffActions()
+		gui.Show(
+			store.Diff().Target != nil,
+			func() *native.Node {
+				return gui.Fragment([]*native.Node{gui.View(
+
+					gui.Text(
+						func() string {
+							if target := store.Diff().Target; target != nil {
+								return target.Path
+							}
+							return ""
 						},
-					).Display("flex").FlexDirection("row").AlignItems("center").Gap(8).Height(40).FlexShrink(0).PaddingLeft(14).PaddingRight(10).BorderBottomWidth(1).BorderColor(app.Theme().Border)
+					).Flex(1).MinWidth(0).FontSize(13).FontWeight(600).LineClamp(1),
 					gui.Show(
-						func() bool { return store.Diff().Error != "" },
-						func() {
-							gui.Text(
+						store.DiffStats().Added > 0,
+						func() *gui.Element {
+							return gui.Text(
+								"+" + strconv.Itoa(store.DiffStats().Added),
+							).FontSize(11).FontWeight(700).TextColor(app.Theme().Success).FontFamily("monospace")
+						},
+					),
+					gui.Show(
+						store.DiffStats().Removed > 0,
+						func() *gui.Element {
+							return gui.Text(
+								"-" + strconv.Itoa(store.DiffStats().Removed),
+							).FontSize(11).FontWeight(700).TextColor(app.Theme().Danger).FontFamily("monospace")
+						},
+					),
+					gui.Show(
+
+						store.Diff().Loading && store.Diff().Diff == nil,
+
+						func() *gui.Element {
+							return gui.Text(
+								"Loading…",
+							).FontSize(11).TextColor(app.Theme().TextTertiary)
+						},
+					),
+					diffActions(),
+				).Display("flex").FlexDirection("row").AlignItems("center").Gap(8).Height(40).FlexShrink(0).PaddingLeft(14).PaddingRight(10).BorderBottomWidth(1).BorderColor(app.Theme().Border).Node,
+					gui.Show(
+						store.Diff().Error != "",
+						func() *gui.Element {
+							return gui.Text(
 								store.Diff().Error,
 							).Padding(12).TextColor(app.Theme().Danger).FontSize(12)
 						},
-					)
-					diffTable()
+					),
+					diffTable()})
 
-				},
-				func() {
-					title := "Select a file"
-					if store.View() == model.ViewHistory {
-						title = "Select a commit"
-					}
-					emptyState(title, "Choose a change to review its diff.")
-				},
-			)
-		},
+			},
+			func() *gui.Element {
+				title := "Select a file"
+				if store.View() == model.ViewHistory {
+					title = "Select a commit"
+				}
+				return emptyState(title, "Choose a change to review its diff.")
+			},
+		),
 	).Display("flex").Flex(1).MinWidth(0).MinHeight(0).FlexDirection("column").BackgroundColor(app.Theme().Content)
 }
 
-func diffActions() {
+func diffActions() *native.Node {
 	app := UseApp()
 	store := app.Store
-	gui.Show(
-		func() bool {
-			return store.Diff().Target != nil && store.Diff().Target.Kind != "commit"
-		},
-		func() {
+	return gui.Show(
+
+		store.Diff().Target != nil && store.Diff().Target.Kind != "commit",
+
+		func() *gui.Element {
 			mode := store.Diff().Target.Kind
 			lineCount := store.SelectedDiffLineCount()
-			gui.View(
-				func() {
-					gui.Show(
-						func() bool { return lineCount > 0 },
-						func() {
-							if mode == "staged" {
-								gui.Button(
-									"Unstage "+strconv.Itoa(lineCount)+" Lines",
+			return gui.View(
 
-									app.Theme().Button("primary"),
-								).OnClick(func() { store.ApplySelectedLines("unstage") })
-
-								return
-
-							}
-
-							gui.Button(
-								"Discard Lines…",
-
-								app.Theme().Button("danger"),
-							).OnClick(func() { store.ApplySelectedLines("discard") })
-
-							gui.Button(
-								"Stage "+strconv.Itoa(lineCount)+" Lines",
+				gui.Show(
+					lineCount > 0,
+					func() *native.Node {
+						var children []*native.Node
+						if mode == "staged" {
+							children = append(children, gui.Button(
+								"Unstage "+strconv.Itoa(lineCount)+" Lines",
 
 								app.Theme().Button("primary"),
-							).OnClick(func() { store.ApplySelectedLines("stage") })
+							).OnClick(func() { store.ApplySelectedLines("unstage") }).Node)
 
-						},
-						func() {
-							if mode == "staged" {
-								gui.Button(
-									"Unstage File",
+							return gui.Fragment(children)
 
-									app.Theme().Button("secondary"),
-								).OnClick(func() {
-									if item := store.ActiveItem(); item != nil {
-										store.UnstageItems([]git.ChangeItem{*item})
-									}
-								})
+						}
+						children = append(children, gui.Button(
+							"Discard Lines…",
 
-								return
+							app.Theme().Button("danger"),
+						).OnClick(func() { store.ApplySelectedLines("discard") }).Node)
+						children = append(children, gui.Button(
+							"Stage "+strconv.Itoa(lineCount)+" Lines",
 
+							app.Theme().Button("primary"),
+						).OnClick(func() { store.ApplySelectedLines("stage") }).Node)
+						return gui.Fragment(children)
+
+					},
+					func() *native.Node {
+						var children []*native.Node
+						if mode == "staged" {
+							children = append(children, gui.Button(
+								"Unstage File",
+
+								app.Theme().Button("secondary"),
+							).OnClick(func() {
+								if item := store.ActiveItem(); item != nil {
+									store.UnstageItems([]git.ChangeItem{*item})
+								}
+							}).Node)
+
+							return gui.Fragment(children)
+
+						}
+						children = append(children, gui.Button(
+							"Discard…",
+
+							app.Theme().Button("danger"),
+						).OnClick(func() {
+							if item := store.ActiveItem(); item != nil {
+								confirmDiscard(app, []git.ChangeItem{*item})
 							}
+						}).Node)
+						children = append(children, gui.Button(
+							"Stage File",
 
-							gui.Button(
-								"Discard…",
+							app.Theme().Button("primary"),
+						).OnClick(func() {
+							if item := store.ActiveItem(); item != nil {
+								store.StageItems([]git.ChangeItem{*item})
+							}
+						}).Node)
+						return gui.Fragment(children)
 
-								app.Theme().Button("danger"),
-							).OnClick(func() {
-								if item := store.ActiveItem(); item != nil {
-									confirmDiscard(app, []git.ChangeItem{*item})
-								}
-							})
-
-							gui.Button(
-								"Stage File",
-
-								app.Theme().Button("primary"),
-							).OnClick(func() {
-								if item := store.ActiveItem(); item != nil {
-									store.StageItems([]git.ChangeItem{*item})
-								}
-							})
-
-						},
-					)
-				},
+					},
+				),
 			).Display("flex").FlexDirection("row").Gap(6)
 		},
 	)
 }
 
-func diffTable() {
+func diffTable() *native.Node {
 	app := UseApp()
 	store := app.Store
 	visibleRange, setVisibleRange := gui.CreateSignal(gui.VisibleRange{Start: 0, End: 0})
 	visible := func() []visibleItem[git.DiffRow] {
 		return visibleWindow(store.DiffRows(), visibleRange())
 	}
-	gui.Table.Root(
+	return gui.Table.Root(
 		gui.TableRootProps{
 			PartProps: gui.PartProps{
 				Style: gui.Style().
@@ -629,12 +618,12 @@ func diffTable() {
 				store.SetDiffSelection(ranges)
 			},
 		},
-		func() {
-			gui.KeyedFor(
+		func() *native.Node {
+			return gui.KeyedFor(
 				visible,
 				func(row visibleItem[git.DiffRow]) any { return row.Index },
-				func(row func() visibleItem[git.DiffRow], _ func() int) {
-					diffTableRow(func() git.DiffRow { return row().Item }, func() int { return row().Index })
+				func(row func() visibleItem[git.DiffRow], _ func() int) *native.Node {
+					return diffTableRow(func() git.DiffRow { return row().Item }, func() int { return row().Index })
 				},
 				nil,
 			)
@@ -642,7 +631,7 @@ func diffTable() {
 	)
 }
 
-func diffTableRow(row func() git.DiffRow, index func() int) {
+func diffTableRow(row func() git.DiffRow, index func() int) *native.Node {
 	app := UseApp()
 	store := app.Store
 	theme := app.Theme()
@@ -689,7 +678,7 @@ func diffTableRow(row func() git.DiffRow, index func() int) {
 		TextAlign("right").
 		PaddingRight(6).
 		UserSelect("none")
-	gui.Table.Row(
+	return gui.Table.Row(
 		gui.TableRowProps{
 			Index: func() float64 { return float64(index()) },
 			PartProps: gui.PartProps{
@@ -701,79 +690,81 @@ func diffTableRow(row func() git.DiffRow, index func() int) {
 					}),
 			},
 		},
-		func() {
-			gui.Table.Cell(
+		func() *native.Node {
+			return gui.Fragment([]*native.Node{gui.Table.Cell(
 				gui.TableCellProps{
 					Column: "old",
 					PartProps: gui.PartProps{
 						Style: gui.Style().BackgroundColor(gutter),
 					},
 				},
-				func() {
-					gui.Show(
-						func() bool {
-							return row().Kind == "line" && row().OldLineNumber != nil
-						},
-						func() {
-							gui.Text(
+				func() *native.Node {
+					return gui.Show(
+
+						row().Kind == "line" && row().OldLineNumber != nil,
+
+						func() *gui.Element {
+							return gui.Text(
 								*row().OldLineNumber,
 								numberStyle,
 							)
 						},
 					)
 				},
-			)
-			gui.Table.Cell(
-				gui.TableCellProps{
-					Column: "new",
-					PartProps: gui.PartProps{
-						Style: gui.Style().BackgroundColor(gutter),
-					},
-				},
-				func() {
-					gui.Show(
-						func() bool {
-							return row().Kind == "line" && row().NewLineNumber != nil
+			),
+				gui.Table.Cell(
+					gui.TableCellProps{
+						Column: "new",
+						PartProps: gui.PartProps{
+							Style: gui.Style().BackgroundColor(gutter),
 						},
-						func() {
-							gui.Text(
-								*row().NewLineNumber,
-								numberStyle,
-							)
-						},
-					)
-				},
-			)
-			gui.Table.Cell(
-				gui.TableCellProps{
-					Column: "text",
-					PartProps: gui.PartProps{
-						Style: gui.Style().
-							PaddingLeft(8).
-							PaddingRight(8).
-							MinWidth(0).
-							Gap(8),
 					},
-				},
-				func() {
-					gui.View(
-						func() {
+					func() *native.Node {
+						return gui.Show(
+
+							row().Kind == "line" && row().NewLineNumber != nil,
+
+							func() *gui.Element {
+								return gui.Text(
+									*row().NewLineNumber,
+									numberStyle,
+								)
+							},
+						)
+					},
+				),
+				gui.Table.Cell(
+					gui.TableCellProps{
+						Column: "text",
+						PartProps: gui.PartProps{
+							Style: gui.Style().
+								PaddingLeft(8).
+								PaddingRight(8).
+								MinWidth(0).
+								Gap(8),
+						},
+					},
+					func() *gui.Element {
+						return gui.View(
+
 							gui.View(
-								func() {
+								func() *native.Node {
+									var children []*native.Node
 									if mark != "" {
-										icon(mark, 12, func() string { return markColor })
+										children = append(children, icon(mark, 12, func() string { return markColor }).Node)
 									}
+									return gui.Fragment(children)
 								},
-							).Width(12).FlexShrink(0)
+							).Width(12).FlexShrink(0),
 							gui.Text(
 								row().Text,
-							).Flex(1).MinWidth(0).FontFamily("monospace").FontSize(MonoFontSize).TextColor(textColor).WhiteSpace("nowrap")
+							).Flex(1).MinWidth(0).FontFamily("monospace").FontSize(MonoFontSize).TextColor(textColor).WhiteSpace("nowrap"),
 							gui.Show(
-								func() bool {
-									return row().Kind == "hunk" && store.Diff().Target != nil && store.Diff().Target.Kind != "commit"
-								},
-								func() {
-									gui.Button(
+
+								row().Kind == "hunk" && store.Diff().Target != nil && store.Diff().Target.Kind != "commit",
+
+								func() *gui.Element {
+									return gui.Button(
 										func() string {
 											if store.Diff().Target != nil && store.Diff().Target.Kind == "staged" {
 												return "Unstage hunk"
@@ -792,16 +783,15 @@ func diffTableRow(row func() git.DiffRow, index func() int) {
 									}).
 										Height(16).FontFamily("system-ui").FontSize(11).LineHeight(14).PaddingLeft(6).PaddingRight(6).BorderRadius(4)
 								},
-							)
-						},
-					).Display("flex").Flex(1).MinWidth(0).FlexDirection("row").AlignItems("center").Gap(8)
-				},
-			)
+							),
+						).Display("flex").Flex(1).MinWidth(0).FlexDirection("row").AlignItems("center").Gap(8)
+					},
+				)})
 		},
 	)
 }
 
-func historyTable() {
+func historyTable() *native.Node {
 	app := UseApp()
 	store := app.Store
 	visibleRange, setVisibleRange := gui.CreateSignal(gui.VisibleRange{Start: 0, End: 0})
@@ -820,7 +810,7 @@ func historyTable() {
 		}
 		return 2*graphInset + float64(min(lanes, 8))*graphLaneWidth
 	})
-	gui.Table.Root(
+	return gui.Table.Root(
 		gui.TableRootProps{
 			PartProps: gui.PartProps{
 				Style: gui.Style().Flex(1).MinHeight(0).OverflowY("scroll"),
@@ -845,12 +835,12 @@ func historyTable() {
 				store.SetHistorySelection(ranges)
 			},
 		},
-		func() {
-			gui.KeyedFor(
+		func() *native.Node {
+			return gui.KeyedFor(
 				visible,
 				func(row visibleItem[git.Commit]) any { return row.Index },
-				func(row func() visibleItem[git.Commit], _ func() int) {
-					historyTableRow(row, graphWidth)
+				func(row func() visibleItem[git.Commit], _ func() int) *native.Node {
+					return historyTableRow(row, graphWidth)
 				},
 				nil,
 			)
@@ -858,10 +848,10 @@ func historyTable() {
 	)
 }
 
-func historyTableRow(row func() visibleItem[git.Commit], graphWidth func() float64) {
+func historyTableRow(row func() visibleItem[git.Commit], graphWidth func() float64) *native.Node {
 	app := UseApp()
 	store := app.Store
-	gui.Table.Row(
+	return gui.Table.Row(
 		gui.TableRowProps{
 			Index: func() float64 { return float64(row().Index) },
 			PartProps: gui.PartProps{
@@ -888,14 +878,14 @@ func historyTableRow(row func() visibleItem[git.Commit], graphWidth func() float
 				},
 			},
 		},
-		func() {
-			gui.Table.Cell(
+		func() *native.Node {
+			return gui.Fragment([]*native.Node{gui.Table.Cell(
 				gui.TableCellProps{
 					Column:    "graph",
 					PartProps: gui.PartProps{},
 				},
-				func() {
-					historyGraph(func() *git.GraphRow {
+				func() *gui.Element {
+					return historyGraph(func() *git.GraphRow {
 						graph := store.History().Graph
 						index := row().Index
 						if index < 0 || index >= len(graph) {
@@ -904,118 +894,114 @@ func historyTableRow(row func() visibleItem[git.Commit], graphWidth func() float
 						return &graph[index]
 					}, graphWidth)
 				},
-			)
-			gui.Table.Cell(
-				gui.TableCellProps{
-					Column: "subject",
-					PartProps: gui.PartProps{
-						Style: gui.Style().
-							MinWidth(0).
-							PaddingRight(8).
-							Overflow("hidden"),
+			),
+				gui.Table.Cell(
+					gui.TableCellProps{
+						Column: "subject",
+						PartProps: gui.PartProps{
+							Style: gui.Style().
+								MinWidth(0).
+								PaddingRight(8).
+								Overflow("hidden"),
+						},
 					},
-				},
-				func() {
-					gui.View(
-						func() {
-							commitRefs(func() []git.CommitRef { return row().Item.Refs })
+					func() *gui.Element {
+						return gui.View(
+
+							commitRefs(func() []git.CommitRef { return row().Item.Refs }),
 							gui.Text(
 								row().Item.Subject,
-							).Flex(1).FontSize(12.5).LineClamp(1).MinWidth(0)
-						},
-					).Display("flex").Flex(1).MinWidth(0).FlexDirection("row").AlignItems("center").Gap(6)
-				},
-			)
-			gui.Table.Cell(
-				gui.TableCellProps{
-					Column: "author",
-					PartProps: gui.PartProps{Style: gui.Style().
-						MinWidth(0).
-						PaddingRight(8).
-						Overflow("hidden")},
-				},
-				func() {
-					gui.Text(
-						row().Item.AuthorName,
-					).FontSize(11).TextColor(app.Theme().TextTertiary).LineClamp(1)
-				},
-			)
-			gui.Table.Cell(
-				gui.TableCellProps{
-					Column:    "date",
-					PartProps: gui.PartProps{Style: gui.Style().PaddingRight(10)},
-				},
-				func() {
-					gui.Text(
+							).Flex(1).FontSize(12.5).LineClamp(1).MinWidth(0),
+						).Display("flex").Flex(1).MinWidth(0).FlexDirection("row").AlignItems("center").Gap(6)
+					},
+				),
+				gui.Table.Cell(
+					gui.TableCellProps{
+						Column: "author",
+						PartProps: gui.PartProps{Style: gui.Style().
+							MinWidth(0).
+							PaddingRight(8).
+							Overflow("hidden")},
+					},
+					func() *gui.Element {
+						return gui.Text(
+							row().Item.AuthorName,
+						).FontSize(11).TextColor(app.Theme().TextTertiary).LineClamp(1)
+					},
+				),
+				gui.Table.Cell(
+					gui.TableCellProps{
+						Column:    "date",
+						PartProps: gui.PartProps{Style: gui.Style().PaddingRight(10)},
+					},
+					func() *gui.Element {
+						return gui.Text(
 
-						git.RelativeTime(row().Item.AuthorTime, time.Now()),
-					).FontSize(11).TextColor(app.Theme().TextTertiary).TextAlign("right")
-				},
-			)
+							git.RelativeTime(row().Item.AuthorTime, time.Now()),
+						).FontSize(11).TextColor(app.Theme().TextTertiary).TextAlign("right")
+					},
+				)})
 		},
 	)
 }
 
-func HistoryView() {
+func HistoryView() *gui.Element {
 	app := UseApp()
 	store := app.Store
-	gui.View(
-		func() {
-			resizablePanel("Resize history", store.HistorySplit, store.SetHistorySplit, 260, 1000,
-				func() {
-					gui.View(
-						func() {
-							gui.Text(
-								func() string {
-									if store.History().AllBranches {
-										return "All branches"
-									}
-									if status := store.Status(); status != nil && status.Branch != "" {
-										return status.Branch
-									}
-									return "History"
-								},
-							).FontSize(11).FontWeight(700).TextTransform("uppercase").TextColor(app.Theme().TextTertiary)
-							gui.Text(
-								func() string {
-									suffix := ""
-									if !store.History().Exhausted {
-										suffix = "+"
-									}
-									return strconv.Itoa(len(store.History().Commits)) + suffix + " commits"
-								},
-							).FontSize(11).TextColor(app.Theme().TextTertiary)
-							gui.View().Flex(1)
-							CheckRow("All branches", func() bool { return store.History().AllBranches }, store.SetHistoryAllBranches)
+	return gui.View(
+
+		resizablePanel("Resize history", store.HistorySplit, store.SetHistorySplit, 260, 1000,
+			func() *native.Node {
+				return gui.Fragment([]*native.Node{gui.View(
+
+					gui.Text(
+						func() string {
+							if store.History().AllBranches {
+								return "All branches"
+							}
+							if status := store.Status(); status != nil && status.Branch != "" {
+								return status.Branch
+							}
+							return "History"
 						},
-					).Display("flex").FlexDirection("row").AlignItems("center").Height(32).FlexShrink(0).PaddingLeft(12).PaddingRight(8).Gap(8).BorderBottomWidth(1).BorderColor(app.Theme().Border)
+					).FontSize(11).FontWeight(700).TextTransform("uppercase").TextColor(app.Theme().TextTertiary),
+					gui.Text(
+						func() string {
+							suffix := ""
+							if !store.History().Exhausted {
+								suffix = "+"
+							}
+							return strconv.Itoa(len(store.History().Commits)) + suffix + " commits"
+						},
+					).FontSize(11).TextColor(app.Theme().TextTertiary),
+					gui.View().Flex(1),
+					CheckRow("All branches", func() bool { return store.History().AllBranches }, store.SetHistoryAllBranches),
+				).Display("flex").FlexDirection("row").AlignItems("center").Height(32).FlexShrink(0).PaddingLeft(12).PaddingRight(8).Gap(8).BorderBottomWidth(1).BorderColor(app.Theme().Border).Node,
 					gui.Show(
-						func() bool { return len(store.History().Commits) > 0 },
-						func() {
-							historyTable()
+						len(store.History().Commits) > 0,
+						func() *native.Node {
+							return historyTable()
 						},
-						func() {
-							emptyState("No commits", "This repository has no history yet.")
+						func() *gui.Element {
+							return emptyState("No commits", "This repository has no history yet.")
 						},
-					)
-				},
-				gui.Style().
-					Display("flex").
-					FlexShrink(0).
-					MinHeight(0).
-					FlexDirection("column"),
-			)
-			gui.View(
-				func() {
-					commitDetail()
-					DiffPane()
-				},
-			).Display("flex").Flex(1).MinWidth(0).MinHeight(0).FlexDirection("column")
-		},
+					)})
+			},
+			gui.Style().
+				Display("flex").
+				FlexShrink(0).
+				MinHeight(0).
+				FlexDirection("column"),
+		),
+		gui.View(
+
+			commitDetail(),
+			DiffPane(),
+		).Display("flex").Flex(1).MinWidth(0).MinHeight(0).FlexDirection("column"),
 	).Display("flex").Flex(1).MinWidth(0).MinHeight(0).FlexDirection("row")
 }
 
-func commitFileTable() {
+func commitFileTable() *native.Node {
 	app := UseApp()
 	store := app.Store
 	visibleRange, setVisibleRange := gui.CreateSignal(gui.VisibleRange{Start: 0, End: 0})
@@ -1034,7 +1020,7 @@ func commitFileTable() {
 		}
 		return nil
 	}
-	gui.Table.Root(
+	return gui.Table.Root(
 		gui.TableRootProps{
 			PartProps: gui.PartProps{
 				Style: gui.Style().
@@ -1070,12 +1056,12 @@ func commitFileTable() {
 				}
 			},
 		},
-		func() {
-			gui.KeyedFor(
+		func() *native.Node {
+			return gui.KeyedFor(
 				visible,
 				func(row visibleItem[git.CommitFile]) any { return row.Item.Path },
-				func(row func() visibleItem[git.CommitFile], _ func() int) {
-					gui.Table.Row(
+				func(row func() visibleItem[git.CommitFile], _ func() int) *native.Node {
+					return gui.Table.Row(
 						gui.TableRowProps{
 							Index: func() float64 { return float64(row().Index) },
 							PartProps: gui.PartProps{
@@ -1088,29 +1074,29 @@ func commitFileTable() {
 									}),
 							},
 						},
-						func() {
-							gui.Table.Cell(
+						func() *native.Node {
+							return gui.Fragment([]*native.Node{gui.Table.Cell(
 								gui.TableCellProps{
 									Column:    "status",
 									PartProps: gui.PartProps{Style: gui.Style().PaddingLeft(12)},
 								},
-								func() {
-									gui.Text(
+								func() *gui.Element {
+									return gui.Text(
 										row().Item.Status,
 									).Width(16).FontWeight(700).TextColor(StatusColor(app.Theme(), row().Item.Status))
 								},
-							)
-							gui.Table.Cell(
-								gui.TableCellProps{
-									Column:    "name",
-									PartProps: gui.PartProps{},
-								},
-								func() {
-									gui.Text(
-										row().Item.Path,
-									).Flex(1).MinWidth(0).LineClamp(1)
-								},
-							)
+							),
+								gui.Table.Cell(
+									gui.TableCellProps{
+										Column:    "name",
+										PartProps: gui.PartProps{},
+									},
+									func() *gui.Element {
+										return gui.Text(
+											row().Item.Path,
+										).Flex(1).MinWidth(0).LineClamp(1)
+									},
+								)})
 						},
 					)
 				},
@@ -1120,321 +1106,302 @@ func commitFileTable() {
 	)
 }
 
-func commitDetail() {
+func commitDetail() *gui.Element {
 	app := UseApp()
 	store := app.Store
-	gui.View(
-		func() {
-			gui.Show(
-				func() bool { return store.SelectedCommit() != nil },
-				func() {
+	return gui.View(
 
-					gui.View(
-						func() {
-							gui.Text(
-								func() string {
-									if commit := store.SelectedCommit(); commit != nil {
-										return commit.Subject
-									}
-									return ""
-								},
-							).FontSize(14).FontWeight(700)
-							gui.Show(
-								func() bool {
-									commit := store.SelectedCommit()
-									return commit != nil && commit.Body != ""
-								},
-								func() {
-									gui.Text(
-										func() string {
-											if commit := store.SelectedCommit(); commit != nil {
-												return commit.Body
-											}
-											return ""
-										},
-									).FontSize(12.5).LineHeight(18).UserSelect("text").TextColor(app.Theme().TextSecondary)
-								},
-							)
-							gui.Text(
-								func() string {
-									if commit := store.SelectedCommit(); commit != nil {
-										return commit.AuthorName + " · " + git.AbsoluteTime(commit.AuthorTime) + " · " + commit.ShortSha
-									}
-									return ""
-								},
-							).FontSize(12).TextColor(app.Theme().TextSecondary)
+		gui.Show(
+			store.SelectedCommit() != nil,
+			func() *native.Node {
+				return gui.Fragment([]*native.Node{gui.View(
+
+					gui.Text(
+						func() string {
+							if commit := store.SelectedCommit(); commit != nil {
+								return commit.Subject
+							}
+							return ""
 						},
-					).Padding(12).Display("flex").FlexDirection("column").Gap(4)
+					).FontSize(14).FontWeight(700),
 					gui.Show(
-						func() bool { return store.CommitDetail().Loading },
-						func() {
-							gui.Text(
+						func() bool {
+							commit := store.SelectedCommit()
+							return commit != nil && commit.Body != ""
+						},
+						func() *gui.Element {
+							return gui.Text(
+								func() string {
+									if commit := store.SelectedCommit(); commit != nil {
+										return commit.Body
+									}
+									return ""
+								},
+							).FontSize(12.5).LineHeight(18).UserSelect("text").TextColor(app.Theme().TextSecondary)
+						},
+					),
+					gui.Text(
+						func() string {
+							if commit := store.SelectedCommit(); commit != nil {
+								return commit.AuthorName + " · " + git.AbsoluteTime(commit.AuthorTime) + " · " + commit.ShortSha
+							}
+							return ""
+						},
+					).FontSize(12).TextColor(app.Theme().TextSecondary),
+				).Padding(12).Display("flex").FlexDirection("column").Gap(4).Node,
+					gui.Show(
+						store.CommitDetail().Loading,
+						func() *gui.Element {
+							return gui.Text(
 								"Loading files…",
 							).PaddingLeft(12).FontSize(12)
 						},
-					)
-					commitFileTable()
+					),
+					commitFileTable()})
 
-				},
-				func() {
-					emptyState("Select a commit", "Its files appear here.")
-				},
-			)
-		},
+			},
+			func() *gui.Element {
+				return emptyState("Select a commit", "Its files appear here.")
+			},
+		),
 	).Display("flex").FlexDirection("column").FlexShrink(0).MaxHeight("45%").MinHeight(0).OverflowY("auto").BorderBottomWidth(1).BorderColor(app.Theme().Border)
 }
 
-func BranchesView() {
+func BranchesView() *gui.Element {
 	app := UseApp()
 	store := app.Store
-	gui.View(
-		func() {
-			gui.View(
-				func() {
+	return gui.View(
+
+		gui.View(
+
+			gui.Text(
+				"Local branches",
+			).FontSize(11).FontWeight(700).TextTransform("uppercase").TextColor(app.Theme().TextTertiary).Flex(1),
+			gui.Button(
+				"New Branch",
+
+				app.Theme().Button("primary"),
+			).OnClick(func() { app.OpenDialog(DialogRequest{Kind: DialogNewBranch}) }),
+		).Display("flex").FlexDirection("row").AlignItems("center").Height(32).Gap(8),
+		gui.For(
+			func() []git.BranchRef { return store.Refs().Local },
+			func(branch git.BranchRef, _ func() int) *gui.Element {
+				return gui.Button(
+
 					gui.Text(
-						"Local branches",
-					).FontSize(11).FontWeight(700).TextTransform("uppercase").TextColor(app.Theme().TextTertiary).Flex(1)
-					gui.Button(
-						"New Branch",
-
-						app.Theme().Button("primary"),
-					).OnClick(func() { app.OpenDialog(DialogRequest{Kind: DialogNewBranch}) })
-
-				},
-			).Display("flex").FlexDirection("row").AlignItems("center").Height(32).Gap(8)
-			gui.For(
-				func() []git.BranchRef { return store.Refs().Local },
-				func(branch git.BranchRef, _ func() int) {
-					gui.Button(
-						func() {
-							gui.Text(
-								branch.Name,
-							).Flex(1).FontWeight(ternary(branch.Current, 700, 500)).LineClamp(1)
-							gui.Show(
-								func() bool { return branch.Current },
-								func() {
-									gui.Text(
-										"current",
-									).FontSize(11).TextColor(app.Theme().Accent)
-								},
-							)
-							gui.Text(
-								branch.ShortSha,
-							).FontSize(11).TextColor(app.Theme().TextTertiary)
+						branch.Name,
+					).Flex(1).FontWeight(ternary(branch.Current, 700, 500)).LineClamp(1),
+					gui.Show(
+						branch.Current,
+						func() *gui.Element {
+							return gui.Text(
+								"current",
+							).FontSize(11).TextColor(app.Theme().Accent)
 						},
-
-						rowStyle(app.Theme(), branch.Current),
-					).OnClick(func() {}).OnDoubleClick(func(*native.Event) {
-						if !branch.Current {
-							store.SwitchBranch(branch.Name)
-						}
-					}).OnContextMenu(func(*native.Event) {
-						native.PopupMenu(
-							app.Window,
-							[]native.MenuItem{
-								{Label: "Switch to Branch", Click: func() { store.SwitchBranch(branch.Name) }},
-								{Label: "New Branch from Here…", Click: func() { app.OpenDialog(DialogRequest{Kind: DialogNewBranch, From: branch.Name}) }},
-								{Label: "Copy Branch Name", Click: func() { native.WriteClipboardText(branch.Name) }},
-								{Type: "separator"},
-								{Label: "Delete Branch…", Click: func() { store.DeleteBranch(branch.Name, true) }},
-							},
-							nil,
-							nil,
-							func(error) {},
-						)
-					})
-
-				},
-				func(branch git.BranchRef) any { return branch.FullName },
-				nil,
-			)
-			gui.Show(
-				func() bool { return len(store.Refs().Remote) > 0 },
-				func() {
+					),
 					gui.Text(
-						"Remote branches",
-					).FontSize(11).FontWeight(700).TextTransform("uppercase").TextColor(app.Theme().TextTertiary).MarginTop(16)
-				},
-			)
-			gui.For(
-				func() []git.BranchRef { return store.Refs().Remote },
-				func(branch git.BranchRef, _ func() int) {
-					gui.View(
-						func() {
-							gui.Text(
-								branch.Name,
-							).Flex(1).LineClamp(1).TextColor(app.Theme().TextSecondary)
-							gui.Text(
-								branch.ShortSha,
-							).FontSize(11).TextColor(app.Theme().TextTertiary)
-						},
-						rowStyle(app.Theme(), false),
-					)
-				},
-				func(branch git.BranchRef) any { return branch.FullName },
-				nil,
-			)
-		},
-	).Display("flex").Flex(1).MinHeight(0).FlexDirection("column").OverflowY("auto").Padding(12).Gap(4)
-}
+						branch.ShortSha,
+					).FontSize(11).TextColor(app.Theme().TextTertiary),
 
-func WorktreesView() {
-	app := UseApp()
-	store := app.Store
-	gui.View(
-		func() {
-			gui.View(
-				func() {
-					gui.Text(
-						"Worktrees",
-					).FontSize(11).FontWeight(700).TextTransform("uppercase").TextColor(app.Theme().TextTertiary).Flex(1)
-					gui.Button(
-						"New Worktree",
-
-						app.Theme().Button("primary"),
-					).OnClick(func() { app.OpenDialog(DialogRequest{Kind: DialogNewWorktree}) })
-
-				},
-			).Display("flex").FlexDirection("row").AlignItems("center").Height(32)
-			gui.For(
-				store.Worktrees,
-				func(worktree git.Worktree, _ func() int) {
-					active := store.Repository() != nil && store.Repository().Root() == worktree.Path
-					label := worktree.BranchName
-					if label == "" {
-						label = filepath.Base(worktree.Path)
+					rowStyle(app.Theme(), branch.Current),
+				).OnClick(func() {}).OnDoubleClick(func(*native.Event) {
+					if !branch.Current {
+						store.SwitchBranch(branch.Name)
 					}
-					gui.Button(
-						func() {
-							gui.Text(label).Flex(1).LineClamp(1)
-							gui.Text(
-
-								filepath.Base(worktree.Path),
-							).FontSize(11).TextColor(app.Theme().TextTertiary)
-
+				}).OnContextMenu(func(*native.Event) {
+					native.PopupMenu(
+						app.Window,
+						[]native.MenuItem{
+							{Label: "Switch to Branch", Click: func() { store.SwitchBranch(branch.Name) }},
+							{Label: "New Branch from Here…", Click: func() { app.OpenDialog(DialogRequest{Kind: DialogNewBranch, From: branch.Name}) }},
+							{Label: "Copy Branch Name", Click: func() { native.WriteClipboardText(branch.Name) }},
+							{Type: "separator"},
+							{Label: "Delete Branch…", Click: func() { store.DeleteBranch(branch.Name, true) }},
 						},
+						nil,
+						nil,
+						func(error) {},
+					)
+				})
 
-						rowStyle(app.Theme(), active),
-					).OnClick(func() { store.SelectWorktree(worktree.Path) }).OnContextMenu(func(*native.Event) {
-						items := []native.MenuItem{
-							{Label: "Reveal in Finder", Click: func() {
-								native.ShowItemInFolder(
-									worktree.Path,
-									func(error) {},
-								)
-							}},
-							{Label: "Copy Path", Click: func() { native.WriteClipboardText(worktree.Path) }},
-						}
-						if !worktree.Main {
-							items = append(items, native.MenuItem{Type: "separator"}, native.MenuItem{
-								Label: "Remove Worktree",
-								Click: func() { store.RemoveWorktree(worktree.Path, false) },
-							})
-						}
-						native.PopupMenu(
-							app.Window,
-							items,
-							nil,
-							nil,
-							func(error) {},
-						)
-					})
+			},
+			func(branch git.BranchRef) any { return branch.FullName },
+			nil,
+		),
+		gui.Show(
+			len(store.Refs().Remote) > 0,
+			func() *gui.Element {
+				return gui.Text(
+					"Remote branches",
+				).FontSize(11).FontWeight(700).TextTransform("uppercase").TextColor(app.Theme().TextTertiary).MarginTop(16)
+			},
+		),
+		gui.For(
+			func() []git.BranchRef { return store.Refs().Remote },
+			func(branch git.BranchRef, _ func() int) *gui.Element {
+				return gui.View(
 
-				},
-				func(worktree git.Worktree) any { return worktree.Path },
-				nil,
-			)
-		},
+					gui.Text(
+						branch.Name,
+					).Flex(1).LineClamp(1).TextColor(app.Theme().TextSecondary),
+					gui.Text(
+						branch.ShortSha,
+					).FontSize(11).TextColor(app.Theme().TextTertiary),
+
+					rowStyle(app.Theme(), false),
+				)
+			},
+			func(branch git.BranchRef) any { return branch.FullName },
+			nil,
+		),
 	).Display("flex").Flex(1).MinHeight(0).FlexDirection("column").OverflowY("auto").Padding(12).Gap(4)
 }
 
-func StashesView() {
+func WorktreesView() *gui.Element {
 	app := UseApp()
 	store := app.Store
-	gui.View(
-		func() {
-			gui.View(
-				func() {
+	return gui.View(
+
+		gui.View(
+
+			gui.Text(
+				"Worktrees",
+			).FontSize(11).FontWeight(700).TextTransform("uppercase").TextColor(app.Theme().TextTertiary).Flex(1),
+			gui.Button(
+				"New Worktree",
+
+				app.Theme().Button("primary"),
+			).OnClick(func() { app.OpenDialog(DialogRequest{Kind: DialogNewWorktree}) }),
+		).Display("flex").FlexDirection("row").AlignItems("center").Height(32),
+		gui.For(
+			store.Worktrees,
+			func(worktree git.Worktree, _ func() int) *gui.Element {
+				active := store.Repository() != nil && store.Repository().Root() == worktree.Path
+				label := worktree.BranchName
+				if label == "" {
+					label = filepath.Base(worktree.Path)
+				}
+				return gui.Button(
+
+					gui.Text(label).Flex(1).LineClamp(1),
 					gui.Text(
-						"Stashes",
-					).FontSize(11).FontWeight(700).TextTransform("uppercase").TextColor(app.Theme().TextTertiary).Flex(1)
-					gui.Button(
-						"Stash Changes",
 
-						app.Theme().Button("primary"),
-					).Disabled(store.ChangeCount() == 0).OnClick(func() { app.OpenDialog(DialogRequest{Kind: DialogStash}) })
+						filepath.Base(worktree.Path),
+					).FontSize(11).TextColor(app.Theme().TextTertiary),
 
-				},
-			).Display("flex").FlexDirection("row").AlignItems("center").Height(32)
-			gui.Show(
-				func() bool { return len(store.Stashes()) > 0 },
-				func() {
-					gui.For(
-						store.Stashes,
-						func(stash git.StashEntry, _ func() int) {
-							gui.Button(
-								func() {
-									gui.View(
-										func() {
-											gui.Text(stash.Summary).LineClamp(1)
-											gui.Text(
-												stash.Ref + " · " + git.RelativeTime(stash.Time, time.Now()),
-											).FontSize(11).TextColor(app.Theme().TextTertiary)
-										},
-									).Display("flex").Flex(1).MinWidth(0).FlexDirection("column")
-									gui.Button(
-										"Apply",
-
-										app.Theme().Button("secondary"),
-									).OnClick(func() { store.StashApply(stash.Ref) })
-
-									gui.Button(
-										"Pop",
-
-										app.Theme().Button("secondary"),
-									).OnClick(func() { store.StashPop(stash.Ref) })
-
-								},
-
-								rowStyle(app.Theme(), false),
-							).OnContextMenu(func(*native.Event) {
-								native.PopupMenu(
-									app.Window,
-									[]native.MenuItem{
-										{Label: "Apply", Click: func() { store.StashApply(stash.Ref) }},
-										{Label: "Pop", Click: func() { store.StashPop(stash.Ref) }},
-										{Label: "Drop", Click: func() { store.StashDrop(stash.Ref) }},
-									},
-									nil,
-									nil,
-									func(error) {},
-								)
-							})
-
-						},
-						func(stash git.StashEntry) any { return stash.Ref },
+					rowStyle(app.Theme(), active),
+				).OnClick(func() { store.SelectWorktree(worktree.Path) }).OnContextMenu(func(*native.Event) {
+					items := []native.MenuItem{
+						{Label: "Reveal in Finder", Click: func() {
+							native.ShowItemInFolder(
+								worktree.Path,
+								func(error) {},
+							)
+						}},
+						{Label: "Copy Path", Click: func() { native.WriteClipboardText(worktree.Path) }},
+					}
+					if !worktree.Main {
+						items = append(items, native.MenuItem{Type: "separator"}, native.MenuItem{
+							Label: "Remove Worktree",
+							Click: func() { store.RemoveWorktree(worktree.Path, false) },
+						})
+					}
+					native.PopupMenu(
+						app.Window,
+						items,
 						nil,
+						nil,
+						func(error) {},
 					)
-				},
-				func() {
-					emptyState("No stashes", "Stash local changes to save them for later.")
-				},
-			)
-		},
+				})
+
+			},
+			func(worktree git.Worktree) any { return worktree.Path },
+			nil,
+		),
 	).Display("flex").Flex(1).MinHeight(0).FlexDirection("column").OverflowY("auto").Padding(12).Gap(4)
 }
 
-func emptyState(title, description string) {
+func StashesView() *gui.Element {
 	app := UseApp()
-	gui.View(
-		func() {
+	store := app.Store
+	return gui.View(
+
+		gui.View(
+
 			gui.Text(
-				title,
-			).FontSize(15).FontWeight(500).TextColor(app.Theme().TextTertiary).TextAlign("center")
-			gui.Text(
-				description,
-			).FontSize(12).LineHeight(17).TextColor(app.Theme().TextTertiary).TextAlign("center").MaxWidth(360)
-		},
+				"Stashes",
+			).FontSize(11).FontWeight(700).TextTransform("uppercase").TextColor(app.Theme().TextTertiary).Flex(1),
+			gui.Button(
+				"Stash Changes",
+
+				app.Theme().Button("primary"),
+			).Disabled(store.ChangeCount() == 0).OnClick(func() { app.OpenDialog(DialogRequest{Kind: DialogStash}) }),
+		).Display("flex").FlexDirection("row").AlignItems("center").Height(32),
+		gui.Show(
+			len(store.Stashes()) > 0,
+			func() *native.Node {
+				return gui.For(
+					store.Stashes,
+					func(stash git.StashEntry, _ func() int) *gui.Element {
+						return gui.Button(
+
+							gui.View(
+
+								gui.Text(stash.Summary).LineClamp(1),
+								gui.Text(
+									stash.Ref+" · "+git.RelativeTime(stash.Time, time.Now()),
+								).FontSize(11).TextColor(app.Theme().TextTertiary),
+							).Display("flex").Flex(1).MinWidth(0).FlexDirection("column"),
+							gui.Button(
+								"Apply",
+
+								app.Theme().Button("secondary"),
+							).OnClick(func() { store.StashApply(stash.Ref) }),
+
+							gui.Button(
+								"Pop",
+
+								app.Theme().Button("secondary"),
+							).OnClick(func() { store.StashPop(stash.Ref) }),
+
+							rowStyle(app.Theme(), false),
+						).OnContextMenu(func(*native.Event) {
+							native.PopupMenu(
+								app.Window,
+								[]native.MenuItem{
+									{Label: "Apply", Click: func() { store.StashApply(stash.Ref) }},
+									{Label: "Pop", Click: func() { store.StashPop(stash.Ref) }},
+									{Label: "Drop", Click: func() { store.StashDrop(stash.Ref) }},
+								},
+								nil,
+								nil,
+								func(error) {},
+							)
+						})
+
+					},
+					func(stash git.StashEntry) any { return stash.Ref },
+					nil,
+				)
+			},
+			func() *gui.Element {
+				return emptyState("No stashes", "Stash local changes to save them for later.")
+			},
+		),
+	).Display("flex").Flex(1).MinHeight(0).FlexDirection("column").OverflowY("auto").Padding(12).Gap(4)
+}
+
+func emptyState(title, description string) *gui.Element {
+	app := UseApp()
+	return gui.View(
+
+		gui.Text(
+			title,
+		).FontSize(15).FontWeight(500).TextColor(app.Theme().TextTertiary).TextAlign("center"),
+		gui.Text(
+			description,
+		).FontSize(12).LineHeight(17).TextColor(app.Theme().TextTertiary).TextAlign("center").MaxWidth(360),
 	).Display("flex").Flex(1).MinHeight(0).FlexDirection("column").AlignItems("center").JustifyContent("center").Gap(8).Padding(32)
 }
 

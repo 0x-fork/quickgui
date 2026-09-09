@@ -5,9 +5,9 @@
 `ui.Input` 和 `ui.TextArea` 托管原生文本编辑器。将 `ui.Value` 绑定到访问器，并在 `OnInput` 中从 `event.Value` 更新。单行输入中的 Return 由 `OnSubmit` 处理。
 
 ```go
-func InputExample() {
+func InputExample() *ui.Element {
 	value, setValue := ui.CreateSignal("")
-	ui.Input().
+	return ui.Input().
 		Value(value()).
 		Placeholder("Write here").
 		OnInputEvent(func(event *native.Event) { setValue(event.Value) }).
@@ -20,22 +20,22 @@ func InputExample() {
 `Field.Root` 将标签、控件、描述和错误关联起来。从应用状态设置 `Required`、`Invalid` 和 `ValidationMessage`。`ValidationMode` 与 `ValidationDebounceTime` 控制核心何时请求验证；验证规则由应用定义。
 
 ```go
-func FieldExample() {
+func FieldExample() *native.Node {
 	email, setEmail := ui.CreateSignal("")
-	ui.Field.Root(
+	return ui.Field.Root(
 		ui.FieldRootProps{
 			Required: true,
 			Filled:   func() bool { return email() != "" },
 		},
-		func() {
-			ui.Field.Label(ui.FieldLabelProps{}, "Email")
-			ui.Field.Control(ui.FieldControlProps{InputPartProps: ui.InputPartProps{
-				Value:       email,
-				Placeholder: "you@example.com",
-				OnInput:     func(event *native.Event) { setEmail(event.Value) },
-			}})
-			ui.Field.Description(ui.PartProps{}, "Used for receipts")
-			ui.Field.Error(ui.PartProps{}, "Enter a valid email address")
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Field.Label(ui.FieldLabelProps{}, "Email"),
+				ui.Field.Control(ui.FieldControlProps{InputPartProps: ui.InputPartProps{
+					Value:       email,
+					Placeholder: "you@example.com",
+					OnInput:     func(event *native.Event) { setEmail(event.Value) },
+				}}),
+				ui.Field.Description(ui.PartProps{}, "Used for receipts"),
+				ui.Field.Error(ui.PartProps{}, "Enter a valid email address")})
 		},
 	)
 }
@@ -46,18 +46,18 @@ func FieldExample() {
 复选框通过 `ui.CheckedState` 接受 `bool` 或 `ui.CheckedIndeterminate`。单选组保存一个值；复选组和切换组可保存多个值。只读控件与禁用控件具有不同语义。
 
 ```go
-func CheckboxGroupExample() {
+func CheckboxGroupExample() *native.Node {
 	values, setValues := ui.CreateSignal([]string{"email"})
-	ui.CheckboxGroup.Root(
+	return ui.CheckboxGroup.Root(
 		ui.CheckboxGroupProps{
 			AllValues:     []string{"email", "push"},
 			Value:         values,
 			OnValueChange: func(next []string, _ *native.Event) { setValues(next) },
 		},
-		func() {
-			ui.Checkbox.Root(ui.CheckboxProps{Parent: true}, "All notifications")
-			ui.Checkbox.Root(ui.CheckboxProps{Value: "email"}, "Email")
-			ui.Checkbox.Root(ui.CheckboxProps{Value: "push"}, "Push")
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Checkbox.Root(ui.CheckboxProps{Parent: true}, "All notifications"),
+				ui.Checkbox.Root(ui.CheckboxProps{Value: "email"}, "Email"),
+				ui.Checkbox.Root(ui.CheckboxProps{Value: "push"}, "Push")})
 		},
 	)
 }
@@ -68,9 +68,9 @@ func CheckboxGroupExample() {
 通过 `PickerSourceProps.Items` 声明选项。Select 使用选中值；Combobox 结合文本过滤与选择；Autocomplete 允许自由输入。多选控件使用 `Values` 和 `OnValuesChange`。
 
 ```go
-func SelectExample() {
+func SelectExample() *native.Node {
 	value, setValue := ui.CreateSignal[*string](nil)
-	ui.Select.Root(
+	return ui.Select.Root(
 		ui.SelectRootProps{
 			PickerSourceProps: ui.PickerSourceProps{Items: func() []ui.OptionDeclaration {
 				return []ui.OptionDeclaration{{Value: "go", Label: "Go"}, {Value: "swift", Label: "Swift"}}
@@ -78,7 +78,9 @@ func SelectExample() {
 			Value:         value,
 			OnValueChange: func(next *string, _ *native.Event) { setValue(next) },
 		},
-		func() { ui.Select.Value(ui.PartProps{}); ui.Select.Icon(ui.PartProps{}, "▾") },
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Select.Value(ui.PartProps{}), ui.Select.Icon(ui.PartProps{}, "▾")})
+		},
 	)
 }
 ```

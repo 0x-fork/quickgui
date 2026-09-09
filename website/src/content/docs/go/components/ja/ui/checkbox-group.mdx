@@ -14,18 +14,18 @@ import (
 ## 使い方
 
 ```go
-func CheckboxGroupExample() {
+func CheckboxGroupExample() *native.Node {
 	values, setValues := ui.CreateSignal([]string{"email"})
-	ui.CheckboxGroup.Root(
+	return ui.CheckboxGroup.Root(
 		ui.CheckboxGroupProps{
 			AllValues:     []string{"email", "push"},
 			Value:         values,
 			OnValueChange: func(next []string, _ *native.Event) { setValues(next) },
 		},
-		func() {
-			ui.Checkbox.Root(ui.CheckboxProps{Parent: true}, "All notifications")
-			ui.Checkbox.Root(ui.CheckboxProps{Value: "email"}, "Email")
-			ui.Checkbox.Root(ui.CheckboxProps{Value: "push"}, "Push")
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Checkbox.Root(ui.CheckboxProps{Parent: true}, "All notifications"),
+				ui.Checkbox.Root(ui.CheckboxProps{Value: "email"}, "Email"),
+				ui.Checkbox.Root(ui.CheckboxProps{Value: "push"}, "Push")})
 		},
 	)
 }

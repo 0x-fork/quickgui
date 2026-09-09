@@ -1,49 +1,84 @@
 package native
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/egoist/quickgui/go/protocol"
 	"github.com/egoist/quickgui/go/reactive"
 )
 
-func TestWindowMountsDeclaredRootsAndDisposesBindings(t *testing.T) {
+type returnedView struct{ node *Node }
+
+func testFragment(nodes []*Node) *Node {
+	node := CreateSentinel()
+	node.Group = nodes
+	return node
+}
+
+func TestNonReturningComponentsAreRejectedBeforeExecution(t *testing.T) {
+	runs := 0
+	legacy := func() { runs++ }
+	if IsComponent(legacy) {
+		t.Fatal("a void callback must not be a component")
+	}
+	defer func() {
+		failure := recover()
+		if failure == nil || !strings.Contains(failure.(string), "must return a native node") {
+			t.Fatalf("unexpected component validation: %v", failure)
+		}
+		if runs != 0 {
+			t.Fatal("a rejected declaration callback ran")
+		}
+	}()
+	CollectChildren(legacy)
+}
+
+func (view *returnedView) NativeNode() *Node {
+	if view == nil {
+		return nil
+	}
+	return view.node
+}
+
+func TestWindowMountsReturnedNodeAndReleasesUnusedDeclarations(t *testing.T) {
 	ResetTreeStateForTests()
 	signal := reactive.NewSignal("one")
 	window := &Window{NodeHost: NewNodeHost(1, 2)}
 	window.Root = CreateRootNode(window.NodeHost, protocol.RootNodeID)
 	builds, cleanups := 0, 0
-	var first, second *Node
-	dispose := window.mountComponent(func() {
+	var returned, unused *Node
+	dispose := window.mountComponent(func() *returnedView {
 		builds++
 		reactive.OnCleanup(func() { cleanups++ })
-		first = CreateText("")
-		first.Bind(func() { ReplaceText(first, signal.Read()) })
-		second = CreateText("")
-		second.Bind(func() { ReplaceText(second, signal.Read()) })
+		unused = CreateText("")
+		unused.Bind(func() { ReplaceText(unused, signal.Read()) })
+		returned = CreateText("")
+		returned.Bind(func() { ReplaceText(returned, signal.Read()) })
+		return &returnedView{returned}
 	})
-	if len(window.Root.Children) != 2 || window.Root.Children[0] != first || window.Root.Children[1] != second || len(signal.Observers) != 2 {
-		t.Fatal("the window must mount all declared roots in order")
+	if len(window.Root.Children) != 1 || window.Root.Children[0] != returned || !unused.Removed || len(signal.Observers) != 1 {
+		t.Fatal("the window must mount only the returned node and dispose unused bindings")
 	}
 	signal.Write("two")
-	if first.Text != "two" || second.Text != "two" || builds != 1 {
+	if returned.Text != "two" || builds != 1 {
 		t.Fatal("a property update rebuilt the root component")
 	}
 	dispose()
 	if cleanups != 1 || len(signal.Observers) != 0 {
-		t.Fatal("component ownership leaked")
+		t.Fatal("returned component ownership leaked")
 	}
 }
 
-func TestEmptyDeclarationsAndConstructionScopeRestoration(t *testing.T) {
+func TestReturnedNodesSupportEmptyResultsAndRestoreConstructionAfterPanic(t *testing.T) {
 	ResetTreeStateForTests()
-	var empty Component
-	if len(CollectChildren(empty)) != 0 || len(CollectChildren(func() {})) != 0 {
-		t.Fatal("empty components must have no roots")
+	var empty func() *Node
+	if len(CollectChildren(empty)) != 0 || len(CollectChildren(func() *returnedView { return nil })) != 0 {
+		t.Fatal("nil component results must be empty")
 	}
-	func() { defer func() { _ = recover() }(); CollectChildren(func() { panic("interrupted") }) }()
+	func() { defer func() { _ = recover() }(); CollectChildren(func() *Node { panic("interrupted") }) }()
 	var expected *Node
-	nodes := CollectChildren(func() { expected = CreateText("restored") })
+	nodes := CollectChildren(func() *Node { expected = CreateText("restored"); return expected })
 	if len(nodes) != 1 || nodes[0] != expected {
 		t.Fatal("the construction scope was not restored")
 	}

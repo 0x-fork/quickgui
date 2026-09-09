@@ -272,23 +272,23 @@ structural and take the toolbar's own axis. The core makes a disabled toolbar it
 discover the command; arrow navigation still skips it and it still refuses pointer focus.
 
 ```go
-func ActionToolbar() {
-	ui.Toolbar.Root(
+func ActionToolbar() *native.Node {
+	return ui.Toolbar.Root(
 		ui.ToolbarRootProps{Items: []ui.ComponentItem{
 			{Value: "cut"},
 			{Value: "docs"},
 			{Value: "paste", Disabled: true},
 		}},
-		func() {
-			ui.Toolbar.Group(
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Toolbar.Group(
 				ui.PartProps{},
-				func() {
-					ui.Toolbar.Button(ui.ToolbarItemProps{Value: "cut"}, "Cut")
-					ui.Toolbar.Link(ui.ToolbarItemProps{Value: "docs"}, "Docs")
+				func() *native.Node {
+					return ui.Fragment([]*native.Node{ui.Toolbar.Button(ui.ToolbarItemProps{Value: "cut"}, "Cut"),
+						ui.Toolbar.Link(ui.ToolbarItemProps{Value: "docs"}, "Docs")})
 				},
-			)
-			ui.Toolbar.Separator(ui.PartProps{})
-			ui.Toolbar.Item(ui.ToolbarItemProps{Value: "paste"}, "Paste")
+			),
+				ui.Toolbar.Separator(ui.PartProps{}),
+				ui.Toolbar.Item(ui.ToolbarItemProps{Value: "paste"}, "Paste")})
 		},
 	)
 }
@@ -300,39 +300,39 @@ stack `Limit`, the `Expanded` stack, the `SwipeDirection`, and the stack `Pitch`
 each toast's own offset:
 
 ```go
-func Notices() {
-	ui.Toast.Provider(
+func Notices() *native.Node {
+	return ui.Toast.Provider(
 		ui.ToastProviderProps{Timeout: 4000, Limit: 3},
-		func() {
+		func() *native.Node {
+			var children []*native.Node
 			toasts := ui.UseToastManager()
-			ui.Button(
+			children = append(children, ui.Button(
 				"Notify",
 			).OnClick(func() {
 				toasts.Add(ui.ToastRequest{Title: "Saved", Type: ui.ToastSuccess})
-			})
-
-			ui.Toast.Viewport(
+			}).Node)
+			children = append(children, ui.Toast.Viewport(
 				ui.ToastViewportProps{},
-				func() {
-					ui.KeyedFor(
+				func() *native.Node {
+					return ui.KeyedFor(
 						toasts.Stack,
 						func(entry ui.ToastStackEntry) any { return entry.ID },
-						func(entry func() ui.ToastStackEntry, _ func() int) {
+						func(entry func() ui.ToastStackEntry, _ func() int) *native.Node {
 							id := entry().ID
-							ui.Toast.Positioner(
+							return ui.Toast.Positioner(
 								ui.ToastPartProps{
 									ToastID: id,
 									PartProps: ui.PartProps{Style: ui.Style().
 										Top(func() float64 { return entry().Offset })},
 								},
-								func() {
-									ui.Toast.Root(
+								func() *native.Node {
+									return ui.Toast.Root(
 										ui.ToastPartProps{ToastID: id},
-										func() {
-											ui.Toast.Content(
+										func() *native.Node {
+											return ui.Toast.Content(
 												ui.ToastPartProps{ToastID: id},
-												func() {
-													ui.Toast.Title(
+												func() *native.Node {
+													return ui.Fragment([]*native.Node{ui.Toast.Title(
 														ui.ToastPartProps{ToastID: id},
 														func() string {
 															for _, toast := range toasts.Toasts() {
@@ -342,11 +342,11 @@ func Notices() {
 															}
 															return ""
 														},
-													)
-													ui.Toast.Close(
-														ui.ToastPartProps{ToastID: id},
-														"Dismiss",
-													)
+													),
+														ui.Toast.Close(
+															ui.ToastPartProps{ToastID: id},
+															"Dismiss",
+														)})
 												},
 											)
 										},
@@ -357,7 +357,8 @@ func Notices() {
 						nil,
 					)
 				},
-			)
+			))
+			return ui.Fragment(children)
 		},
 	)
 }

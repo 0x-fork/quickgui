@@ -142,8 +142,14 @@ func TestFailedComponentConstructionDisposesOwnersAndMenus(t *testing.T) {
 			}
 		}()
 		NewWindow(WindowOptions{
-			Menu:      []MenuDefinition{{Label: "File", Items: []MenuItem{{Label: "Action", Click: func() {}}}}},
-			Component: func() { reactive.OnCleanup(func() { cleanups++ }); CreateText("partial"); panic("mount failed") },
+			Menu: []MenuDefinition{{Label: "File", Items: []MenuItem{{Label: "Action", Click: func() {}}}}},
+			Component: func() *Node {
+				var children []*Node
+				reactive.OnCleanup(func() { cleanups++ })
+				children = append(children, CreateText("partial"))
+				panic("mount failed")
+				return testFragment(children)
+			},
 		})
 	}()
 	if cleanups != 1 || len(menuCallbacks) != before || fake.created != 0 || len(App.Windows) != 0 {
@@ -170,23 +176,23 @@ func TestWindowOwnsComponentLifetime(t *testing.T) {
 	value, setValue := reactive.CreateSignal("first")
 	mounts, effects, cleanups := 0, 0, 0
 	var text *Node
-	window := NewWindow(WindowOptions{Component: func() {
+	window := NewWindow(WindowOptions{Component: func() *Node {
 		if CurrentWindow() == nil {
 			t.Fatal("missing component window")
 		}
 		mounts++
 		text = CreateText("")
 		text.Bind(func() { effects++; ReplaceText(text, value()) })
-		CreateText("sibling")
+		sibling := CreateText("sibling")
 		reactive.OnCleanup(func() { cleanups++ })
-		DeclareChild(text)
+		return testFragment([]*Node{text, sibling})
 	}})
 	setValue("second")
 	if mounts != 1 || effects != 2 || text.Text != "second" || fake.created != 1 {
 		t.Fatal("the component remounted or its binding did not update")
 	}
-	if len(window.Root.Children) != 2 || window.Root.Children[0] != text || window.Root.Children[1].Text != "sibling" {
-		t.Fatal("window components must collect multiple roots once in declaration order")
+	if len(window.Root.Children) != 3 || window.Root.Children[0] != text || window.Root.Children[1].Text != "sibling" || len(window.Root.Children[2].Group) != 2 {
+		t.Fatal("window components must mount the explicitly returned fragment once")
 	}
 	App.didCloseWindow(window)
 	App.didCloseWindow(window)
@@ -205,13 +211,15 @@ func TestDeferredBindingsKeepTheirOwningWindow(t *testing.T) {
 	value, setValue := reactive.CreateSignal(0)
 	var observed *Window
 	var events subscriptions[struct{}]
-	window := NewWindow(WindowOptions{Component: func() {
+	window := NewWindow(WindowOptions{Component: func() *Node {
 		node := CreateText("")
 		node.Bind(func() {
 			value()
 			observed = CurrentWindow()
 			events.add(func(struct{}) { observed = CurrentWindow() })
 		})
+		return node
+
 	}})
 	defer App.didCloseWindow(window)
 	setValue(1)

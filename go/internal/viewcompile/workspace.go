@@ -191,31 +191,27 @@ func Prepare(directory, output string, patterns []string, tests bool, tags, goos
 				return "", err
 			}
 		}
-		for changed := true; changed; {
-			changed = false
-			for path, pkg := range sources {
-				for _, file := range pkg.files {
-					if ast.IsGenerated(file) {
+		for path, pkg := range sources {
+			for _, file := range pkg.files {
+				if ast.IsGenerated(file) {
+					continue
+				}
+				for _, decl := range file.Decls {
+					fn, ok := decl.(*ast.FuncDecl)
+					if !ok || !IsComponent(fn, pkg.info) {
 						continue
 					}
-					for _, decl := range file.Decls {
-						fn, ok := decl.(*ast.FuncDecl)
-						if !ok || !IsComponent(fn, pkg.info, components) {
-							continue
-						}
-						if _, exists := components[path+"."+fn.Name.Name]; exists {
-							continue
-						}
-						component, err := Describe(fn, pkg.info)
-						if err != nil {
-							return "", fmt.Errorf("%s: %w", fs.Position(fn.Pos()), err)
-						}
-						if pkg.pkg.Scope().Lookup(component.Generated) != nil {
-							return "", fmt.Errorf("%s: reserved generated name %s", fs.Position(fn.Pos()), component.Generated)
-						}
-						components[path+"."+component.Name] = component
-						changed = true
+					if _, exists := components[path+"."+fn.Name.Name]; exists {
+						continue
 					}
+					component, err := Describe(fn, pkg.info)
+					if err != nil {
+						return "", fmt.Errorf("%s: %w", fs.Position(fn.Pos()), err)
+					}
+					if pkg.pkg.Scope().Lookup(component.Generated) != nil {
+						return "", fmt.Errorf("%s: reserved generated name %s", fs.Position(fn.Pos()), component.Generated)
+					}
+					components[path+"."+component.Name] = component
 				}
 			}
 		}

@@ -10,7 +10,7 @@ import (
 	"github.com/egoist/quickgui/go/ui"
 )
 
-func checkboxTestRoot(t *testing.T, component func(), check func(*native.Node)) {
+func checkboxTestRoot(t *testing.T, component ui.Component, check func(*native.Node)) {
 	t.Helper()
 	native.ResetTreeStateForTests()
 	reactive.CreateRoot(func(dispose func()) struct{} {
@@ -84,6 +84,7 @@ func checkboxMarkIs(t *testing.T, node *native.Node, expected string) {
 	if text := checkboxText(indicator); text != "" {
 		t.Fatalf("indicator uses a font glyph instead of an SVG: %q", text)
 	}
+
 }
 
 func TestCheckboxDemoIndicatorsFollowTogglesAndChildState(t *testing.T) {
@@ -119,13 +120,14 @@ func TestCheckboxDemoIndicatorsFollowTogglesAndChildState(t *testing.T) {
 		checkboxMarkIs(t, parent, "−")
 		checkboxMarkIs(t, analytics, "✓")
 		checkboxMarkIs(t, crashes, "")
+
 	})
 }
 
 func TestUncontrolledCheckboxIndicatorAndCallbackStayInSync(t *testing.T) {
 	var changes []bool
-	checkboxTestRoot(t, func() {
-		checkbox(ui.CheckboxProps{
+	checkboxTestRoot(t, func() *native.Node {
+		return checkbox(ui.CheckboxProps{
 			OnCheckedChange: func(next bool, _ *native.Event) { changes = append(changes, next) },
 		}, "Uncontrolled")
 	}, func(root *native.Node) {
@@ -178,5 +180,6 @@ func TestCheckboxGroupIndicatorsFollowNativeGroupChanges(t *testing.T) {
 				checkboxMarkIs(t, node, update.mark)
 			}
 		}
+
 	})
 }

@@ -14,9 +14,9 @@ import (
 ## Usage
 
 ```go
-func SliderExample() {
+func SliderExample() *native.Node {
 	volume, setVolume := ui.CreateSignal([]float64{40})
-	ui.Slider.Root(
+	return ui.Slider.Root(
 		ui.SliderRootProps{
 			Value:         volume,
 			Min:           0,
@@ -24,19 +24,19 @@ func SliderExample() {
 			Step:          1,
 			OnValueChange: func(next []float64, _ *native.Event) { setVolume(next) },
 		},
-		func() {
-			ui.Slider.Label(ui.PartProps{}, "Volume")
-			ui.Slider.Control(
-				ui.PartProps{Style: ui.Style().Width(240).Height(24)},
-				func() {
-					ui.Slider.Track(
-						ui.PartProps{},
-						func() { ui.Slider.Indicator(ui.PartProps{}) },
-					)
-					ui.Slider.Thumb(ui.SliderThumbProps{})
-				},
-			)
-			ui.Slider.Value(ui.PartProps{})
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Slider.Label(ui.PartProps{}, "Volume"),
+				ui.Slider.Control(
+					ui.PartProps{Style: ui.Style().Width(240).Height(24)},
+					func() *native.Node {
+						return ui.Fragment([]*native.Node{ui.Slider.Track(
+							ui.PartProps{},
+							func() *native.Node { return ui.Slider.Indicator(ui.PartProps{}) },
+						),
+							ui.Slider.Thumb(ui.SliderThumbProps{})})
+					},
+				),
+				ui.Slider.Value(ui.PartProps{})})
 		},
 	)
 }

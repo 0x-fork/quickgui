@@ -5,8 +5,8 @@
 将过渡放在基础样式上，让指针移入和移出时都生效。同一声明也适用于 `Active`、`Focus`、`Expanded`、`DragOver` 等绘制状态。
 
 ```go
-func HoverAction() {
-	ui.Button(
+func HoverAction() *ui.Element {
+	return ui.Button(
 		"Continue",
 	).
 		Padding(12).
@@ -24,25 +24,23 @@ func HoverAction() {
 通过信号或 `ui.When` 改变目标值。下面的卡片在颜色和透明度变化时保留同一个节点及其子节点。
 
 ```go
-func AnimatedSelection() {
+func AnimatedSelection() *ui.Element {
 	selected, setSelected := ui.CreateSignal(false)
-	ui.View(
-		func() {
-			ui.Button("Toggle emphasis").OnClick(func() { setSelected(!selected()) })
-			ui.View(
-				"Your selection",
-			).
-				Padding(20).
-				BorderRadius(12).
-				BackgroundColor("#334155").
-				TextColor("white").
-				Opacity(0.6).
-				Transition("background-color 180ms ease-out, opacity 180ms ease-out").
-				When(selected, ui.Style().
-					BackgroundColor("#2563eb"), ui.Style().
-					Opacity(1))
+	return ui.View(
 
-		},
+		ui.Button("Toggle emphasis").OnClick(func() { setSelected(!selected()) }),
+		ui.View(
+			"Your selection",
+		).
+			Padding(20).
+			BorderRadius(12).
+			BackgroundColor("#334155").
+			TextColor("white").
+			Opacity(0.6).
+			Transition("background-color 180ms ease-out, opacity 180ms ease-out").
+			When(selected, ui.Style().
+				BackgroundColor("#2563eb"), ui.Style().
+				Opacity(1)),
 	).Display("flex").FlexDirection("column").Gap(12)
 }
 ```
@@ -54,8 +52,8 @@ func AnimatedSelection() {
 多个属性共用一组时间设置时，使用 `ui.TransitionDeclaration`。此示例的时长需要导入 `time`。
 
 ```go
-func CappedTransition() {
-	ui.Button(
+func CappedTransition() *ui.Element {
+	return ui.Button(
 		"Hover me",
 	).Padding(12).BackgroundColor("#334155").TextColor("white").Opacity(0.8).
 		Transition(ui.TransitionDeclaration{
@@ -114,8 +112,8 @@ Go UI API 提供绘制属性过渡和动态图像。CSS 关键帧、时间线回
 把动态 GIF 或 WebP 的路径传给 `ui.Image`。原生解码器保留帧和文件的循环策略，不需要 Go 定时器或逐帧更新信号。
 
 ```go
-func AnimatedImage(path string) {
-	ui.Image().Value(path).
+func AnimatedImage(path string) *ui.Element {
+	return ui.Image().Value(path).
 		Width(96).Height(96).ObjectFit("contain")
 }
 ```

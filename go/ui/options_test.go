@@ -112,7 +112,7 @@ func TestWhenRestoresBaseStyleWithoutRebuildingChildren(t *testing.T) {
 		node := View(
 			styleBackgroundColor("#ccc"),
 			When(selected, styleBackgroundColor("#2563eb"), styleTextColor("white")),
-			func() { mounts++; Text("child") },
+			func() *Element { mounts++; return Text("child") },
 		)
 		child := node.Children[0]
 		setSelected(true)
@@ -139,7 +139,7 @@ func TestStyleRecordsComposeAndConditionalStylesRestoreBindings(t *testing.T) {
 		selectedColor := reactive.NewSignal("#ddeeff")
 		mounts := 0
 		node := View(
-			func() { mounts++; Text("retained") },
+			func() *Element { mounts++; return Text("retained") },
 			styleData{BackgroundColor: baseColor.Read, TextColor: "white", Padding: 12},
 			styleData{Padding: 0},
 			When(selected, styleData{BackgroundColor: selectedColor.Read, Opacity: .5}),

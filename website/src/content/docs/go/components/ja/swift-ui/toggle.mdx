@@ -14,12 +14,12 @@ import (
 ## 使い方
 
 ```go
-func SwiftUiToggleExample() {
+func SwiftUiToggleExample() *native.Node {
 	on, setOn := ui.CreateSignal(true)
-	ui.SwiftUI.Host(
+	return ui.SwiftUI.Host(
 		ui.SwiftUIHostProps{MatchContents: true},
-		func() {
-			ui.SwiftUI.Toggle(ui.SwiftUIToggleProps{
+		func() *native.Node {
+			return ui.SwiftUI.Toggle(ui.SwiftUIToggleProps{
 				IsOn:         on,
 				Label:        "Notifications",
 				OnIsOnChange: func(next bool, _ *native.Event) { setOn(next) },

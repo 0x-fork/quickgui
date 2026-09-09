@@ -1,5 +1,7 @@
 package main
 
+import "github.com/egoist/quickgui/go/native"
+
 import "github.com/egoist/quickgui/go/ui"
 
 const (
@@ -41,8 +43,8 @@ var buttonStyle = ui.Style().
 	Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor(blueSurface) }).
 	DisabledStyle(func(s ui.StyleBuilder) ui.StyleBuilder { return s.Opacity(0.35) })
 
-func link(label, href string, end bool) {
-	ui.Link(
+func link(label, href string, end bool) *native.Node {
+	return ui.Link(
 		ui.LinkProps{
 			Href:        href,
 			End:         end,
@@ -53,38 +55,36 @@ func link(label, href string, end bool) {
 	)
 }
 
-func button(label string, click func(), options ...any) {
+func button(label string, click func(), options ...any) *ui.Element {
 	args := []any{label, buttonStyle, ui.OnClick(click)}
-	ui.Button(append(args, options...)...)
+	return ui.Button(append(args, options...)...)
 }
 
-func historyButton(label, path string, click func(), disabled func() bool) {
-	ui.Button(
-		func() {
-			ui.SVG().Value(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#e8edf7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="` + path + `"/></svg>`).
-				Width(17).Height(17)
-		},
+func historyButton(label, path string, click func(), disabled func() bool) *ui.Element {
+	return ui.Button(
+
+		ui.SVG().Value(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#e8edf7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="` + path + `"/></svg>`).
+			Width(17).Height(17),
 	).Style(buttonStyle).Width(34).Height(30).PaddingLeft(0).PaddingRight(0).BorderRadius(7).AriaLabel(label).Disabled(disabled()).OnClick(click)
 
 }
 
-func page(title, description any, children ...any) {
-	ui.View(
-		func() {
-			ui.Text(
-				title,
-			).FontSize(28).LineHeight(36).FontWeight(750)
-			ui.Text(
-				description,
-			).MaxWidth(620).TextColor(muted).LineHeight(21)
-			ui.Child(children)
-		},
+func page(title, description any, children ...any) *ui.Element {
+	return ui.View(
+
+		ui.Text(
+			title,
+		).FontSize(28).LineHeight(36).FontWeight(750),
+		ui.Text(
+			description,
+		).MaxWidth(620).TextColor(muted).LineHeight(21),
+		children,
 	).Display("flex").FlexDirection("column").Width("100%").Height("100%").Padding(28).Gap(16).OverflowY("auto")
 }
 
-func card(title, detail, href string) {
+func card(title, detail, href string) *native.Node {
 	active := ui.Style().BorderColor(blue)
-	ui.Link(
+	return ui.Link(
 		ui.LinkProps{
 			Href:        href,
 			ActiveStyle: &active,
@@ -105,9 +105,9 @@ func card(title, detail, href string) {
 					return s.BackgroundColor(panelRaised)
 				})},
 		},
-		func() {
-			ui.Text(title).FontWeight(700)
-			ui.Text(detail).TextColor(muted).LineHeight(19)
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Text(title).FontWeight(700).Node,
+				ui.Text(detail).TextColor(muted).LineHeight(19).Node})
 		},
 	)
 }

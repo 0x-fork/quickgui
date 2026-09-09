@@ -217,14 +217,13 @@ func renderRouteBranch(chain func() []renderedRoute, index int, fallback Compone
 			return fallback
 		}
 		entry := reactive.Untrack(func() renderedRoute { return chain()[index] })
-		return func() {
-			outlet := func() { renderRouteBranch(chain, index+1, nil) }
-			outletContext.Provide(outlet, func() {
+		return func() *native.Node {
+			outlet := func() *native.Node { return renderRouteBranch(chain, index+1, nil) }
+			return reactive.Provide(outletContext, Component(outlet), func() *native.Node {
 				if entry.component == nil {
-					outlet()
-					return
+					return outlet()
 				}
-				entry.component()
+				return renderComponent(entry.component)
 			})
 		}
 	})

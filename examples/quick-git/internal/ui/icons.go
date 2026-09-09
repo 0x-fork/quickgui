@@ -1,5 +1,7 @@
 package ui
 
+import "github.com/egoist/quickgui/go/native"
+
 import (
 	_ "embed"
 	"strings"
@@ -25,19 +27,19 @@ const (
 //go:embed icons/refresh-cw.svg
 var refreshIcon string
 
-func icon(svg string, size float64, color func() string) {
-	gui.SVG().Width(size).Height(size).FlexShrink(0).Value(func() string { return strings.ReplaceAll(svg, "currentColor", color()) })
+func icon(svg string, size float64, color func() string) *gui.Element {
+	return gui.SVG().Width(size).Height(size).FlexShrink(0).Value(func() string { return strings.ReplaceAll(svg, "currentColor", color()) })
 
 }
 
-func toolbarIcon(svg string) {
+func toolbarIcon(svg string) *gui.Element {
 	app := UseApp()
-	icon(svg, 14, func() string { return app.Theme().TextSecondary })
+	return icon(svg, 14, func() string { return app.Theme().TextSecondary })
 }
 
-func currentIndicator(current func() bool) {
-	gui.Show(
+func currentIndicator(current func() bool) *native.Node {
+	return gui.Show(
 		current,
-		func() { toolbarIcon(checkIcon) },
+		func() *gui.Element { return toolbarIcon(checkIcon) },
 	)
 }

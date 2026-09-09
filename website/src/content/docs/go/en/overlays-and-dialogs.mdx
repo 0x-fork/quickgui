@@ -5,25 +5,25 @@ Use a QuickGUI overlay for application-styled content, or a native dialog for pl
 A popover composes a trigger, positioner, and popup. The side is a preference; the core resolves collisions. Read the result through `ui.UsePopoverPlacement` inside the root.
 
 ```go
-func PopoverExample() {
-	ui.Popover.Root(
+func PopoverExample() *native.Node {
+	return ui.Popover.Root(
 		ui.PopoverRootProps{},
-		func() {
-			ui.Popover.Trigger(ui.PopoverTriggerProps{}, "Account")
-			ui.Popover.Positioner(
-				ui.PopoverPositionerProps{},
-				func() {
-					ui.Popover.Popup(
-						ui.PopoverPopupProps{PartProps: ui.PartProps{Style: ui.Style().
-							Width(240).
-							Padding(16)}},
-						func() {
-							ui.Popover.Title(ui.PartProps{}, "Account")
-							ui.Popover.Close(ui.PartProps{}, "Done")
-						},
-					)
-				},
-			)
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Popover.Trigger(ui.PopoverTriggerProps{}, "Account"),
+				ui.Popover.Positioner(
+					ui.PopoverPositionerProps{},
+					func() *native.Node {
+						return ui.Popover.Popup(
+							ui.PopoverPopupProps{PartProps: ui.PartProps{Style: ui.Style().
+								Width(240).
+								Padding(16)}},
+							func() *native.Node {
+								return ui.Fragment([]*native.Node{ui.Popover.Title(ui.PartProps{}, "Account"),
+									ui.Popover.Close(ui.PartProps{}, "Done")})
+							},
+						)
+					},
+				)})
 		},
 	)
 }
@@ -34,33 +34,33 @@ func PopoverExample() {
 Create modal content under `Dialog.Portal`. `Dialog.Title` and `Dialog.Description` provide its accessible name and description. `AlertDialog` adds confirmation semantics. Controlled roots receive both the next open state and its reason.
 
 ```go
-func DialogExample() {
-	ui.Dialog.Root(
+func DialogExample() *native.Node {
+	return ui.Dialog.Root(
 		ui.DialogRootProps{},
-		func() {
-			ui.Dialog.Trigger(ui.PartProps{}, "Open dialog")
-			ui.Dialog.Portal(
-				ui.PartProps{},
-				func() {
-					ui.Dialog.Backdrop(ui.PartProps{})
-					ui.Dialog.Viewport(
-						ui.PartProps{},
-						func() {
-							ui.Dialog.Popup(
-								ui.DialogPopupProps{},
-								func() {
-									ui.Dialog.Title(ui.PartProps{}, "Confirm action")
-									ui.Dialog.Description(
-										ui.PartProps{},
-										"Review the details before continuing.",
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Dialog.Trigger(ui.PartProps{}, "Open dialog"),
+				ui.Dialog.Portal(
+					ui.PartProps{},
+					func() *native.Node {
+						return ui.Fragment([]*native.Node{ui.Dialog.Backdrop(ui.PartProps{}),
+							ui.Dialog.Viewport(
+								ui.PartProps{},
+								func() *native.Node {
+									return ui.Dialog.Popup(
+										ui.DialogPopupProps{},
+										func() *native.Node {
+											return ui.Fragment([]*native.Node{ui.Dialog.Title(ui.PartProps{}, "Confirm action"),
+												ui.Dialog.Description(
+													ui.PartProps{},
+													"Review the details before continuing.",
+												),
+												ui.Dialog.Close(ui.PartProps{}, "Cancel")})
+										},
 									)
-									ui.Dialog.Close(ui.PartProps{}, "Cancel")
 								},
-							)
-						},
-					)
-				},
-			)
+							)})
+					},
+				)})
 		},
 	)
 }
@@ -71,19 +71,19 @@ func DialogExample() {
 `ui.SystemPopover` hosts its body in an operating-system popover. Specify its logical width and height, then declare ordinary QuickGUI children.
 
 ```go
-func SystemPopoverExample() {
-	ui.SystemPopover.Root(
+func SystemPopoverExample() *native.Node {
+	return ui.SystemPopover.Root(
 		ui.PopoverRootProps{},
-		func() {
-			ui.SystemPopover.Trigger(ui.PopoverTriggerProps{}, "Account")
-			ui.SystemPopover.Content(
-				ui.PopoverContentProps{
-					Width:     240,
-					Height:    120,
-					Placement: "bottom-start",
-				},
-				"Account settings",
-			)
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.SystemPopover.Trigger(ui.PopoverTriggerProps{}, "Account"),
+				ui.SystemPopover.Content(
+					ui.PopoverContentProps{
+						Width:     240,
+						Height:    120,
+						Placement: "bottom-start",
+					},
+					"Account settings",
+				)})
 		},
 	)
 }
@@ -94,9 +94,9 @@ func SystemPopoverExample() {
 Native dialogs use asynchronous callbacks. Capture the parent window while rendering and pass it explicitly to the request. A canceled open panel returns `Canceled: true`.
 
 ```go
-func OpenFolderButton() {
+func OpenFolderButton() *ui.Element {
 	window := native.CurrentWindow()
-	ui.Button(
+	return ui.Button(
 		"Open folder",
 	).OnClick(func() {
 		native.ShowOpenDialog(

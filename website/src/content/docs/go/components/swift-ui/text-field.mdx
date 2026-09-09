@@ -14,12 +14,12 @@ import (
 ## Usage
 
 ```go
-func SwiftUiTextFieldExample() {
+func SwiftUiTextFieldExample() *native.Node {
 	text, setText := ui.CreateSignal("")
-	ui.SwiftUI.Host(
+	return ui.SwiftUI.Host(
 		ui.SwiftUIHostProps{MatchContents: true},
-		func() {
-			ui.SwiftUI.TextField(ui.SwiftUITextFieldProps{
+		func() *native.Node {
+			return ui.SwiftUI.TextField(ui.SwiftUITextFieldProps{
 				Value:         text,
 				Placeholder:   "Enter text",
 				OnValueChange: func(next string, _ *native.Event) { setText(next) },

@@ -13,14 +13,14 @@ import (
 ## Usage
 
 ```go
-func RouterExample() {
-	ui.Router(ui.RouterProps{
+func RouterExample() *native.Node {
+	return ui.Router(ui.RouterProps{
 		InitialPath: "/",
 		Routes: []*ui.RouteDeclaration{
 			ui.Route(
 				"/",
-				func() {
-					ui.Link(
+				func() *native.Node {
+					return ui.Link(
 						ui.LinkProps{Href: "/settings"},
 						"Settings",
 					)
@@ -28,10 +28,10 @@ func RouterExample() {
 			),
 			ui.Route(
 				"/settings",
-				func() { ui.Text("Settings") },
+				func() *ui.Element { return ui.Text("Settings") },
 			),
 		},
-		Fallback: func() { ui.Text("Page not found") },
+		Fallback: func() *ui.Element { return ui.Text("Page not found") },
 	})
 }
 ```

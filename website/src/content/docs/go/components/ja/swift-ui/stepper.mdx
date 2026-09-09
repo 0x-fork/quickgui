@@ -14,12 +14,12 @@ import (
 ## 使い方
 
 ```go
-func SwiftUiStepperExample() {
+func SwiftUiStepperExample() *native.Node {
 	value, setValue := ui.CreateSignal(40.0)
-	ui.SwiftUI.Host(
+	return ui.SwiftUI.Host(
 		ui.SwiftUIHostProps{MatchContents: true},
-		func() {
-			ui.SwiftUI.Stepper(ui.SwiftUIStepperProps{
+		func() *native.Node {
+			return ui.SwiftUI.Stepper(ui.SwiftUIStepperProps{
 				Value:         value,
 				Min:           0,
 				Max:           100,

@@ -1,5 +1,7 @@
 package main
 
+import "github.com/egoist/quickgui/go/ui"
+
 import (
 	"os"
 	"path/filepath"
@@ -100,7 +102,7 @@ func TestSplitInsertsAfterFocusedPaneAndClosesNeighbor(t *testing.T) {
 }
 func TestRetainedTerminalIdentityAcrossNavigationThemeAndRestart(t *testing.T) {
 	testModel(t, func(m *model) {
-		roots := native.CollectChildren(func() { appView(m) })
+		roots := native.CollectChildren(func() *ui.Element { return appView(m) })
 		if len(roots) != 1 {
 			t.Fatalf("roots %d", len(roots))
 		}

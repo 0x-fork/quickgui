@@ -139,56 +139,55 @@ func overlay() ui.PartProps {
 	s = s.JustifyContent("center")
 	return ui.PartProps{Style: s}
 }
-func panel(title, hint string, children func()) {
-	ui.View(
-		func() {
-			ui.Text(title).FontSize(17).FontWeight(700)
-			ui.Text(
-				hint,
-			).FontSize(12).LineHeight(18).TextColor(color(func(p palette) string { return p.Muted }))
-			children()
-		},
+func panel(title, hint string, children ui.Component) *ui.Element {
+	return ui.View(
+
+		ui.Text(title).FontSize(17).FontWeight(700),
+		ui.Text(
+			hint,
+		).FontSize(12).LineHeight(18).TextColor(color(func(p palette) string { return p.Muted })),
+		children,
 	).Display("flex").FlexDirection("column").Gap(14).Padding(20).BorderRadius(12).BorderWidth(1).BorderColor(color(func(p palette) string { return p.Border })).BackgroundColor(color(func(p palette) string { return p.Panel })).FlexShrink(0)
 }
-func row(children func()) {
-	ui.View(
+func row(children ui.Component) *ui.Element {
+	return ui.View(
 		children,
 	).Display("flex").FlexDirection("row").AlignItems("center").FlexWrap("wrap").Gap(10)
 }
-func col(children func()) {
-	ui.View(
+func col(children ui.Component) *ui.Element {
+	return ui.View(
 		children,
 	).Display("flex").FlexDirection("column").Gap(8)
 }
-func note(value any) {
-	ui.Text(
+func note(value any) *ui.Element {
+	return ui.Text(
 		value,
 	).FontSize(12).LineHeight(18).FontFamily("monospace").TextColor(color(func(p palette) string { return p.Muted }))
 }
-func label(value any) { ui.Text(value).FontSize(12) }
-func muted(value any) {
-	ui.Text(
+func label(value any) *ui.Element { return ui.Text(value).FontSize(12) }
+func muted(value any) *ui.Element {
+	return ui.Text(
 		value,
 	).FontSize(12).LineHeight(17).TextColor(color(func(p palette) string { return p.Muted }))
 }
-func button(label any, click func(), options ...any) {
+func button(label any, click func(), options ...any) *ui.Element {
 	args := []any{controlStyle(), ui.OnClick(click)}
 	args = append(args, options...)
 	args = append(args, label)
-	ui.Button(args...)
+	return ui.Button(args...)
 }
-func primary(label any, click func()) {
-	button(label, click, ui.Style().
+func primary(label any, click func()) *ui.Element {
+	return button(label, click, ui.Style().
 		BackgroundColor(color(func(p palette) string { return p.Accent })).
 		TextColor(color(func(p palette) string { return p.OnAccent })).
 		Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
 			return s.BackgroundColor(color(func(p palette) string { return p.AccentHover }))
 		}))
 }
-func input(value any, set func(string), placeholder string, options ...any) {
+func input(value any, set func(string), placeholder string, options ...any) *ui.Element {
 	args := []any{inputStyle(), ui.Value(value), ui.Placeholder(placeholder), ui.OnInput(func(e *native.Event) { set(e.Value) })}
 	args = append(args, options...)
-	ui.Input(args...)
+	return ui.Input(args...)
 }
 func checkboxStyle() ui.StyleBuilder {
 	s := controlStyle()
@@ -199,7 +198,7 @@ func checkboxStyle() ui.StyleBuilder {
 	s = s.PaddingLeft(8)
 	return s
 }
-func checkbox(props ui.CheckboxProps, caption any) {
+func checkbox(props ui.CheckboxProps, caption any) *native.Node {
 	if props.Style == nil {
 		props.Style = checkboxStyle()
 	}
@@ -218,10 +217,10 @@ func checkbox(props ui.CheckboxProps, caption any) {
 			}
 		}
 	}
-	ui.Checkbox.Root(
+	return ui.Checkbox.Root(
 		props,
-		func() {
-			ui.Checkbox.Indicator(
+		func() *native.Node {
+			return ui.Fragment([]*native.Node{ui.Checkbox.Indicator(
 				ui.PartProps{Style: func() ui.StyleBuilder {
 					border, background := p().Border, p().Control
 					if props.Checked() != false {
@@ -239,11 +238,11 @@ func checkbox(props ui.CheckboxProps, caption any) {
 						AlignItems("center").
 						JustifyContent("center")
 				}},
-				func() {
-					ui.Show(
-						func() bool { return props.Checked() != false },
-						func() {
-							ui.SVG().Value(func() string {
+				func() *native.Node {
+					return ui.Show(
+						props.Checked() != false,
+						func() *ui.Element {
+							return ui.SVG().Value(func() string {
 								path := "M3 6l2 2 4-4"
 								if props.Checked() == ui.CheckedIndeterminate {
 									path = "M3 6h6"
@@ -254,8 +253,8 @@ func checkbox(props ui.CheckboxProps, caption any) {
 						},
 					)
 				},
-			)
-			label(caption)
+			),
+				label(caption).Node})
 		},
 	)
 }

@@ -122,26 +122,26 @@ The `ui` package exposes `ui.Collapsible.Root`, `Trigger`, and `Panel`, plus
 their children in callbacks so each part receives its enclosing component context.
 
 ```go
-func ShippingDetails() {
+func ShippingDetails() *native.Node {
 	open, setOpen := ui.CreateSignal([]string{"shipping"})
-	ui.Accordion.Root(
+	return ui.Accordion.Root(
 		ui.AccordionRootProps{
 			Value:         open,
 			OnValueChange: func(value []string, _ *native.Event) { setOpen(value) },
 			Multiple:      true,
 			HeadingLevel:  4,
 		},
-		func() {
-			ui.Accordion.Item(
+		func() *native.Node {
+			return ui.Accordion.Item(
 				ui.AccordionItemProps{Value: "shipping"},
-				func() {
-					ui.Accordion.Header(
+				func() *native.Node {
+					return ui.Fragment([]*native.Node{ui.Accordion.Header(
 						ui.PartProps{},
-						func() {
-							ui.Accordion.Trigger(ui.PartProps{}, "Shipping")
+						func() *native.Node {
+							return ui.Accordion.Trigger(ui.PartProps{}, "Shipping")
 						},
-					)
-					ui.Accordion.Panel(ui.PartProps{}, "Orders ship within two business days.")
+					),
+						ui.Accordion.Panel(ui.PartProps{}, "Orders ship within two business days.")})
 				},
 			)
 		},

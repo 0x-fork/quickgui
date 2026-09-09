@@ -13,8 +13,8 @@ import (
 ## 使い方
 
 ```go
-func ShaderExample(source string, parameters func() []float64) {
-	ui.Shader().Value(source).ShaderParameters(parameters).
+func ShaderExample(source string, parameters func() []float64) *ui.Element {
+	return ui.Shader().Value(source).ShaderParameters(parameters).
 		Width(320).Height(180)
 }
 ```

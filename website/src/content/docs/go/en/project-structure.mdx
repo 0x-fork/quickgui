@@ -16,15 +16,14 @@ my-app/
 
 ## Application entry
 
-`main.go` starts `native.Run` and creates a window. Components and children blocks share the `func()` signature and declare their children in order, without returning a node. Split larger applications into ordinary Go packages.
+`main.go` starts `native.Run` and creates a window. Components and deferred construction callbacks return `*ui.Element` or `*native.Node`. Every created node is returned, assigned, or passed to a parent; implicit declaration blocks are unsupported. Split larger applications into ordinary Go packages.
 
 ```go
-func ViewExample() {
-	ui.View(
-		func() {
-			ui.Text("Hello from Go")
-			ui.Button("Continue").OnClick(func() {})
-		},
+func ViewExample() *ui.Element {
+	return ui.View(
+
+		ui.Text("Hello from Go"),
+		ui.Button("Continue").OnClick(func() {}),
 	).Padding(20).Gap(12)
 }
 ```

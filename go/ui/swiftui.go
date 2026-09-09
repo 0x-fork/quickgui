@@ -549,9 +549,10 @@ func (swiftUIAPI) QuickGUIHostView(props SwiftUIQuickGUIHostViewProps, children 
 				Shadow:               &shadow,
 				Background:           coalesceBackground(props.Background),
 				BackgroundAppearance: "transparent",
-				Component: func() {
+				Component: func() *native.Node {
 					surface := native.CreateElement(protocol.TagView)
 					insertChildren(surface, props.Children)
+					return surface
 				},
 			},
 			horizontal,

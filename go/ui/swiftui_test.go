@@ -16,8 +16,8 @@ func TestSwiftUIHostAndButtonDeclareDedicatedTags(t *testing.T) {
 		host := SwiftUI.Host(SwiftUIHostProps{
 			MatchContents: true,
 			PartProps: PartProps{
-				Children: func() {
-					SwiftUI.Button(SwiftUIButtonProps{
+				Children: func() *native.Node {
+					return SwiftUI.Button(SwiftUIButtonProps{
 						Label:       "Continue",
 						SystemImage: "arrow.right",
 						Modifiers:   []SwiftUIModifier{SwiftUI.ButtonStyle("glass"), SwiftUI.ControlSize("large")},
@@ -94,11 +94,11 @@ func TestSwiftUIPopoverToggleRequiresRoot(t *testing.T) {
 		root := SwiftUI.Popover.Root(SwiftUIPopoverProps{
 			IsPresented:         open,
 			OnIsPresentedChange: setOpen,
-			Children: func() {
-				SwiftUI.Popover.Trigger(SwiftUIPopoverTriggerProps{
+			Children: func() *native.Node {
+				return SwiftUI.Popover.Trigger(SwiftUIPopoverTriggerProps{
 					Ref: func(node *native.Node) { ref = node },
-					Render: func() {
-						SwiftUI.Button(SwiftUIButtonProps{Label: "Open"})
+					Render: func() *native.Node {
+						return SwiftUI.Button(SwiftUIButtonProps{Label: "Open"})
 					},
 				})
 			},

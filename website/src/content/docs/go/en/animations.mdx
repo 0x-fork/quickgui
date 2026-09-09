@@ -5,8 +5,8 @@ Animate changes to retained nodes with `ui.Style().Transition(...)`. The native 
 Put the transition on the base style so it applies when the pointer enters and leaves. The same declaration works with other paint states, including `Active`, `Focus`, `Expanded`, and `DragOver`.
 
 ```go
-func HoverAction() {
-	ui.Button(
+func HoverAction() *ui.Element {
+	return ui.Button(
 		"Continue",
 	).
 		Padding(12).
@@ -24,25 +24,23 @@ func HoverAction() {
 Use a signal or `ui.When` to change the target. The card below keeps the same node and children while its color and opacity animate.
 
 ```go
-func AnimatedSelection() {
+func AnimatedSelection() *ui.Element {
 	selected, setSelected := ui.CreateSignal(false)
-	ui.View(
-		func() {
-			ui.Button("Toggle emphasis").OnClick(func() { setSelected(!selected()) })
-			ui.View(
-				"Your selection",
-			).
-				Padding(20).
-				BorderRadius(12).
-				BackgroundColor("#334155").
-				TextColor("white").
-				Opacity(0.6).
-				Transition("background-color 180ms ease-out, opacity 180ms ease-out").
-				When(selected, ui.Style().
-					BackgroundColor("#2563eb"), ui.Style().
-					Opacity(1))
+	return ui.View(
 
-		},
+		ui.Button("Toggle emphasis").OnClick(func() { setSelected(!selected()) }),
+		ui.View(
+			"Your selection",
+		).
+			Padding(20).
+			BorderRadius(12).
+			BackgroundColor("#334155").
+			TextColor("white").
+			Opacity(0.6).
+			Transition("background-color 180ms ease-out, opacity 180ms ease-out").
+			When(selected, ui.Style().
+				BackgroundColor("#2563eb"), ui.Style().
+				Opacity(1)),
 	).Display("flex").FlexDirection("column").Gap(12)
 }
 ```
@@ -54,8 +52,8 @@ Updating the target during a transition starts from its current visible value, i
 Use `ui.TransitionDeclaration` when several properties share one timing configuration. Import `time` for the duration in this example.
 
 ```go
-func CappedTransition() {
-	ui.Button(
+func CappedTransition() *ui.Element {
+	return ui.Button(
 		"Hover me",
 	).Padding(12).BackgroundColor("#334155").TextColor("white").Opacity(0.8).
 		Transition(ui.TransitionDeclaration{
@@ -114,8 +112,8 @@ Transitions respect the system's Reduce Motion preference. `native.WindowOptions
 Pass an animated GIF or WebP path to `ui.Image`. The native decoder retains the frames and the file's repeat policy; no Go timer or per-frame signal is needed.
 
 ```go
-func AnimatedImage(path string) {
-	ui.Image().Value(path).
+func AnimatedImage(path string) *ui.Element {
+	return ui.Image().Value(path).
 		Width(96).Height(96).ObjectFit("contain")
 }
 ```

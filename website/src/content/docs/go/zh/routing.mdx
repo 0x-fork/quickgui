@@ -5,14 +5,14 @@
 使用 `ui.Route` 和 `ui.Layout` 声明路由。布局通过 `ui.Outlet` 挂载匹配的子路由。用 `ui.UseParams` 读取参数，或用 `ui.UseRouter` 导航。
 
 ```go
-func RouterExample() {
-	ui.Router(ui.RouterProps{
+func RouterExample() *native.Node {
+	return ui.Router(ui.RouterProps{
 		InitialPath: "/",
 		Routes: []*ui.RouteDeclaration{
 			ui.Route(
 				"/",
-				func() {
-					ui.Link(
+				func() *native.Node {
+					return ui.Link(
 						ui.LinkProps{Href: "/settings"},
 						"Settings",
 					)
@@ -20,10 +20,10 @@ func RouterExample() {
 			),
 			ui.Route(
 				"/settings",
-				func() { ui.Text("Settings") },
+				func() *ui.Element { return ui.Text("Settings") },
 			),
 		},
-		Fallback: func() { ui.Text("Page not found") },
+		Fallback: func() *ui.Element { return ui.Text("Page not found") },
 	})
 }
 ```
@@ -35,26 +35,25 @@ func RouterExample() {
 把共享导航放在 outlet 外部。Home 和 Settings 共用同一布局，因此切换页面时布局的局部状态会保留。outlet 只提供当前匹配的子页面。
 
 ```go
-func NestedRouterExample() {
-	ui.Router(ui.RouterProps{
+func NestedRouterExample() *native.Node {
+	return ui.Router(ui.RouterProps{
 		Routes: []*ui.RouteDeclaration{
 			ui.Layout(
-				func() {
-					ui.View(
-						func() {
-							ui.Link(ui.LinkProps{Href: "/"}, "Home")
-							ui.Link(ui.LinkProps{Href: "/settings"}, "Settings")
-							ui.Outlet()
-						},
+				func() *ui.Element {
+					return ui.View(
+
+						ui.Link(ui.LinkProps{Href: "/"}, "Home"),
+						ui.Link(ui.LinkProps{Href: "/settings"}, "Settings"),
+						ui.Outlet(),
 					).Display("flex").FlexDirection("column").Gap(12)
 				},
 				ui.Route(
 					"/",
-					func() { ui.Text("Home") },
+					func() *ui.Element { return ui.Text("Home") },
 				),
 				ui.Route(
 					"/settings",
-					func() { ui.Text("Settings") },
+					func() *ui.Element { return ui.Text("Settings") },
 				),
 			),
 		},
@@ -67,9 +66,9 @@ func NestedRouterExample() {
 在路由组件内，`ui.UseRouter()` 提供 `Navigate`、`Replace`、`Back` 和 `Forward`。`ui.Link` 声明导航目标。普通导航添加历史记录，替换导航则修改当前记录。
 
 ```go
-func BackButton() {
+func BackButton() *ui.Element {
 	router := ui.UseRouter()
-	ui.Button("Back").OnClick(router.Back)
+	return ui.Button("Back").OnClick(router.Back)
 }
 ```
 
@@ -80,25 +79,25 @@ func BackButton() {
 `:name` 路径段捕获一个参数。将读取保留在文本访问器内：如果在初始化时保存 `params()["name"]`，标签就会停留在初始值。查询参数与路径参数分别读取。这个路由初次显示 `quickgui` 和 `history`。
 
 ```go
-func ParameterRouterExample() {
-	ui.Router(ui.RouterProps{
+func ParameterRouterExample() *native.Node {
+	return ui.Router(ui.RouterProps{
 		InitialPath: "/projects/quickgui?tab=history",
 		Routes: []*ui.RouteDeclaration{
 			ui.Route(
 				"/projects/:name",
-				func() {
+				func() *ui.Element {
 					params := ui.UseParams()
 					search := ui.UseSearchParams()
-					ui.View(func() {
+					return ui.View(
 						ui.Text(
 							"Project: ",
 							params()["name"],
-						)
+						),
 						ui.Text(
 							"Tab: ",
 							search()["tab"],
-						)
-					})
+						),
+					)
 				},
 			),
 		},
