@@ -42,8 +42,8 @@ test("the TypeScript updater guide loads real configuration and compiles the ext
       throw error.cause ?? error;
     });
     expect(config.frontend).toBe("typescript");
-    expect(config.native.extensions).toEqual(["@quickgui/extension-updater"]);
-    expect(typescriptExtensions(project, config.native.extensions)[0]?.package).toBe(
+    expect(config.extensions).toEqual(["@quickgui/extension-updater"]);
+    expect(typescriptExtensions(project, config.extensions)[0]?.package).toBe(
       "@quickgui/extension-updater",
     );
     expect(updaterMetadata(config, "darwin-arm64", "production")).toEqual({

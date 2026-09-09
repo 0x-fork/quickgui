@@ -27,9 +27,7 @@ export default defineConfig({
   identifier: "com.example.my-app",
   version: "1.0.0",
   entry: "app.tsx",
-  native: {
-    extensions: ["@quickgui/extension-updater"],
-  },
+  extensions: ["@quickgui/extension-updater"],
   updates: {
     baseUrl: "https://downloads.example.com/my-app",
     publicKey: readFileSync(

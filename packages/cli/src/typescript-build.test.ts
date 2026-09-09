@@ -35,17 +35,10 @@ test("TypeScript is explicit, defaults to app.tsx, and rejects incompatible nati
     resolveConfig(
       {
         ...input,
-        native: {
-          extensions: [
-            "terminal",
-            "@acme/extension-echo",
-            "quickgui-extension-echo",
-            "./extension",
-          ],
-        },
+        extensions: ["terminal", "@acme/extension-echo", "quickgui-extension-echo", "./extension"],
       },
       "/example",
-    ).native.extensions,
+    ).extensions,
   ).toEqual(["terminal", "@acme/extension-echo", "quickgui-extension-echo", "/example/extension"]);
   expect(resolveConfig({ name: "Demo", identifier: "com.example.demo" }, "/example").frontend).toBe(
     "go",

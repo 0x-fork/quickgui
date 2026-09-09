@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { loadConfig, parseFrontend } from "./config.ts";
+import { loadConfig, parseFrontend, resolveConfig } from "./config.ts";
 import { parseCliArgs } from "./args.ts";
 import { shouldIgnoreChange } from "./dev.ts";
 import { errorMessage } from "./error.ts";
@@ -107,12 +107,12 @@ test("discovery retains TypeScript support and gives TOML precedence", async () 
   expect((await loadConfig(root, "quickgui.config.ts")).name).toBe("TS App");
 });
 
-test("TOML and TypeScript resolve TypeScript extension directories from the project", async () => {
+test("TOML and TypeScript resolve top-level extension directories from the project", async () => {
   const root = project();
   const extensions = ["vendor/my-service", join(root, "vendor/another-service")];
   writeFileSync(
     join(root, "quickgui.toml"),
-    minimal + `frontend = "typescript"\n[native]\nextensions = ${JSON.stringify(extensions)}\n`,
+    minimal + `frontend = "typescript"\nextensions = ${JSON.stringify(extensions)}\n`,
   );
   writeFileSync(
     join(root, "quickgui.config.ts"),
@@ -120,16 +120,24 @@ test("TOML and TypeScript resolve TypeScript extension directories from the proj
       name: "Zig App",
       identifier: "com.example.typescript",
       frontend: "typescript",
-      native: { extensions },
+      extensions,
     })}`,
   );
   for (const path of ["quickgui.toml", "quickgui.config.ts"]) {
     const config = await loadConfig(root, path);
-    expect(config.native.extensions).toEqual([
+    expect(config.extensions).toEqual([
       join(root, "vendor/my-service"),
       join(root, "vendor/another-service"),
     ]);
   }
+});
+
+test("extensions validate at the top level and Go keeps import-based discovery", () => {
+  const input = { name: "Example", identifier: "com.example.app", frontend: "typescript" };
+  expect(resolveConfig(input, "/project").extensions).toEqual([]);
+  expect(() => resolveConfig({ ...input, extensions: "updater" }, "/project")).toThrow("extensions");
+  expect(() => resolveConfig({ ...input, native: { extensions: ["updater"] } }, "/project")).toThrow("top-level extensions");
+  expect(() => resolveConfig({ ...input, frontend: "go", extensions: ["updater"] }, "/project")).toThrow("Go extensions are discovered from imports");
 });
 
 test("explicit relative and absolute TOML paths resolve resources from the project", async () => {

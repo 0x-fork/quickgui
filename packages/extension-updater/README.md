@@ -2,7 +2,7 @@
 
 Optional automatic updates for QuickGUI TypeScript and Go applications. The TypeScript API and native updater artifacts live in this package.
 
-For TypeScript, install it with `bun add @quickgui/extension-updater`, register `native.extensions: ["@quickgui/extension-updater"]` in `quickgui.config.ts`, and import:
+For TypeScript, install it with `bun add @quickgui/extension-updater`, register `extensions: ["@quickgui/extension-updater"]` in `quickgui.config.ts`, and import:
 
 ```ts
 import { app } from "@quickgui/native";

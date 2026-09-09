@@ -109,7 +109,7 @@ export async function compileNativeApplication(options: NativeCompileOptions): P
   const library = resolveHostLibrary(target, config.projectRoot, config.native.libraryPath);
   const plan = goBuildPlan(options);
   const extensions = typescript
-    ? typescriptExtensions(config.projectRoot, config.native.extensions)
+    ? typescriptExtensions(config.projectRoot, config.extensions)
     : await discoverExtensions(config, plan.argv.at(-1)!, plan.env);
   if (
     extensions.some(

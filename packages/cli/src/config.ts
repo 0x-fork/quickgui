@@ -158,8 +158,6 @@ export interface NativeConfig {
   libraryPath?: string;
   /** Optional Go build tags. */
   tags?: string[];
-  /** Extension directories; TypeScript also accepts npm packages and terminal/updater names. */
-  extensions?: string[];
 }
 
 export interface QuickGuiConfig {
@@ -174,6 +172,8 @@ export interface QuickGuiConfig {
   target?: QuickGuiTarget;
   /** Native compilation options. */
   native?: NativeConfig;
+  /** TypeScript extensions: npm packages, directories, or terminal/updater names. */
+  extensions?: string[];
   resources?: string[];
   /** OpenType font files embedded in the executable and registered before app startup. */
   fonts?: string[];
@@ -200,7 +200,8 @@ export interface ResolvedQuickGuiConfig {
   entry: string;
   outDir: string;
   target?: QuickGuiTarget;
-  native: { libraryPath?: string; tags: string[]; extensions: string[] };
+  native: { libraryPath?: string; tags: string[] };
+  extensions: string[];
   resources: string[];
   fonts: string[];
   protocols: string[];
@@ -291,10 +292,10 @@ export function resolveConfig(
   const documentTypes = resolveDocumentTypes(input.documentTypes);
   const updates = resolveUpdates(input.updates, projectRoot);
   const native = objectOrEmpty(input.native, "native");
-  if (frontend === "go" && native.extensions !== undefined)
-    throw new CliError(
-      "native.extensions is for TypeScript; Go extensions are discovered from imports",
-    );
+  if (native.extensions !== undefined)
+    throw new CliError("Use top-level extensions instead of native.extensions");
+  if (frontend === "go" && input.extensions !== undefined)
+    throw new CliError("extensions is for TypeScript; Go extensions are discovered from imports");
   if (frontend === "typescript" && native.tags !== undefined)
     throw new CliError("native.tags contains Go build tags and is not supported by TypeScript");
   const linuxIcon = optionalString(linux.icon, "linux.icon", 1_024);
@@ -323,16 +324,15 @@ export function resolveConfig(
         ? { libraryPath: resolveRelative(projectRoot, String(native.libraryPath)) }
         : {}),
       tags: stringArray(native.tags, "native.tags"),
-      extensions: stringArray(native.extensions, "native.extensions").map((path) =>
-        frontend === "typescript" &&
-        (path === "terminal" ||
-          path === "updater" ||
-          path.startsWith("@") ||
-          path.startsWith("quickgui-extension-"))
-          ? path
-          : resolveRelative(projectRoot, path),
-      ),
     },
+    extensions: stringArray(input.extensions, "extensions").map((path) =>
+      path === "terminal" ||
+      path === "updater" ||
+      path.startsWith("@") ||
+      path.startsWith("quickgui-extension-")
+        ? path
+        : resolveRelative(projectRoot, path),
+    ),
     resources,
     fonts,
     protocols,
