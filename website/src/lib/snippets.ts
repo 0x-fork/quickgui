@@ -77,7 +77,7 @@ func openWindow() {
   },
   swiftUi: {
     lang: "go",
-    code: `return ui.SwiftUI.Host(
+    code: `ui.SwiftUI.Host(
 	ui.SwiftUIHostProps{MatchContents: true},
 	func() *native.Node {
 		return ui.SwiftUI.Button(ui.SwiftUIButtonProps{
