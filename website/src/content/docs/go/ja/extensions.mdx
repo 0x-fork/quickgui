@@ -16,10 +16,9 @@
 quickgui init-extension my-components --type go
 quickgui init-extension my-service --type zig
 quickgui init-extension my-service --type rust
-quickgui init-extension my-service --type moonbit
 ```
 
-既定の `go` は再利用可能なコンポーネントとリアクティブなデモを生成します。`zig`、`rust`、`moonbit` は独立したネイティブサービス、型付き Go ラッパー、マニフェスト、ABI 定義、npm 成果物パッケージを生成します。どのテンプレートにも `cmd/demo` と `quickgui.toml` が含まれます。
+既定の `go` は再利用可能なコンポーネントとリアクティブなデモを生成します。`zig` と `rust` は独立したネイティブサービス、型付き Go ラッパー、マニフェスト、ABI 定義、npm 成果物パッケージを生成します。どのテンプレートにも `cmd/demo` と `quickgui.toml` が含まれます。
 
 ```sh
 cd my-service
@@ -31,8 +30,6 @@ bun run dev
 Zig テンプレートには Zig 0.16.x、Rust テンプレートには安定版 Cargo/Rust が必要です。ビルドスクリプトはすべて Bun で実行する TypeScript です。`bun run build` は現在のマシン向けライブラリを `artifacts/lib/<target>/` に出力します。マニフェストの名前とバージョンを Go ラッパー、生成されたネイティブ定数、npm パッケージで共有します。`bun run dev` は最初に一度だけネイティブをビルドし、Go の編集では再利用します。ネイティブコードの変更後はコマンドを再起動してください。純粋な Go 拡張にはネイティブビルドや成果物パッケージは不要です。
 
 パッケージ公開前は、このチェックアウトで `bun packages/cli/src/cli.ts init-extension <directory> --type <type> --no-install` を実行できます。生成された Go SDK 依存を `replace` でローカルの `go` ディレクトリへ向け、CLI 依存もローカルの `file:` パスに変更してから依存をインストールします。開発と公開の手順は生成された README に記載されています。
-
-`moonbit` では `native/extension.mbt` に操作を実装し、MoonBit とネイティブ C コンパイラでビルドします。Bun スクリプトは MoonBit の C バックエンドでコンパイルし、専用ランタイムを共有ライブラリへリンクします。Go アプリからは引き続き purego で読み込みます。プロバイダー単体のビルドにコア変更や Go は不要です。ハンドラー API、メモリ所有権、ツールチェーン、両フロントエンドからの利用は [MoonBit 拡張ガイド](/ja/docs/moonbit/extensions)を参照してください。
 
 ## コンポーネントの共有
 

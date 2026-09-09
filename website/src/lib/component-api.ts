@@ -16,5 +16,5 @@ export interface ApiSection {
 export interface ComponentApi {
   sections: ApiSection[];
   example: string;
-  language: "go" | "moonbit" | "tsx";
+  language: "go" | "tsx";
 }

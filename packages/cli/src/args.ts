@@ -133,13 +133,13 @@ export function parseCliArgs(argv: string[]): ParsedCliCommand {
       "--no-install": { key: "noInstall", value: false },
     });
     if (parsed.positionals.length > 1)
-      throw new CliError("Usage: quickgui init-extension [directory] [--type go|zig|rust|moonbit]");
+      throw new CliError("Usage: quickgui init-extension [directory] [--type go|zig|rust]");
     const type = parseExtensionType(stringOption(parsed, "type") ?? "go");
     const name = stringOption(parsed, "name");
     const module = stringOption(parsed, "module");
     const npmPackage = stringOption(parsed, "npmPackage");
     if (type === "go" && npmPackage !== undefined)
-      throw new CliError("--npm-package is only used by Zig, Rust, and MoonBit extensions");
+      throw new CliError("--npm-package is only used by Zig and Rust extensions");
     return {
       command: "init-extension",
       directory: parsed.positionals[0] ?? "quickgui-extension",

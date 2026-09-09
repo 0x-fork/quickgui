@@ -7,7 +7,7 @@ type StyleBuilder struct {
 	style styleData
 }
 
-// Style starts a reusable fluent style, like MoonBit's style(). Apply it with
+// Style starts a reusable fluent style. Apply it with
 // Element.Style or a compound part's Style field.
 func Style() StyleBuilder { return StyleBuilder{} }
 

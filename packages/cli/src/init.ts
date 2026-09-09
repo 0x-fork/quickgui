@@ -21,15 +21,6 @@ const templateFiles = [
   ["README.md", "README.md"],
   ["main.go", "main.go"],
 ] as const;
-const moonbitFiles = [
-  ["package.json", "package.json"],
-  ["quickgui.toml", "quickgui.toml"],
-  ["moon.mod", "moon.mod"],
-  ["gitignore", ".gitignore"],
-  ["README.md", "README.md"],
-  ["main/moon.pkg", "main/moon.pkg"],
-  ["main/main.mbt", "main/main.mbt"],
-] as const;
 const typescriptFiles = [
   ["package.json", "package.json"],
   ["quickgui.config.ts", "quickgui.config.ts"],
@@ -58,24 +49,20 @@ export async function initProject(options: InitProjectOptions): Promise<string> 
     "{{IDENTIFIER}}": JSON.stringify(identifier),
     "{{PACKAGE_NAME}}": JSON.stringify(packageName(name)),
     "{{GO_MODULE}}": `example.com/${packageName(name)}`,
-    "{{MOON_MODULE}}": JSON.stringify(`myapp/${packageName(name)}`),
     "{{README_TITLE}}": name.replaceAll("\n", " ").replaceAll("\r", " "),
   };
 
   mkdirSync(destination, { recursive: true });
-  const moonbit = options.frontend === "moonbit";
   const typescript = options.frontend === "typescript";
   const templateRoot = fileURLToPath(
     new URL(
-      `../templates/${typescript ? "typescript" : moonbit ? "moonbit" : "native"}/`,
+      `../templates/${typescript ? "typescript" : "native"}/`,
       import.meta.url,
     ),
   );
   for (const [sourceName, targetName] of typescript
     ? typescriptFiles
-    : moonbit
-      ? moonbitFiles
-      : templateFiles) {
+    : templateFiles) {
     const source = join(templateRoot, sourceName);
     if (!existsSync(source)) throw new CliError(`CLI template is missing: ${source}`);
     const target = join(destination, targetName);
@@ -102,9 +89,7 @@ export async function initProject(options: InitProjectOptions): Promise<string> 
     }
     const argv = typescript
       ? ["bun", "run", "check"]
-      : moonbit
-        ? ["moon", "check", "--target", "native"]
-        : ["go", "mod", "tidy"];
+      : ["go", "mod", "tidy"];
     const prepare = Bun.spawn(argv, {
       cwd: destination,
       stdin: "inherit",

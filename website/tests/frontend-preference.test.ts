@@ -1,7 +1,16 @@
 import { expect, test } from "bun:test";
 import { readFrontendPreference, rememberFrontend } from "../src/lib/frontend-preference";
 import { resolveDocsRoute } from "../src/lib/docs-routing";
-import { switchDocsFrontend } from "../src/lib/docs";
+import { DOCS_FRONTENDS, switchDocsFrontend } from "../src/lib/docs";
+
+test("removed frontends have no routes and old preferences safely default to Go", () => {
+  expect(DOCS_FRONTENDS).toEqual(["go", "typescript"]);
+  for (const frontend of ["zig", "moonbit"]) {
+    expect(readFrontendPreference(`quickgui-frontend=${frontend}`)).toBe("go");
+    expect(resolveDocsRoute(frontend)).toBeUndefined();
+    expect(resolveDocsRoute(frontend, "components/button")).toBeUndefined();
+  }
+});
 
 test("TypeScript selection persists and resolves the same guide or component", () => {
   expect(readFrontendPreference("theme=dark; quickgui-frontend=typescript")).toBe("typescript");

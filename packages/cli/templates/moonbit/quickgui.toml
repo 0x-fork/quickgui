@@ -1,4 +1,0 @@
-name = {{APP_NAME}}
-identifier = {{IDENTIFIER}}
-frontend = "moonbit"
-entry = "main"

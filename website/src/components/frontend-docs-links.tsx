@@ -4,7 +4,6 @@ import { DOCS_FRONTENDS, docsPath, frontendLabel, type DocsFrontend } from "../l
 
 const icons: Record<DocsFrontend, string> = {
   go: "i-simple-icons-go size-6 text-[#00add8]",
-  moonbit: "size-5 shrink-0 bg-[#7c3aed] [mask:url(/icons/moonbit.svg)_center/contain_no-repeat]",
   typescript: "i-simple-icons-typescript size-5 text-[#3178c6]",
 };
 

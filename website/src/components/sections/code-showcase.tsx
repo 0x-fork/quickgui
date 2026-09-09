@@ -12,12 +12,6 @@ const PANES = [
     file: "counter.go",
     name: "Go",
   },
-  {
-    key: "moonbit",
-    snippet: "moonbitCounter",
-    file: "counter.mbt",
-    name: "MoonBit",
-  },
   { key: "typescript", snippet: "typescriptCounter", file: "counter.tsx", name: "TypeScript" },
 ] as const;
 
@@ -36,7 +30,7 @@ export function CodeShowcase({
     <section id="code" className="border-b border-border">
       <SectionHeading title={t("code.title")} lead={t("code.lead")} />
 
-      {/* Mobile: tab bar switches panes; desktop shows all three side by side. */}
+      {/* Mobile: tab bar switches panes; desktop shows both side by side. */}
       <div className="flex border-b border-border lg:hidden">
         {PANES.map((pane) => (
           <button
@@ -56,7 +50,7 @@ export function CodeShowcase({
         ))}
       </div>
 
-      <div className="grid gap-px bg-border lg:grid-cols-3">
+      <div className="grid gap-px bg-border lg:grid-cols-2">
         {PANES.map((pane) => (
           <div
             key={pane.key}

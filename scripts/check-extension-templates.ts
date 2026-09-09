@@ -17,14 +17,6 @@ import { resolveHostLibrary } from "../packages/cli/src/native-build.ts";
 import { hostTarget } from "../packages/cli/src/targets.ts";
 
 const root = resolve(import.meta.dir, "..");
-const localMoon = join(root, "target/moonbit-toolchain");
-const moonHome =
-  process.env.MOON_HOME ?? (existsSync(join(localMoon, "bin/moon")) ? localMoon : undefined);
-if (moonHome)
-  Object.assign(process.env, {
-    MOON_HOME: moonHome,
-    PATH: `${join(moonHome, "bin")}${process.platform === "win32" ? ";" : ":"}${process.env.PATH ?? ""}`,
-  });
 const target = hostTarget();
 const core = resolveHostLibrary(target, root);
 const directory = mkdtempSync(join(tmpdir(), "quickgui-extension-templates-"));
@@ -71,7 +63,7 @@ try {
     pathToFileURL(join(directory, "package/src/config.ts")).href
   );
 
-  for (const type of ["go", "rust", "zig", "moonbit"] as const) {
+  for (const type of ["go", "rust", "zig"] as const) {
     const name = `template-${type}`;
     const module = `example.test/${name}`;
     const project = join(directory, `${type} project`);
@@ -150,25 +142,7 @@ try {
         recursive: true,
       });
       if (type === "rust") await run(["cargo", "fmt", "--check"], join(project, "native"));
-      else if (type === "moonbit") {
-        await run(["moon", "fmt", "--check"], join(project, "native"));
-        for (const profile of ["--debug", "--release"]) {
-          await run(
-            ["moon", "test", "--target", "native", profile, "--deny-warn"],
-            join(project, "native"),
-          );
-        }
-        if (process.platform === "darwin") {
-          const symbols = await run(["nm", "-gU", provider], project);
-          if (
-            symbols
-              .trim()
-              .split("\n")
-              .some((line) => !line.endsWith(" _quickgui_extension_v1"))
-          )
-            throw new Error(`MoonBit provider leaked runtime symbols:\n${symbols}`);
-        }
-      } else
+      else
         await run(
           [
             process.env.ZIG ?? "zig",
@@ -216,85 +190,10 @@ func main() { if err := host.Load(); err != nil { panic(err) } }
     if (libraries.length !== (type === "go" ? 1 : 2))
       throw new Error(`${type} bundled unexpected native libraries`);
 
-    const moonConsumers: string[] = [];
-    if (type === "moonbit") {
-      // A MoonBit application has its own runtime/layout table. Loading another
-      // MoonBit image must not interpose either runtime or corrupt live objects.
-      const sdk = join(directory, "sdk");
-      cpSync(join(root, "moonbit"), sdk, {
-        recursive: true,
-        filter: (path) =>
-          !["_build", ".mooncakes", ".repos", ".git"].includes(path.split(/[\\/]/).at(-1)!),
-      });
-      const consumer = join(project, "moonbit-demo");
-      await run(
-        [process.execPath, cli, "init", consumer, "--frontend", "moonbit", "--no-install"],
-        directory,
-      );
-      writeFileSync(
-        join(directory, "moon.work"),
-        `members = ["sdk", "moonbit project/moonbit-demo"]\n`,
-      );
-      writeFileSync(
-        join(consumer, "main/moon.pkg"),
-        'import { "egoist/quickgui/native", "moonbitlang/core/ref" }\npkgtype(kind: "executable")\n',
-      );
-      writeFileSync(
-        join(consumer, "main/main.mbt"),
-        `
-fn main {
-  let replies = @ref.Ref(0)
-  // This nested object stays live across calls into the independent runtime.
-  let expected : Json = { "text": "MoonBit → provider", "nested": [null, { "ok": true }] }
-  match @native.run(() => {
-    for _ in 0..<32 {
-      @native.invoke("extension/${name}/echo", expected, result => {
-        match result {
-          Ok(value) => if value != expected { abort("Changed extension reply") }
-          Err(error) => abort(error)
-        }
-        replies.val += 1
-        if replies.val == 32 { @native.quit() }
-      })
-    }
-  }, options={ "quitMode": "explicit" }) {
-    Ok(_) => ()
-    Err(error) => abort(error)
-  }
-  if replies.val != 32 { abort("Missing extension replies") }
-}
-`,
-      );
-      for (const mode of ["development", "production"] as const) {
-        const app = join(project, `Moon-${mode}.app`);
-        const executablePath =
-          process.platform === "darwin"
-            ? join(app, "Contents/MacOS/Check")
-            : join(app, process.platform === "win32" ? "Check.exe" : "Check");
-        mkdirSync(dirname(executablePath), { recursive: true });
-        await compileNativeApplication({
-          config: resolveConfig(
-            {
-              name: "MoonBit Extension Check",
-              identifier: "dev.quickgui.moonbit-extension-check",
-              frontend: "moonbit",
-              entry: "main",
-              native: { libraryPath: core, extensions: [project] },
-            },
-            consumer,
-          ),
-          mode,
-          target,
-          executablePath,
-          fonts: [],
-        });
-        moonConsumers.push(executablePath);
-      }
-    }
     rmSync(join(project, "node_modules"), { recursive: true, force: true });
     rmSync(join(project, "artifacts"), { recursive: true, force: true });
     rmSync(join(project, "native"), { recursive: true, force: true });
-    for (const executable of [executablePath, ...moonConsumers]) {
+    for (const executable of [executablePath]) {
       await run([executable], directory, {
         QUICKGUI_LIBRARY: undefined,
         QUICKGUI_HOST_LIB: undefined,
@@ -302,7 +201,7 @@ fn main {
       });
     }
     console.log(
-      `[templates] ${type}: packed CLI scaffold, formatted sources, compiled demo, isolated bundle loaded through purego${type === "moonbit" ? "; MoonBit debug/release consumers passed" : ""}`,
+      `[templates] ${type}: packed CLI scaffold, formatted sources, compiled demo, isolated bundle loaded through purego`,
     );
   }
 } finally {

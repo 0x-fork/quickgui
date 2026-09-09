@@ -1,5 +1,0 @@
-import {
-  "quickgui/components-moonbit/gallery",
-}
-
-pkgtype(kind: "executable")

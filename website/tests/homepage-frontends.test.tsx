@@ -38,12 +38,11 @@ test("every homepage frontend selects its own commands, SwiftUI example, and doc
           <SwiftUi highlighted={highlighted} frontend={frontend} onFrontendChange={() => {}} />,
         ),
       );
-      const extension = { go: "go", moonbit: "mbt", typescript: "tsx" }[frontend];
+      const extension = { go: "go", typescript: "tsx" }[frontend];
       expect(swift).toContain(`swiftui.${extension}`);
       expect(swift).toContain(
         {
           go: "ui.SwiftUI.Host",
-          moonbit: "@ui.swift_ui_host",
           typescript: "@quickgui/solid/swift-ui",
         }[frontend],
       );

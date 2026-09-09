@@ -64,46 +64,20 @@ export async function runCli(argv: string[]): Promise<number> {
         const { runTypeScript } = await import("./typescript-build.ts");
         return runTypeScript(project, command.command);
       }
-      if (
-        !existsSync(resolve(project, "moon.mod")) &&
-        !existsSync(resolve(project, "moon.mod.json"))
-      ) {
-        const { runGo } = await import("./go-build.ts");
-        return runGo(project, command.command, command.release);
-      }
-      const { runMoonbit } = await import("./moonbit-build.ts");
-      return runMoonbit(project, [command.command], command.release ? "production" : "development");
+      const { runGo } = await import("./go-build.ts");
+      return runGo(project, command.command, command.release);
     }
     case "fmt": {
       const project = resolve(command.project);
-      const hasConfig = ["quickgui.toml", "quickgui.config.ts"].some((file) =>
-        existsSync(resolve(project, file)),
-      );
-      if (hasConfig && (await loadConfig(project)).frontend === "typescript") {
+      const hasConfig = ["quickgui.toml", "quickgui.config.ts"].some((file) => existsSync(resolve(project, file)));
+      const frontend = hasConfig ? (await loadConfig(project)).frontend : "go";
+      if (frontend === "typescript") {
         const { runTypeScript } = await import("./typescript-build.ts");
         return runTypeScript(project, "fmt", command.check);
       }
-      const moonbit = hasConfig
-        ? (await loadConfig(project)).frontend === "moonbit"
-        : existsSync(resolve(project, "moon.mod")) || existsSync(resolve(project, "moon.mod.json"));
-      const child = Bun.spawn(
-        moonbit
-          ? ["moon", "fmt", ...(command.check ? ["--check"] : [])]
-          : [
-              "go",
-              "run",
-              "github.com/egoist/quickgui/go/cmd/quickguifmt",
-              command.check ? "-check" : "-w",
-              ".",
-            ],
-        {
-          cwd: resolve(command.project),
-          env: { ...process.env, CGO_ENABLED: "0" },
-          stdin: "inherit",
-          stdout: "inherit",
-          stderr: "inherit",
-        },
-      );
+      const child = Bun.spawn(["go", "run", "github.com/egoist/quickgui/go/cmd/quickguifmt", command.check ? "-check" : "-w", "."], {
+        cwd: project, env: { ...process.env, CGO_ENABLED: "0" }, stdin: "inherit", stdout: "inherit", stderr: "inherit",
+      });
       return await child.exited;
     }
     case "keygen":
@@ -193,11 +167,11 @@ function helpText(topic?: HelpTopic): string {
   if (topic === "init-extension") {
     return `Usage: quickgui init-extension [directory] [options]
 
-Create an extension with a runnable Go demo. Zig, Rust, and MoonBit templates include a
+Create an extension with a runnable Go demo. Zig and Rust templates include a
 standalone native service library, a Go wrapper, and Bun build scripts.
 
 Options:
-  --type <go|zig|rust|moonbit> Extension language (default: go)
+  --type <go|zig|rust> Extension language (default: go)
   --name <name>              Extension name (default: directory name)
   --module <path>            Go module path (default: example.com/<name>)
   --npm-package <name>       Native artifact package (default: <name>-native)
@@ -222,7 +196,7 @@ Options:
 Create a QuickGUI project compiled to native code.
 
 Options:
-  --frontend <go|moonbit|typescript> Application language (default: go)
+  --frontend <go|typescript> Application language (default: go)
   --name <name>              Application display name
   --identifier <id>          Reverse-DNS bundle identifier
   --no-install               Do not run bun install
@@ -264,7 +238,7 @@ Options:
   if (topic === "fmt") {
     return `Usage: quickgui fmt [options]
 
-Format Go with the QuickGUI SDK formatter or MoonBit with moon fmt.
+Format Go with the QuickGUI SDK formatter or TypeScript with the project formatter.
 The frontend is selected from the project's config.
 
 Options:
@@ -273,7 +247,7 @@ Options:
   -h, --help                 Show this help`;
   }
   if (topic === "check" || topic === "test") {
-    return `Usage: quickgui ${topic} [options]\n\n${topic === "check" ? "Type-check" : "Test"} Go or MoonBit using the same reactive view compiler as dev and build.\n\nOptions:\n  --project <directory>      Project directory (default: .)\n  --release                  Use the release profile\n  -h, --help                 Show this help`;
+    return `Usage: quickgui ${topic} [options]\n\n${topic === "check" ? "Type-check" : "Test"} Go or TypeScript using the same build pipeline as dev and build.\n\nOptions:\n  --project <directory>      Project directory (default: .)\n  --release                  Use the release profile\n  -h, --help                 Show this help`;
   }
   return `QuickGUI CLI ${CLI_VERSION}
 
@@ -281,12 +255,12 @@ Usage: quickgui <command> [options]
 
 Commands:
   init [directory]           Create a new project
-  init-extension [directory] Create a Go, Zig, Rust, or MoonBit extension
+  init-extension [directory] Create a Go, Zig, or Rust extension
   dev                        Run a native app with source reload
   build                      Package a production application
-  fmt                        Format Go or MoonBit source
-  check                      Type-check compiled Go or MoonBit views
-  test                       Test compiled Go or MoonBit views
+  fmt                        Format Go or TypeScript source
+  check                      Type-check compiled Go or TypeScript views
+  test                       Test compiled Go or TypeScript views
   keygen                     Create a Minisign update signing key pair
 
 Run \`quickgui help <command>\` for command-specific help.`;

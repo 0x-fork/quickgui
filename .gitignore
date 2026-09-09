@@ -8,9 +8,8 @@ dist
 .quickgui
 *.node
 worktrees/
+zig-out/
 _build/
-.mooncakes/
-.repos/
 
 # Generated native host assets are staged by build:native.
 packages/native/lib/**/*.dylib

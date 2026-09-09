@@ -11,7 +11,7 @@ const root = resolve(import.meta.dir, "../..");
 test("each frontend reference uses real declarations, examples, and source targets", () => {
   const sourceLengths = new Map<string, number>();
   for (const component of ALL_COMPONENT_DOCS)
-    for (const frontend of ["go", "moonbit", "typescript"] as const) {
+    for (const frontend of ["go", "typescript"] as const) {
       const api = getComponentApi(frontend, component.kind, component.slug);
       expect(api.example.length).toBeGreaterThan(0);
       expect(api.sections.length).toBeGreaterThan(0);
@@ -47,15 +47,6 @@ test("compound props preserve callback types, inherited fields, and namespaces",
   expect(terminal.entries.some((entry) => entry.name === "Program")).toBe(true);
 });
 
-test("MoonBit keeps its own fluent types and declaration defaults", () => {
-  const checkbox = getComponentApi("moonbit", "ui", "checkbox").sections[0];
-  const checked = checkbox.entries.find((entry) => entry.name === "checked")!;
-  expect(checked.type).toContain("Bool");
-  expect(checked.default).toBe("false");
-  expect(checked.binding).toContain("() -> Bool");
-  expect(checkbox.entries.some((entry) => entry.name === "default_checked")).toBe(false);
-});
-
 test("the browser catalog matches the Rust demo dispatcher", () => {
   const source = readFileSync(resolve(root, "crates/quickgui-docs-demo/src/lib.rs"), "utf8");
   const declared = [
@@ -87,14 +78,9 @@ test("every preview uses the selected frontend's documented example and syntax h
     }
   }
   expect(getDemoSource("go", "button")!.code).toContain("ui.Button(");
-  expect(getDemoSource("moonbit", "button")!.code).toContain("@ui.button(");
   expect(getDemoSource("typescript", "button")!.code).toContain("<Button");
   for (const frontend of DOCS_FRONTENDS) {
     expect(getDemoSource(frontend, "terminal")).toBeUndefined();
     expect(getDemoSource(frontend, "missing")).toBeUndefined();
   }
-});
-
-test("the MoonBit container uses the same View name as the Go API", () => {
-  expect(getComponentApi("moonbit", "ui", "view").sections[0].signature).toStartWith("@ui.view(");
 });

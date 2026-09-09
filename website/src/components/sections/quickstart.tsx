@@ -16,8 +16,8 @@ export function Quickstart({
 }) {
   const { t } = useTranslation();
   const steps = [
-    { key: "create", snippet: frontend === "typescript" ? "typescriptCliInit" : frontend === "go" ? "cliInit" : "moonbitCliInit" },
-    { key: "edit", snippet: frontend === "typescript" ? "typescriptCliCheck" : frontend === "go" ? "cliFormat" : "moonbitCliFormat" },
+    { key: "create", snippet: frontend === "typescript" ? "typescriptCliInit" : "cliInit" },
+    { key: "edit", snippet: frontend === "typescript" ? "typescriptCliCheck" : "cliFormat" },
     { key: "ship", snippet: "cliBuild" },
   ] as const;
 

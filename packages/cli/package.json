@@ -33,8 +33,6 @@
     "src/go-build.ts",
     "src/typescript-build.ts",
     "src/typescript-compiler.ts",
-    "src/moonbit-build.ts",
-    "src/moonbit",
     "src/targets.ts",
     "templates",
     "src/packaging",
@@ -45,8 +43,7 @@
   },
   "dependencies": {
     "@quickgui/native": "workspace:*",
-    "@solidjs/compiler": "2.0.0-rc.7",
-    "web-tree-sitter": "0.27.0"
+    "@solidjs/compiler": "2.0.0-rc.7"
   },
   "engines": {
     "bun": ">=1.4.0"

@@ -7,7 +7,6 @@ import { site } from "../../lib/site";
 const MB = 1_000_000;
 const colors: Record<string, string> = {
   "quickgui-go": "var(--peach)",
-  "quickgui-moonbit": "var(--mint)",
   "quickgui-typescript": "#7ea6e8",
   tauri: "#64748b",
   electron: "#71717a",

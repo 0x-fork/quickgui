@@ -13,7 +13,7 @@ Edits are kept in memory for the session. The initial view contains the first
 100 issues and the first issue's details. There is no network, database, or
 background synchronization. No fixture includes optional extensions or plugins.
 Electron and Tauri use the exact same bundled TypeScript, HTML, and CSS. QuickGUI
-uses Go, MoonBit, and Bun/Solid 2 TypeScript components with fine-grained reactive state.
+uses Go and Bun/Solid 2 TypeScript components with fine-grained reactive state.
 
 [`workload.ts`](workload.ts) generates one deterministic dataset embedded in all
 five builds; generated copies are ignored by Git. The result records the dataset
@@ -22,9 +22,7 @@ SHA-256, record count, page size, and content dimensions.
 ## Reproduce
 
 Install Bun, Go 1.23 or later, Rust/Cargo, and Xcode Command Line Tools. Stage the
-QuickGUI native runtime with `bun run build:native`. The benchmark uses the
-repository's MoonBit toolchain when available (`bun scripts/setup-moonbit.ts`),
-otherwise the `moon` tool on PATH. Run from the repository root:
+QuickGUI native runtime with `bun run build:native`. Run from the repository root:
 
 ```sh
 bun install --cwd benchmarks/desktop --frozen-lockfile
@@ -156,8 +154,7 @@ This measures what each fixture ships, rather than adding system libraries to
 one framework or removing included libraries from another. It is installed
 bundle size, not DMG, ZIP, or installer download size.
 
-The CLI uses its normal Go release flags and MoonBit's optimizing C release
-backend. Tauri uses the default Cargo release profile. Electron is packaged
+The CLI uses its normal Go release flags. Tauri uses the default Cargo release profile. Electron is packaged
 with ASAR using `@electron/packager`. Dependency versions are pinned in the
 fixture manifests and lockfiles.
 

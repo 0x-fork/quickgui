@@ -48,10 +48,9 @@ test("server-rendered benchmark charts include every localized SVG title", async
   }
 });
 
-test("all five measured apps fit inside the charts and appear in the preview picker", () => {
+test("all measured apps fit inside the charts and appear in the preview picker", () => {
   expect(measured.results.map((row) => row.id)).toEqual([
     "quickgui-go",
-    "quickgui-moonbit",
     "quickgui-typescript",
     "tauri",
     "electron",

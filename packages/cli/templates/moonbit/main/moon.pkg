@@ -1,6 +1,0 @@
-import {
-  "egoist/quickgui/ui",
-  "egoist/quickgui/native",
-}
-
-pkgtype(kind: "executable")

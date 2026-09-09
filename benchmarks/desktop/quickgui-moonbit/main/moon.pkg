@@ -1,9 +1,0 @@
-import {
-  "moonbitlang/core/json",
-  "egoist/quickgui/protocol",
-  "egoist/quickgui/ui",
-  "egoist/quickgui/native",
-  "egoist/quickgui/reactive",
-}
-
-pkgtype(kind: "executable")

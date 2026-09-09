@@ -1,8 +1,0 @@
-{
-  "name": "{{NPM_PACKAGE}}",
-  "version": "0.1.0",
-  "files": ["lib", "LICENSE-MoonBit", "NOTICE"],
-  "exports": {
-    "./package.json": "./package.json"
-  }
-}

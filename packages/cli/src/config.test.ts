@@ -3,12 +3,24 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { loadConfig } from "./config.ts";
+import { loadConfig, parseFrontend } from "./config.ts";
+import { parseCliArgs } from "./args.ts";
 import { shouldIgnoreChange } from "./dev.ts";
 import { errorMessage } from "./error.ts";
 
 const roots: string[] = [];
 const minimal = 'name = "TOML App"\nidentifier = "com.example.toml"\n';
+
+test("only Go and TypeScript can be selected as application frontends", () => {
+  expect(parseFrontend("go")).toBe("go");
+  expect(parseFrontend("typescript")).toBe("typescript");
+  for (const frontend of ["zig", "moonbit"]) {
+    expect(() => parseFrontend(frontend)).toThrow("expected go or typescript");
+    expect(() => parseCliArgs(["init", "app", "--frontend", frontend])).toThrow(
+      "expected go or typescript",
+    );
+  }
+});
 
 function project(): string {
   const root = mkdtempSync(join(tmpdir(), "quickgui-toml-test-"));
@@ -95,19 +107,19 @@ test("discovery retains TypeScript support and gives TOML precedence", async () 
   expect((await loadConfig(root, "quickgui.config.ts")).name).toBe("TS App");
 });
 
-test("TOML and TypeScript resolve MoonBit extension directories from the project", async () => {
+test("TOML and TypeScript resolve TypeScript extension directories from the project", async () => {
   const root = project();
   const extensions = ["vendor/my-service", join(root, "vendor/another-service")];
   writeFileSync(
     join(root, "quickgui.toml"),
-    minimal + `frontend = "moonbit"\n[native]\nextensions = ${JSON.stringify(extensions)}\n`,
+    minimal + `frontend = "typescript"\n[native]\nextensions = ${JSON.stringify(extensions)}\n`,
   );
   writeFileSync(
     join(root, "quickgui.config.ts"),
     `export default ${JSON.stringify({
-      name: "MoonBit App",
-      identifier: "com.example.moonbit",
-      frontend: "moonbit",
+      name: "Zig App",
+      identifier: "com.example.typescript",
+      frontend: "typescript",
       native: { extensions },
     })}`,
   );

@@ -1,14 +1,13 @@
 export const site = {
   name: "QuickGUI",
-  tagline: "Build native desktop apps with Go, MoonBit, or TypeScript.",
+  tagline: "Build native desktop apps with Go or TypeScript.",
   description:
-    "Build native desktop apps with Go, MoonBit, or TypeScript and Solid 2. Fast builds, fine-grained reactivity, GPU rendering, familiar layouts, and accessible components.",
+    "Build native desktop apps with Go or TypeScript and Solid 2. Fast builds, fine-grained reactivity, GPU rendering, familiar layouts, and accessible components.",
   repo: "egoist/quickgui",
   links: {
     github: "https://github.com/egoist/quickgui",
     docs: "/docs/go",
     go: "https://github.com/egoist/quickgui/tree/main/go",
-    moonbit: "https://github.com/egoist/quickgui/tree/main/moonbit",
     typescript: "https://github.com/egoist/quickgui/tree/main/packages/solid",
     ui: "https://github.com/egoist/quickgui/blob/main/docs/ui.md",
     cli: "https://github.com/egoist/quickgui/blob/main/docs/cli.md",

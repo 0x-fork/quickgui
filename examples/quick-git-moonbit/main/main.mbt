@@ -1,4 +1,0 @@
-///|
-fn main {
-  @app.run()
-}

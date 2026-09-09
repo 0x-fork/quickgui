@@ -1,7 +1,0 @@
-name = "Quick Git MoonBit"
-identifier = "dev.quickgui.quick-git-moonbit"
-frontend = "moonbit"
-entry = "main"
-
-[native]
-extensions = ["native"]

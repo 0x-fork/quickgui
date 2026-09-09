@@ -1,6 +1,5 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { quickguiSolidPlugin } from "./typescript-compiler.ts";
 import type { NativeCompileOptions } from "./native-build.ts";
 import { CliError } from "./error.ts";
 import { extensionLibraryName, extensionManifests, type ExtensionManifest } from "./extensions.ts";
@@ -21,6 +20,7 @@ export async function compileTypeScriptApplication(
   options: NativeCompileOptions,
   extensions: ExtensionManifest[] = [],
 ): Promise<void> {
+  const { quickguiSolidPlugin } = await import("./typescript-compiler.ts");
   const { config, target, executablePath, mode } = options;
   const cache = resolve(config.projectRoot, ".quickgui", "typescript");
   mkdirSync(cache, { recursive: true });

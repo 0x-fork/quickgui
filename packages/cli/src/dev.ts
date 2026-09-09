@@ -6,7 +6,6 @@ import { buildProject, type BuildResult } from "./build.ts";
 import { loadConfig, type ResolvedQuickGuiConfig } from "./config.ts";
 import { CliError, errorMessage } from "./error.ts";
 import { hostTarget, type QuickGuiTarget } from "./targets.ts";
-import { loadMoonbitSourceMaps, remapMoonbitDiagnostics } from "./moonbit/workspace.ts";
 
 export interface DevOptions {
   project: string;
@@ -220,16 +219,10 @@ async function launchApplication(
       QUICKGUI_READY_SOCKET: socketPath,
     },
     stdin: "ignore",
-    stdout: config.frontend === "moonbit" ? "pipe" : "inherit",
-    stderr: config.frontend === "moonbit" ? "pipe" : "inherit",
+    stdout: "inherit",
+    stderr: "inherit",
   });
-  // Keep the launch's maps: a rebuild can replace them before the old process
-  // finishes. Drain its final traceback before stopping the CLI.
-  const maps = config.frontend === "moonbit" ? loadMoonbitSourceMaps(config.projectRoot) : [];
-  const output = Promise.all([
-    forwardOutput(child.stdout, (text) => process.stdout.write(text), maps, config.projectRoot),
-    forwardOutput(child.stderr, (text) => process.stderr.write(text), maps, config.projectRoot),
-  ]);
+  const output = Promise.resolve();
   appOutput.set(child, output);
   void child.exited.then(async (status) => {
     await output;
@@ -260,39 +253,6 @@ async function launchApplication(
     } catch {
       // The socket file was already removed.
     }
-  }
-}
-
-async function forwardOutput(
-  stream: ReadableStream<Uint8Array> | number | null | undefined,
-  write: (text: string) => unknown,
-  maps: ReturnType<typeof loadMoonbitSourceMaps>,
-  cwd: string,
-): Promise<void> {
-  if (!stream || typeof stream === "number") return;
-  const reader = stream.getReader();
-  const decoder = new TextDecoder();
-  let pending = "";
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      pending += decoder.decode(value, { stream: !done });
-      const end = pending.lastIndexOf("\n") + 1;
-      if (end) {
-        write(remapMoonbitDiagnostics(pending.slice(0, end), maps, cwd));
-        pending = pending.slice(end);
-      }
-      // Do not retain unbounded output from apps that log without newlines.
-      if (done || pending.length > 65_536) {
-        write(remapMoonbitDiagnostics(pending, maps, cwd));
-        pending = "";
-      }
-      if (done) break;
-    }
-  } catch (error) {
-    console.error(`[quickgui] Could not read application output: ${errorMessage(error)}`);
-  } finally {
-    reader.releaseLock();
   }
 }
 
@@ -330,9 +290,7 @@ export function shouldIgnoreChange(
         ".git",
         ".quickgui",
         ".zig-cache",
-        ".mooncakes",
-        ".repos",
-        "_build",
+        "zig-out",
         "node_modules",
         "target",
       ].includes(part),

@@ -17,7 +17,6 @@
     "version:sync": "bun scripts/sync-release-version.ts",
     "version:check": "bun scripts/sync-release-version.ts --check",
     "test:go": "bash scripts/check-go.sh",
-    "test:moonbit": "bun scripts/check-moonbit.ts",
     "fmt:go": "go -C go run ./cmd/quickguifmt -w ../go ../examples",
     "fmt:go:check": "go -C go run ./cmd/quickguifmt -check ../go ../examples"
   },

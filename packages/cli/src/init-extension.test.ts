@@ -24,7 +24,7 @@ describe("init-extension", () => {
       type: "go",
       install: true,
     });
-    for (const type of ["zig", "rust", "moonbit"] as const) {
+    for (const type of ["zig", "rust"] as const) {
       expect(
         parseCliArgs([
           "init-extension",
@@ -70,7 +70,7 @@ describe("init-extension", () => {
       expect(() => parseCliArgs(["init-extension", ...args])).toThrow();
   });
 
-  for (const type of ["go", "zig", "rust", "moonbit"] as const) {
+  for (const type of ["go", "zig", "rust"] as const) {
     test(`creates a usable ${type} project with a configured demo`, async () => {
       const directory = destination("My Extension");
       await initExtension({
@@ -185,7 +185,7 @@ describe("init-extension", () => {
     }
   });
 
-  for (const type of ["zig", "moonbit"]) {
+  for (const type of ["zig"]) {
     test(`ships the canonical standalone C ABI for ${type}`, () => {
       expect(
         readFileSync(
@@ -197,21 +197,6 @@ describe("init-extension", () => {
       );
     });
   }
-
-  test("MoonBit scaffolds an isolated provider module with service logic and Bun tooling", async () => {
-    const directory = destination("moon-provider");
-    await initExtension({ directory, type: "moonbit", install: false });
-    expect(readFileSync(join(directory, "native/moon.mod"), "utf8")).toContain(
-      'name = "example/moon-provider-native"',
-    );
-    // A parent app's Moon workspace must not change the provider's dependency set.
-    expect(readFileSync(join(directory, "native/moon.work"), "utf8")).toMatch(
-      /members = \[\s*"\."/,
-    );
-    expect(readFileSync(join(directory, "native/extension.mbt"), "utf8")).toContain("fn handle(");
-    expect(existsSync(join(directory, "native/extension_wbtest.mbt"))).toBe(true);
-    expect(existsSync(join(directory, "scripts/provider.ts"))).toBe(true);
-  });
 
   test("the real CLI creates a project without invoking installers", async () => {
     const directory = destination("with spaces");

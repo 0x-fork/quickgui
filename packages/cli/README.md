@@ -1,6 +1,6 @@
 # @quickgui/cli
 
-`@quickgui/cli` supports Go, MoonBit, and TypeScript QuickGUI applications. It creates projects, watches source, compiles the selected frontend, and packages the executable with matching prebuilt native libraries. Go remains the default and builds with `CGO_ENABLED=0`. Use `quickgui init my-app --frontend typescript` for Bun and Solid 2; see the [TypeScript guide](../../docs/typescript.md).
+`@quickgui/cli` supports Go and TypeScript QuickGUI applications. It creates projects, watches source, compiles the selected frontend, and packages the executable with matching prebuilt native libraries. Go remains the default and builds with `CGO_ENABLED=0`. Use `quickgui init my-app --frontend typescript` for Bun and Solid 2; see the [TypeScript guide](../../docs/typescript.md).
 
 ## Create a project
 
@@ -12,38 +12,23 @@ bun run dev
 
 The scaffold contains `main.go`, `go.mod`, `quickgui.config.ts`, and `package.json`. Pass your root component as `native.WindowOptions{Component: Counter}`. `native.Run` owns application startup. Initialization refuses to overwrite a non-empty directory; `--no-install` skips both dependency installations.
 
-## MoonBit projects
-
-```console
-quickgui init my-app --frontend moonbit
-```
-
-This generates `moon.mod`, `main/moon.pkg`, a fluent `main/main.mbt` component, `quickgui.toml`, and Bun scripts. Set `frontend = "moonbit"` and `entry = "main"` in TOML. `quickgui dev` uses MoonBit’s fast native backend on Apple Silicon macOS and x64 Linux/Windows; `quickgui build` and other hosts use C compilation. Both produce native executables and reuse native libraries. Builds target the host platform and architecture. `quickgui fmt` runs `moon fmt`. Install MoonBit and a C compiler. Set `MOONBIT_NEW_NATIVE=0` to troubleshoot development builds with the C backend.
-
-For source development before publication, use `--no-install` and a `moon.work` containing the generated module and the local SDK. The repository already configures `examples/moonbit-counter`. Optional providers are selected through `native.extensions = ["vendor/my-service"]`, with directory paths relative to the app project. The CLI reads `quickgui.extension.json` inside each directory and validates and packages the provider using the same artifact pipeline as Go. See the [MoonBit guide](../../moonbit/README.md) for API coverage and native validation.
-
-MoonBit views use child lists and direct getter expressions such as `text("Count: \{count()}")`, `input(value=name())`, and `.width(width())`. The CLI compiles these into fine-grained bindings. `quickgui check` and `quickgui test` run the same transform; `--project path` selects a project and `--release` selects the release backend. Raw `moon test` does not apply this transform.
-
-Original `.mbt` files remain unchanged. Generated files and source maps live in `.quickgui/moonbit-sources`; unchanged files reuse the build cache. Compiler errors, test failures, and symbolicated stack locations printed by the CLI point back to original source. Native debugger breakpoints and stepping currently target the generated files. The source itself remains ordinary MoonBit for editor completion and type checking.
-
 ## Create an extension
 
 ```console
 quickgui init-extension my-components --type go
 quickgui init-extension my-service --type zig
-quickgui init-extension my-service --type moonbit
 quickgui init-extension my-service --type rust --module github.com/acme/my-service --npm-package @acme/my-service-native
 ```
 
-`go` is the default. It creates a reusable component library and a reactive demo. `zig`, `rust`, and `moonbit` create independent service libraries, Go wrappers, manifests, and publishable native artifact packages. Each project includes a `cmd/demo` application and `quickgui.toml`; run `bun run dev` inside it. All build scripts are TypeScript executed with Bun.
+`go` is the default. It creates a reusable component library and a reactive demo. `zig` and `rust` create independent service libraries, Go wrappers, manifests, and publishable native artifact packages. Each project includes a `cmd/demo` application and `quickgui.toml`; run `bun run dev` inside it. All build scripts are TypeScript executed with Bun.
 
 Use `--name` to override the extension name, `--module` for the Go module path (default `example.com/<name>`), and `--npm-package` for a native artifact package (default `<name>-native`). `--no-install` skips both `bun install` and `go mod tidy`. Existing non-empty directories are preserved.
 
-The Zig template targets Zig 0.16.x; the Rust template uses stable Cargo/Rust. The MoonBit template requires MoonBit (tested with v0.10.11) and a C compiler. Write operations in `native/extension.mbt`; the build compiles through C and links a private runtime, exporting only the service descriptor. The same provider works with Go or MoonBit applications. Go is needed for the included demo, but not for building the MoonBit provider alone. On Windows use an MSVC-compatible compiler and SDK. `MOON`, `MOON_HOME`, and `CC` select the tools; `moon -C native fmt` and `moon -C native test --target native --release` format and test the provider.
+The Zig template targets Zig 0.16.x; the Rust template uses stable Cargo/Rust. Both produce native providers usable by Go and TypeScript applications.
 
 Native templates build for the current machine and stage their library in `artifacts/lib/<target>/`. The manifest controls the provider release and the generated native version constants. Application edits reuse the built library; restart `bun run dev` after native changes. Pure Go extensions need no native build toolchain or artifact package.
 
-In this unpublished checkout, run `bun packages/cli/src/cli.ts init-extension <directory> --type <type> --no-install`. Before running the demo, point the generated Go SDK requirement to this checkout with a `replace` directive, set `@quickgui/cli` to a local `file:` dependency, and run the two installation commands. A MoonBit provider can run `bun run build` immediately without installing those demo dependencies. The integration check `bun scripts/check-extension-templates.ts` exercises all four templates from a packed CLI using the local SDK and staged core library, including native MoonBit consumers in debug and release modes.
+In this unpublished checkout, run `bun packages/cli/src/cli.ts init-extension <directory> --type <type> --no-install`. Before running the demo, point the generated Go SDK requirement to this checkout with a `replace` directive, set `@quickgui/cli` to a local `file:` dependency, and run the two installation commands. The integration check `bun scripts/check-extension-templates.ts` exercises all three templates from a packed CLI using the local SDK and staged core library.
 
 ## Development
 

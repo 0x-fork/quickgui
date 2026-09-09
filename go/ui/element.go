@@ -93,7 +93,7 @@ func (element *Element) configureFields(fields []elementBinding, options ...Opti
 	return element
 }
 
-// Style merges a reusable style, matching MoonBit's style modifier. Scalar
+// Style merges a reusable style. Scalar
 // accessors retain independent native bindings.
 func (element *Element) Style(style StyleBuilder) *Element {
 	return element.configureFields(populatedStyleBindings(style.style), style)
@@ -166,7 +166,7 @@ func (element *Element) Ref(handler func(*native.Node)) *Element {
 	return element
 }
 
-// OnInput receives the current text, matching MoonBit's on_input callback.
+// OnInput receives the current text.
 func (element *Element) OnInput(handler func(string)) *Element {
 	return element.OnInputEvent(valueHandler(handler))
 }

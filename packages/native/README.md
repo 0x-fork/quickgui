@@ -1,6 +1,6 @@
 # @quickgui/native
 
-Prebuilt Rust shared libraries for QuickGUI's Go, MoonBit, and TypeScript frontends. The CLI selects the target asset and bundles it with an application. All frontends load it in process.
+Prebuilt Rust shared libraries for QuickGUI's Go and TypeScript frontends. The CLI selects the target asset and bundles it with an application. All frontends load it in process.
 
 This package also exports Bun application bindings: `app`, `Window`, and retained native nodes. TypeScript applications use `@quickgui/solid` for Solid 2 JSX. See the [TypeScript guide](../../docs/typescript.md). Go APIs remain in `github.com/egoist/quickgui/go/native` and `github.com/egoist/quickgui/go/ui`.
 

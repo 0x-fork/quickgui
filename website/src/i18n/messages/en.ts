@@ -1,8 +1,8 @@
 export const en = {
   meta: {
-    title: "QuickGUI — Native desktop apps with Go, MoonBit, or TypeScript.",
+    title: "QuickGUI — Native desktop apps with Go or TypeScript.",
     description:
-      "Build native desktop apps with Go, MoonBit, or TypeScript. Fast builds, fine-grained reactivity, GPU rendering, and accessible components. Explore measured memory and bundle sizes.",
+      "Build native desktop apps with Go or TypeScript. Fast builds, fine-grained reactivity, GPU rendering, and accessible components. Explore measured memory and bundle sizes.",
   },
   common: {
     skipToContent: "Skip to content",
@@ -21,10 +21,10 @@ export const en = {
     benchmarks: "Benchmarks",
   },
   hero: {
-    badge: "Go + MoonBit + TypeScript · Fast builds",
+    badge: "Go + TypeScript · Fast builds",
     titleLine1: "Build native desktop apps.",
-    titleLine2: "With Go, MoonBit, or TypeScript.",
-    sub: "Build native interfaces in Go, MoonBit, or TypeScript with fast incremental builds, fine-grained reactivity, and accessible components powered by the same GPU renderer.",
+    titleLine2: "With Go or TypeScript.",
+    sub: "Build native interfaces in Go or TypeScript with fast incremental builds, fine-grained reactivity, and accessible components powered by the same GPU renderer.",
   },
   features: {
     title: "Features",
@@ -35,11 +35,11 @@ export const en = {
       },
       fast: {
         title: "Fast incremental builds",
-        body: "Recompile your Go, MoonBit, or TypeScript app while reusing the native runtime. Keep the feedback loop short as you refine your interface.",
+        body: "Recompile your Go or TypeScript app while reusing the native runtime. Keep the feedback loop short as you refine your interface.",
       },
       layout: {
         title: "Flexbox and CSS Grid",
-        body: "Flexbox and CSS Grid with familiar style options. Compose layouts in Go, MoonBit, or TypeScript and reuse styles across components.",
+        body: "Flexbox and CSS Grid with familiar style options. Compose layouts in Go or TypeScript and reuse styles across components.",
       },
       components: {
         title: "Components included",
@@ -68,19 +68,19 @@ export const en = {
     },
   },
   code: {
-    title: "Go, MoonBit, and TypeScript examples",
-    lead: "Go uses child blocks and composable styles. MoonBit uses child lists and fluent properties and handlers. TypeScript uses Solid 2 JSX. In all three, signals update the bindings that read them while the rest of the tree stays mounted.",
+    title: "Go and TypeScript examples",
+    lead: "Go uses fluent native views and composable styles. TypeScript uses Solid 2 JSX. In both, signals update the bindings that read them while the rest of the tree stays mounted.",
   },
   swiftUi: {
     title: "Use native SwiftUI in QuickGUI.",
-    lead: "Embed real SwiftUI controls in your Go, MoonBit, or TypeScript application on macOS, alongside your QuickGUI components.",
+    lead: "Embed real SwiftUI controls in your Go or TypeScript application on macOS, alongside your QuickGUI components.",
   },
   quickstart: {
     title: "Quickstart",
     create: "Create and run",
     edit: "Format and build",
     ship: "Sign and package",
-    note: "Use Bun 1.4+ with TypeScript and Solid 2, or install Go 1.23+ / MoonBit for those frontends. macOS also needs Xcode Command Line Tools. Signing and notarization use your own Apple developer credentials.",
+    note: "Use Bun 1.4+ with TypeScript and Solid 2, or install Go 1.23+ for the Go frontend. macOS also needs Xcode Command Line Tools. Signing and notarization use your own Apple developer credentials.",
   },
   platforms: {
     available: "available now",
@@ -88,7 +88,7 @@ export const en = {
   },
   cta: {
     title: "Get started with QuickGUI",
-    body: "Write a Go, MoonBit, or TypeScript component and ship a native app with its runtime included.",
+    body: "Write a Go or TypeScript component and ship a native app with its runtime included.",
     docs: "Read the docs",
     star: "Star on GitHub",
   },
@@ -97,7 +97,7 @@ export const en = {
   },
   benchmarks: {
     title: "Benchmarks",
-    lead: "Idle memory and installed bundle size for QuickGUI Go, QuickGUI MoonBit, QuickGUI TypeScript, Tauri, and Electron, measured on the same Mac. Each app runs the same issue tracker with 1,000 issues.",
+    lead: "Idle memory and installed bundle size for QuickGUI Go, QuickGUI TypeScript, Tauri, and Electron, measured on the same Mac. Each app runs the same issue tracker with 1,000 issues.",
     memory: "Idle app memory",
     bundle: "Installed bundle",
     measured: "Measured {{date}}",

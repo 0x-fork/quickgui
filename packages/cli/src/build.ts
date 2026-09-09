@@ -196,7 +196,6 @@ async function buildMacApp(
     if (generatedIcns) iconFile = "AppIcon.icns";
   }
   const reservedResources = new Set<string>([
-    ...(config.frontend === "moonbit" ? ["quickgui-moonbit.json"] : []),
     ...(iconFile ? [iconFile] : []),
     ...(fonts.length > 0 ? ["fonts"] : []),
   ]);
@@ -617,7 +616,7 @@ function validateInputs(
 ): void {
   if (!existsSync(config.entry)) {
     throw new CliError(
-      `${config.frontend === "typescript" ? "TypeScript" : config.frontend === "moonbit" ? "MoonBit" : "Go"} application package not found: ${config.entry}`,
+      `${config.frontend === "typescript" ? "TypeScript" : "Go"} application package not found: ${config.entry}`,
     );
   }
   for (const resource of config.resources) {

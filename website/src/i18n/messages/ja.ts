@@ -2,9 +2,9 @@ import type { en } from "./en";
 
 export const ja: typeof en = {
   meta: {
-    title: "QuickGUI — Go、MoonBit、TypeScript でネイティブデスクトップアプリを作る",
+    title: "QuickGUI — Go と TypeScript でネイティブデスクトップアプリを作る",
     description:
-      "Go、MoonBit、TypeScript でネイティブデスクトップアプリを構築。高速ビルド、細粒度のリアクティビティ、GPU 描画、アクセシブルなコンポーネント。メモリとアプリサイズの実測値も公開。",
+      "Go と TypeScript でネイティブデスクトップアプリを構築。高速ビルド、細粒度のリアクティビティ、GPU 描画、アクセシブルなコンポーネント。メモリとアプリサイズの実測値も公開。",
   },
   common: {
     skipToContent: "コンテンツへスキップ",
@@ -23,10 +23,10 @@ export const ja: typeof en = {
     benchmarks: "ベンチマーク",
   },
   hero: {
-    badge: "Go + MoonBit + TypeScript · 高速ビルド",
+    badge: "Go + TypeScript · 高速ビルド",
     titleLine1: "ネイティブデスクトップアプリを、",
-    titleLine2: "Go、MoonBit、TypeScript で。",
-    sub: "Go、MoonBit、TypeScript でネイティブ UI を構築。共通の GPU レンダラー、高速な増分ビルド、細粒度のリアクティビティ、アクセシブルなコンポーネントを利用できます。",
+    titleLine2: "Go と TypeScript で。",
+    sub: "Go と TypeScript でネイティブ UI を構築。共通の GPU レンダラー、高速な増分ビルド、細粒度のリアクティビティ、アクセシブルなコンポーネントを利用できます。",
   },
   features: {
     title: "機能",
@@ -37,11 +37,11 @@ export const ja: typeof en = {
       },
       fast: {
         title: "高速な増分ビルド",
-        body: "ネイティブランタイムを再利用し、Go、MoonBit、TypeScript のアプリを再コンパイル。待ち時間を減らし、UI の改善に集中できます。",
+        body: "ネイティブランタイムを再利用し、Go と TypeScript のアプリを再コンパイル。待ち時間を減らし、UI の改善に集中できます。",
       },
       layout: {
         title: "Flexbox と CSS Grid",
-        body: "Flexbox、CSS Grid、なじみのあるスタイルオプション。Go、MoonBit、TypeScript でレイアウトを組み立て、スタイルを再利用できます。",
+        body: "Flexbox、CSS Grid、なじみのあるスタイルオプション。Go と TypeScript でレイアウトを組み立て、スタイルを再利用できます。",
       },
       components: {
         title: "コンポーネント同梱",
@@ -70,19 +70,19 @@ export const ja: typeof en = {
     },
   },
   code: {
-    title: "Go、MoonBit、TypeScript のコード例",
-    lead: "Go は子要素の関数ブロックと組み合わせ可能なスタイル、MoonBit は子要素のリストとfluent なプロパティとイベントハンドラーを使います。TypeScript は Solid 2 JSX を使用します。いずれもシグナルを読むバインディングだけを更新し、ほかのノードは維持します。",
+    title: "Go と TypeScript のコード例",
+    lead: "Go は fluent なネイティブビューと組み合わせ可能なスタイルを使い、TypeScript は Solid 2 JSX を使います。シグナルを読むバインディングだけが更新され、ほかのノードは維持されます。",
   },
   swiftUi: {
     title: "QuickGUI でネイティブ SwiftUI を使う",
-    lead: "macOS の Go、MoonBit、TypeScript アプリに本物の SwiftUI コントロールを埋め込み、QuickGUI コンポーネントと一緒に使えます。",
+    lead: "macOS の Go と TypeScript アプリに本物の SwiftUI コントロールを埋め込み、QuickGUI コンポーネントと一緒に使えます。",
   },
   quickstart: {
     title: "クイックスタート",
     create: "作成して実行",
     edit: "整形とビルド",
     ship: "署名とパッケージ化",
-    note: "TypeScript では Bun 1.4+ と Solid 2、Go と MoonBit では対応するツールチェーンが必要です。macOS では Xcode Command Line Tools も必要です。署名と公証には自分の Apple 開発者資格情報を使います。",
+    note: "TypeScript では Bun 1.4+ と Solid 2、Go では Go 1.23+ が必要です。macOS では Xcode Command Line Tools も必要です。署名と公証には自分の Apple 開発者資格情報を使います。",
   },
   platforms: {
     available: "利用可能",
@@ -90,7 +90,7 @@ export const ja: typeof en = {
   },
   cta: {
     title: "QuickGUI をはじめる",
-    body: "Go、MoonBit、TypeScript のコンポーネントを書いて、ランタイムを同梱したネイティブアプリを配布しましょう。",
+    body: "Go と TypeScript のコンポーネントを書いて、ランタイムを同梱したネイティブアプリを配布しましょう。",
     docs: "ドキュメントを読む",
     star: "GitHub でスターする",
   },
@@ -99,7 +99,7 @@ export const ja: typeof en = {
   },
   benchmarks: {
     title: "ベンチマーク",
-    lead: "QuickGUI Go、QuickGUI MoonBit、QuickGUI TypeScript、Tauri、Electron のアイドル時メモリとインストールサイズを同じ Mac で測定しました。各アプリで同じ課題管理ツールを動かし、1,000 件の課題を読み込みます。",
+    lead: "QuickGUI Go、QuickGUI TypeScript、Tauri、Electron のアイドル時メモリとインストールサイズを同じ Mac で測定しました。各アプリで同じ課題管理ツールを動かし、1,000 件の課題を読み込みます。",
     memory: "アプリのアイドル時メモリ",
     bundle: "インストールサイズ",
     measured: "測定日：{{date}}",

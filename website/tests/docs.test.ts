@@ -24,7 +24,7 @@ describe('frontend documentation routes', () => {
       })
     }
     expect(resolveDocsRoute('unknown')).toBeUndefined()
-    expect(resolveDocsRoute('moonbit', 'swift-ui')?.kind).toBe('page')
+    expect(resolveDocsRoute('typescript', 'swift-ui')?.kind).toBe('page')
   })
 
   test('redirects every previous Go guide and component URL', () => {
@@ -46,18 +46,18 @@ describe('frontend documentation routes', () => {
   })
 
   test('switches shared topics and falls back for unknown pages', () => {
-    expect(switchDocsFrontend('/docs/go/styling', 'moonbit')).toBe('/docs/moonbit/styling')
-    expect(switchDocsFrontend('/docs/moonbit/ui', 'go')).toBe('/docs/go/rendering')
-    expect(switchDocsFrontend('/docs/go', 'moonbit')).toBe('/docs/moonbit')
-    expect(switchDocsFrontend('/docs/moonbit', 'go')).toBe('/docs/go')
-    expect(switchDocsFrontend('/docs/go/components/button', 'moonbit')).toBe(
-      '/docs/moonbit/components/button',
+    expect(switchDocsFrontend('/docs/go/styling', 'typescript')).toBe('/docs/typescript/styling')
+    expect(switchDocsFrontend('/docs/typescript/ui', 'go')).toBe('/docs/go/rendering')
+    expect(switchDocsFrontend('/docs/go', 'typescript')).toBe('/docs/typescript')
+    expect(switchDocsFrontend('/docs/typescript', 'go')).toBe('/docs/go')
+    expect(switchDocsFrontend('/docs/go/components/button', 'typescript')).toBe(
+      '/docs/typescript/components/button',
     )
-    expect(switchDocsFrontend('/docs/go/swift-ui', 'moonbit')).toBe('/docs/moonbit/swift-ui')
-    expect(switchDocsFrontend('/docs/moonbit/native-services', 'go')).toBe(
+    expect(switchDocsFrontend('/docs/go/swift-ui', 'typescript')).toBe('/docs/typescript/swift-ui')
+    expect(switchDocsFrontend('/docs/typescript/native-services', 'go')).toBe(
       '/docs/go/native-services',
     )
-    expect(switchDocsFrontend('/docs/moonbit/missing', 'go')).toBe('/docs/go')
+    expect(switchDocsFrontend('/docs/typescript/missing', 'go')).toBe('/docs/go')
   })
 
   test('redirects the former UI guide to Rendering in either frontend', () => {
@@ -75,31 +75,31 @@ describe('frontend documentation routes', () => {
   })
 })
 
-test('Go and MoonBit share guide order, localized sections, and sidebar structure', () => {
+test('Go and TypeScript share guide order, localized sections, and sidebar structure', () => {
   const go = docsPages('go')
-  const moonbit = docsPages('moonbit')
+  const typescript = docsPages('typescript')
   expect(go.map((page) => page.slug)).toEqual(DOCS_GUIDE_ORDER)
-  expect(moonbit.map((page) => page.slug)).toEqual(DOCS_GUIDE_ORDER)
+  expect(typescript.map((page) => page.slug)).toEqual(DOCS_GUIDE_ORDER)
   for (const locale of SUPPORTED_LOCALES) {
     for (let index = 0; index < go.length; index++) {
       expect(localizedDocsPage(go[index], locale).title).toBe(
-        localizedDocsPage(moonbit[index], locale).title,
+        localizedDocsPage(typescript[index], locale).title,
       )
       expect(localizedDocsPage(go[index], locale).outline).toEqual(
-        localizedDocsPage(moonbit[index], locale).outline,
+        localizedDocsPage(typescript[index], locale).outline,
       )
-      expect(switchDocsFrontend(docsPath('go', go[index].slug), 'moonbit')).toBe(
-        docsPath('moonbit', go[index].slug),
+      expect(switchDocsFrontend(docsPath('go', go[index].slug), 'typescript')).toBe(
+        docsPath('typescript', go[index].slug),
       )
     }
-    const structure = (frontend: 'go' | 'moonbit') =>
+    const structure = (frontend: 'go' | 'typescript') =>
       docsNavGroups(locale, frontend).map((group) => ({
         id: group.id,
         title: group.title,
         titles: group.items.map((item) => item.title),
         paths: group.items.map((item) => item.path.replace(`/docs/${frontend}`, '')),
       }))
-    expect(structure('go')).toEqual(structure('moonbit'))
+    expect(structure('go')).toEqual(structure('typescript'))
   }
 })
 
@@ -146,7 +146,7 @@ test('the sidebar separates concepts from one complete component reference', asy
   }
 })
 
-test('localized concepts and MoonBit guides keep matching outlines and examples', async () => {
+test('localized concepts and TypeScript guides keep matching outlines and examples', async () => {
   for (const frontend of DOCS_FRONTENDS) {
     for (const source of docsPages(frontend)) {
       let englishExamples: string[] = []
@@ -163,7 +163,6 @@ test('localized concepts and MoonBit guides keep matching outlines and examples'
         }))
         expect(headings).toEqual(page.outline)
         if (
-          frontend !== 'moonbit' &&
           !['reactivity', 'rendering', 'components', 'routing', 'styling'].includes(source.slug)
         )
           continue
@@ -195,26 +194,26 @@ test('all internal MDX links use valid frontend routes', async () => {
   }
 })
 
-test('every Go component has a localized MoonBit reference and keeps its route when switching', async () => {
+test('every Go component has a localized TypeScript reference and keeps its route when switching', async () => {
   for (const component of ALL_COMPONENT_DOCS) {
-    const path = componentDocsPath(component, 'moonbit')
-    expect(switchDocsFrontend(componentDocsPath(component), 'moonbit')).toBe(path)
+    const path = componentDocsPath(component, 'typescript')
+    expect(switchDocsFrontend(componentDocsPath(component), 'typescript')).toBe(path)
     expect(switchDocsFrontend(path, 'go')).toBe(componentDocsPath(component))
     let example = ''
     for (const locale of SUPPORTED_LOCALES) {
       const file = resolve(
         root,
-        'src/content/docs/moonbit/components',
+        'src/content/docs/typescript/components',
         locale === 'en' ? '' : locale,
         component.kind,
         `${component.slug}.mdx`,
       )
       const content = await readFile(file, 'utf8')
       expect(content).not.toContain('```go')
-      const code = [...content.matchAll(/```moonbit\n([\s\S]*?)```/g)]
+      const code = [...content.matchAll(/```tsx\n([\s\S]*?)```/g)]
         .map((match) => match[1])
         .join('\n')
-      expect(code).toContain('fn component_example() -> @ui.Element')
+      expect(code.trim().length).toBeGreaterThan(0)
       if (locale === 'en') example = code
       else expect(code).toBe(example)
     }
@@ -238,11 +237,11 @@ test('search scopes results and caches by frontend and locale', async () => {
         expect(hits.every((hit) => hit.document.url.startsWith(prefix))).toBe(true)
       }
     }
-    const moonbit = await searchDocs('en', 'moonbit', 'button')
-    expect(moonbit.every((hit) => !hit.document.url.includes('/docs/go/'))).toBe(true)
-    const checkbox = await searchDocs('en', 'moonbit', 'checkbox')
+    const typescript = await searchDocs('en', 'typescript', 'button')
+    expect(typescript.every((hit) => !hit.document.url.includes('/docs/go/'))).toBe(true)
+    const checkbox = await searchDocs('en', 'typescript', 'checkbox')
     expect(
-      checkbox.some((hit) => hit.document.url.startsWith('/docs/moonbit/components/checkbox')),
+      checkbox.some((hit) => hit.document.url.startsWith('/docs/typescript/components/checkbox')),
     ).toBe(true)
     expect(requested.sort()).toEqual(
       DOCS_FRONTENDS.flatMap((frontend) =>

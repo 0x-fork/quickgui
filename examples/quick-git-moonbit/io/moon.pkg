@@ -1,9 +1,0 @@
-import {
-  "egoist/quickgui/native",
-  "egoist/quickgui/reactive",
-  "moonbitlang/core/json",
-  "moonbitlang/core/encoding/utf8",
-  "moonbitlang/core/encoding/base64",
-  "moonbitlang/core/buffer",
-  "moonbitlang/core/ref",
-}

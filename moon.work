@@ -1,6 +1,0 @@
-members = [
-  "moonbit",
-  "examples/moonbit-counter",
-  "examples/quick-git-moonbit",
-  "examples/components-moonbit",
-]

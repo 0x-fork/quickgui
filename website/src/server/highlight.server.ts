@@ -8,7 +8,6 @@ async function highlightAll(): Promise<HighlightedSnippets> {
     { createHighlighterCore },
     { createJavaScriptRegexEngine },
     go,
-    moonbit,
     bash,
     tsx,
     githubLight,
@@ -18,7 +17,6 @@ async function highlightAll(): Promise<HighlightedSnippets> {
     import("shiki/core"),
     import("shiki/engine/javascript"),
     import("shiki/langs/go.mjs"),
-    import("shiki/langs/moonbit.mjs"),
     import("shiki/langs/bash.mjs"),
     import("shiki/langs/tsx.mjs"),
     import("shiki/themes/github-light.mjs"),
@@ -27,7 +25,7 @@ async function highlightAll(): Promise<HighlightedSnippets> {
 
   const highlighter = await createHighlighterCore({
     themes: [githubLight.default, githubDark.default],
-    langs: [go.default, moonbit.default, bash.default, tsx.default],
+    langs: [go.default, bash.default, tsx.default],
     engine: createJavaScriptRegexEngine({ forgiving: true }),
   });
 

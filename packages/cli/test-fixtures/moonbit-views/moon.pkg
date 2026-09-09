@@ -1,9 +1,0 @@
-import {
-  "egoist/quickgui/ui",
-  "egoist/quickgui/native",
-  "egoist/quickgui/protocol",
-  "egoist/quickgui/reactive",
-  "moonbitlang/core/ref",
-  "moonbitlang/core/json",
-  "quickgui/compiler-test/widgets" @parts,
-} for "test"

@@ -1,7 +1,0 @@
-import {
-  "egoist/quickgui/native",
-  "egoist/quickgui/protocol",
-  "egoist/quickgui/reactive",
-  "moonbitlang/core/json",
-  "moonbitlang/core/ref",
-}

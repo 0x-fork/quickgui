@@ -2,7 +2,7 @@ TypeScript ガイド本文は現在英語です。コンポーネントの API �
 
 ## 拡張の種類を選ぶ
 
-Use an ordinary TypeScript package for reusable Solid components. Use a native extension when a feature needs a Rust, Go, Zig, or MoonBit service or an optional native renderer backend. All native providers load into the same process.
+Use an ordinary TypeScript package for reusable Solid components. Use a native extension when a feature needs a Rust, Go, or Zig service or an optional native renderer backend. All native providers load into the same process.
 
 ## 拡張プロジェクトを作成する
 
@@ -10,7 +10,7 @@ Use an ordinary TypeScript package for reusable Solid components. Use a native e
 quickgui init-extension my-provider --type rust
 ```
 
-Provider scaffolds use the shared extension ABI. A TypeScript consumer can use the same provider package as Go or MoonBit.
+Provider scaffolds use the shared extension ABI. A TypeScript consumer can use the same provider package as Go.
 
 ## コンポーネントの共有
 

@@ -64,28 +64,6 @@ function SaveButton() {
 }
 `,
   },
-  moonbitCounter: {
-    lang: "moonbit",
-    code: `fn counter() -> @ui.Element {
-  let (count, set_count) = @ui.create_signal(0)
-  @ui.view([
-    @ui.text("Count: \\{count()}"),
-    @ui.button("Increment")
-    .on_click(() => set_count(count() + 1))
-    .padding(12)
-    .rounded_lg()
-    .bg(@ui.rgb8(37, 99, 235)),
-  ])
-  .flex_col()
-  .size_full()
-  .items_center()
-  .justify_center()
-  .gap(20)
-  .bg(@ui.rgb8(9, 13, 22))
-  .text_color(@ui.rgb8(226, 232, 240))
-}
-`,
-  },
   window: {
     lang: "go",
     code: `package main
@@ -135,14 +113,6 @@ func openWindow() {
 )
 `,
   },
-  moonbitSwiftUi: {
-    lang: "moonbit",
-    code: `@ui.swift_ui_host([
-  @ui.swift_ui_button()
-  .label("Save changes")
-  .swift_ui_system_image("checkmark"),
-])`,
-  },
   cliInit: {
     lang: "bash",
     code: `bunx @quickgui/cli init my-app
@@ -152,18 +122,6 @@ bun run dev`,
   cliFormat: {
     lang: "bash",
     code: `bun run fmt
-bun run build`,
-  },
-  moonbitCliInit: {
-    lang: "bash",
-    code: `bunx @quickgui/cli init my-app \\
-  --frontend moonbit
-cd my-app
-bun run dev`,
-  },
-  moonbitCliFormat: {
-    lang: "bash",
-    code: `moon fmt
 bun run build`,
   },
   cliBuild: {

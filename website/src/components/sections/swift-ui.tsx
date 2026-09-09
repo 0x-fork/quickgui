@@ -6,7 +6,6 @@ import { FrontendPicker } from "../frontend-picker";
 
 const examples: Record<DocsFrontend, { file: string; snippet: SnippetKey }> = {
   go: { file: "swiftui.go", snippet: "swiftUi" },
-  moonbit: { file: "swiftui.mbt", snippet: "moonbitSwiftUi" },
   typescript: { file: "swiftui.tsx", snippet: "typescriptSwiftUi" },
 };
 

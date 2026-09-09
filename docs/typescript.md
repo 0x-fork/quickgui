@@ -1,6 +1,6 @@
 # TypeScript with Bun and Solid 2
 
-The TypeScript frontend uses Bun, Solid 2, and the same Rust renderer as Go and MoonBit. Bun calls the shared library through `bun:ffi` in the same process. JSX produces retained native nodes without a DOM or WebView.
+The TypeScript frontend uses Bun, Solid 2, and the same Rust renderer as Go. Bun calls the shared library through `bun:ffi` in the same process. JSX produces retained native nodes without a DOM or WebView.
 
 ## Start a project
 

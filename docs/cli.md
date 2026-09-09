@@ -1,6 +1,6 @@
 # Project CLI and application packaging
 
-`@quickgui/cli` supports Go, MoonBit, and TypeScript applications and packages each with the matching Rust shared library. Go is the default and uses `CGO_ENABLED=0`. Pass `--frontend moonbit` or `--frontend typescript` to `init` to select another frontend. See the [TypeScript guide](typescript.md) for Bun and Solid 2 JSX, worker ownership, and checks.
+`@quickgui/cli` supports Go and TypeScript applications and packages each with the matching Rust shared library. Go is the default and uses `CGO_ENABLED=0`. Pass `--frontend typescript` to `init` to select another frontend. See the [TypeScript guide](typescript.md) for Bun and Solid 2 JSX, worker ownership, and checks.
 
 ## Create a project
 

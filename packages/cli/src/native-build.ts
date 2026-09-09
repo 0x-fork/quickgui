@@ -7,7 +7,6 @@ import { hostTarget, targetInfo, type QuickGuiTarget } from "./targets.ts";
 import { updaterMetadata } from "./packaging/appcast.ts";
 import { unpackResources } from "./extension-resources.ts";
 import { discoverExtensions, extensionLibraryName, resolveExtension } from "./extensions.ts";
-import { compileMoonbitApplication, moonbitBuildPlan, moonbitExtensions } from "./moonbit-build.ts";
 import { prepareGoWorkspace } from "./go-build.ts";
 import { compileTypeScriptApplication, typescriptExtensions } from "./typescript-build.ts";
 
@@ -104,18 +103,14 @@ export function goBuildPlan(options: NativeCompileOptions): {
 
 export async function compileNativeApplication(options: NativeCompileOptions): Promise<string[]> {
   const { config, target } = options;
-  const moonbit = config.frontend === "moonbit";
   const typescript = config.frontend === "typescript";
-  if (moonbit) moonbitBuildPlan(options);
-  else if (!typescript && !Bun.which("go"))
+  if (!typescript && !Bun.which("go"))
     throw new CliError("Go 1.23 or later is required on PATH");
   const library = resolveHostLibrary(target, config.projectRoot, config.native.libraryPath);
   const plan = goBuildPlan(options);
   const extensions = typescript
     ? typescriptExtensions(config.projectRoot, config.native.extensions)
-    : moonbit
-      ? moonbitExtensions(config.native.extensions)
-      : await discoverExtensions(config, plan.argv.at(-1)!, plan.env);
+    : await discoverExtensions(config, plan.argv.at(-1)!, plan.env);
   if (
     extensions.some(
       (extension) =>
@@ -129,7 +124,7 @@ export async function compileNativeApplication(options: NativeCompileOptions): P
     const metadata = Buffer.from(
       JSON.stringify(updaterMetadata(config, target, options.mode)),
     ).toString("base64url");
-    if (!moonbit && !typescript) {
+    if (!typescript) {
       const flagIndex = plan.argv.indexOf("-ldflags") + 1;
       plan.argv[flagIndex] += " -X github.com/egoist/quickgui/go/updater.buildMetadata=" + metadata;
     }
@@ -162,11 +157,6 @@ export async function compileNativeApplication(options: NativeCompileOptions): P
         libraries.push(output);
       }
     }
-  }
-  if (moonbit) {
-    const metadata = await compileMoonbitApplication(options, extensions);
-    if (targetInfo(target).platform !== "darwin") libraries.push(metadata);
-    return libraries;
   }
   if (typescript) {
     await compileTypeScriptApplication(options, extensions);

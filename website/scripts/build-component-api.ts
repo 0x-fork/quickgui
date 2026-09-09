@@ -1,8 +1,7 @@
-import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { ALL_COMPONENT_DOCS } from "../src/lib/component-docs";
 import { propertyNotes } from "./component-property-notes";
-import { moonComponents } from "../../scripts/moonbit-components";
 import type { ApiEntry, ApiSection, ComponentApi } from "../src/lib/component-api";
 import { typescriptApi } from "./typescript-api";
 
@@ -119,31 +118,6 @@ function fields(name: string, seen = new Set<string>()): ApiEntry[] {
     .map((f) => ({ ...f, description: describe(f.name, f.description) }));
   return [...new Map([...inherited, ...own].map((f) => [f.name, f])).values()];
 }
-const moonFiles = readdirSync(resolve(root, "moonbit/ui")).filter(
-  (f) => f.endsWith(".mbt") && !f.includes("_test"),
-);
-const moon = new Map<string, Decl>();
-moonFiles.push(
-  ...readdirSync(resolve(root, "moonbit/terminal"))
-    .filter((f) => f.endsWith(".mbt") && !f.includes("_test"))
-    .map((f) => `../terminal/${f}`),
-);
-for (const file of moonFiles) {
-  const content = readFileSync(resolve(root, "moonbit/ui", file), "utf8");
-  for (const match of content.matchAll(
-    /pub fn(?:\[[^\]]+\])? (Element::)?(\w+)\(([\s\S]*?)\) -> ([@\w.:]+)\s*\{/g,
-  )) {
-    const signature = `${match[2]}(${compact(match[3])
-      .replace(/^self : Element,?\s*/, "")
-      .replace(/,\s*$/, "")}) -> ${match[4]}`;
-    moon.set(`${file.startsWith("../terminal") ? "terminal." : ""}${match[1] ?? ""}${match[2]}`, {
-      name: match[2],
-      signature,
-      description: "",
-      source: `${file.startsWith("../terminal") ? "moonbit/terminal/" + file.slice(12) : "moonbit/ui/" + file}#L${content.slice(0, match.index).split("\n").length}`,
-    });
-  }
-}
 function goApi(component: (typeof ALL_COMPONENT_DOCS)[number]): ApiSection[] {
   if (component.kind === "swift-ui" && component.slug !== "popover") {
     const d = declarations.find(
@@ -220,75 +194,9 @@ function goApi(component: (typeof ALL_COMPONENT_DOCS)[number]): ApiSection[] {
     },
   ];
 }
-function moonApi(component: (typeof ALL_COMPONENT_DOCS)[number]): ApiSection[] {
-  const spec =
-    component.kind === "ui"
-      ? moonComponents.find(
-          (c) => c.name === (component.slug === "toast" ? "toast-viewport" : component.slug),
-        )
-      : undefined;
-  const aliases: Record<string, string> = {
-    table: "data_table",
-    terminal: "terminal.view",
-    toast: "toast_viewport",
-  };
-  const name =
-    aliases[component.slug] ??
-    `${component.kind === "swift-ui" ? "swift_ui_" : ""}${snake(component.slug)}`;
-  const constructor = moon.get(name);
-  if (!constructor) throw new Error(`Missing MoonBit constructor: ${name}`);
-  const wanted = new Set([
-    "style",
-    "on_click",
-    "on_input",
-    "aria_label",
-    "disabled",
-    ...component.keyProps.map(snake),
-    ...(spec?.properties.map((p) => p.toLowerCase()) ?? []),
-    ...(spec
-      ? [
-          "slot",
-          "part_value",
-          "part_index",
-          "on_component_change",
-          "on_checked_change",
-          "on_open_change",
-          "on_value_change",
-        ]
-      : []),
-  ]);
-  const entries = [...wanted].flatMap((name) => {
-    const d = moon.get(`Element::${name}`);
-    if (!d) return [];
-    const binding = moon.get(`Element::bind_${name}`);
-    const initial = spec?.defaults?.[name.toUpperCase()];
-    return [
-      {
-        name,
-        type: d.signature,
-        description:
-          name === "style" ? "Applies a reusable @ui.Style to this element." : describe(name),
-        source: d.source,
-        ...(initial !== undefined ? { default: JSON.stringify(initial) } : {}),
-        ...(binding ? { binding: binding.signature } : {}),
-      },
-    ];
-  });
-  return [
-    {
-      name,
-      signature: `${name.startsWith("terminal.") ? "@terminal" : "@ui"}.${constructor.signature}`,
-      description: spec
-        ? `Compose named parts with .slot(@ui.Slot) and .children(children). Available slots: ${Object.keys(spec.parts).join(", ")}.`
-        : "",
-      source: constructor.source,
-      entries,
-    },
-  ];
-}
 const data: Record<string, ComponentApi> = {};
 for (const component of ALL_COMPONENT_DOCS)
-  for (const frontend of ["go", "moonbit", "typescript"] as const) {
+  for (const frontend of ["go", "typescript"] as const) {
     const content = readFileSync(
       resolve(
         root,
@@ -298,7 +206,7 @@ for (const component of ALL_COMPONENT_DOCS)
     );
     data[`${frontend}/${component.kind}/${component.slug}`] = {
       language: frontend === "typescript" ? "tsx" : frontend,
-      sections: frontend === "typescript" ? typescriptApi(component) : frontend === "go" ? goApi(component) : moonApi(component),
+      sections: frontend === "typescript" ? typescriptApi(component) : goApi(component),
       example:
         content
           .split("## Usage")[1]

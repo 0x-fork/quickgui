@@ -2,9 +2,9 @@ import type { en } from "./en";
 
 export const zh: typeof en = {
   meta: {
-    title: "QuickGUI — 用 Go、MoonBit 或 TypeScript 构建原生桌面应用",
+    title: "QuickGUI — 用 Go 或 TypeScript 构建原生桌面应用",
     description:
-      "用 Go、MoonBit 或 TypeScript 构建原生桌面应用。快速构建、细粒度响应式、GPU 渲染和无障碍组件，并提供内存与应用体积的实测对比。",
+      "用 Go 或 TypeScript 构建原生桌面应用。快速构建、细粒度响应式、GPU 渲染和无障碍组件，并提供内存与应用体积的实测对比。",
   },
   common: {
     skipToContent: "跳到正文",
@@ -23,10 +23,10 @@ export const zh: typeof en = {
     benchmarks: "基准测试",
   },
   hero: {
-    badge: "Go + MoonBit + TypeScript · 快速构建",
+    badge: "Go + TypeScript · 快速构建",
     titleLine1: "构建原生桌面应用，",
-    titleLine2: "用 Go、MoonBit 或 TypeScript。",
-    sub: "使用 Go、MoonBit 或 TypeScript 开发原生界面，支持快速增量构建、细粒度响应式和无障碍组件，共享同一个 GPU 渲染器。",
+    titleLine2: "用 Go 或 TypeScript。",
+    sub: "使用 Go 或 TypeScript 开发原生界面，支持快速增量构建、细粒度响应式和无障碍组件，共享同一个 GPU 渲染器。",
   },
   features: {
     title: "特性",
@@ -37,11 +37,11 @@ export const zh: typeof en = {
       },
       fast: {
         title: "快速增量构建",
-        body: "重新编译 Go、MoonBit 或 TypeScript 应用时，复用原生运行时。缩短反馈周期，把更多时间留给界面打磨。",
+        body: "重新编译 Go 或 TypeScript 应用时，复用原生运行时。缩短反馈周期，把更多时间留给界面打磨。",
       },
       layout: {
         title: "Flexbox 与 CSS Grid",
-        body: "使用 Flexbox、CSS Grid 和熟悉的样式选项，在 Go、MoonBit 或 TypeScript 中组合布局并复用组件样式。",
+        body: "使用 Flexbox、CSS Grid 和熟悉的样式选项，在 Go 或 TypeScript 中组合布局并复用组件样式。",
       },
       components: {
         title: "组件开箱即用",
@@ -70,19 +70,19 @@ export const zh: typeof en = {
     },
   },
   code: {
-    title: "Go、MoonBit 与 TypeScript 示例",
-    lead: "Go 使用子节点函数块和可组合样式，MoonBit 使用子节点列表和链式属性和事件处理器。TypeScript 使用 Solid 2 JSX。三者的信号都只更新读取它的绑定，其余节点保持挂载。",
+    title: "Go 与 TypeScript 示例",
+    lead: "Go 使用链式原生视图和可组合样式，TypeScript 使用 Solid 2 JSX。信号只更新读取它的绑定，其余节点保持挂载。",
   },
   swiftUi: {
     title: "在 QuickGUI 中使用原生 SwiftUI",
-    lead: "在 macOS 的 Go、MoonBit 或 TypeScript 应用中嵌入真正的 SwiftUI 控件，与 QuickGUI 组件一起使用。",
+    lead: "在 macOS 的 Go 或 TypeScript 应用中嵌入真正的 SwiftUI 控件，与 QuickGUI 组件一起使用。",
   },
   quickstart: {
     title: "快速开始",
     create: "创建并运行",
     edit: "格式化与构建",
     ship: "签名与打包",
-    note: "TypeScript 前端使用 Bun 1.4+ 和 Solid 2；Go 与 MoonBit 前端还需要对应的工具链。macOS 还需要 Xcode Command Line Tools。签名和公证使用你自己的 Apple 开发者凭证。",
+    note: "TypeScript 前端使用 Bun 1.4+ 和 Solid 2；Go 前端需要 Go 1.23+。macOS 还需要 Xcode Command Line Tools。签名和公证使用你自己的 Apple 开发者凭证。",
   },
   platforms: {
     available: "现已可用",
@@ -90,7 +90,7 @@ export const zh: typeof en = {
   },
   cta: {
     title: "开始使用 QuickGUI",
-    body: "编写 Go、MoonBit 或 TypeScript 组件，发布自带运行时的原生应用。",
+    body: "编写 Go 或 TypeScript 组件，发布自带运行时的原生应用。",
     docs: "阅读文档",
     star: "在 GitHub 加星",
   },
@@ -99,7 +99,7 @@ export const zh: typeof en = {
   },
   benchmarks: {
     title: "基准测试",
-    lead: "在同一台 Mac 上测量 QuickGUI Go、QuickGUI MoonBit、QuickGUI TypeScript、Tauri 和 Electron 的空闲内存与安装体积。每个应用都运行相同的任务管理器，包含 1,000 条任务。",
+    lead: "在同一台 Mac 上测量 QuickGUI Go、QuickGUI TypeScript、Tauri 和 Electron 的空闲内存与安装体积。每个应用都运行相同的任务管理器，包含 1,000 条任务。",
     memory: "应用空闲内存",
     bundle: "安装体积",
     measured: "测量日期：{{date}}",

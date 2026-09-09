@@ -3,7 +3,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CliError } from "./error.ts";
 
-export type ExtensionType = "go" | "zig" | "rust" | "moonbit";
+export type ExtensionType = "go" | "zig" | "rust";
 
 export interface InitExtensionOptions {
   directory: string;
@@ -15,8 +15,8 @@ export interface InitExtensionOptions {
 }
 
 export function parseExtensionType(value: string): ExtensionType {
-  if (value === "go" || value === "zig" || value === "rust" || value === "moonbit") return value;
-  throw new CliError(`Unknown extension type: ${value}. Expected go, zig, rust, or moonbit.`);
+  if (value === "go" || value === "zig" || value === "rust") return value;
+  throw new CliError(`Unknown extension type: ${value}. Expected go, zig, or rust.`);
 }
 
 const templateRoot = fileURLToPath(new URL("../templates/extension/", import.meta.url));
@@ -71,7 +71,7 @@ export async function initExtension(options: InitExtensionOptions): Promise<stri
   )
     throw new CliError("--module must be a Go import path such as github.com/acme/my-extension");
   if (type === "go" && options.npmPackage !== undefined)
-    throw new CliError("--npm-package is only used by Zig, Rust, and MoonBit extensions");
+    throw new CliError("--npm-package is only used by Zig and Rust extensions");
   const npmPackage = options.npmPackage ?? `${name}-native`;
   if (
     npmPackage.length > 214 ||
@@ -94,11 +94,7 @@ export async function initExtension(options: InitExtensionOptions): Promise<stri
     LIBRARY: `quickgui_${name.replaceAll("-", "_")}`,
     DEV_SCRIPT: type === "go" ? "quickgui dev" : "bun scripts/dev.ts",
     COMPILER_REQUIREMENT:
-      type === "moonbit"
-        ? "MoonBit v0.10.11 or newer and a native C compiler"
-        : type === "zig"
-          ? "Zig 0.16.0"
-          : "stable Rust (edition 2021 or newer)",
+      type === "zig" ? "Zig 0.16.0" : "stable Rust (edition 2021 or newer)",
   };
 
   // Read and expand every template before creating the destination. A broken CLI

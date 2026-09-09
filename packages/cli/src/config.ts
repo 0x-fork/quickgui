@@ -145,12 +145,12 @@ export interface MacAppStoreConfig {
   entitlements?: string;
 }
 
-export type Frontend = "go" | "moonbit" | "typescript";
+export type Frontend = "go" | "typescript";
 
 export function parseFrontend(value: string): Frontend {
-  if (value === "go" || value === "moonbit" || value === "typescript") return value;
+  if (value === "go" || value === "typescript") return value;
   throw new CliError(
-    `Unknown frontend ${JSON.stringify(value)}; expected go, moonbit, or typescript`,
+    `Unknown frontend ${JSON.stringify(value)}; expected go or typescript`,
   );
 }
 
@@ -272,7 +272,7 @@ export function resolveConfig(
   const entry = resolveRelative(
     projectRoot,
     optionalString(input.entry, "entry", 1_024) ??
-      (frontend === "moonbit" ? "main" : frontend === "typescript" ? "app.tsx" : "."),
+      (frontend === "typescript" ? "app.tsx" : "."),
   );
   const outDir = resolveRelative(
     projectRoot,
@@ -296,10 +296,8 @@ export function resolveConfig(
   const native = objectOrEmpty(input.native, "native");
   if (frontend === "go" && native.extensions !== undefined)
     throw new CliError(
-      "native.extensions is for MoonBit; Go extensions are discovered from imports",
+      "native.extensions is for TypeScript; Go extensions are discovered from imports",
     );
-  if (frontend === "moonbit" && native.tags !== undefined)
-    throw new CliError("native.tags contains Go build tags and cannot be used with MoonBit");
   if (frontend === "typescript" && native.tags !== undefined)
     throw new CliError("native.tags contains Go build tags and is not supported by TypeScript");
   const linuxIcon = optionalString(linux.icon, "linux.icon", 1_024);

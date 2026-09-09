@@ -16,10 +16,9 @@
 quickgui init-extension my-components --type go
 quickgui init-extension my-service --type zig
 quickgui init-extension my-service --type rust
-quickgui init-extension my-service --type moonbit
 ```
 
-默认类型为 `go`，生成可复用组件和响应式演示。`zig`、`rust` 和 `moonbit` 生成独立原生服务、类型化 Go 封装、清单、ABI 定义和 npm 产物包。所有模板都包含 `cmd/demo` 和 `quickgui.toml`：
+默认类型为 `go`，生成可复用组件和响应式演示。`zig` 和 `rust` 生成独立原生服务、类型化 Go 封装、清单、ABI 定义和 npm 产物包。所有模板都包含 `cmd/demo` 和 `quickgui.toml`：
 
 ```sh
 cd my-service
@@ -31,8 +30,6 @@ bun run dev
 Zig 模板要求 Zig 0.16.x，Rust 模板使用稳定版 Cargo/Rust。构建脚本均为 Bun 执行的 TypeScript。`bun run build` 为当前机器构建原生库并放入 `artifacts/lib/<target>/`。清单为 Go 封装、生成的原生常量和 npm 包提供统一的名称和版本。`bun run dev` 先构建一次原生库，之后监视 Go 编辑并复用该库；修改原生代码后重启命令。纯 Go 扩展不需要原生构建或产物包。
 
 包发布前，可在本仓库运行 `bun packages/cli/src/cli.ts init-extension <directory> --type <type> --no-install`，再用 `replace` 将生成项目的 Go SDK 依赖指向本地 `go` 目录，并把 CLI 依赖改为本地 `file:` 路径，最后安装依赖。生成的 README 包含开发与发布说明。
-
-选择 `moonbit` 后，在 `native/extension.mbt` 实现操作，使用 MoonBit 与原生 C 编译器构建。Bun 脚本通过 MoonBit C 后端编译并将私有运行时链接进共享库；Go 应用仍通过 purego 加载它。单独构建后端不需要修改核心或安装 Go。处理函数、内存所有权、工具链和跨前端使用见 [MoonBit 扩展编写指南](/zh/docs/moonbit/extensions)。
 
 ## 共享组件
 
