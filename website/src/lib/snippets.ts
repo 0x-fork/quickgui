@@ -28,10 +28,6 @@ export const snippets = {
 }
 `,
   },
-  typescriptCliInit: {
-    lang: "bash",
-    code: "bunx @quickgui/cli init my-app --frontend typescript\ncd my-app\nbun run dev",
-  },
   typescriptCliCheck: { lang: "bash", code: "bun run check\nbun run test\nbun run fmt" },
   counter: {
     lang: "go",

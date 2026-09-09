@@ -111,7 +111,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         {/* One bordered column runs the whole page; sections stack flush,
             separated by hairlines. */}
         <div className="mx-auto w-full max-w-6xl border-x border-border">
-          <Hero frontend={frontend} onFrontendChange={selectFrontend} />
+          <Hero frontend={frontend} />
           <Benchmarks />
           <Features />
           <CodeShowcase
@@ -123,7 +123,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           <Quickstart
             highlighted={highlighted}
             frontend={frontend}
-            onFrontendChange={selectFrontend}
           />
           <Platforms />
           <FinalCta />

@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 
 import { parseCliArgs, type HelpTopic, type ParsedCliCommand } from "./args.ts";
 import { buildProject } from "./build.ts";
-import { loadConfig } from "./config.ts";
+import { loadConfig, type Frontend } from "./config.ts";
 import { runDev } from "./dev.ts";
 import { CliError, errorMessage } from "./error.ts";
 import { initProject } from "./init.ts";
@@ -27,7 +27,29 @@ export async function runCli(argv: string[]): Promise<number> {
       console.log(CLI_VERSION);
       return 0;
     case "init": {
-      const destination = await initProject(command);
+      let frontend = command.frontend;
+      if (frontend === undefined) {
+        if (!process.stdin.isTTY || !process.stdout.isTTY) {
+          throw new CliError(
+            "Choosing a frontend requires an interactive terminal. Pass --frontend go or --frontend typescript.",
+          );
+        }
+        const { cancel, select } = await import("@clack/prompts");
+        const selected = await select<Frontend>({
+          message: "Which frontend would you like to use?",
+          initialValue: "go",
+          options: [
+            { value: "go", label: "Go" },
+            { value: "typescript", label: "TypeScript", hint: "Bun and Solid" },
+          ],
+        });
+        if (typeof selected === "symbol") {
+          cancel("Project creation cancelled.");
+          return 130;
+        }
+        frontend = selected;
+      }
+      const destination = await initProject({ ...command, frontend });
       console.log(`\nCreated QuickGUI project at ${destination}`);
       console.log(`\n  cd ${relativeDisplayPath(destination)}`);
       if (!command.install) console.log("  bun install");
@@ -196,7 +218,7 @@ Options:
 Create a QuickGUI project compiled to native code.
 
 Options:
-  --frontend <go|typescript> Application language (default: go)
+  --frontend <go|typescript> Application language (prompts when omitted)
   --name <name>              Application display name
   --identifier <id>          Reverse-DNS bundle identifier
   --no-install               Do not run bun install

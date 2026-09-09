@@ -1,6 +1,6 @@
 # @quickgui/cli
 
-`@quickgui/cli` supports Go and TypeScript QuickGUI applications. It creates projects, watches source, compiles the selected frontend, and packages the executable with matching prebuilt native libraries. Go remains the default and builds with `CGO_ENABLED=0`. Use `quickgui init my-app --frontend typescript` for Bun and Solid 2; see the [TypeScript guide](../../docs/typescript.md).
+`@quickgui/cli` supports Go and TypeScript QuickGUI applications. It creates projects, watches source, compiles the selected frontend, and packages the executable with matching prebuilt native libraries. Go builds with `CGO_ENABLED=0`; TypeScript uses Bun and Solid 2. See the [TypeScript guide](../../docs/typescript.md).
 
 ## Create a project
 
@@ -10,7 +10,9 @@ cd my-app
 bun run dev
 ```
 
-The scaffold contains `main.go`, `go.mod`, `quickgui.config.ts`, and `package.json`. Pass your root component as `native.WindowOptions{Component: Counter}`. `native.Run` owns application startup. Initialization refuses to overwrite a non-empty directory; `--no-install` skips both dependency installations.
+The CLI asks you to choose Go or TypeScript. Pass `--frontend go` or `--frontend typescript` to skip the prompt; an explicit frontend is required in non-interactive environments.
+
+The Go scaffold contains `main.go`, `go.mod`, `quickgui.config.ts`, and `package.json`. Pass your root component as `native.WindowOptions{Component: Counter}`. `native.Run` owns application startup. Initialization refuses to overwrite a non-empty directory; `--no-install` skips dependency installation and preparation.
 
 ## Create an extension
 

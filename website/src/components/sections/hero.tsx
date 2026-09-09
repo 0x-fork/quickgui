@@ -1,20 +1,13 @@
 import { useTranslation } from "react-i18next";
 import { CopyButton } from "../copy-button";
-import { FrontendPicker } from "../frontend-picker";
 import { FrontendDocsLinks } from "../frontend-docs-links";
 import type { DocsFrontend } from "../../lib/docs";
 
-export function Hero({
-  frontend,
-  onFrontendChange,
-}: {
-  frontend: DocsFrontend;
-  onFrontendChange: (frontend: DocsFrontend) => void;
-}) {
+export function Hero({ frontend }: { frontend: DocsFrontend }) {
   const { t, i18n } = useTranslation();
   const prefix = i18n.language === "en" ? "" : `/${i18n.language}`;
   const docsHref = `${prefix}/docs/${frontend}`;
-  const initCommand = `bunx @quickgui/cli init my-app${frontend === "go" ? "" : ` --frontend ${frontend}`}`;
+  const initCommand = "bunx @quickgui/cli init my-app";
 
   return (
     <section className="border-b border-border">
@@ -41,7 +34,6 @@ export function Hero({
           <FrontendDocsLinks />
         </div>
         <div className="animate-fade-up mt-6 flex flex-wrap items-center gap-3 [animation-delay:180ms]">
-          <FrontendPicker value={frontend} onChange={onFrontendChange} />
           <div className="flex min-h-10 max-w-full items-center gap-2 border border-border bg-card-2 pr-1 pl-3 font-mono text-xs sm:text-sm">
             <span className="text-peach select-none">$</span>
             <span className="min-w-0 overflow-x-auto whitespace-nowrap">{initCommand}</span>

@@ -3,20 +3,17 @@ import { CodeBlock } from "../code-block";
 import { SectionHeading } from "../section-heading";
 import type { HighlightedSnippets } from "../../lib/snippets";
 import type { DocsFrontend } from "../../lib/docs";
-import { FrontendPicker } from "../frontend-picker";
 
 export function Quickstart({
   highlighted,
   frontend,
-  onFrontendChange,
 }: {
   highlighted: HighlightedSnippets;
   frontend: DocsFrontend;
-  onFrontendChange: (frontend: DocsFrontend) => void;
 }) {
   const { t } = useTranslation();
   const steps = [
-    { key: "create", snippet: frontend === "typescript" ? "typescriptCliInit" : "cliInit" },
+    { key: "create", snippet: "cliInit" },
     { key: "edit", snippet: frontend === "typescript" ? "typescriptCliCheck" : "cliFormat" },
     { key: "ship", snippet: "cliBuild" },
   ] as const;
@@ -24,9 +21,6 @@ export function Quickstart({
   return (
     <section id="quickstart" className="border-b border-border">
       <SectionHeading title={t("quickstart.title")} />
-      <div className="border-b border-border px-6 py-6 sm:px-12">
-        <FrontendPicker value={frontend} onChange={onFrontendChange} />
-      </div>
       <div className="grid gap-px bg-border lg:grid-cols-3">
         {steps.map((step, index) => (
           <div key={step.key} className="min-w-0 space-y-5 bg-background p-6 sm:p-8">

@@ -1,4 +1,4 @@
-These guides use Go, the default frontend. Choose TypeScript in the sidebar for Solid 2 JSX.
+These guides use Go. Choose TypeScript in the sidebar for Solid 2 JSX.
 
 QuickGUI apps are ordinary Go programs. Write components and fine-grained reactive state in Go, then build with `CGO_ENABLED=0`. The prebuilt native library is loaded in the same process through purego. Bun runs the CLI for development and packaging.
 
@@ -20,7 +20,7 @@ bun install
 bun packages/cli/src/cli.ts dev --project examples/counter
 ```
 
-To create a separate app, scaffold without installing registry packages:
+To create a separate app, scaffold without installing registry packages and choose **Go** when prompted:
 
 ```bash
 bun packages/cli/src/cli.ts init ../my-app --no-install
@@ -29,7 +29,7 @@ go mod edit -replace github.com/egoist/quickgui/go=../quickgui/go
 go mod tidy
 ```
 
-In the generated `quickgui.config.ts`, change the `defineConfig` import to `../quickgui/packages/cli/src/index.ts` to use the local CLI. Then run `bun packages/cli/src/cli.ts dev --project ../my-app` from the QuickGUI checkout. Go is the default; `--frontend go` is optional.
+In the generated `quickgui.config.ts`, change the `defineConfig` import to `../quickgui/packages/cli/src/index.ts` to use the local CLI. Then run `bun packages/cli/src/cli.ts dev --project ../my-app` from the QuickGUI checkout. Pass `--frontend go` to `init` to skip the frontend prompt.
 
 ## Your first window
 

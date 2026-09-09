@@ -1,6 +1,6 @@
 # Project CLI and application packaging
 
-`@quickgui/cli` supports Go and TypeScript applications and packages each with the matching Rust shared library. Go is the default and uses `CGO_ENABLED=0`. Pass `--frontend typescript` to `init` to select another frontend. See the [TypeScript guide](typescript.md) for Bun and Solid 2 JSX, worker ownership, and checks.
+`@quickgui/cli` supports Go and TypeScript applications and packages each with the matching Rust shared library. Go uses `CGO_ENABLED=0`. See the [TypeScript guide](typescript.md) for Bun and Solid 2 JSX, worker ownership, and checks.
 
 ## Create a project
 
@@ -10,7 +10,9 @@ cd my-app
 bun run dev
 ```
 
-The scaffold contains `main.go`, `go.mod`, `quickgui.config.ts`, and `package.json`. Pass your root component as `native.WindowOptions{Component: Counter}`. `native.Run` owns application startup. Initialization refuses to overwrite a non-empty directory; `--no-install` skips both dependency installations.
+The CLI asks you to choose Go or TypeScript. Pass `--frontend go` or `--frontend typescript` to skip the prompt; an explicit frontend is required in non-interactive environments.
+
+The Go scaffold contains `main.go`, `go.mod`, `quickgui.config.ts`, and `package.json`. Pass your root component as `native.WindowOptions{Component: Counter}`. `native.Run` owns application startup. Initialization refuses to overwrite a non-empty directory; `--no-install` skips dependency installation and preparation.
 
 ## Development
 

@@ -1,4 +1,4 @@
-这些指南使用默认的 Go 前端。可在侧栏中选择使用 Solid 2 JSX 的 TypeScript 前端。
+这些指南使用 Go 前端。可在侧栏中选择使用 Solid 2 JSX 的 TypeScript 前端。
 
 QuickGUI 应用是普通的 Go 程序。用 Go 编写组件和细粒度响应式状态，并以 `CGO_ENABLED=0` 构建。purego 在同一进程中加载预编译原生库；Bun 仅运行开发与打包 CLI。
 
@@ -29,7 +29,7 @@ go mod edit -replace github.com/egoist/quickgui/go=../quickgui/go
 go mod tidy
 ```
 
-在生成的 `quickgui.config.ts` 中，将 `defineConfig` 导入路径改为 `../quickgui/packages/cli/src/index.ts` 以使用本地 CLI。然后在 QuickGUI 源码目录运行 `bun packages/cli/src/cli.ts dev --project ../my-app`。默认前端为 Go，`--frontend go` 可省略。
+在前端选择提示中选择 **Go**。在生成的 `quickgui.config.ts` 中，将 `defineConfig` 导入路径改为 `../quickgui/packages/cli/src/index.ts` 以使用本地 CLI。然后在 QuickGUI 源码目录运行 `bun packages/cli/src/cli.ts dev --project ../my-app`。给 `init` 传入 `--frontend go` 可跳过前端选择。
 
 ## 第一个窗口
 

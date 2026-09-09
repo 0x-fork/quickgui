@@ -13,7 +13,7 @@ import { getHighlightedSnippets } from "../src/server/highlight.server";
 
 const plain = (html: string) => html.replace(/<[^>]*>/g, "");
 
-test("every homepage frontend selects its own commands, SwiftUI example, and docs links", async () => {
+test("homepage frontends share the init command and select their examples and docs links", async () => {
   const highlighted = await getHighlightedSnippets();
   for (const locale of SUPPORTED_LOCALES) {
     const i18n = createI18n(locale);
@@ -21,9 +21,11 @@ test("every homepage frontend selects its own commands, SwiftUI example, and doc
     for (const frontend of DOCS_FRONTENDS) {
       const render = (children: React.ReactNode) =>
         renderToString(<I18nextProvider i18n={i18n}>{children}</I18nextProvider>);
-      const hero = render(<Hero frontend={frontend} onFrontendChange={() => {}} />);
-      const command = `bunx @quickgui/cli init my-app${frontend === "go" ? "" : ` --frontend ${frontend}`}`;
+      const hero = render(<Hero frontend={frontend} />);
+      const command = "bunx @quickgui/cli init my-app";
       expect(plain(hero)).toContain(command);
+      expect(hero).not.toContain("--frontend");
+      expect(hero).not.toContain('role="group"');
       const cta = render(<FinalCta />);
       for (const target of DOCS_FRONTENDS) {
         for (const html of [hero, cta]) {
@@ -43,15 +45,16 @@ test("every homepage frontend selects its own commands, SwiftUI example, and doc
       expect(swift).toContain(
         {
           go: "ui.SwiftUI.Host",
-          typescript: "@quickgui/solid/swift-ui",
+          typescript: "Host matchContents",
         }[frontend],
       );
       const quickstart = plain(
         render(
-          <Quickstart highlighted={highlighted} frontend={frontend} onFrontendChange={() => {}} />,
+          <Quickstart highlighted={highlighted} frontend={frontend} />,
         ),
       );
       expect(quickstart.replace(/\\\s*\n\s*/g, " ").replace(/\s+/g, " ")).toContain(command);
+      expect(quickstart).not.toContain("--frontend");
     }
   }
 });

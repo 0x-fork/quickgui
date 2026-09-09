@@ -1,4 +1,4 @@
-このガイドは既定の Go フロントエンドを使います。Solid 2 JSX を使う TypeScript はサイドバーから選べます。
+このガイドは Go フロントエンドを使います。Solid 2 JSX を使う TypeScript はサイドバーから選べます。
 
 QuickGUI アプリは通常の Go プログラムです。Go でコンポーネントと細粒度のリアクティブな状態を記述し、`CGO_ENABLED=0` でビルドします。purego が同じプロセス内でビルド済みネイティブライブラリを読み込み、Bun は開発・パッケージング用 CLI を実行します。
 
@@ -29,7 +29,7 @@ go mod edit -replace github.com/egoist/quickgui/go=../quickgui/go
 go mod tidy
 ```
 
-生成された `quickgui.config.ts` で `defineConfig` のインポートを `../quickgui/packages/cli/src/index.ts` に変更し、ローカル CLI を使います。その後 QuickGUI チェックアウトから `bun packages/cli/src/cli.ts dev --project ../my-app` を実行します。Go が既定なので `--frontend go` は省略できます。
+フロントエンドの選択プロンプトで **Go** を選択してください。生成された `quickgui.config.ts` で `defineConfig` のインポートを `../quickgui/packages/cli/src/index.ts` に変更し、ローカル CLI を使います。その後 QuickGUI チェックアウトから `bun packages/cli/src/cli.ts dev --project ../my-app` を実行します。`init` に `--frontend go` を渡すと、フロントエンドの選択を省略できます。
 
 ## 最初のウィンドウ
 
