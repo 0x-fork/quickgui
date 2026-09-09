@@ -132,13 +132,7 @@ func Gallery() *native.Node {
 		},
 		func() *native.Node {
 			return ui.Fragment([]*native.Node{ui.View(
-
-				ui.View(
-
-					ui.Text(
-						"Components",
-					).FontSize(13).FontWeight(700),
-				).Display("flex").Height(52).FlexShrink(0).AlignItems("center").PaddingLeft(82).AppRegion("drag"),
+				ui.View().Display("flex").Height(52).FlexShrink(0).AlignItems("center").PaddingLeft(82).AppRegion("drag"),
 				ui.View(
 
 					ui.Tabs.List(
@@ -173,7 +167,7 @@ func Gallery() *native.Node {
 												UserSelect("none").
 												BackgroundColor(background).
 												TextColor(ink).
-												FontSize(12).
+												FontSize(13).
 												FontWeight(weight).
 												Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
 													return s.BackgroundColor(choose(selected() == entry.ID, p().Accent, p().ControlHover))
