@@ -27,7 +27,7 @@ func TestExtensionRequirementsTrackIndependentVersions(t *testing.T) {
 	}
 	assertPanics(func() { RequireExtension("acme-echo", "7.2.2") })
 	assertPanics(func() { RequireExtension("acme-echo") })
-	for _, name := range []string{"", "../provider", "provider/command", "host", strings.Repeat("a", 65)} {
+	for _, name := range []string{"", "../extension", "extension/command", "host", strings.Repeat("a", 65)} {
 		assertPanics(func() { RequireExtension(name, "1.0.0") })
 	}
 	for _, version := range []string{"", "latest", "^1.0.0", "1.0.0/../../other", "1.0.0+" + strings.Repeat("x", 64)} {
@@ -42,7 +42,7 @@ func TestExtensionRequirementsTrackIndependentVersions(t *testing.T) {
 
 	extensionState.loaded = false
 	for i := 2; i < 32; i++ {
-		RequireExtension(fmt.Sprintf("provider-%d", i), "1.0.0")
+		RequireExtension(fmt.Sprintf("extension-%d", i), "1.0.0")
 	}
 	assertPanics(func() { RequireExtension("overflow", "1.0.0") })
 }

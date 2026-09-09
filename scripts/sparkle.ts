@@ -66,4 +66,4 @@ export async function stageSparkle(destination: string): Promise<void> {
   }
 }
 if (import.meta.main)
-  await stageSparkle(resolve(process.argv[2] ?? "packages/native-updater/lib/darwin-arm64"));
+  await stageSparkle(resolve(process.argv[2] ?? "packages/extension-updater/lib/darwin-arm64"));

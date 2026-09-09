@@ -18,6 +18,7 @@ const name = (node: any): string =>
     : (node?.name ?? node?.value ?? "");
 for (const file of [
   "packages/solid/src/index.ts",
+  "packages/solid/src/style-helpers.generated.ts",
   "packages/solid/src/swift-ui.ts",
   "packages/solid/src/router.ts",
 ]) {

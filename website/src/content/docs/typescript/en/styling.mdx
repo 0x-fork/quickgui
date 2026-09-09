@@ -6,6 +6,18 @@ Use CSS-shaped camelCase style props or a `style` object. Numeric lengths are lo
 <View padding={16} gap={12} backgroundColor="#18181b" color="#fafafa" />
 ```
 
+Rust's 325 layout and style helpers are available as kebab-case props and style fields:
+
+```tsx
+<View flex-col p-3 gap-2 rounded="lg">
+  <Text text-lg font-semibold>Panel title</Text>
+</View>
+```
+
+`rounded` accepts a number or `"sm"`, `"md"`, `"lg"`, `"xl"`, `"2xl"`, and `"full"`; `"lg"` is 8 logical pixels. Corner helpers such as `rounded-t` and `rounded-tl` accept the same values. No-argument helpers become boolean props (`rounded-lg`, `items-center`, `p-3`); value helpers include `px={12}`, `grid-cols={3}`, `w-fraction={0.5}`, and `size={[320, 200]}`. Spacing presets use Rust's four-pixel unit: `p-3` is 12 pixels, while `p={3}` is three pixels. Use `position-sticky` for sticky layout. `flex` and `flex-wrap` accept booleans as well as their CSS values.
+
+Helpers expand before style arrays merge. Direct helper props override the corresponding style fields; `false`, `null`, or `undefined` withdraws a helper and reveals the underlying style. The helper types and values are generated from Rust by `scripts/generate-style-helpers.ts`.
+
 ## Merging styles
 
 Nested style arrays merge left to right; later fields override earlier ones. Falsy entries are ignored. Removing a style field withdraws that declaration.
@@ -16,10 +28,12 @@ Nested style arrays merge left to right; later fields override earlier ones. Fal
 
 ## Reusable styles
 
-Use the exported `NativeStyle` type or `JSX.Style` for reusable styles. Keep getters in JSX when their values should update reactively.
+Use `JSX.Style` for reusable styles. Keep getters in JSX when their values should update reactively.
 
 ```tsx
-const panel: NativeStyle = { padding: 16, borderRadius: 12, backgroundColor: "#20242c" };
+import type { JSX } from "@quickgui/solid";
+
+const panel = { "p-3": true, rounded: "xl", backgroundColor: "#20242c" } satisfies JSX.Style;
 <View style={panel}><Text>Reusable panel</Text></View>
 ```
 

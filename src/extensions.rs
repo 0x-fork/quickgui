@@ -34,16 +34,16 @@ pub fn service(name: &str) -> Option<ServiceApi> {
 }
 
 pub fn shutdown_services() {
-    // Never hold a registry lock while calling foreign code. Providers can emit
+    // Never hold a registry lock while calling foreign code. Extensions can emit
     // their last events and release their sinks during shutdown.
-    let providers: Vec<_> = services()
+    let extensions: Vec<_> = services()
         .lock()
         .unwrap()
         .services
         .values()
         .map(|service| service.api)
         .collect();
-    for api in providers {
+    for api in extensions {
         unsafe { (api.shutdown)() };
     }
 }
@@ -55,7 +55,7 @@ pub(crate) fn terminal() -> Option<&'static TerminalApi> {
     TERMINAL.get()
 }
 
-/// Register a provider obtained from `quickgui_extension_v1` through an in-process loader.
+/// Register an extension obtained from `quickgui_extension_v1` through an in-process loader.
 ///
 /// # Safety
 /// The descriptor, its borrowed strings, and function table must be readable and remain valid
@@ -69,7 +69,7 @@ pub unsafe fn register_extension(
     }
 }
 
-/// Register an independently versioned provider. The imported package supplies
+/// Register an independently versioned extension. The imported package supplies
 /// its exact version; compatibility is checked by the ABI and table layout.
 ///
 /// # Safety
@@ -113,7 +113,7 @@ pub unsafe fn register_extension_versioned(
     }
     if descriptor.kind == abi::SERVICE_EXTENSION {
         if name == b"terminal" {
-            return Err("terminal requires its typed provider contract");
+            return Err("terminal requires its typed extension contract");
         }
         if descriptor.api.is_null()
             || descriptor.api_size as usize != size_of::<ServiceApi>()
@@ -216,33 +216,33 @@ mod tests {
     static API: ServiceApi = ServiceApi { invoke, shutdown };
 
     #[test]
-    fn accepts_independent_services_without_provider_specific_core_code() {
+    fn accepts_independent_services_without_extension_specific_core_code() {
         let descriptor = Extension {
             abi_version: abi::ABI_VERSION,
             descriptor_size: size_of::<Extension>() as u32,
             kind: abi::SERVICE_EXTENSION,
             api_size: size_of::<ServiceApi>() as u32,
-            name: abi::Bytes::new(b"independent-test-provider"),
+            name: abi::Bytes::new(b"independent-test-extension"),
             version: abi::Bytes::new(b"7.2.1"),
             api: ptr::addr_of!(API).cast(),
         };
         assert!(
             unsafe {
-                register_extension_versioned(&descriptor, b"independent-test-provider", b"7.2.0")
+                register_extension_versioned(&descriptor, b"independent-test-extension", b"7.2.0")
             }
             .is_err()
         );
         for _ in 0..2 {
             unsafe {
-                register_extension_versioned(&descriptor, b"independent-test-provider", b"7.2.1")
+                register_extension_versioned(&descriptor, b"independent-test-extension", b"7.2.1")
             }
             .unwrap();
         }
         assert_eq!(
-            service("independent-test-provider").unwrap().invoke as usize,
+            service("independent-test-extension").unwrap().invoke as usize,
             invoke as *const () as usize
         );
-        assert!(service("unknown-test-provider").is_none());
+        assert!(service("unknown-test-extension").is_none());
         shutdown_services();
         assert_eq!(SHUTDOWNS.load(Ordering::SeqCst), 1);
     }
@@ -267,7 +267,7 @@ mod tests {
         );
         for i in 1..abi::MAX_EXTENSIONS {
             registry
-                .register(&format!("provider-{i}"), "1.0.0", API)
+                .register(&format!("extension-{i}"), "1.0.0", API)
                 .unwrap();
         }
         assert!(registry.register("overflow", "1.0.0", API).is_err());
@@ -281,24 +281,24 @@ mod tests {
             descriptor_size: size_of::<Extension>() as u32,
             kind: abi::SERVICE_EXTENSION,
             api_size: size_of::<ServiceApi>() as u32,
-            name: abi::Bytes::new(b"provider/escape"),
+            name: abi::Bytes::new(b"extension/escape"),
             version: abi::Bytes::new(b"1.0.0"),
             api: ptr::addr_of!(API).cast(),
         };
         assert!(
-            unsafe { register_extension_versioned(&descriptor, b"provider/escape", b"1.0.0") }
+            unsafe { register_extension_versioned(&descriptor, b"extension/escape", b"1.0.0") }
                 .is_err()
         );
-        descriptor.name = abi::Bytes::new(b"provider");
+        descriptor.name = abi::Bytes::new(b"extension");
         descriptor.api = nulls.as_ptr().cast();
         assert_eq!(
-            unsafe { register_extension_versioned(&descriptor, b"provider", b"1.0.0") },
+            unsafe { register_extension_versioned(&descriptor, b"extension", b"1.0.0") },
             Err("service extension function table mismatch")
         );
         descriptor.api = ptr::addr_of!(API).cast();
         descriptor.kind = 999;
         assert!(
-            unsafe { register_extension_versioned(&descriptor, b"provider", b"1.0.0") }.is_err()
+            unsafe { register_extension_versioned(&descriptor, b"extension", b"1.0.0") }.is_err()
         );
     }
 

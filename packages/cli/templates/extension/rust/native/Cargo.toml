@@ -1,5 +1,5 @@
 [package]
-name = "{{NAME}}-native"
+name = "quickgui-extension-{{NAME}}"
 version = "0.1.0"
 edition = "2021"
 publish = false
@@ -12,5 +12,5 @@ crate-type = ["cdylib"]
 panic = "abort"
 strip = "symbols"
 
-# This provider is independent of any parent Cargo workspace.
+# This extension is independent of any parent Cargo workspace.
 [workspace]

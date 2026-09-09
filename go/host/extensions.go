@@ -20,7 +20,7 @@ var extensionState = struct {
 }{names: make(map[string]string)}
 
 // RequireExtension declares an optional backend from a package's init function.
-// Pass an exact version for an independently released provider; omitting it keeps
+// Pass an exact version for an independently released extension; omitting it keeps
 // the built-in core-release requirement. No native code or UI work runs during init.
 func RequireExtension(name string, version ...string) {
 	extensionState.Lock()
@@ -101,5 +101,5 @@ func findExtensionLibrary(name, corePath string) (string, error) {
 		}
 		directory = parent
 	}
-	return "", fmt.Errorf("QuickGUI extension %s is not bundled; rebuild with quickgui dev/build or stage the provider in QUICKGUI_EXTENSION_DIR", name)
+	return "", fmt.Errorf("QuickGUI extension %s is not bundled; rebuild with quickgui dev/build or stage the extension in QUICKGUI_EXTENSION_DIR", name)
 }

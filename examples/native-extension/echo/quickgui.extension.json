@@ -2,7 +2,7 @@
   "schema": 1,
   "name": "acme-echo",
   "abi": 1,
-  "package": "@acme/quickgui-echo",
+  "package": "@acme/extension-echo",
   "version": "1.0.0",
   "library": "quickgui_acme_echo"
 }

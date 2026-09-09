@@ -29,7 +29,7 @@ func App() *ui.Element {
 		ui.Button(
 			"Call extension",
 		).OnClick(func() {
-			echo.Send("The stock core loaded @acme/quickgui-echo 1.0.0", func(reply string, err error) {
+			echo.Send("The stock core loaded @acme/extension-echo 1.0.0", func(reply string, err error) {
 				if err != nil {
 					setMessage(err.Error())
 					return

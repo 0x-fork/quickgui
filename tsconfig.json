@@ -25,6 +25,8 @@
     "packages/native/build.ts",
     "packages/native/src/**/*.ts",
     "packages/native/test/**/*.ts",
+    "packages/extension-updater/src/**/*.ts",
+    "packages/extension-updater/test/**/*.ts",
     "packages/solid/test/**/*.ts",
     "packages/solid/src/**/*.ts",
     "examples/components-typescript/**/*.ts",

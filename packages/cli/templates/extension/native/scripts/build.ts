@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { buildProvider } from "./provider.ts";
+import { compileExtension } from "./extension.ts";
 
 export const root = resolve(import.meta.dir, "..");
 
@@ -42,7 +42,7 @@ export async function buildExtension(): Promise<string> {
       ? `${manifest.library}.dll`
       : `lib${manifest.library}.${platform === "darwin" ? "dylib" : "so"}`;
   mkdirSync(directory, { recursive: true });
-  await buildProvider(root, manifest, join(directory, filename));
+  await compileExtension(root, manifest, join(directory, filename));
 
   const packagePath = join(root, "artifacts/package.json");
   const artifact = JSON.parse(readFileSync(packagePath, "utf8"));

@@ -163,7 +163,8 @@ test('localized concepts and TypeScript guides keep matching outlines and exampl
         }))
         expect(headings).toEqual(page.outline)
         if (
-          !['reactivity', 'rendering', 'components', 'routing', 'styling'].includes(source.slug)
+          !['reactivity', 'rendering', 'components', 'routing', 'styling'].includes(source.slug) &&
+          !(frontend === 'typescript' && source.slug === 'updater')
         )
           continue
         const examples = [...content.matchAll(/```[^\n]*\n[\s\S]*?```/g)].map((match) => match[0])

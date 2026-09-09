@@ -35,7 +35,7 @@ describe("init-extension", () => {
           "--name",
           "acme-tool",
           "--npm-package",
-          "@acme/tool-native",
+          "@acme/extension-tool",
           "--no-install",
         ]),
       ).toEqual({
@@ -45,7 +45,7 @@ describe("init-extension", () => {
         install: false,
         module: "github.com/acme/tool",
         name: "acme-tool",
-        npmPackage: "@acme/tool-native",
+        npmPackage: "@acme/extension-tool",
       });
     }
     expect(parseCliArgs(["init-extension", "--help"])).toEqual({
@@ -78,7 +78,7 @@ describe("init-extension", () => {
         type,
         install: false,
         module: "github.com/acme/notice",
-        ...(type === "go" ? {} : { npmPackage: "@acme/notice-native" }),
+        ...(type === "go" ? {} : { npmPackage: "@acme/extension-notice" }),
       });
       const config = await loadConfig(directory);
       expect(config.entry).toBe(join(directory, "cmd/demo"));
@@ -114,7 +114,7 @@ describe("init-extension", () => {
           schema: 1,
           abi: 1,
           name: "my-extension",
-          package: "@acme/notice-native",
+          package: "@acme/extension-notice",
           version: "0.1.0",
           library: "quickgui_my_extension",
         });
@@ -222,5 +222,9 @@ describe("init-extension", () => {
     expect(stdout).toContain("Created rust extension");
     expect(stdout).toContain("bun run dev");
     expect(existsSync(join(directory, "native/src/lib.rs"))).toBe(true);
+    expect(existsSync(join(directory, "scripts/extension.ts"))).toBe(true);
+    expect(
+      JSON.parse(readFileSync(join(directory, "quickgui.extension.json"), "utf8")).package,
+    ).toBe("quickgui-extension-with-spaces");
   });
 });

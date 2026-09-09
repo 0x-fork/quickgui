@@ -2297,4 +2297,3 @@ export const app = new App();
 
 export { ExtensionSession, invokeExtension } from "./extension.ts";
 export { parseColor as color } from "./native-tree.ts";
-export { Updater, type UpdaterOptions, type UpdateEvent } from "./updater.ts";

@@ -41,7 +41,7 @@ typedef struct QuickGuiServiceSink {
 /* Copy any borrowed inputs retained after returning. Enqueue slow work; never block on UI,
  * network, or worker completion. shutdown cancels sessions without waiting.
  * invoke runs on the frontend UI worker; shutdown may run on the native main thread
- * concurrently with a final invoke. Serialize provider state without waiting on that
+ * concurrently with a final invoke. Serialize extension state without waiting on that
  * thread. Workers may emit/release from any thread.
  * A start request's ID identifies its session and its retained event sink. */
 typedef struct QuickGuiServiceApi {
@@ -51,7 +51,7 @@ typedef struct QuickGuiServiceApi {
 } QuickGuiServiceApi;
 
 /* All fields and the pointed-to table remain valid until process exit.
- * version is the provider's own exact release, not the core's release. */
+ * version is the extension's own exact release, not the core's release. */
 typedef struct QuickGuiExtension {
     uint32_t abi_version;
     uint32_t descriptor_size;

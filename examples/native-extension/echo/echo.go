@@ -1,5 +1,5 @@
 // Package echo wraps an independently versioned native library. It imports no
-// optional QuickGUI backend and needs no provider-specific changes in the core.
+// optional QuickGUI backend and needs no extension-specific changes in the core.
 package echo
 
 import (

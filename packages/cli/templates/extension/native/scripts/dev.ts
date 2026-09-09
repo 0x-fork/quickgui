@@ -1,6 +1,6 @@
 import { buildExtension, root } from "./build.ts";
 
-// Build the provider once. The QuickGUI watcher then recompiles only Go edits.
+// Build the extension once. The QuickGUI watcher then recompiles only Go edits.
 const directory = await buildExtension();
 const child = Bun.spawn(
   [process.execPath, "run", "--bun", "quickgui", "dev", ...process.argv.slice(2)],

@@ -16,6 +16,11 @@ export const calls: Call[] = [];
 
 /** Native events waiting for the next `app.dispatchEvents()`. */
 const pendingEvents: Record<string, unknown>[] = [];
+const extensionListeners = new Map<number, (value: string) => void>();
+
+export function emitExtensionEvent(session: number, value: unknown): void {
+  extensionListeners.get(session)?.(JSON.stringify(value));
+}
 
 let clipboardItem: { entries: Record<string, unknown>[] } | null = null;
 let findClipboardItem: { entries: Record<string, unknown>[] } | null = null;
@@ -40,6 +45,20 @@ export function queueEvents(...events: Record<string, unknown>[]): void {
 }
 
 export const fakeBinding: Record<string, unknown> = {
+  startExtension: (name: string, options: unknown, changed: (value: string) => void) => {
+    const session = 1000 + callsNamed("startExtension").length;
+    record("startExtension", [name, options, session]);
+    extensionListeners.set(session, changed);
+    return { session, ready: Promise.resolve() };
+  },
+  invoke: async (method: string, value: unknown) => {
+    record("invoke", [method, value]);
+    return null;
+  },
+  stopExtension: async (name: string, session: number) => {
+    record("stopExtension", [name, session]);
+    extensionListeners.delete(session);
+  },
   protocolVersion: () => PROTOCOL_VERSION,
   createApp: (...args: unknown[]) => {
     record("createApp", args);

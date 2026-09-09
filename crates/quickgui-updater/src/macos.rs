@@ -729,7 +729,7 @@ mod tests {
     #[test]
     fn routing_protocols_match_the_staged_sparkle_framework() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../packages/native-updater/lib/darwin-arm64/Sparkle.framework/Sparkle");
+            .join("../../packages/extension-updater/lib/darwin-arm64/Sparkle.framework/Sparkle");
         if !path.exists() {
             return;
         }

@@ -1,7 +1,7 @@
 # {{NAME}}
 
 A standalone {{TYPE}} native service with a Go wrapper and a QuickGUI demo.
-The provider exports the public service ABI and loads through purego, without
+The extension exports the public service ABI and loads through purego, without
 CGO, IPC, or changes to the QuickGUI core.
 
 ## Develop
@@ -22,7 +22,7 @@ All tooling scripts are TypeScript run with Bun.
 The layout is:
 
 - `extension.go`: typed Go API and import-time declaration; native loading is deferred.
-- `quickgui.extension.json`: provider identity, ABI, npm package, and exact release version.
+- `quickgui.extension.json`: extension identity, ABI, npm package, and exact release version.
 - `native/`: independent service implementation and vendored ABI definitions.
 - `scripts/`: build and development commands.
 - `artifacts/`: publishable npm package containing `lib/<platform>-<arch>/`.
@@ -30,13 +30,13 @@ The layout is:
 
 The build script generates native identity/version constants from the manifest
 and synchronizes `artifacts/package.json`. Always build through `bun run build`.
-The Go wrapper embeds the same manifest, so it requires that exact provider version.
+The Go wrapper embeds the same manifest, so it requires that exact extension version.
 
 ## Extend the service
 
 Replace the sample `echo` method with your API. It returns the original JSON
 payload and handles errors through the reply sink. The ABI is C-compatible;
-the provider does not depend on QuickGUI's renderer or internal Rust types.
+the extension does not depend on QuickGUI's renderer or internal Rust types.
 
 Inputs are borrowed for the call. Copy them before starting asynchronous work.
 Emit JSON success replies or UTF-8 errors, then release each sink exactly once,

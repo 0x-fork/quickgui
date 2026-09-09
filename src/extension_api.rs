@@ -5,10 +5,10 @@ use std::ffi::c_void;
 
 pub const ABI_VERSION: u32 = 1;
 pub const TERMINAL_EXTENSION: u32 = 1;
-/// Generic request/reply/event provider. Names and release versions belong to
-/// the extension author; no per-provider kind or core registration is needed.
+/// Generic request/reply/event extension. Names and release versions belong to
+/// the extension author; no per-extension kind or core registration is needed.
 pub const SERVICE_EXTENSION: u32 = 2;
-/// Compatibility alias for providers built before services became extensible.
+/// Compatibility alias for extensions built before services became extensible.
 pub const UPDATER_EXTENSION: u32 = SERVICE_EXTENSION;
 pub const MAX_EXTENSION_NAME: usize = 64;
 pub const MAX_EXTENSIONS: usize = 32;
@@ -175,7 +175,7 @@ pub struct ServiceSink {
 /// waiting for network or main-thread work. Copy any borrowed input retained after returning.
 /// One-shot operations can reply and release their sink without opening a session.
 /// Invoke runs on the frontend UI worker; shutdown may run on the native main thread
-/// concurrently with a final invoke. Providers must serialize their own state without
+/// concurrently with a final invoke. Extensions must serialize their own state without
 /// blocking the main thread.
 #[repr(C)]
 #[derive(Clone, Copy)]

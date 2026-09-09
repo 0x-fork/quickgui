@@ -2,7 +2,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { run, type Manifest } from "./build.ts";
 
-export async function buildProvider(
+export async function compileExtension(
   root: string,
   manifest: Manifest,
   output: string,

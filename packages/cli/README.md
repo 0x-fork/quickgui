@@ -17,16 +17,16 @@ The scaffold contains `main.go`, `go.mod`, `quickgui.config.ts`, and `package.js
 ```console
 quickgui init-extension my-components --type go
 quickgui init-extension my-service --type zig
-quickgui init-extension my-service --type rust --module github.com/acme/my-service --npm-package @acme/my-service-native
+quickgui init-extension my-service --type rust --module github.com/acme/my-service --npm-package @acme/extension-my-service
 ```
 
 `go` is the default. It creates a reusable component library and a reactive demo. `zig` and `rust` create independent service libraries, Go wrappers, manifests, and publishable native artifact packages. Each project includes a `cmd/demo` application and `quickgui.toml`; run `bun run dev` inside it. All build scripts are TypeScript executed with Bun.
 
-Use `--name` to override the extension name, `--module` for the Go module path (default `example.com/<name>`), and `--npm-package` for a native artifact package (default `<name>-native`). `--no-install` skips both `bun install` and `go mod tidy`. Existing non-empty directories are preserved.
+Use `--name` to override the extension name, `--module` for the Go module path (default `example.com/<name>`), and `--npm-package` for a native artifact package (default `quickgui-extension-<name>`). `--no-install` skips both `bun install` and `go mod tidy`. Existing non-empty directories are preserved.
 
-The Zig template targets Zig 0.16.x; the Rust template uses stable Cargo/Rust. Both produce native providers usable by Go and TypeScript applications.
+The Zig template targets Zig 0.16.x; the Rust template uses stable Cargo/Rust. Both produce native extensions usable by Go and TypeScript applications.
 
-Native templates build for the current machine and stage their library in `artifacts/lib/<target>/`. The manifest controls the provider release and the generated native version constants. Application edits reuse the built library; restart `bun run dev` after native changes. Pure Go extensions need no native build toolchain or artifact package.
+Native templates build for the current machine and stage their library in `artifacts/lib/<target>/`. The manifest controls the extension release and the generated native version constants. Application edits reuse the built library; restart `bun run dev` after native changes. Pure Go extensions need no native build toolchain or artifact package.
 
 In this unpublished checkout, run `bun packages/cli/src/cli.ts init-extension <directory> --type <type> --no-install`. Before running the demo, point the generated Go SDK requirement to this checkout with a `replace` directive, set `@quickgui/cli` to a local `file:` dependency, and run the two installation commands. The integration check `bun scripts/check-extension-templates.ts` exercises all three templates from a packed CLI using the local SDK and staged core library.
 
@@ -50,9 +50,9 @@ From this repository, run `bun run build:native` once to stage the Rust library.
 
 Import `github.com/egoist/quickgui/go/terminal` to use `terminal.View(terminal.Props{…})`. The core UI package does not import the terminal backend. The CLI examines the actual Go dependency graph, including transitive imports, target files, and build tags, then bundles the required extension libraries beside the core library.
 
-Terminal uses the separate `@quickgui/native-terminal` package. The CLI uses an installed package or downloads the exact SDK-matched version on first use, verifies its SHA-512 integrity, and caches it. Apps without that import neither download nor bundle it. Ordinary Go edits reuse these prebuilt artifacts; no native build or feature-combination matrix is needed.
+Terminal uses the separate `@quickgui/extension-terminal` package. The CLI uses an installed package or downloads the exact SDK-matched version on first use, verifies its SHA-512 integrity, and caches it. Apps without that import neither download nor bundle it. Ordinary Go edits reuse these prebuilt artifacts; no native build or feature-combination matrix is needed.
 
-For offline builds, install the matching `@quickgui/native-terminal` version beforehand, or put the target libraries in `QUICKGUI_EXTENSION_DIR`. `QUICKGUI_CACHE_DIR` selects the download cache root (default: `~/.cache/quickgui`). Downloads and extracted libraries are limited to 128 MiB each, and the extension cache evicts old libraries above 512 MiB. At runtime, libraries are loaded locally through purego; there is no network access or IPC.
+For offline builds, install the matching `@quickgui/extension-terminal` version beforehand, or put the target libraries in `QUICKGUI_EXTENSION_DIR`. `QUICKGUI_CACHE_DIR` selects the download cache root (default: `~/.cache/quickgui`). Downloads and extracted libraries are limited to 128 MiB each, and the extension cache evicts old libraries above 512 MiB. At runtime, libraries are loaded locally through purego; there is no network access or IPC.
 
 From a source checkout, build each native artifact once:
 
@@ -62,7 +62,7 @@ bun packages/native/build.ts --extension terminal
 bun packages/cli/src/cli.ts dev --project examples/herdr-gui
 ```
 
-The built-in terminal requires the matching core release. Third-party services can use their own names, release versions, and npm scopes with the public service ABI. Put a `quickgui.extension.json` manifest beside the imported Go package and call `host.RequireExtension("your-provider", "1.0.0")`; the CLI bundles it and the core registers it automatically. See the [authoring guide](../../website/src/content/docs/go/en/extensions.mdx) and [standalone C/Go example](../../examples/native-extension/). Packaged apps include their selected libraries and work without Bun, Go, Rust, or npm installed.
+The built-in terminal requires the matching core release. Third-party services can use their own names, release versions, and npm scopes with the public service ABI. Put a `quickgui.extension.json` manifest beside the imported Go package and call `host.RequireExtension("your-extension", "1.0.0")`; the CLI bundles it and the core registers it automatically. See the [authoring guide](../../website/src/content/docs/go/en/extensions.mdx) and [standalone C/Go example](../../examples/native-extension/). Packaged apps include their selected libraries and work without Bun, Go, Rust, or npm installed.
 
 ## Configuration
 

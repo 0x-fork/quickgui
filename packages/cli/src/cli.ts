@@ -174,7 +174,7 @@ Options:
   --type <go|zig|rust> Extension language (default: go)
   --name <name>              Extension name (default: directory name)
   --module <path>            Go module path (default: example.com/<name>)
-  --npm-package <name>       Native artifact package (default: <name>-native)
+  --npm-package <name>       Native artifact package (default: quickgui-extension-<name>)
   --no-install               Skip bun install and go mod tidy
   -h, --help                 Show this help`;
   }

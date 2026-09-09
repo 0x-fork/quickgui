@@ -1,4 +1,4 @@
-import { ExtensionSession } from "./extension.ts";
+import { ExtensionSession } from "@quickgui/native";
 
 export interface UpdaterOptions {
   feedUrl?: string;
@@ -10,7 +10,7 @@ export interface UpdaterOptions {
 }
 export interface UpdateEvent {
   kind: string;
-  status: "idle" | "checking" | "available" | "downloading" | "installing";
+  status: "idle" | "checking" | "available" | "downloading" | "installing" | "disabled";
   version?: string;
   notes?: string;
   downloadedBytes?: number;
@@ -54,3 +54,5 @@ export class Updater {
     return this.#session.close();
   }
 }
+
+export default Updater;

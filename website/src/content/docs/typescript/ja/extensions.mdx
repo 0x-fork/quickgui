@@ -2,51 +2,53 @@ TypeScript ガイド本文は現在英語です。コンポーネントの API �
 
 ## 拡張の種類を選ぶ
 
-Use an ordinary TypeScript package for reusable Solid components. Use a native extension when a feature needs a Rust, Go, or Zig service or an optional native renderer backend. All native providers load into the same process.
+Use an ordinary TypeScript package for reusable Solid components. Use a native extension when a feature needs a Rust, Go, or Zig service or an optional native renderer backend. All native extensions load into the same process.
 
 ## 拡張プロジェクトを作成する
 
 ```sh
-quickgui init-extension my-provider --type rust
+quickgui init-extension my-extension --type rust
 ```
 
-Provider scaffolds use the shared extension ABI. A TypeScript consumer can use the same provider package as Go.
+Extension scaffolds use the shared extension ABI. A TypeScript consumer can use the same extension package as Go.
 
 ## コンポーネントの共有
 
 ```tsx
-import { Button, type NativeProps } from "@quickgui/solid";
-export function PrimaryButton(props: NativeProps) {
-  return <Button backgroundColor="#2563eb" color="#ffffff" borderRadius={8} padding={12} {...props} />;
+import { Button, type JSX } from "@quickgui/solid";
+export function PrimaryButton(props: JSX.NativeProps) {
+  return <Button backgroundColor="#2563eb" color="#ffffff" rounded="lg" p-3 {...props} />;
 }
 ```
 
 ## ネイティブ拡張の構成
 
-A native provider ships `quickgui.extension.json`, a versioned shared library, and any declared resources. Its manifest identifies the service name, ABI, npm package, release version, library, and per-platform resources.
+A native extension ships `quickgui.extension.json`, a versioned shared library, and any declared resources. Its manifest identifies the service name, ABI, npm package, release version, library, and per-platform resources.
 
 ## 依存関係の宣言
 
-```tsx
+```ts
+import { defineConfig } from "@quickgui/cli";
+
 export default defineConfig({
   frontend: "typescript", name: "Terminal App", identifier: "com.example.terminal",
-  native: { extensions: ["terminal"] },
+  native: { extensions: ["@quickgui/extension-terminal"] },
 });
 ```
 
-Add `@quickgui/native-terminal` to application dependencies. Custom providers may be selected by scoped npm package or a directory containing their manifest.
+Add `@quickgui/extension-terminal` to application dependencies. Custom extensions may be selected by a scoped package such as `@acme/extension-echo`, an unscoped package such as `quickgui-extension-echo`, or a directory containing their manifest.
 
 ## ネイティブインターフェースを実装する
 
-Implement the bounded `ServiceApi` or renderer extension contract in the native provider. Copy borrowed input before returning, keep event streams scoped to their sessions, and release worker resources when the session stops.
+Implement the bounded `ServiceApi` or renderer extension contract in the native extension. Copy borrowed input before returning, keep event streams scoped to their sessions, and release worker resources when the session stops.
 
 ## 自動登録
 
-The CLI resolves and bundles declared providers. The worker registers their descriptors and exact versions through FFI before creating the application, so components use the same core renderer and native resource registry.
+The CLI resolves and bundles declared extensions. The worker registers their descriptors and exact versions through FFI before creating the application, so components use the same core renderer and native resource registry.
 
 ## 成果物のビルドとパッケージ化
 
-App edits reuse prebuilt provider artifacts. Rebuild a provider when its native implementation changes, then rebuild the application to stage those bytes. Provider resources are copied before signing.
+App edits reuse prebuilt extension artifacts. Rebuild an extension when its native implementation changes, then rebuild the application to stage those bytes. Extension resources are copied before signing.
 
 ## テストと配布
 
@@ -59,4 +61,4 @@ await session.request("refresh", null);
 await session.close();
 ```
 
-Test against a packed provider and CLI in a fresh project. Extension commands are asynchronous and share the bounded native event transport.
+Test against a packed extension and CLI in a fresh project. Extension commands are asynchronous and share the bounded native event transport.

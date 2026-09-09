@@ -1,5 +1,5 @@
 //! Async service extensions share the host event queue, without another renderer or Go callback
-//! crossing native threads. A session sink stays alive until the provider's last worker releases it.
+//! crossing native threads. A session sink stays alive until the extension's last worker releases it.
 use quickgui::extension_api::{Bytes, ServiceSink};
 use std::{
     ffi::c_void,
@@ -54,7 +54,7 @@ pub(crate) fn invoke(request: u32, service: &str, params: &str) {
         replied: AtomicBool::new(false),
     }))
     .cast();
-    // SAFETY: the registered provider owns the context and copies inputs it retains after return.
+    // SAFETY: the registered extension owns the context and copies inputs it retains after return.
     unsafe {
         (api.invoke)(
             request,
@@ -98,7 +98,7 @@ unsafe extern "C" fn emit(context: *mut c_void, kind: u32, bytes: Bytes) {
 fn json_response(bytes: &[u8]) -> Result<String, String> {
     let json = std::str::from_utf8(bytes)
         .map_err(|error| format!("invalid extension response: {error}"))?;
-    // Validate without allocating a Value tree or rewriting the provider's schema.
+    // Validate without allocating a Value tree or rewriting the extension's schema.
     // Large numbers, explicit nulls, and whitespace survive the native boundary.
     serde_json::from_str::<serde::de::IgnoredAny>(json)
         .map_err(|error| format!("invalid extension response: {error}"))?;
@@ -121,7 +121,7 @@ mod tests {
     use super::json_response;
 
     #[test]
-    fn service_payloads_preserve_provider_data_without_a_value_tree() {
+    fn service_payloads_preserve_extension_data_without_a_value_tree() {
         let source = r#"{ "null": null, "integer": 900719925474099312345, "fraction": 0.12345678901234567890123, "items": [null, false, "hello"] }"#;
         assert_eq!(json_response(source.as_bytes()).unwrap(), source);
         assert_eq!(json_response(b"null").unwrap(), "null");

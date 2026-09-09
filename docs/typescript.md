@@ -59,10 +59,22 @@ Compound components expose their named parts and typed state hooks. Rust owns se
 
 `@quickgui/solid/router` supplies routes, nested outlets, links, and navigation hooks backed by Rust route matching and memory history. `@quickgui/solid/swift-ui` exposes native controls, popovers, and reverse QuickGUI hosting; typed modifier factories are in `@quickgui/solid/swift-ui/modifiers`.
 
-Use native camelCase properties directly or reusable `NativeStyle` objects:
+Use native camelCase properties directly or reusable `JSX.Style` objects. Rust's layout and style helpers are available as kebab-case props:
 
 ```tsx
-const panel = { padding: 16, borderRadius: 12, backgroundColor: "#18181b" };
+<View flex-col p-3 gap-2 rounded="lg">
+  <Text text-lg font-semibold>Panel title</Text>
+</View>
+```
+
+`rounded` accepts a numeric radius or `"sm"`, `"md"`, `"lg"`, `"xl"`, `"2xl"`, and `"full"`; `"lg"` is 8 logical pixels, matching Rust. Corner helpers such as `rounded-t` and `rounded-tl` accept the same values. No-argument Rust helpers become boolean props (`rounded-lg`, `flex-col`, `items-center`, `p-3`, `text-lg`, `font-bold`); value helpers accept props such as `px={12}`, `grid-cols={3}`, `w-fraction={0.5}`, and `size={[320, 200]}`. Spacing presets use Rust's four-pixel unit (`p-3` is 12 pixels), while `p={3}` is three pixels. `flex` and `flex-wrap` also accept booleans alongside their CSS values. Use `position-sticky` for Rust's `sticky` layout helper.
+
+Helpers work in reusable styles and style arrays, which expand and merge left to right. Direct helper props override the corresponding style fields; setting a helper to `false`, `null`, or `undefined` withdraws it and restores the underlying style. `bun scripts/generate-style-helpers.ts --check` checks all 325 helpers against Rust.
+
+```tsx
+import type { JSX } from "@quickgui/solid";
+
+const panel = { "p-3": true, rounded: "xl", backgroundColor: "#18181b" } satisfies JSX.Style;
 <View style={panel} textColor="#fafafa"><Text>Hello</Text></View>
 ```
 
@@ -77,7 +89,7 @@ Input handlers receive native events, with text in `event.value`:
 `Window.close()`, `Window.setTitle()`, `Window.getState()`, `app.quit()`, and `app.exit()` use the native host. Operations returning values are asynchronous. `Window.whenReady()` resolves when Rust has mounted the window, including hidden windows; snapshot getters await that event; setters queue their native work until creation. `app.command()` exposes existing native JSON commands for advanced use.
 Native window snapshots use `bounds`, `viewportSize`, and `scaleFactor`. Observe close completion with `window.onClose()` or `window.on("closed", ...)`. Menus, clipboard, file and alert dialogs, display information, appearance, notifications, global shortcuts, tray icons, permissions, power assertions, secure storage, and metrics are available from `@quickgui/native`.
 
-Declare optional providers with `native.extensions: ["terminal"]` or `["updater"]`, and install their corresponding native packages. `ExtensionSession` and `invokeExtension` expose other provider services through the shared C ABI. `Updater` uses the current Rust updater extension.
+Declare optional extensions with `native.extensions: ["terminal"]` or `["updater"]`, and install their corresponding native packages. `ExtensionSession` and `invokeExtension` expose other extension services through the shared C ABI. Import `Updater` from `@quickgui/extension-updater`; the [TypeScript updater guide](../website/src/content/docs/typescript/en/updater.mdx) shows installation, a complete `quickgui.config.ts`, application startup, and signed release commands.
 
 The [Quick Git example](../examples/quick-git-typescript/README.md) includes changes and history, partial staging, branches, stashes, worktrees, native menus and dialogs, independent per-window stores, and cancellable Bun subprocesses. Its interface follows the current Go example, including native splitters, the QuickGUI toolbar and composer, virtualized commit files, and history selection that survives focus refresh.
 

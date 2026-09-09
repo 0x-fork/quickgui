@@ -84,7 +84,7 @@ const library = join(
 );
 if (!existsSync(library)) throw new Error(`Expected the shared library at ${library}`);
 const stage = join(
-  extension ? resolve(packageRoot, "..", `native-${extension}`) : packageRoot,
+  extension ? resolve(packageRoot, "..", `extension-${extension}`) : packageRoot,
   "lib",
   target,
 );

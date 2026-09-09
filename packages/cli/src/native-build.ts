@@ -114,7 +114,7 @@ export async function compileNativeApplication(options: NativeCompileOptions): P
   if (
     extensions.some(
       (extension) =>
-        extension.name === "updater" && extension.package === "@quickgui/native-updater",
+        extension.name === "updater" && extension.package === "@quickgui/extension-updater",
     )
   ) {
     if (options.mode === "production" && !config.updates?.publicKey)

@@ -149,9 +149,7 @@ export type Frontend = "go" | "typescript";
 
 export function parseFrontend(value: string): Frontend {
   if (value === "go" || value === "typescript") return value;
-  throw new CliError(
-    `Unknown frontend ${JSON.stringify(value)}; expected go or typescript`,
-  );
+  throw new CliError(`Unknown frontend ${JSON.stringify(value)}; expected go or typescript`);
 }
 
 /** Application compilation and native shared-library options. */
@@ -160,7 +158,7 @@ export interface NativeConfig {
   libraryPath?: string;
   /** Optional Go build tags. */
   tags?: string[];
-  /** Provider directories; TypeScript also accepts scoped packages and terminal/updater names. */
+  /** Extension directories; TypeScript also accepts npm packages and terminal/updater names. */
   extensions?: string[];
 }
 
@@ -271,8 +269,7 @@ export function resolveConfig(
   const frontend = parseFrontend(optionalString(input.frontend, "frontend", 32) ?? "go");
   const entry = resolveRelative(
     projectRoot,
-    optionalString(input.entry, "entry", 1_024) ??
-      (frontend === "typescript" ? "app.tsx" : "."),
+    optionalString(input.entry, "entry", 1_024) ?? (frontend === "typescript" ? "app.tsx" : "."),
   );
   const outDir = resolveRelative(
     projectRoot,
@@ -328,7 +325,10 @@ export function resolveConfig(
       tags: stringArray(native.tags, "native.tags"),
       extensions: stringArray(native.extensions, "native.extensions").map((path) =>
         frontend === "typescript" &&
-        (path === "terminal" || path === "updater" || path.startsWith("@"))
+        (path === "terminal" ||
+          path === "updater" ||
+          path.startsWith("@") ||
+          path.startsWith("quickgui-extension-"))
           ? path
           : resolveRelative(projectRoot, path),
       ),

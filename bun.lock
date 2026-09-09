@@ -164,16 +164,19 @@
         "@solidjs/compiler": "2.0.0-rc.7",
       },
     },
+    "packages/extension-terminal": {
+      "name": "@quickgui/extension-terminal",
+      "version": "0.1.3",
+    },
+    "packages/extension-updater": {
+      "name": "@quickgui/extension-updater",
+      "version": "0.1.3",
+      "dependencies": {
+        "@quickgui/native": "workspace:*",
+      },
+    },
     "packages/native": {
       "name": "@quickgui/native",
-      "version": "0.1.3",
-    },
-    "packages/native-terminal": {
-      "name": "@quickgui/native-terminal",
-      "version": "0.1.3",
-    },
-    "packages/native-updater": {
-      "name": "@quickgui/native-updater",
       "version": "0.1.3",
     },
     "packages/solid": {
@@ -494,9 +497,9 @@
 
     "@quickgui/native": ["@quickgui/native@workspace:packages/native"],
 
-    "@quickgui/native-terminal": ["@quickgui/native-terminal@workspace:packages/native-terminal"],
+    "@quickgui/extension-terminal": ["@quickgui/extension-terminal@workspace:packages/extension-terminal"],
 
-    "@quickgui/native-updater": ["@quickgui/native-updater@workspace:packages/native-updater"],
+    "@quickgui/extension-updater": ["@quickgui/extension-updater@workspace:packages/extension-updater"],
 
     "@quickgui/solid": ["@quickgui/solid@workspace:packages/solid"],
 

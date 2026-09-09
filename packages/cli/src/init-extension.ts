@@ -72,7 +72,7 @@ export async function initExtension(options: InitExtensionOptions): Promise<stri
     throw new CliError("--module must be a Go import path such as github.com/acme/my-extension");
   if (type === "go" && options.npmPackage !== undefined)
     throw new CliError("--npm-package is only used by Zig and Rust extensions");
-  const npmPackage = options.npmPackage ?? `${name}-native`;
+  const npmPackage = options.npmPackage ?? `quickgui-extension-${name}`;
   if (
     npmPackage.length > 214 ||
     !/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/.test(npmPackage)

@@ -25,7 +25,7 @@ cd my-service
 bun run dev
 ```
 
-`--module github.com/acme/my-service` で Go モジュールを、`--npm-package @acme/my-service-native` でネイティブ成果物パッケージを指定します。`--name` はディレクトリから作られる名前を上書きします。既定値は `example.com/<name>` と `<name>-native` です。`--no-install` は `bun install` と `go mod tidy` を省略します。空でないディレクトリは上書きしません。
+`--module github.com/acme/my-service` で Go モジュールを、`--npm-package @acme/extension-my-service` でネイティブ成果物パッケージを指定します。`--name` はディレクトリから作られる名前を上書きします。既定値は `example.com/<name>` と `quickgui-extension-<name>` です。`--no-install` は `bun install` と `go mod tidy` を省略します。空でないディレクトリは上書きしません。
 
 Zig テンプレートには Zig 0.16.x、Rust テンプレートには安定版 Cargo/Rust が必要です。ビルドスクリプトはすべて Bun で実行する TypeScript です。`bun run build` は現在のマシン向けライブラリを `artifacts/lib/<target>/` に出力します。マニフェストの名前とバージョンを Go ラッパー、生成されたネイティブ定数、npm パッケージで共有します。`bun run dev` は最初に一度だけネイティブをビルドし、Go の編集では再利用します。ネイティブコードの変更後はコマンドを再起動してください。純粋な Go 拡張にはネイティブビルドや成果物パッケージは不要です。
 
@@ -77,7 +77,7 @@ build-extension.ts
 
 小さなヘッダーをプロジェクトにコピーしてください。C、C++、Rust など、C ABI を公開できる言語で実装できます。Rust では同等の [`extension_api.rs`](https://github.com/egoist/quickgui/blob/main/src/extension_api.rs) 定義をコピーして `cdylib` をビルドできます。`quickgui`、`quickgui-host`、WGPU、Taffy のリンクは不要です。[updater バックエンド](https://github.com/egoist/quickgui/tree/main/crates/quickgui-updater) が非同期サービスの参考になります。
 
-この例の独立したリリース番号は `1.0.0` です。記述子、マニフェスト、npm パッケージ、`RequireExtension` のバージョンを一致させます。コアとの互換性はサービス ABI バージョンとテーブルのレイアウトで判定され、プロバイダーのリリース番号を QuickGUI に合わせる必要はありません。必要な Go SDK と ABI を明記してください。組み込み terminal の型付き描画契約は引き続きコアのリリースに一致する必要があります。
+この例の独立したリリース番号は `1.0.0` です。記述子、マニフェスト、npm パッケージ、`RequireExtension` のバージョンを一致させます。コアとの互換性はサービス ABI バージョンとテーブルのレイアウトで判定され、拡張機能のリリース番号を QuickGUI に合わせる必要はありません。必要な Go SDK と ABI を明記してください。組み込み terminal の型付き描画契約は引き続きコアのリリースに一致する必要があります。
 
 ## 依存関係の宣言
 
@@ -88,13 +88,13 @@ build-extension.ts
   "schema": 1,
   "name": "acme-echo",
   "abi": 1,
-  "package": "@acme/quickgui-echo",
+  "package": "@acme/extension-echo",
   "version": "1.0.0",
   "library": "quickgui_acme_echo"
 }
 ```
 
-名前は小文字で始まり、最大 64 文字の小文字、数字、ハイフンを使用します。衝突しにくい名前を選んでください。`host` は予約され、`terminal` は組み込みの型付き契約を使います。`library` は `quickgui_` と名前のハイフンをアンダースコアに置き換えた文字列で、`lib` や拡張子は含めません。npm パッケージは任意の有効な scope、または scope なしを使用できます。マニフェストは最大 16 KiB、アプリは最大 32 プロバイダーです。
+名前は小文字で始まり、最大 64 文字の小文字、数字、ハイフンを使用します。衝突しにくい名前を選んでください。`host` は予約され、`terminal` は組み込みの型付き契約を使います。`library` は `quickgui_` と名前のハイフンをアンダースコアに置き換えた文字列で、`lib` や拡張子は含めません。npm パッケージは任意の有効な scope、または scope なしを使用できます。マニフェストは最大 16 KiB、アプリは最大 32 拡張機能です。
 
 Go パッケージの初期化では同じリリースを宣言し、型付き操作を公開します。
 
@@ -131,7 +131,7 @@ CLI はコンパイルと同じエントリ、ターゲット、ビルドタグ�
 
 ## ネイティブインターフェースを実装する
 
-C リンケージと既定のシンボル可視性で `quickgui_extension_v1` を公開し、静的記述子を返します。名前、プロバイダーの正確なバージョン、ABI `1`、サービス種別 `2`、2 関数のテーブルを含みます。すべてのサービスが同じ種別を使います。プロバイダーごとの種別追加は不要です。公開ヘッダーに全フィールドとコールバックの定義があります。
+C リンケージと既定のシンボル可視性で `quickgui_extension_v1` を公開し、静的記述子を返します。名前、拡張機能の正確なバージョン、ABI `1`、サービス種別 `2`、2 関数のテーブルを含みます。すべてのサービスが同じ種別を使います。拡張機能ごとの種別追加は不要です。公開ヘッダーに全フィールドとコールバックの定義があります。
 
 Rust の `ServiceApi` は `invoke` と `shutdown` を実装します。次の断片はローカルの `abi.rs` を使用します。
 
@@ -160,7 +160,7 @@ pub unsafe extern "C" fn quickgui_extension_v1() -> *const abi::Extension {
 
 境界を渡すのは C レイアウト、固定幅フィールド、借用バイト列、関数ポインターだけです。言語固有のオブジェクトとアロケーター所有権は各ライブラリ内に保持します。記述子、文字列、テーブルは静的寿命を持ちます。保持する入力は先にコピーし、重い処理をキューに入れて直ちに戻ります。ネットワーク、ワーカー、ネイティブメインスレッドを待たず、キュー、セッション、保持データに上限を設けます。Rust panic を `extern "C"` 境界の外へ出してはいけません。
 
-| リクエスト | パラメーター | プロバイダーの処理 |
+| リクエスト | パラメーター | 拡張機能の処理 |
 | --- | --- | --- |
 | `echo` など単発のメソッド | `InvokeExtension` に渡した JSON 値 | 一度返信して sink を解放 |
 | `start` | `OpenExtension` のオプション JSON | リクエスト ID をセッション ID とし、返信後もイベント sink を保持 |
@@ -178,7 +178,7 @@ pub unsafe extern "C" fn quickgui_extension_v1() -> *const abi::Extension {
 
 アプリ起動前に Go ローダーが選択されたイメージを開き、エントリを呼び、記述子と要求バージョンをコアに渡します。コアはヘッダーから順に、名前、リリース、ABI、テーブルサイズ、非 null コールバックを検証します。サービスを名前で保持し、`extension/acme-echo/<method>` とアプリ終了を自動的に処理します。
 
-同一の登録は繰り返せます。同名の異なるバージョンやテーブルは拒否され、CLI も同名の異なる npm パッケージを拒否します。プロバイダーはレジストリロックの外で呼び出されます。レジストリとライブラリはプロセス中保持され、`shutdown` が残るセッションをキャンセルします。専用のコア登録コードを追加する必要はありません。
+同一の登録は繰り返せます。同名の異なるバージョンやテーブルは拒否され、CLI も同名の異なる npm パッケージを拒否します。拡張機能はレジストリロックの外で呼び出されます。レジストリとライブラリはプロセス中保持され、`shutdown` が残るセッションをキャンセルします。専用のコア登録コードを追加する必要はありません。
 
 ## 成果物のビルドとパッケージ化
 
@@ -218,7 +218,7 @@ Rust のライブラリ名を `quickgui_acme_echo`、crate type を `cdylib` に
 
 ```json
 {
-  "name": "@acme/quickgui-echo",
+  "name": "@acme/extension-echo",
   "version": "1.0.0",
   "files": ["lib", "README.md"],
   "exports": { "./package.json": "./package.json" }
@@ -227,7 +227,7 @@ Rust のライブラリ名を `quickgui_acme_echo`、crate type を `cdylib` に
 
 `@acme` を自分の scope に置き換え、独自のワークフローでリリースします。必要性は Go インポートで決まるため、コア npm パッケージの依存には追加しません。QuickGUI の組み込み `--extension` コマンドやバージョン同期の変更は不要です。利用者の Go 編集ではプリビルド済みライブラリを再利用します。
 
-リソースはマニフェストの `resources` で `darwin`、`linux`、`windows` ごとに basename を宣言します。各プラットフォーム最大 16 ファイルで両アーキテクチャに適用され、対応ライブラリの隣に配置します。ディレクトリは [`packResources`](https://github.com/egoist/quickgui/blob/main/packages/cli/src/extension-resources.ts) の `.qgr` を使い、上限内で実行権限と制限された相対シンボリックリンクを保持できます。リソースはコアやプロバイダーのライブラリを上書きできません。macOS framework は OS の署名要件も満たす必要があります。Sparkle リソースには既存の macOS 署名とバンドル設定が適用されますが、他のサービスに updater 設定は不要です。
+リソースはマニフェストの `resources` で `darwin`、`linux`、`windows` ごとに basename を宣言します。各プラットフォーム最大 16 ファイルで両アーキテクチャに適用され、対応ライブラリの隣に配置します。ディレクトリは [`packResources`](https://github.com/egoist/quickgui/blob/main/packages/cli/src/extension-resources.ts) の `.qgr` を使い、上限内で実行権限と制限された相対シンボリックリンクを保持できます。リソースはコアや拡張機能のライブラリを上書きできません。macOS framework は OS の署名要件も満たす必要があります。Sparkle リソースには既存の macOS 署名とバンドル設定が適用されますが、他のサービスに updater 設定は不要です。
 
 ## テストと配布
 

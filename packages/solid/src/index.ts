@@ -52,6 +52,8 @@ import {
   setNativeProperty,
   type WindowRenderer,
 } from "@quickgui/native";
+import { expandStyleHelper, helperProperties, type StyleHelpers } from "./style-helpers.ts";
+export type { RoundedPreset, StyleHelpers } from "./style-helpers.generated.ts";
 
 type PropertyInput = unknown;
 type PropertyEntry = {
@@ -255,8 +257,10 @@ const properties: Record<string, PropertyEntry> = {
   gridAutoFlow: { code: PropertyCode.GridAutoFlow },
   gridColumnStart: { code: PropertyCode.GridColumnStart },
   gridColumnEnd: { code: PropertyCode.GridColumnEnd },
+  gridColumnSpan: { code: PropertyCode.GridColumnSpan },
   gridRowStart: { code: PropertyCode.GridRowStart },
   gridRowEnd: { code: PropertyCode.GridRowEnd },
+  gridRowSpan: { code: PropertyCode.GridRowSpan },
   transitionProperty: { code: PropertyCode.TransitionProperties },
   transitionDuration: {
     code: PropertyCode.TransitionDuration,
@@ -585,17 +589,73 @@ const colorProperties = new Set([
   PropertyCode.TerminalCursorColor,
 ]);
 
+type HelperPropertyState = {
+  style: Record<string, unknown>;
+  direct: Map<string, Record<string, unknown>>;
+};
+
+// Own declarations by prop, so withdrawing a multi-property helper reveals earlier declarations
+// without clearing a sibling binding. Weak ownership follows the retained native node's lifetime.
+const helperPropertyStates = new WeakMap<NativeNode, HelperPropertyState>();
+
+function helperPropertyState(node: NativeNode): HelperPropertyState {
+  let state = helperPropertyStates.get(node);
+  if (!state) {
+    state = { style: {}, direct: new Map() };
+    helperPropertyStates.set(node, state);
+  }
+  return state;
+}
+
+function applyHelperProperties(
+  node: NativeNode,
+  state: HelperPropertyState,
+  fields: Set<string>,
+): void {
+  for (const field of fields) {
+    let value = state.style[field];
+    for (const declaration of state.direct.values()) {
+      if (Object.hasOwn(declaration, field)) value = declaration[field];
+    }
+    applyProperty(node, field, value ?? null);
+  }
+}
+
 function setProperty(
   node: NativeNode,
   name: string,
   value: PropertyInput,
   previous?: PropertyInput,
 ) {
-  if (name === "children" || name === "ref" || name === "key") return;
   if (name === "style") {
-    setStyle(node, value, previous);
+    setStyle(node, value);
     return;
   }
+  const helper = expandStyleHelper(name, value);
+  if (helper !== undefined || helperProperties.has(name)) {
+    const state = helperPropertyState(node);
+    const declaration =
+      helper ?? (value === undefined || value === null || value === false ? {} : { [name]: value });
+    const old = state.direct.get(name);
+    // Keep the prop's original position when a reactive boolean switches off and back on.
+    state.direct.set(name, declaration);
+    applyHelperProperties(
+      node,
+      state,
+      new Set([...Object.keys(old ?? {}), ...Object.keys(declaration)]),
+    );
+    return;
+  }
+  applyProperty(node, name, value, previous);
+}
+
+function applyProperty(
+  node: NativeNode,
+  name: string,
+  value: PropertyInput,
+  previous?: PropertyInput,
+) {
+  if (name === "children" || name === "ref" || name === "key") return;
   if (name === "anchor") {
     if (value === null || value === undefined || value === false) {
       setNativeProperty(node, PropertyCode.AnchorTarget, null);
@@ -694,10 +754,6 @@ function setProperty(
     setNativeProperty(node, PropertyCode.Password, value === "password");
     return;
   }
-  if (name === "flex") {
-    setFlex(node, value);
-    return;
-  }
   if (name === "keymap") {
     setNativeProperty(node, PropertyCode.Keymap, encodeKeymap(value));
     return;
@@ -708,10 +764,6 @@ function setProperty(
   }
   if (name === "dropKinds") {
     setNativeProperty(node, PropertyCode.DropKinds, encodeDropKinds(value));
-    return;
-  }
-  if (name === "gridColumn" || name === "gridRow") {
-    setGridPlacement(node, name === "gridColumn", value);
     return;
   }
   if (name === "matchContents") {
@@ -779,6 +831,11 @@ function mergeStyleInto(target: Record<string, unknown>, style: unknown): void {
   // `false`, `null`, and `undefined` entries are skipped, as is anything that is not a style.
   if (!isRecord(style)) return;
   for (const [name, value] of Object.entries(style)) {
+    const helper = expandStyleHelper(name, value);
+    if (helper !== undefined) {
+      Object.assign(target, helper);
+      continue;
+    }
     const current = target[name];
     if (!(name in stateStyleCodes) || !isStateEntries(name, value)) {
       target[name] = value;
@@ -819,42 +876,23 @@ function groupStateEntries(value: unknown): Record<string, unknown>[] {
   return isRecord(value) ? [{ ...value }] : [];
 }
 
-function setStyle(node: NativeNode, value: PropertyInput, previous: PropertyInput): void {
+function setStyle(node: NativeNode, value: PropertyInput): void {
   const next = flattenStyle(value as JSX.StyleProp) as Record<string, unknown>;
-  const old = flattenStyle(previous as JSX.StyleProp) as Record<string, unknown>;
+  const state = helperPropertyState(node);
+  const old = state.style;
+  state.style = next;
+  const fields = new Set<string>();
   for (const name of Object.keys(old)) {
-    if (!(name in next)) setProperty(node, name, null, old[name]);
+    if (helperProperties.has(name)) {
+      if (!Object.is(next[name], old[name])) fields.add(name);
+    } else if (!(name in next)) applyProperty(node, name, null, old[name]);
   }
   for (const [name, nextValue] of Object.entries(next)) {
-    if (!Object.is(nextValue, old[name])) setProperty(node, name, nextValue, old[name]);
+    if (helperProperties.has(name)) {
+      if (!Object.is(nextValue, old[name])) fields.add(name);
+    } else if (!Object.is(nextValue, old[name])) applyProperty(node, name, nextValue, old[name]);
   }
-}
-
-function setFlex(node: NativeNode, value: PropertyInput): void {
-  if (value === null || value === undefined || value === false) {
-    for (const code of [PropertyCode.FlexGrow, PropertyCode.FlexShrink, PropertyCode.FlexBasis]) {
-      setNativeProperty(node, code, null);
-    }
-    return;
-  }
-  if (typeof value === "number") {
-    setNativeProperty(node, PropertyCode.FlexGrow, value);
-    setNativeProperty(node, PropertyCode.FlexShrink, 1);
-    setNativeProperty(node, PropertyCode.FlexBasis, 0);
-    return;
-  }
-  const parts = String(value).trim().split(/\s+/);
-  if (parts.length === 1 && parts[0] === "none") {
-    setNativeProperty(node, PropertyCode.FlexGrow, 0);
-    setNativeProperty(node, PropertyCode.FlexShrink, 0);
-    setNativeProperty(node, PropertyCode.FlexBasis, "auto");
-    return;
-  }
-  if (parts.length >= 1) setNativeProperty(node, PropertyCode.FlexGrow, Number(parts[0]));
-  if (parts.length >= 2) setNativeProperty(node, PropertyCode.FlexShrink, Number(parts[1]));
-  if (parts.length >= 3) {
-    setNativeProperty(node, PropertyCode.FlexBasis, normalizeLength(parts[2]));
-  }
+  applyHelperProperties(node, state, fields);
 }
 
 /**
@@ -1371,52 +1409,6 @@ function normalizeGridTemplate(value: PropertyInput): number | string | null {
   return normalized === "" || normalized === "none" ? null : normalized;
 }
 
-/**
- * Split a `grid-column` / `grid-row` shorthand into the core's line and span placement.
- *
- * `2 / span 3` is the same placement as lines `2` through `5`, so a declared start plus span
- * becomes an explicit end and the core never needs a combined form it does not expose.
- */
-function setGridPlacement(node: NativeNode, column: boolean, value: PropertyInput): void {
-  const startCode = column ? PropertyCode.GridColumnStart : PropertyCode.GridRowStart;
-  const endCode = column ? PropertyCode.GridColumnEnd : PropertyCode.GridRowEnd;
-  const spanCode = column ? PropertyCode.GridColumnSpan : PropertyCode.GridRowSpan;
-  setNativeProperty(node, startCode, null);
-  setNativeProperty(node, endCode, null);
-  setNativeProperty(node, spanCode, null);
-  if (value === null || value === undefined || value === false) return;
-  if (typeof value === "number") {
-    setNativeProperty(node, startCode, value);
-    return;
-  }
-  const [rawStart = "", rawEnd = ""] = String(value).split("/");
-  const start = rawStart.trim();
-  const end = rawEnd.trim();
-  const startSpan = start.match(/^span\s+(\d+)$/);
-  const endSpan = end.match(/^span\s+(\d+)$/);
-  const startLine = start === "" || start === "auto" ? null : Number(start);
-  if (startSpan) {
-    setNativeProperty(node, spanCode, Number(startSpan[1]));
-    return;
-  }
-  if (startLine !== null && Number.isFinite(startLine)) {
-    setNativeProperty(node, startCode, startLine);
-  }
-  if (endSpan) {
-    const span = Number(endSpan[1]);
-    if (startLine !== null && Number.isFinite(startLine)) {
-      setNativeProperty(node, endCode, startLine + span);
-    } else {
-      setNativeProperty(node, spanCode, span);
-    }
-    return;
-  }
-  const endLine = end === "" || end === "auto" ? null : Number(end);
-  if (endLine !== null && Number.isFinite(endLine)) {
-    setNativeProperty(node, endCode, endLine);
-  }
-}
-
 /** Bounded shader parameter floats, packed into the core's four fixed vectors. */
 function normalizeShaderParameters(value: PropertyInput): string | null {
   if (value === null || value === undefined || value === false) return null;
@@ -1683,6 +1675,7 @@ function normalizeTooltipText(value: PropertyInput): string | null {
 
 function isLengthProperty(code: PropertyCode): boolean {
   return (
+    code === PropertyCode.FlexBasis ||
     (code >= PropertyCode.Gap && code <= PropertyCode.MarginLeft) ||
     code === PropertyCode.BorderWidth ||
     (code >= PropertyCode.BorderTopWidth && code <= PropertyCode.BorderLeftWidth) ||
@@ -8810,10 +8803,9 @@ export namespace JSX {
     key?: string | number;
   }
 
-  export interface Style {
+  export interface Style extends StyleHelpers {
     textColor?: ColorValue;
     display?: "none" | "block" | "flex" | "grid";
-    flex?: number | string;
     flexDirection?: "row" | "row-reverse" | "column" | "column-reverse";
     flexWrap?: "nowrap" | "wrap" | "wrap-reverse";
     flexGrow?: number;
@@ -8902,8 +8894,10 @@ export namespace JSX {
     gridRow?: number | string;
     gridColumnStart?: number;
     gridColumnEnd?: number;
+    gridColumnSpan?: number;
     gridRowStart?: number;
     gridRowEnd?: number;
+    gridRowSpan?: number;
     transitionProperty?: string;
     transitionDuration?: number | string;
     transitionTimingFunction?: TransitionEasing;

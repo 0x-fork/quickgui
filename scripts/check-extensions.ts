@@ -78,7 +78,7 @@ try {
   const { extensionLibraryName } = await import("../packages/cli/src/extensions.ts");
   const backend = join(
     root,
-    "packages/native-terminal/lib",
+    "packages/extension-terminal/lib",
     target,
     extensionLibraryName(backendManifest, target),
   );
@@ -147,17 +147,17 @@ func main() { if err := host.Load(); err != nil { panic(err) } }
     );
   }
 
-  // An independently versioned provider, built against only the public C header.
+  // An independently versioned extension, built against only the public C header.
   // Copy its Go module and npm artifact into an isolated consumer so neither
   // dependency discovery nor artifact lookup can rely on checkout integration.
   const independent = join(directory, "independent");
-  const provider = join(independent, "provider");
-  cpSync(join(root, "examples/native-extension/echo"), provider, { recursive: true });
+  const extension = join(independent, "extension");
+  cpSync(join(root, "examples/native-extension/echo"), extension, { recursive: true });
   writeFileSync(
-    join(provider, "go.mod"),
+    join(extension, "go.mod"),
     `module example.test/echo\n\ngo 1.23\n\nrequire github.com/egoist/quickgui/go v${version}\n`,
   );
-  const artifactPackage = join(independent, "node_modules/@acme/quickgui-echo");
+  const artifactPackage = join(independent, "node_modules/@acme/extension-echo");
   const service = await buildExtension(join(artifactPackage, "lib", target));
   cpSync(
     join(root, "examples/native-extension/backend/package.json"),
@@ -181,7 +181,7 @@ func main() { if err := host.Load(); err != nil { panic(err) } }
   );
   writeFileSync(
     join(independent, "go.mod"),
-    `module example.test/consumer\n\ngo 1.23\n\nrequire (\n github.com/egoist/quickgui/go v${version}\n example.test/echo v1.0.0\n)\nreplace github.com/egoist/quickgui/go => ${JSON.stringify(join(root, "go"))}\nreplace example.test/echo => ./provider\n`,
+    `module example.test/consumer\n\ngo 1.23\n\nrequire (\n github.com/egoist/quickgui/go v${version}\n example.test/echo v1.0.0\n)\nreplace github.com/egoist/quickgui/go => ${JSON.stringify(join(root, "go"))}\nreplace example.test/echo => ./extension\n`,
   );
   writeFileSync(
     join(independent, "main.go"),
@@ -208,17 +208,17 @@ func main() { if err := host.Load(); err != nil { panic(err) } }
     fonts: [],
   });
   if (libraries.length !== 2 || !libraries.some((path) => basename(path) === basename(service)))
-    throw new Error("Independent consumer did not bundle exactly its selected provider and core");
+    throw new Error("Independent consumer did not bundle exactly its selected extension and core");
   // Installed packages are a build-time input; the packaged app needs neither.
   rmSync(join(independent, "node_modules"), { recursive: true });
-  rmSync(provider, { recursive: true });
+  rmSync(extension, { recursive: true });
   await run([executablePath], directory, {
     QUICKGUI_LIBRARY: undefined,
     QUICKGUI_HOST_LIB: undefined,
     QUICKGUI_EXTENSION_DIR: undefined,
   });
   console.log(
-    "[extensions] Independent @acme/quickgui-echo@1.0.0: bundled and loaded through purego; JSON replies and errors verified",
+    "[extensions] Independent @acme/extension-echo@1.0.0: bundled and loaded through purego; JSON replies and errors verified",
   );
 } finally {
   rmSync(directory, { recursive: true, force: true });

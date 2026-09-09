@@ -45,6 +45,12 @@ test("compound props preserve callback types, inherited fields, and namespaces",
   const terminal = getComponentApi("go", "ui", "terminal").sections[0];
   expect(terminal.signature).toStartWith("terminal.View(");
   expect(terminal.entries.some((entry) => entry.name === "Program")).toBe(true);
+  const view = getComponentApi("typescript", "ui", "view").sections[0];
+  for (const name of ["rounded", "rounded-lg", "flex-col", "p-3", "grid-cols", "text-lg"]) {
+    expect(view.entries.find((entry) => entry.name === name)?.source).toStartWith(
+      "packages/solid/src/style-helpers.generated.ts#L",
+    );
+  }
 });
 
 test("the browser catalog matches the Rust demo dispatcher", () => {

@@ -21,8 +21,8 @@ for (const file of readdirSync(output)) {
 
 const packages = [
   { name: "native", library: "quickgui_host" },
-  { name: "native-terminal", library: "quickgui_terminal" },
-  { name: "native-updater", library: "quickgui_updater" },
+  { name: "extension-terminal", library: "quickgui_terminal" },
+  { name: "extension-updater", library: "quickgui_updater" },
   { name: "solid", library: undefined },
   { name: "cli", library: undefined },
 ];
@@ -54,14 +54,22 @@ for (const pkg of packages) {
   if (
     pkg.name === "cli" &&
     (manifest.dependencies?.["@quickgui/native"] !== version ||
-      manifest.dependencies?.["@quickgui/native-terminal"] ||
-      manifest.dependencies?.["@quickgui/native-updater"] ||
+      manifest.dependencies?.["@quickgui/extension-terminal"] ||
+      manifest.dependencies?.["@quickgui/extension-updater"] ||
       manifest.bin?.quickgui !== "src/cli.ts")
   ) {
     throw new Error("CLI must depend only on the core native package; extensions are optional");
   }
   const entries = run(["tar", "-tzf", archive]).trim().split("\n");
-  if (pkg.name === "native-updater") {
+  if (pkg.name === "extension-updater") {
+    if (
+      manifest.exports?.["."] !== "./src/index.ts" ||
+      !entries.includes("package/src/index.ts") ||
+      manifest.dependencies?.["@quickgui/native"] !== version
+    )
+      throw new Error(
+        "Updater package must include its TypeScript API and matching native core dependency",
+      );
     for (const arch of ["arm64", "x64"])
       if (!entries.includes("package/lib/darwin-" + arch + "/Sparkle.framework.qgr"))
         throw new Error("Missing Sparkle resources in updater package");

@@ -6,7 +6,7 @@ static void invoke(uint32_t request, QuickGuiBytes method, QuickGuiBytes params,
     (void)request;
     if (method.len == 4 && memcmp(method.data, "echo", 4) == 0 &&
         params.len <= QUICKGUI_EXTENSION_MAX_PAYLOAD) {
-        /* This CPU-only operation is immediate; asynchronous providers copy the
+        /* This CPU-only operation is immediate; asynchronous extensions copy the
          * inputs, queue work, and retain the sink until that work finishes. */
         sink.emit(sink.context, QUICKGUI_EXTENSION_REPLY, params);
     } else {
@@ -17,7 +17,7 @@ static void invoke(uint32_t request, QuickGuiBytes method, QuickGuiBytes params,
     sink.release(sink.context);
 }
 
-static void shutdown_service(void) { /* No sessions or workers in this provider. */ }
+static void shutdown_service(void) { /* No sessions or workers in this extension. */ }
 static const QuickGuiServiceApi api = {invoke, shutdown_service};
 static const QuickGuiExtension descriptor = {
     QUICKGUI_EXTENSION_ABI_V1,

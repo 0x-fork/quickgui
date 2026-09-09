@@ -252,8 +252,8 @@ export async function resolveExtension(
   } catch {
     /* optional package */
   }
-  if (manifest.package === `@quickgui/native-${manifest.name}`)
-    candidates.push(resolve(import.meta.dir, "..", "..", `native-${manifest.name}`));
+  if (manifest.package === `@quickgui/extension-${manifest.name}`)
+    candidates.push(resolve(import.meta.dir, "..", "..", `extension-${manifest.name}`));
   for (const directory of candidates) {
     const metadata = join(directory, "package.json");
     const file = join(directory, "lib", target, filename);

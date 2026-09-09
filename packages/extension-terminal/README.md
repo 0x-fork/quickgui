@@ -1,4 +1,4 @@
-# @quickgui/native-terminal
+# @quickgui/extension-terminal
 
 Prebuilt PTY and Ghostty backend for `github.com/egoist/quickgui/go/terminal`.
 The CLI discovers the Go import, caches the matching release artifact, and bundles

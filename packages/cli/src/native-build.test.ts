@@ -81,7 +81,7 @@ test("independent updater names do not require built-in updater configuration, a
     for (const manifest of [updater, other]) {
       const source = join(root, manifest.name);
       mkdirSync(source);
-      writeFileSync(join(source, "provider.go"), `package ${manifest.name}\n`);
+      writeFileSync(join(source, "extension.go"), `package ${manifest.name}\n`);
       writeFileSync(join(source, "quickgui.extension.json"), JSON.stringify(manifest));
       const artifact = join(root, "node_modules", manifest.package);
       mkdirSync(join(artifact, "lib", target), { recursive: true });
@@ -95,7 +95,7 @@ test("independent updater names do not require built-in updater configuration, a
       );
       writeFileSync(
         join(artifact, "lib", target, extensionLibraryName(manifest, target)),
-        "provider: " + manifest.name,
+        "extension: " + manifest.name,
       );
     }
     writeFileSync(
@@ -135,7 +135,7 @@ test("independent updater names do not require built-in updater configuration, a
       'package main\nimport (\n _ "example.test/extensions/updater"\n _ "example.test/extensions/another"\n)\nfunc main() {}\n',
     );
     await expect(compileNativeApplication(options)).rejects.toThrow("resource collision");
-    expect(readFileSync(libraries[1]!, "utf8")).toBe("provider: updater");
+    expect(readFileSync(libraries[1]!, "utf8")).toBe("extension: updater");
   } finally {
     rmSync(root, { recursive: true, force: true });
     if (previousDirectory === undefined) delete process.env.QUICKGUI_EXTENSION_DIR;

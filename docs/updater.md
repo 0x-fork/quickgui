@@ -1,6 +1,6 @@
 # Automatic updates
 
-The optional `github.com/egoist/quickgui/go/updater` package provides automatic application updates. Importing it includes `@quickgui/native-updater`; apps without the import include neither that library nor Sparkle. Ordinary Go edits reuse the prebuilt native artifacts.
+The optional `github.com/egoist/quickgui/go/updater` package provides automatic application updates. Importing it includes `@quickgui/extension-updater`; apps without the import include neither that library nor Sparkle. Ordinary Go edits reuse the prebuilt native artifacts.
 
 ## Configure
 

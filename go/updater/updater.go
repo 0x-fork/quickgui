@@ -1,5 +1,5 @@
 // Package updater adds optional Sparkle-compatible application updates. Importing
-// it makes the CLI bundle @quickgui/native-updater and Sparkle on macOS.
+// it makes the CLI bundle @quickgui/extension-updater and Sparkle on macOS.
 package updater
 
 import (

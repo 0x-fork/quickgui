@@ -142,7 +142,7 @@ pub extern "C" fn quickgui_protocol_version() -> u32 {
     PROTOCOL_VERSION as u32
 }
 
-/// Register an optional native provider before creating application windows.
+/// Register an optional native extension before creating application windows.
 ///
 /// # Safety
 /// The descriptor and its code must remain loaded until process exit. `name` is a readable
@@ -170,7 +170,7 @@ pub unsafe extern "C" fn quickgui_register_extension(
     }
 }
 
-/// Register a provider whose release version is owned by its importing package.
+/// Register an extension whose release version is owned by its importing package.
 ///
 /// # Safety
 /// The descriptor follows `quickgui_register_extension`'s lifetime contract.

@@ -6,7 +6,7 @@ Call `native.Run` once from `main`. Its startup callback creates windows and reg
 
 ## Commands and services
 
-Use the typed `native` APIs for dialogs, clipboard, shell, appearance, menus, and other platform services. Operations with results use completion callbacks; handle their errors without blocking the UI goroutine. Independent providers use `native.InvokeExtension` and `native.OpenExtension`.
+Use the typed `native` APIs for dialogs, clipboard, shell, appearance, menus, and other platform services. Operations with results use completion callbacks; handle their errors without blocking the UI goroutine. Independent extensions use `native.InvokeExtension` and `native.OpenExtension`.
 
 For application background work, use `ui.Async` with component cancellation or `native.Dispatch` to return results to the UI goroutine. Read and write signals only there. See [Authoring Extensions](/docs/go/extensions) for service and session ownership.
 

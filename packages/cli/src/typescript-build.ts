@@ -7,8 +7,10 @@ import { updaterMetadata } from "./packaging/appcast.ts";
 
 export function typescriptExtensions(project: string, names: string[]): ExtensionManifest[] {
   const directories = names.map((name) => {
-    const pkg = name === "terminal" || name === "updater" ? `@quickgui/native-${name}` : name;
-    return pkg.startsWith("@") ? dirname(Bun.resolveSync(`${pkg}/package.json`, project)) : pkg;
+    const pkg = name === "terminal" || name === "updater" ? `@quickgui/extension-${name}` : name;
+    return pkg.startsWith("@") || pkg.startsWith("quickgui-extension-")
+      ? dirname(Bun.resolveSync(`${pkg}/package.json`, project))
+      : pkg;
   });
   for (const directory of directories)
     if (!existsSync(join(directory, "quickgui.extension.json")))

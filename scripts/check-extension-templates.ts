@@ -80,7 +80,7 @@ try {
         "--module",
         module,
         "--no-install",
-        ...(type === "go" ? [] : ["--npm-package", `@template/${name}`]),
+        ...(type === "go" ? [] : ["--npm-package", `@template/extension-${name}`]),
       ],
       directory,
     );
@@ -122,7 +122,7 @@ try {
       const artifact = JSON.parse(readFileSync(join(project, "artifacts/package.json"), "utf8"));
       if (artifact.name !== manifest.package || artifact.version !== manifest.version)
         throw new Error(`${type} artifact metadata did not follow the manifest`);
-      const provider = join(
+      const extension = join(
         project,
         "artifacts/lib",
         target,
@@ -133,7 +133,7 @@ try {
         join(root, "go"),
         {
           QUICKGUI_TEST_CORE: core,
-          QUICKGUI_TEST_SERVICE: provider,
+          QUICKGUI_TEST_SERVICE: extension,
           QUICKGUI_TEST_SERVICE_NAME: manifest.name,
           QUICKGUI_TEST_SERVICE_VERSION: manifest.version,
         },

@@ -1,5 +1,5 @@
 {
-  "name": "@acme/quickgui-echo",
+  "name": "@acme/extension-echo",
   "version": "1.0.0",
   "private": true,
   "files": [

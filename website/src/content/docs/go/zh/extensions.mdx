@@ -25,7 +25,7 @@ cd my-service
 bun run dev
 ```
 
-用 `--module github.com/acme/my-service` 设置 Go 模块路径，用 `--npm-package @acme/my-service-native` 设置原生产物包。`--name` 覆盖根据目录推导的名称；默认模块和产物包为 `example.com/<name>` 和 `<name>-native`。`--no-install` 跳过 `bun install` 和 `go mod tidy`。初始化不会覆盖非空目录。
+用 `--module github.com/acme/my-service` 设置 Go 模块路径，用 `--npm-package @acme/extension-my-service` 设置原生产物包。`--name` 覆盖根据目录推导的名称；默认模块和产物包为 `example.com/<name>` 和 `quickgui-extension-<name>`。`--no-install` 跳过 `bun install` 和 `go mod tidy`。初始化不会覆盖非空目录。
 
 Zig 模板要求 Zig 0.16.x，Rust 模板使用稳定版 Cargo/Rust。构建脚本均为 Bun 执行的 TypeScript。`bun run build` 为当前机器构建原生库并放入 `artifacts/lib/<target>/`。清单为 Go 封装、生成的原生常量和 npm 包提供统一的名称和版本。`bun run dev` 先构建一次原生库，之后监视 Go 编辑并复用该库；修改原生代码后重启命令。纯 Go 扩展不需要原生构建或产物包。
 
@@ -88,7 +88,7 @@ build-extension.ts
   "schema": 1,
   "name": "acme-echo",
   "abi": 1,
-  "package": "@acme/quickgui-echo",
+  "package": "@acme/extension-echo",
   "version": "1.0.0",
   "library": "quickgui_acme_echo"
 }
@@ -218,7 +218,7 @@ copyFileSync(join(cargoTarget, "release", filename), join(destination, filename)
 
 ```json
 {
-  "name": "@acme/quickgui-echo",
+  "name": "@acme/extension-echo",
   "version": "1.0.0",
   "files": ["lib", "README.md"],
   "exports": { "./package.json": "./package.json" }

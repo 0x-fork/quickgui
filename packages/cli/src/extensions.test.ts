@@ -32,7 +32,7 @@ const terminal: ExtensionManifest = {
   schema: 1,
   name: "terminal",
   abi: 1,
-  package: "@quickgui/native-terminal",
+  package: "@quickgui/extension-terminal",
   version: "0.1.3",
   library: "quickgui_terminal",
 };
@@ -96,20 +96,20 @@ test("Go dependency discovery respects build tags, target files, and transitive 
   expect(await discoverExtensions(config, ".", { ...env, GOOS: "darwin" })).toEqual([]);
 }, 30_000);
 
-test("third-party providers own their package names and release versions", () => {
+test("third-party extensions own their package names and release versions", () => {
   const root = temporary();
-  const provider = {
+  const extension = {
     ...terminal,
     name: "acme-echo",
     library: "quickgui_acme_echo",
     version: "7.2.1-beta.2+native.3",
   };
-  for (const packageName of ["@acme/quickgui-echo", "my-quickgui-echo"]) {
-    manifest(root, { ...provider, package: packageName });
-    expect(extensionManifests([{ Dir: root }])).toEqual([{ ...provider, package: packageName }]);
+  for (const packageName of ["@acme/extension-echo", "quickgui-extension-echo"]) {
+    manifest(root, { ...extension, package: packageName });
+    expect(extensionManifests([{ Dir: root }])).toEqual([{ ...extension, package: packageName }]);
   }
   const other = join(root, "other-publisher");
-  manifest(other, { ...provider, package: "@other/echo" });
+  manifest(other, { ...extension, package: "@other/extension-echo" });
   expect(() => extensionManifests([{ Dir: root }, { Dir: other }])).toThrow("Conflicting");
   for (const packageName of [
     "../escape",
@@ -120,7 +120,7 @@ test("third-party providers own their package names and release versions", () =>
     "@scope/.hidden",
     "x".repeat(215),
   ]) {
-    manifest(root, { ...provider, package: packageName });
+    manifest(root, { ...extension, package: packageName });
     expect(() => extensionManifests([{ Dir: root }])).toThrow("Invalid");
   }
   manifest(root, { ...terminal, name: "host", library: "quickgui_host" });
@@ -136,10 +136,10 @@ test("installed third-party packages resolve without core checkout integration",
     ...terminal,
     name: "acme-echo",
     library: "quickgui_acme_echo",
-    package: "@acme/quickgui-echo",
+    package: "@acme/extension-echo",
     version: "7.2.1",
   };
-  const directory = join(root, "node_modules/@acme/quickgui-echo");
+  const directory = join(root, "node_modules/@acme/extension-echo");
   const stage = join(directory, "lib/darwin-arm64");
   mkdirSync(stage, { recursive: true });
   const metadata = {
@@ -155,14 +155,14 @@ test("installed third-party packages resolve without core checkout integration",
   );
   writeFileSync(join(directory, "package.json"), JSON.stringify({ ...metadata, version: "7.2.0" }));
   await expect(resolveExtension(extension, "darwin-arm64", root)).rejects.toThrow(
-    "requires @acme/quickgui-echo@7.2.1",
+    "requires @acme/extension-echo@7.2.1",
   );
 });
 
-test("a third-party namespace never falls back to a built-in provider with the same name", async () => {
+test("a third-party namespace never falls back to a built-in extension with the same name", async () => {
   const { spyOn } = await import("bun:test");
   const root = temporary();
-  const extension = { ...terminal, package: "@acme/alternate-terminal", version: "6.4.2" };
+  const extension = { ...terminal, package: "@acme/extension-alternate-terminal", version: "6.4.2" };
   delete process.env.QUICKGUI_EXTENSION_DIR;
   const originalCache = process.env.QUICKGUI_CACHE_DIR;
   process.env.QUICKGUI_CACHE_DIR = join(root, "cache");
@@ -178,7 +178,7 @@ test("a third-party namespace never falls back to a built-in provider with the s
   );
   try {
     await expect(resolveExtension(extension, "darwin-arm64", root)).rejects.toThrow("404");
-    expect(urls).toEqual(["https://registry.npmjs.org/%40acme%2Falternate-terminal/6.4.2"]);
+    expect(urls).toEqual(["https://registry.npmjs.org/%40acme%2Fextension-alternate-terminal/6.4.2"]);
   } finally {
     fetchMock.mockRestore();
     if (originalCache === undefined) delete process.env.QUICKGUI_CACHE_DIR;
@@ -229,7 +229,7 @@ test("exact-version downloads verify integrity and repair a corrupt cache", asyn
   const extension = {
     ...terminal,
     name: "cache-test",
-    package: "@quickgui/native-cache-test",
+    package: "@quickgui/extension-cache-test",
     library: "quickgui_cache_test",
     resources: { darwin: ["Sparkle.framework.qgr"] },
   };
@@ -243,7 +243,7 @@ test("exact-version downloads verify integrity and repair a corrupt cache", asyn
   expect(tar.exitCode).toBe(0);
   const bytes = readFileSync(archive);
   const url =
-    "https://registry.npmjs.org/@quickgui/native-cache-test/-/native-cache-test-0.1.3.tgz";
+    "https://registry.npmjs.org/@quickgui/extension-cache-test/-/extension-cache-test-0.1.3.tgz";
   let calls = 0;
   let publisher = extension.package;
   const fetchMock = spyOn(globalThis, "fetch").mockImplementation(
@@ -292,7 +292,7 @@ test("exact-version downloads verify integrity and repair a corrupt cache", asyn
     await expect(
       resolveExtension(extension, "darwin-arm64", root, "undeclared.qgr"),
     ).rejects.toThrow();
-    publisher = "@another/native-cache-test";
+    publisher = "@another/extension-cache-test";
     const independent = { ...extension, package: publisher };
     const otherPath = await resolveExtension(independent, "darwin-arm64", root);
     expect(otherPath).not.toBe(path);

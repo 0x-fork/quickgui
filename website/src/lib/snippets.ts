@@ -14,13 +14,11 @@ export const snippets = {
     code: `function Counter() {
   const [count, setCount] = createSignal(0);
   return (
-    <View width="100%" height="100%"
-      display="flex" flexDirection="column"
-      alignItems="center" justifyContent="center"
-      gap={20} backgroundColor="#090d16"
+    <View flex-col size-full items-center justify-center gap-5
+      backgroundColor="#090d16"
       color="#e2e8f0">
       <Text>Count: {count()}</Text>
-      <Button padding={12} borderRadius={8}
+      <Button p-3 rounded="lg"
         backgroundColor="#2563eb"
         onClick={() => setCount(count() + 1)}>
         Increment
