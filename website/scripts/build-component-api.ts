@@ -4,6 +4,7 @@ import { ALL_COMPONENT_DOCS } from "../src/lib/component-docs";
 import { propertyNotes } from "./component-property-notes";
 import { moonComponents } from "../../scripts/moonbit-components";
 import type { ApiEntry, ApiSection, ComponentApi } from "../src/lib/component-api";
+import { typescriptApi } from "./typescript-api";
 
 const root = resolve(import.meta.dir, "../..");
 const output = resolve(root, "website/src/lib/generated/component-api.json");
@@ -287,7 +288,7 @@ function moonApi(component: (typeof ALL_COMPONENT_DOCS)[number]): ApiSection[] {
 }
 const data: Record<string, ComponentApi> = {};
 for (const component of ALL_COMPONENT_DOCS)
-  for (const frontend of ["go", "moonbit"] as const) {
+  for (const frontend of ["go", "moonbit", "typescript"] as const) {
     const content = readFileSync(
       resolve(
         root,
@@ -296,8 +297,8 @@ for (const component of ALL_COMPONENT_DOCS)
       "utf8",
     );
     data[`${frontend}/${component.kind}/${component.slug}`] = {
-      language: frontend,
-      sections: frontend === "go" ? goApi(component) : moonApi(component),
+      language: frontend === "typescript" ? "tsx" : frontend,
+      sections: frontend === "typescript" ? typescriptApi(component) : frontend === "go" ? goApi(component) : moonApi(component),
       example:
         content
           .split("## Usage")[1]

@@ -1,0 +1,45 @@
+## Rendering model
+
+The Solid universal compiler creates native nodes and retained bindings. It selects the reactive client build even though Bun normally resolves server conditions. Native layout, painting, focus, input, accessibility, and component state remain in Rust.
+
+## Conditional content
+
+```tsx
+<Show when={expanded()} fallback={<Text>Collapsed</Text>}>
+  <Text>Expanded content</Text>
+</Show>
+```
+
+A conditional region owns its effects and nodes. Removing the region disposes those resources; unrelated sibling nodes keep their identities.
+
+## Lists and identity
+
+```tsx
+<For each={items()}>{item => <Text>{item.name}</Text>}</For>
+```
+
+Use stable item identities for stateful rows. `For` moves existing nodes when order changes. Use `Table` or `Tree` for large native virtual collections and feed only requested visible data.
+
+## Window lifecycle
+
+Each `Window` owns an independent Solid root. Closing a child window must not dispose its siblings. Handle macOS Dock reopening by constructing a fresh window when `hasVisibleWindows` is false.
+
+## Current window
+
+```tsx
+function Content() {
+  const window = Window.getCurrentWindow();
+  return <Button onClick={() => window.close()}>Close</Button>;
+}
+```
+
+The current window exists during renderer construction and native event dispatch. Capture it in setup or pass it explicitly to asynchronous work.
+
+## Checking, testing, and debugging
+
+```sh
+quickgui check
+quickgui test
+```
+
+The components gallery is the broad UI example. Quick Git exercises native menus, file dialogs, virtualized rows, splitters, shortcuts, multiple windows, background Git work, and persistence. Native integration checks are separate from headless adapter tests.

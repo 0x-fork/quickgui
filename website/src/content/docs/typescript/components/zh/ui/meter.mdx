@@ -1,0 +1,48 @@
+显示已知范围内的标量测量值，并带有语义化的低值、高值和最佳区间。
+
+## 导入
+
+从 `@quickgui/solid` 导入 `Meter`。
+
+```tsx
+import { Meter } from "@quickgui/solid";
+```
+
+## 用法
+
+```tsx
+<Meter.Root value={storage()} min={0} max={100} high={80} optimum={40} format="percent">
+  <Meter.Label><Text>Storage</Text></Meter.Label>
+  <Meter.Track><Meter.Indicator /></Meter.Track>
+  <Meter.Value />
+</Meter.Root>
+```
+
+## 结构
+
+- `Meter.Root`
+- `Meter.Track`
+- `Meter.Indicator`
+- `Meter.Label`
+- `Meter.Value`
+
+```tsx
+<Meter.Root>
+  <Meter.Track />
+  <Meter.Indicator />
+  <Meter.Label />
+  <Meter.Value />
+</Meter.Root>
+```
+
+## 主要属性
+
+| 属性 | 说明 |
+| --- | --- |
+| `value` | 受控值，具体类型取决于该组件的约定。 |
+| `min` | 可接受的最小值。 |
+| `max` | 可接受的最大值。 |
+| `low` | 仪表低值区间的上界。 |
+| `high` | 仪表高值区间的下界。 |
+| `optimum` | 仪表值的理想点或区间。 |
+

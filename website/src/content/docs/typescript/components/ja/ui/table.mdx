@@ -1,0 +1,53 @@
+ヘッダー、行、セルのパーツを持つ仮想化テーブルコレクションです。
+
+## インポート
+
+`@quickgui/solid` から `Table` をインポートします。
+
+```tsx
+import { Table } from "@quickgui/solid";
+```
+
+## 使い方
+
+```tsx
+<Table.Root
+  columns={[{ id: "name", label: "Name" }, { id: "status", label: "Status" }]}
+  rowCount={rows.length}
+  onVisibleRangeChange={setVisibleRange}
+>
+  <Table.Header column="name"><Text>Name</Text></Table.Header>
+  <For each={visibleRows()}>{(row) =>
+    <Table.Row index={row.index}>
+      <Table.Cell column="name"><Text>{row.name}</Text></Table.Cell>
+      <Table.Cell column="status"><Text>{row.status}</Text></Table.Cell>
+    </Table.Row>
+  }</For>
+</Table.Root>
+```
+
+## 構成
+
+- `Table.Root`
+- `Table.Header`
+- `Table.Row`
+- `Table.Cell`
+
+```tsx
+<Table.Root>
+  <Table.Header />
+  <Table.Row />
+  <Table.Cell />
+</Table.Root>
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `columns` | 仮想テーブルの列宣言です。 |
+| `rowCount` | 論理上の総行数です。 |
+| `rowHeight` | 仮想化された各行の論理高さです。 |
+| `selectionMode` | テーブルで単一選択または複数選択を有効にします。 |
+| `selection` | テーブル、ネイティブピッカー、カラーコントロールの制御選択値です。 |
+

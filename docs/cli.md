@@ -1,6 +1,6 @@
 # Project CLI and application packaging
 
-`@quickgui/cli` is a TypeScript/Bun tool for Go QuickGUI applications. It creates projects, watches source, invokes `go build` with `CGO_ENABLED=0`, and packages the executable with a matching prebuilt Rust shared library.
+`@quickgui/cli` supports Go, MoonBit, and TypeScript applications and packages each with the matching Rust shared library. Go is the default and uses `CGO_ENABLED=0`. Pass `--frontend moonbit` or `--frontend typescript` to `init` to select another frontend. See the [TypeScript guide](typescript.md) for Bun and Solid 2 JSX, worker ownership, and checks.
 
 ## Create a project
 

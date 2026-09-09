@@ -264,6 +264,10 @@ async function buildMacApp(
   signArguments.push("--sign", identity);
   if (config.macos.entitlements) {
     signArguments.push("--entitlements", config.macos.entitlements);
+  } else if (config.frontend === "typescript") {
+    const entitlements = resolve(stagingRoot, "quickgui-bun.entitlements");
+    writeFileSync(entitlements, bunEntitlements);
+    signArguments.push("--entitlements", entitlements);
   }
   signArguments.push(appPath);
   await run(signArguments, config.projectRoot);
@@ -282,6 +286,16 @@ async function buildMacApp(
     ...(dmgPath ? { dmgPath } : {}),
   };
 }
+
+// Bun's JavaScriptCore JIT and FFI trampolines need executable memory when re-signed.
+// Keep library validation enabled: our shared libraries are signed with the app's identity.
+export const bunEntitlements = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>com.apple.security.cs.allow-jit</key><true/>
+<key>com.apple.security.cs.allow-unsigned-executable-memory</key><true/>
+</dict></plist>
+`;
 
 /**
  * Sign a bundle with the Mac App Store identity and wrap it in a signed installer package.
@@ -603,7 +617,7 @@ function validateInputs(
 ): void {
   if (!existsSync(config.entry)) {
     throw new CliError(
-      `${config.frontend === "moonbit" ? "MoonBit" : "Go"} application package not found: ${config.entry}`,
+      `${config.frontend === "typescript" ? "TypeScript" : config.frontend === "moonbit" ? "MoonBit" : "Go"} application package not found: ${config.entry}`,
     );
   }
   for (const resource of config.resources) {

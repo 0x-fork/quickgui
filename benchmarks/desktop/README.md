@@ -13,10 +13,10 @@ Edits are kept in memory for the session. The initial view contains the first
 100 issues and the first issue's details. There is no network, database, or
 background synchronization. No fixture includes optional extensions or plugins.
 Electron and Tauri use the exact same bundled TypeScript, HTML, and CSS. QuickGUI
-uses its Go and MoonBit components and fine-grained reactive state.
+uses Go, MoonBit, and Bun/Solid 2 TypeScript components with fine-grained reactive state.
 
 [`workload.ts`](workload.ts) generates one deterministic dataset embedded in all
-four builds; generated copies are ignored by Git. The result records the dataset
+five builds; generated copies are ignored by Git. The result records the dataset
 SHA-256, record count, page size, and content dimensions.
 
 ## Reproduce
@@ -28,16 +28,33 @@ otherwise the `moon` tool on PATH. Run from the repository root:
 
 ```sh
 bun install --cwd benchmarks/desktop --frozen-lockfile
-bun scripts/benchmark-desktop.ts
+bun scripts/benchmark-desktop.ts --publish
 ```
 
-This builds all four production apps and then launches them sequentially through
+This builds all five production apps and then launches them sequentially through
 LaunchServices. Keep the machine awake and avoid interacting with the benchmark
 windows during sampling. It only closes the benchmark processes it started.
 Existing user applications are left running. Build output, app bundles, and the
 complete result are saved under `target/desktop-benchmarks/`.
 The terminal running the benchmark needs macOS Screen Recording access to
 inspect window titles and capture each issue tracker window.
+
+Run or build only the [QuickGUI TypeScript fixture](quickgui-typescript) from the repository root:
+
+```sh
+bun install
+bun run --cwd benchmarks/desktop/quickgui-typescript check
+bun run --cwd benchmarks/desktop/quickgui-typescript test
+bun run --cwd benchmarks/desktop/quickgui-typescript dev
+bun run --cwd benchmarks/desktop/quickgui-typescript build
+```
+
+It embeds the same generated JSON, retains 100 rows per page, and checks the dataset,
+mounted row count, and native viewport before setting the readiness title. Its bundle
+includes Bun and the Rust shared library; its worker runs inside the measured app process.
+The homepage retains a measurement date and toolchain for each framework. The
+TypeScript result was measured on September 9, 2026; the other rows retain their
+September 8 measurements on the same machine, OS, workload, and idle policy.
 
 ```sh
 # Build without opening the apps.
@@ -134,7 +151,7 @@ symlinks are not followed and hard-linked files are deduplicated. Directory
 allocation, extended attributes, and compression are excluded.
 
 Tauri uses the OS's WebKit, so WebKit is not part of its distributed bundle.
-Electron ships Chromium and Node. QuickGUI bundles its shared native runtime.
+Electron ships Chromium and Node. QuickGUI bundles its shared native runtime; the TypeScript fixture also embeds Bun.
 This measures what each fixture ships, rather than adding system libraries to
 one framework or removing included libraries from another. It is installed
 bundle size, not DMG, ZIP, or installer download size.

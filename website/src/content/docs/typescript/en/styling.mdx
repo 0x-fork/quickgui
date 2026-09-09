@@ -1,0 +1,51 @@
+## Style modifiers
+
+Use CSS-shaped camelCase style props or a `style` object. Numeric lengths are logical pixels; supported percentages and keywords are parsed by Rust. `color` and `textColor` declare inherited text color.
+
+```tsx
+<View padding={16} gap={12} backgroundColor="#18181b" color="#fafafa" />
+```
+
+## Merging styles
+
+Nested style arrays merge left to right; later fields override earlier ones. Falsy entries are ignored. Removing a style field withdraws that declaration.
+
+```tsx
+<View style={[base, selected() && selectedStyle, { padding: 20 }]} />
+```
+
+## Reusable styles
+
+Use the exported `NativeStyle` type or `JSX.Style` for reusable styles. Keep getters in JSX when their values should update reactively.
+
+```tsx
+const panel: NativeStyle = { padding: 16, borderRadius: 12, backgroundColor: "#20242c" };
+<View style={panel}><Text>Reusable panel</Text></View>
+```
+
+## Flexbox
+
+Use `display`, `flexDirection`, `flexGrow`, `flexShrink`, `flexBasis`, alignment, and gap. Set `minWidth: 0` or `minHeight: 0` on flexible scroll containers so content can shrink into the available viewport.
+
+## Grid
+
+Use `display: "grid"`, track declarations, placement, and spans for two-dimensional layouts. Grid sizing and intrinsic measurements are native; children keep their identities when positions change.
+
+## Text and color
+
+Font family, weight, size, line height, wrapping, ellipsis, decoration, and selection use retained native text. Colors accept hex, supported CSS color strings, or packed RGBA values. Images and SVGs share the core’s bounded caches.
+
+## Interaction states
+
+```tsx
+<Button style={{
+  backgroundColor: "#2563eb",
+  hover: { backgroundColor: "#1d4ed8" },
+  active: { opacity: 0.8 },
+  focusVisible: { outlineColor: "#93c5fd", outlineWidth: 2 },
+}}>Save</Button>
+```
+
+## Groups and named group hover
+
+Use a named `group` on an ancestor and `groupHover` or `groupActive` on descendants to style coordinated states. The core resolves group membership and invalidates the affected retained subtree.

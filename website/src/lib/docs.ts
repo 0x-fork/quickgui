@@ -1,8 +1,9 @@
 import { docsOutline, docsTitle, DOCS_GUIDE_ORDER } from './docs-structure'
 import type { Locale } from '../i18n'
 import { MOONBIT_DOCS_PAGES } from './moonbit-docs'
+import { TYPESCRIPT_DOCS_PAGES } from './typescript-docs'
 
-export const DOCS_FRONTENDS = ['go', 'moonbit'] as const
+export const DOCS_FRONTENDS = ['go', 'moonbit', 'typescript'] as const
 export type DocsFrontend = (typeof DOCS_FRONTENDS)[number]
 
 export type DocsSlug = (typeof DOCS_GUIDE_ORDER)[number]
@@ -182,11 +183,15 @@ export const GO_DOCS_PAGES: readonly DocsPageMeta[] = [
 ]
 
 export function isDocsFrontend(value: string | undefined): value is DocsFrontend {
-  return value === 'go' || value === 'moonbit'
+  return value === 'go' || value === 'moonbit' || value === 'typescript'
 }
 
 export function docsPages(frontend: DocsFrontend): readonly DocsPageMeta[] {
-  return frontend === 'go' ? GO_DOCS_PAGES : MOONBIT_DOCS_PAGES
+  return frontend === 'typescript' ? TYPESCRIPT_DOCS_PAGES : frontend === 'go' ? GO_DOCS_PAGES : MOONBIT_DOCS_PAGES
+}
+
+export function frontendLabel(frontend: DocsFrontend): string {
+  return frontend === 'typescript' ? 'TypeScript' : frontend === 'moonbit' ? 'MoonBit' : 'Go'
 }
 
 export function docsPath(frontend: DocsFrontend, slug: DocsSlug = 'getting-started'): string {

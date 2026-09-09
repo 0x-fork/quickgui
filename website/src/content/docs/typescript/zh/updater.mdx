@@ -1,0 +1,37 @@
+TypeScript 指南正文目前以英文提供，组件 API 参考包含中文说明。
+
+## 配置
+
+Install `@quickgui/native-updater`, declare `native.extensions: ["updater"]`, and configure `updates.baseUrl` and `updates.publicKey`. Release builds require the signing key metadata; development updates remain disabled unless explicitly allowed.
+
+## 应用用法
+
+```tsx
+import { app, Updater } from "@quickgui/native";
+await app.whenReady();
+const updater = new Updater({}, event => console.log(event.status));
+await updater.ready;
+// Invoke these from user actions:
+await updater.check();
+// await updater.install();
+```
+
+## 生命周期
+
+An updater is application-owned. `state` is the last native event, so reading it does not poll. `check()`, `install()`, and `setAutomaticChecks()` return promises. Close the session when it is no longer needed.
+
+## 平台支持
+
+The optional Rust provider uses Sparkle on macOS and the native verified handoff implementation on Windows/Linux. The TypeScript layer declares options and observes native events; it does not implement an updater or installer.
+
+## 发布更新
+
+Use the normal CLI update-manifest and signing workflow. Build, sign, and publish complete native artifacts with their versioned metadata. Never treat a downloaded artifact as trusted before native verification.
+
+## 原生产物
+
+```sh
+bun packages/native/build.ts --extension updater
+```
+
+In a source checkout, build the provider once. Packaged applications include its shared library, Sparkle resources or portable handoff helper, and the update metadata selected by the CLI.

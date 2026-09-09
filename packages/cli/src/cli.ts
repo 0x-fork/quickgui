@@ -56,6 +56,15 @@ export async function runCli(argv: string[]): Promise<number> {
     case "test": {
       const project = resolve(command.project);
       if (
+        ["quickgui.toml", "quickgui.config.ts"].some((file) =>
+          existsSync(resolve(project, file)),
+        ) &&
+        (await loadConfig(project)).frontend === "typescript"
+      ) {
+        const { runTypeScript } = await import("./typescript-build.ts");
+        return runTypeScript(project, command.command);
+      }
+      if (
         !existsSync(resolve(project, "moon.mod")) &&
         !existsSync(resolve(project, "moon.mod.json"))
       ) {
@@ -70,6 +79,10 @@ export async function runCli(argv: string[]): Promise<number> {
       const hasConfig = ["quickgui.toml", "quickgui.config.ts"].some((file) =>
         existsSync(resolve(project, file)),
       );
+      if (hasConfig && (await loadConfig(project)).frontend === "typescript") {
+        const { runTypeScript } = await import("./typescript-build.ts");
+        return runTypeScript(project, "fmt", command.check);
+      }
       const moonbit = hasConfig
         ? (await loadConfig(project)).frontend === "moonbit"
         : existsSync(resolve(project, "moon.mod")) || existsSync(resolve(project, "moon.mod.json"));
@@ -209,7 +222,7 @@ Options:
 Create a QuickGUI project compiled to native code.
 
 Options:
-  --frontend <go|moonbit>    Application language (default: go)
+  --frontend <go|moonbit|typescript> Application language (default: go)
   --name <name>              Application display name
   --identifier <id>          Reverse-DNS bundle identifier
   --no-install               Do not run bun install

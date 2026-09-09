@@ -1,0 +1,37 @@
+## Defining components
+
+Return native JSX from ordinary TypeScript functions. Children and reactive prop getters are evaluated under the component owner; do not manually invoke components as setup side effects.
+
+```tsx
+function Greeting(props: { name: string }) {
+  return <Text>Hello, {props.name}</Text>;
+}
+<Greeting name={name()} />
+```
+
+## Primitives
+
+`View`, `Text`, `Button`, `Input`, `TextArea`, `Markdown`, `Image`, `Svg`, `Shader`, `VirtualList`, and optional `Terminal` are native building blocks. `TextInput` is also available as the single-line input spelling.
+
+## Compound components
+
+```tsx
+<Checkbox.Root checked={checked()} onCheckedChange={setChecked}>
+  <Checkbox.Indicator><Text>✓</Text></Checkbox.Indicator>
+  <Text>Remember this device</Text>
+</Checkbox.Root>
+```
+
+Compound roots coordinate their named parts through Rust-owned state. Keep parts under the intended root so their scope, focus, and value relationships are explicit.
+
+## Controlled state
+
+Use controlled values with the matching change callback, or `defaultValue`, `defaultChecked`, and `defaultOpen` where a component supports internal state. Native events describe the core decision; update the signal to accept that value.
+
+## Component families
+
+The reference covers selection controls, tabs, disclosure, fields, menus, context menus, pickers, dialogs, popovers, preview cards, drawers, navigation menus, ranges, splitters, progress, meters, toggles, toolbars, toasts, calendars, date/time fields, scroll areas, tables, trees, and SwiftUI controls. Run `examples/components-typescript` for the complete gallery.
+
+## Styling parts
+
+Apply `style` to each visual part. Parts intentionally remain unstyled so layout and colors belong to the application. State hooks such as `useSliderState`, `useTabsState`, `useSelectState`, `useMenuItemState`, and `useScrollAreaState` expose the current native state for custom presentation.

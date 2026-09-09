@@ -6,6 +6,7 @@ QuickGUI's documentation is split by concern so public API guidance stays separa
 
 - [View API and layout](view-api.md) — declarative views, Tailwind-style helpers, Flexbox, CSS Grid, and parent-size container queries.
 - [Go components and reactivity](go.md) — ordinary Go components, typed styles, fine-grained signals, window ownership, and the in-process purego boundary.
+- [TypeScript with Bun and Solid 2](typescript.md) — native JSX, fine-grained retained updates, Bun workers, and in-process FFI.
 - [Project CLI and application packaging](cli.md) — Go project initialization, development in a real native app, restart ownership, shared-library packaging, and macOS signing.
 - [Go dependencies and native libraries](native-modules.md) — standard Go modules, background work, and CGO-free access to native libraries.
 - [Application identity, paths, and system information](application-environment.md) — package metadata, app-scoped standard directories, locale/language data, and immutable runtime access.

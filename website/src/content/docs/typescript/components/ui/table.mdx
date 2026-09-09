@@ -1,0 +1,53 @@
+A virtualized tabular collection with header, row, and cell parts.
+
+## Import
+
+Import `Table` from `@quickgui/solid`.
+
+```tsx
+import { Table } from "@quickgui/solid";
+```
+
+## Usage
+
+```tsx
+<Table.Root
+  columns={[{ id: "name", label: "Name" }, { id: "status", label: "Status" }]}
+  rowCount={rows.length}
+  onVisibleRangeChange={setVisibleRange}
+>
+  <Table.Header column="name"><Text>Name</Text></Table.Header>
+  <For each={visibleRows()}>{(row) =>
+    <Table.Row index={row.index}>
+      <Table.Cell column="name"><Text>{row.name}</Text></Table.Cell>
+      <Table.Cell column="status"><Text>{row.status}</Text></Table.Cell>
+    </Table.Row>
+  }</For>
+</Table.Root>
+```
+
+## Anatomy
+
+- `Table.Root`
+- `Table.Header`
+- `Table.Row`
+- `Table.Cell`
+
+```tsx
+<Table.Root>
+  <Table.Header />
+  <Table.Row />
+  <Table.Cell />
+</Table.Root>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `columns` | Column declarations for the virtual table. |
+| `rowCount` | Total logical row count. |
+| `rowHeight` | Logical height of each virtualized row. |
+| `selectionMode` | Allows single or multiple table selection. |
+| `selection` | Controlled selection for a table, native picker, or color control. |
+

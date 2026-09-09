@@ -53,7 +53,7 @@ A pushed `v*` tag starts the separate `Release` workflow, which invokes the reus
 and waits for its macOS, Windows, and Linux gates before publishing. The publish job rejects a tag
 that is not exactly `v<root-package-version>` or lacks a dated changelog section. The root
 `package.json` version is the source of truth; the release gate requires all six published crates,
-the native host, terminal, and updater backend crates, and all four npm packages to match it. The job builds both macOS
+the native host, terminal, and updater backend crates, and all five npm packages to match it. The job builds both macOS
 native architectures for the core, terminal extension, and updater extension including pinned Sparkle resources, runs the CLI tests and TypeScript 7 checks, verifies the npm
 tarballs, and publishes in dependency order. The reusable CI also checks the Go SDK
 and every Go example with CGO disabled. Fresh Rust and Go consumers verify public
@@ -87,7 +87,7 @@ that can publish these six crates and store it as the `CARGO_REGISTRY_TOKEN` Git
 - `quickgui-system`
 - `quickgui`
 
-For each npm package (`@quickgui/native`, `@quickgui/native-terminal`, `@quickgui/native-updater`, and `@quickgui/cli`), add an
+For each npm package (`@quickgui/native`, `@quickgui/native-terminal`, `@quickgui/native-updater`, `@quickgui/solid`, and `@quickgui/cli`), add an
 [npm Trusted Publisher](https://docs.npmjs.com/trusted-publishers/) with GitHub owner `egoist`,
 repository `quickgui`, workflow filename `release.yml`, and no environment. Allow `npm publish`.
 npm requires Node 22.14 or newer and npm 11.5.1 or newer for OIDC; the workflow uses Node 24 and
@@ -133,7 +133,7 @@ The Go SDK is published from the same source commit with a `go/v<version>` tag, 
 the nested `github.com/egoist/quickgui/go` module. The workflow refuses to move an existing SDK tag.
 The repository must be readable by Go consumers; a tag alone does not grant access to a private repository.
 
-It then publishes npm packages in the order `@quickgui/native`, `@quickgui/native-terminal`, `@quickgui/native-updater`, and `@quickgui/cli`.
+It then publishes npm packages in the order `@quickgui/native`, `@quickgui/native-terminal`, `@quickgui/native-updater`, `@quickgui/solid`, and `@quickgui/cli`.
 The terminal and updater packages are optional; the CLI resolves its exact version only when a Go import requires it.
 The CLI waits until the native package is anonymously resolvable from
 its public registry. A rerun skips an existing, non-yanked crate version and skips an existing npm

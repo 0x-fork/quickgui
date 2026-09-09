@@ -3,7 +3,9 @@ import { Link, useNavigate } from 'react-router'
 import { Logo } from '../logo'
 import { docsNavGroups } from '../../lib/docs-navigation'
 import {
+  DOCS_FRONTENDS,
   docsPath,
+  frontendLabel,
   isDocsFrontend,
   switchDocsFrontend,
   type DocsFrontend,
@@ -168,8 +170,9 @@ function DocsSidebar({
               void navigate(localize(locale, switchDocsFrontend(currentPath, next)))
             }}
           >
-            <option value="go">Go</option>
-            <option value="moonbit">MoonBit</option>
+            {DOCS_FRONTENDS.map((value) => (
+              <option key={value} value={value}>{frontendLabel(value)}</option>
+            ))}
           </select>
           <span className="i-lucide-chevrons-up-down" aria-hidden />
         </div>

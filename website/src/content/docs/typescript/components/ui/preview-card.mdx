@@ -1,0 +1,52 @@
+Shows a richer hover or focus preview beside a trigger without changing the current screen.
+
+## Import
+
+Import `PreviewCard` from `@quickgui/solid`.
+
+```tsx
+import { PreviewCard } from "@quickgui/solid";
+```
+
+## Usage
+
+```tsx
+<PreviewCard.Root open={open()} onOpenChange={setOpen} placement="bottom">
+  <PreviewCard.Trigger delay={300}><Text>@quickgui</Text></PreviewCard.Trigger>
+  <PreviewCard.Portal>
+    <PreviewCard.Positioner><PreviewCard.Popup><ProfilePreview /></PreviewCard.Popup></PreviewCard.Positioner>
+  </PreviewCard.Portal>
+</PreviewCard.Root>
+```
+
+## Anatomy
+
+- `PreviewCard.Root`
+- `PreviewCard.Trigger`
+- `PreviewCard.Portal`
+- `PreviewCard.Backdrop`
+- `PreviewCard.Positioner`
+- `PreviewCard.Popup`
+- `PreviewCard.Arrow`
+
+```tsx
+<PreviewCard.Root>
+  <PreviewCard.Trigger />
+  <PreviewCard.Portal />
+  <PreviewCard.Backdrop />
+  <PreviewCard.Positioner />
+  <PreviewCard.Popup />
+  <PreviewCard.Arrow />
+</PreviewCard.Root>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `open` | Controlled open state. |
+| `defaultOpen` | Initial state when the component owns whether it is open. |
+| `delay` | Core-owned delay in milliseconds before opening. |
+| `closeDelay` | Core-owned delay in milliseconds before closing. |
+| `side` | Preferred placement side before collision handling. |
+

@@ -626,6 +626,9 @@ pub(super) fn run_app_host_loop(
     let mut active_app = None;
     let mut runtime: Option<NativeRuntime> = None;
     let mut ready_reported = false;
+    // Window handles are allocated before the platform mounts them during a native turn.
+    // A separate creation notification also covers hidden windows, which may never present.
+    let mut pending_windows = Vec::new();
     // Release services on normal exit, explicit destruction, and error paths, while AppKit's
     // main-thread autorelease pool and runtime are still alive.
     let _services = crate::extension_services::ApplicationServices;
@@ -660,6 +663,12 @@ pub(super) fn run_app_host_loop(
                             .create_window_with_id(window, options, &initial_batch)
                             .map(|_| ())
                     })?;
+                    pending_windows.retain(|id| {
+                        runtime
+                            .as_ref()
+                            .is_some_and(|runtime| runtime.windows.contains_key(id))
+                    });
+                    pending_windows.push(window);
                 }
                 HostCommand::CreateSystemPopover {
                     app,
@@ -680,6 +689,7 @@ pub(super) fn run_app_host_loop(
                             )
                             .map(|_| ())
                     })?;
+                    pending_windows.push(window);
                 }
                 #[cfg(target_os = "macos")]
                 HostCommand::CreateEmbeddedView {
@@ -703,6 +713,7 @@ pub(super) fn run_app_host_loop(
                             )
                             .map(|_| ())
                     })?;
+                    pending_windows.push(window);
                 }
                 HostCommand::ApplyBatch { app, window, batch } => {
                     with_hosted_runtime(active_app, runtime.as_mut(), app, |runtime| {
@@ -731,6 +742,7 @@ pub(super) fn run_app_host_loop(
                     publish_reply("command", request, result);
                 }
                 HostCommand::CloseWindow { app, window } => {
+                    pending_windows.retain(|id| *id != window);
                     with_hosted_runtime(active_app, runtime.as_mut(), app, |runtime| {
                         runtime.close_window(window);
                         Ok(())
@@ -861,6 +873,23 @@ pub(super) fn run_app_host_loop(
         HOST.publish_events(runtime.drain_events());
         #[cfg(target_os = "macos")]
         autorelease_pool.drain_and_replace();
+        pending_windows.retain(|id| {
+            let Some(window) = runtime.windows.get(id) else {
+                return false;
+            };
+            let mounted = window
+                .handle
+                .and_then(|handle| runtime.runner.as_ref()?.window_state(handle))
+                .is_some();
+            if mounted {
+                HOST.publish_events([NativeEvent {
+                    kind: "window-created".to_owned(),
+                    window: *id,
+                    ..NativeEvent::default()
+                }]);
+            }
+            !mounted
+        });
         if let AppRunStatus::Exited(code) = status {
             let code = code.max(0);
             HOST.publish_exit(code);

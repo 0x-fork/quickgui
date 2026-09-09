@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { cn } from "../lib/utils";
-import type { DocsFrontend } from "../lib/docs";
+import { DOCS_FRONTENDS, frontendLabel, type DocsFrontend } from "../lib/docs";
 
 export function FrontendPicker({
   value,
@@ -16,7 +16,7 @@ export function FrontendPicker({
       aria-label={t("common.frontend")}
       className="inline-flex border border-border bg-card-2 p-1"
     >
-      {(["go", "moonbit"] as const).map((frontend) => (
+      {DOCS_FRONTENDS.map((frontend) => (
         <button
           key={frontend}
           type="button"
@@ -29,7 +29,7 @@ export function FrontendPicker({
               : "text-muted-foreground hover:text-foreground",
           )}
         >
-          {frontend === "go" ? "Go" : "MoonBit"}
+          {frontendLabel(frontend)}
         </button>
       ))}
     </div>

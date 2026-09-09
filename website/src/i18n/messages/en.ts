@@ -1,8 +1,8 @@
 export const en = {
   meta: {
-    title: "QuickGUI — Native desktop apps with Go or MoonBit.",
+    title: "QuickGUI — Native desktop apps with Go, MoonBit, or TypeScript.",
     description:
-      "Build native desktop apps with Go or MoonBit. Fast builds, fine-grained reactivity, GPU rendering, and accessible components. Explore measured memory and bundle sizes.",
+      "Build native desktop apps with Go, MoonBit, or TypeScript. Fast builds, fine-grained reactivity, GPU rendering, and accessible components. Explore measured memory and bundle sizes.",
   },
   common: {
     skipToContent: "Skip to content",
@@ -21,10 +21,10 @@ export const en = {
     benchmarks: "Benchmarks",
   },
   hero: {
-    badge: "Go + MoonBit · Fast builds",
+    badge: "Go + MoonBit + TypeScript · Fast builds",
     titleLine1: "Build native desktop apps.",
-    titleLine2: "With Go or MoonBit.",
-    sub: "Build native interfaces in Go or MoonBit with fast incremental builds, fine-grained reactivity, and accessible components powered by the same GPU renderer.",
+    titleLine2: "With Go, MoonBit, or TypeScript.",
+    sub: "Build native interfaces in Go, MoonBit, or TypeScript with fast incremental builds, fine-grained reactivity, and accessible components powered by the same GPU renderer.",
   },
   features: {
     title: "Features",
@@ -35,11 +35,11 @@ export const en = {
       },
       fast: {
         title: "Fast incremental builds",
-        body: "Recompile your Go or MoonBit app while reusing the native runtime. Keep the feedback loop short as you refine your interface.",
+        body: "Recompile your Go, MoonBit, or TypeScript app while reusing the native runtime. Keep the feedback loop short as you refine your interface.",
       },
       layout: {
         title: "Flexbox and CSS Grid",
-        body: "Flexbox and CSS Grid with familiar style options. Compose layouts in Go or MoonBit and reuse styles across components.",
+        body: "Flexbox and CSS Grid with familiar style options. Compose layouts in Go, MoonBit, or TypeScript and reuse styles across components.",
       },
       components: {
         title: "Components included",
@@ -68,19 +68,19 @@ export const en = {
     },
   },
   code: {
-    title: "Go and MoonBit examples",
-    lead: "Go uses child blocks and composable styles. MoonBit uses child lists and fluent properties and handlers. In both, signals update the bindings that read them while the rest of the tree stays mounted.",
+    title: "Go, MoonBit, and TypeScript examples",
+    lead: "Go uses child blocks and composable styles. MoonBit uses child lists and fluent properties and handlers. TypeScript uses Solid 2 JSX. In all three, signals update the bindings that read them while the rest of the tree stays mounted.",
   },
   swiftUi: {
     title: "Use native SwiftUI in QuickGUI.",
-    lead: "Embed real SwiftUI controls in your Go or MoonBit application on macOS, alongside your QuickGUI components.",
+    lead: "Embed real SwiftUI controls in your Go, MoonBit, or TypeScript application on macOS, alongside your QuickGUI components.",
   },
   quickstart: {
     title: "Quickstart",
     create: "Create and run",
     edit: "Format and build",
     ship: "Sign and package",
-    note: "Use Go 1.23+ or the MoonBit toolchain, plus Bun for the CLI. macOS also needs Xcode Command Line Tools. Signing and notarization use your own Apple developer credentials.",
+    note: "Use Bun 1.4+ with TypeScript and Solid 2, or install Go 1.23+ / MoonBit for those frontends. macOS also needs Xcode Command Line Tools. Signing and notarization use your own Apple developer credentials.",
   },
   platforms: {
     available: "available now",
@@ -88,7 +88,7 @@ export const en = {
   },
   cta: {
     title: "Get started with QuickGUI",
-    body: "Write a Go or MoonBit component and ship a native app with its runtime included.",
+    body: "Write a Go, MoonBit, or TypeScript component and ship a native app with its runtime included.",
     docs: "Read the docs",
     star: "Star on GitHub",
   },
@@ -97,7 +97,7 @@ export const en = {
   },
   benchmarks: {
     title: "Benchmarks",
-    lead: "Idle memory and installed bundle size for QuickGUI Go, QuickGUI MoonBit, Tauri, and Electron, measured on the same Mac. This benchmark uses a small issue tracker with 1,000 issues. Larger apps can show bigger differences in memory and bundle size, depending on their features and dependencies.",
+    lead: "Idle memory and installed bundle size for QuickGUI Go, QuickGUI MoonBit, QuickGUI TypeScript, Tauri, and Electron, measured on the same Mac. Each app runs the same issue tracker with 1,000 issues.",
     memory: "Idle app memory",
     bundle: "Installed bundle",
     measured: "Measured {{date}}",
@@ -108,9 +108,9 @@ export const en = {
     memoryMethod:
       "Memory is the sum of physical footprints for the app and its rendering helpers, including WebKit or Chromium renderer, GPU, and network processes. AutoFill and other macOS services are excluded. CPU and memory must stay stable throughout sampling; screenshots are taken afterward. Values include compressed memory and use decimal MB (1,000,000 bytes), as in Activity Monitor. No forced garbage collection or cache purge.",
     bundleMethod:
-      "Bundle size counts the files shipped inside the .app, including native libraries and frameworks. OS-provided frameworks such as WebKit are excluded. This is installed size, not a compressed download.",
+      "Bundle size counts the files shipped inside the .app, including native libraries and frameworks. QuickGUI TypeScript includes Bun and Solid 2; Electron includes Chromium and Node. OS-provided frameworks such as WebKit are excluded. This is installed size, not a compressed download.",
     scope:
-      "The demo supports search, status filters, pagination, editable notes, and completion actions. Data stays in memory for the session, with no database or network service. These charts measure the loaded app at idle, not interaction throughput. Results vary with your app, machine, and operating system. QuickGUI was built from the current development checkout.",
+      "The demo supports search, status filters, pagination, editable notes, and completion actions. Data stays in memory for the session, with no database or network service. These charts measure the loaded app at idle, not interaction throughput. Results vary with your app, machine, and operating system. QuickGUI results use development checkouts; each result records its exact revision.",
     preview: "Benchmark apps",
     previewAlt: "{{framework}} running the issue tracker benchmark with 1,000 issues",
     raw: "Raw measurements",

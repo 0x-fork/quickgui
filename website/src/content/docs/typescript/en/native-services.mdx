@@ -1,0 +1,19 @@
+## Window lifetime
+
+Create a `Window` with `renderer: createRenderer(...)`. `onClose` and `on("closed", ...)` observe native destruction; `onCloseRequested` can hold a user close request. `close()` completes it. `whenReady()` resolves after the native window is mounted, including hidden windows. Returned snapshots use `bounds`, `viewportSize`, and `scaleFactor`.
+
+## Commands and services
+
+```tsx
+import { app, Window, Clipboard, Dialog, Menu, Shell, Screen } from "@quickgui/native";
+await app.whenReady();
+const displays = await Screen.getAllDisplays();
+const selected = await Dialog.showOpenDialog({ properties: ["openDirectory"] });
+// Menus, dialogs, clipboard, displays, appearance, and window operations use Rust services.
+```
+
+Native result operations return promises. Window mutations declare work immediately and are submitted after native creation. System menus and file dialogs remain native controls.
+
+## Events and file watching
+
+Window events include focus, resize, appearance, ready-to-show, minimize, fullscreen, and close. Application events include ready, reopen, activation, quit, open URLs, and keyboard-layout changes. Use Bun file watching and asynchronous I/O for application data; dispose watchers with their owner window. Quick Git demonstrates cancellation, bounded subprocess output, and per-window stores.

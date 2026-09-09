@@ -1,0 +1,31 @@
+TextField と同じ制御規約を持つ、入力内容を隠すネイティブエディターです。
+
+## インポート
+
+`@quickgui/solid/swift-ui` から `SecureField` をインポートします。
+
+```tsx
+import { Host, SecureField } from "@quickgui/solid/swift-ui";
+```
+
+## 使い方
+
+```tsx
+<Host matchContents={{ vertical: true }} style={{ width: 280 }}>
+  <SecureField
+    value={password()}
+    placeholder="Password"
+    onValueChange={setPassword}
+  />
+</Host>
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `placeholder` | 編集値が空のときに表示するテキストです。 |
+| `onValueChange` | コアが受け入れた値を通知します。 |
+| `onSubmit` | ネイティブフィールドが現在値を送信したときに実行します。 |
+

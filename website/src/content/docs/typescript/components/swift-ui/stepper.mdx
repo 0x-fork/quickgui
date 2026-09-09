@@ -1,0 +1,35 @@
+A controlled native numeric stepper with bounded values.
+
+## Import
+
+Import `Stepper` from `@quickgui/solid/swift-ui`.
+
+```tsx
+import { Host, Stepper } from "@quickgui/solid/swift-ui";
+```
+
+## Usage
+
+```tsx
+<Host matchContents>
+  <Stepper
+    value={copies()}
+    min={1}
+    max={20}
+    label={"Copies: " + copies()}
+    onValueChange={setCopies}
+  />
+</Host>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `value` | Controlled value. The precise value type follows this component’s contract. |
+| `min` | Minimum accepted value. |
+| `max` | Maximum accepted value. |
+| `step` | Increment used by keyboard, pointer, or native control input. |
+| `label` | Visible native SwiftUI control label. |
+| `onValueChange` | Reports the value accepted by the core. |
+

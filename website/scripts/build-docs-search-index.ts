@@ -140,7 +140,7 @@ function normalizeText(value: string): string {
 }
 
 function recordsForPage(page: SearchPage, source: string, locale: Locale): DocsSearchDocument[] {
-  const tree = parser.parse(source) as MarkdownNode
+  const tree = parser.parse({ value: source, path: page.sourcePath }) as MarkdownNode
   const slugger = new GithubSlugger()
   const records: DocsSearchDocument[] = []
   let parentHeading = ''
@@ -196,9 +196,13 @@ async function buildLocale(locale: Locale, frontend: DocsFrontend) {
       // Match the rendered route: the summary table is replaced by the complete API.
       source = source.split(`## ${COMPONENT_DOC_LABELS[locale].keyProps}`)[0]
       const api = getComponentApi(frontend, component.kind, component.slug)
-      source += '\n## API reference\n' + api.sections.map(section =>
+      const content = api.sections.map(section =>
         section.name + ' ' + section.signature + '\n' + section.entries.map(entry => `${entry.name} ${entry.type} ${entry.description}`).join('\n'),
       ).join('\n')
+      // Signatures are literal text, not MDX: generics and object types can contain <>{}.
+      records.push({ id: `${locale}:${page.path}:api-reference`, pageTitle: page.title,
+        section: 'API reference', hierarchy: `${page.title} › API reference`, content: normalizeText(content),
+        keywords: '', url: `${localizedPath(locale, page.path)}#api-reference`, area: page.area })
     }
     records.push(...recordsForPage(page, source, locale))
   }

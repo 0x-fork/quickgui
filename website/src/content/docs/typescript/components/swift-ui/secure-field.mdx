@@ -1,0 +1,31 @@
+The concealed native editor with the same controlled contract as TextField.
+
+## Import
+
+Import `SecureField` from `@quickgui/solid/swift-ui`.
+
+```tsx
+import { Host, SecureField } from "@quickgui/solid/swift-ui";
+```
+
+## Usage
+
+```tsx
+<Host matchContents={{ vertical: true }} style={{ width: 280 }}>
+  <SecureField
+    value={password()}
+    placeholder="Password"
+    onValueChange={setPassword}
+  />
+</Host>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `value` | Controlled value. The precise value type follows this component’s contract. |
+| `placeholder` | Text shown while the editable value is empty. |
+| `onValueChange` | Reports the value accepted by the core. |
+| `onSubmit` | Runs when the native field submits its current value. |
+

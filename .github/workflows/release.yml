@@ -96,6 +96,8 @@ jobs:
       - name: Test JavaScript packages
         run: |
           bun run test:js
+          bun run test:typescript
+          bun scripts/generate-typescript.ts --check
           bun run typecheck:js
       - name: Verify optional native extension bundles
         run: bun scripts/check-extensions.ts

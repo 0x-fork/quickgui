@@ -1,0 +1,36 @@
+線形と円形のアクセサリースタイルに対応した、ネイティブ SwiftUI Gauge です。
+
+## インポート
+
+`@quickgui/solid/swift-ui` から `Gauge` をインポートします。
+
+```tsx
+import { Host, Gauge } from "@quickgui/solid/swift-ui";
+```
+
+## 使い方
+
+```tsx
+<Host matchContents>
+  <Gauge
+    value={storageUsed()}
+    min={0}
+    max={100}
+    label="Storage"
+    currentValueLabel={String(storageUsed()) + "%"}
+    style="accessoryCircularCapacity"
+  />
+</Host>
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `min` | 受け入れる最小値です。 |
+| `max` | 受け入れる最大値です。 |
+| `label` | ネイティブ SwiftUI コントロールに表示するラベルです。 |
+| `currentValueLabel` | 現在のネイティブ進捗または Gauge 値を表す読みやすいラベルです。 |
+| `style` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
+

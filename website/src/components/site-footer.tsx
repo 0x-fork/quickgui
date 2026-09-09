@@ -8,6 +8,7 @@ const LINKS = [
   { label: "GitHub", href: site.links.github, external: true },
   { label: "Go SDK", href: site.links.go, external: true },
   { label: "MoonBit SDK", href: site.links.moonbit, external: true },
+  { label: "TypeScript SDK", href: site.links.typescript, external: true },
 ] as const;
 
 export function SiteFooter({ frontend }: { frontend: DocsFrontend }) {

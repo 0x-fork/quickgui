@@ -1,0 +1,31 @@
+Input と同じ制御値の規約を持つ、複数行テキスト編集プリミティブです。
+
+## インポート
+
+`@quickgui/solid` から `TextArea` をインポートします。
+
+```tsx
+import { TextArea } from "@quickgui/solid";
+```
+
+## 使い方
+
+```tsx
+<TextArea
+  value={notes()}
+  placeholder="Release notes"
+  onInput={(event) => setNotes(event.value ?? "")}
+  style={{ width: 360, height: 140 }}
+/>
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `placeholder` | 編集値が空のときに表示するテキストです。 |
+| `onInput` | ネイティブ編集の入力を通知します。 |
+| `onChange` | 確定したネイティブ値の変更を通知します。 |
+| `style` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
+

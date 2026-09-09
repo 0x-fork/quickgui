@@ -1,0 +1,51 @@
+スクロール可能なビューポートと、呼び出し側でスタイルできるスクロールバー、つまみ、コーナーを組み合わせます。
+
+## インポート
+
+`@quickgui/solid` から `ScrollArea` をインポートします。
+
+```tsx
+import { ScrollArea } from "@quickgui/solid";
+```
+
+## 使い方
+
+```tsx
+<ScrollArea.Root
+  viewportSize={{ width: 320, height: 240 }}
+  contentSize={{ width: 320, height: 1200 }}
+  onScrollStateChange={setScrollState}
+>
+  <ScrollArea.Viewport><ScrollArea.Content><LongList /></ScrollArea.Content></ScrollArea.Viewport>
+  <ScrollArea.Scrollbar orientation="vertical"><ScrollArea.Thumb /></ScrollArea.Scrollbar>
+</ScrollArea.Root>
+```
+
+## 構成
+
+- `ScrollArea.Root`
+- `ScrollArea.Viewport`
+- `ScrollArea.Content`
+- `ScrollArea.Scrollbar`
+- `ScrollArea.Thumb`
+- `ScrollArea.Corner`
+
+```tsx
+<ScrollArea.Root>
+  <ScrollArea.Viewport />
+  <ScrollArea.Content />
+  <ScrollArea.Scrollbar />
+  <ScrollArea.Thumb />
+  <ScrollArea.Corner />
+</ScrollArea.Root>
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `viewportSize` | 宣言されたスクロールビューポートの範囲です。 |
+| `contentSize` | 宣言されたスクロール内容の範囲です。 |
+| `overflowEdgeThreshold` | その端にいるとみなす最大距離です。 |
+| `onScrollStateChange` | 制限適用後のオフセットと、そこから得たオーバーフロー状態を通知します。 |
+

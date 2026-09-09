@@ -1,0 +1,43 @@
+選択可能な 1 項目です。通常は RadioGroup 内で宣言します。
+
+## インポート
+
+`@quickgui/solid` から `Radio` をインポートします。
+
+```tsx
+import { Radio } from "@quickgui/solid";
+```
+
+## 使い方
+
+```tsx
+<Radio.Root
+  value="system"
+  checked={theme() === "system"}
+  onCheckedChange={() => setTheme("system")}
+>
+  <Radio.Indicator />
+  <Text>System</Text>
+</Radio.Root>
+```
+
+## 構成
+
+- `Radio.Root`
+- `Radio.Indicator`
+
+```tsx
+<Radio.Root>
+  <Radio.Indicator />
+</Radio.Root>
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `checked` | 制御されたチェック状態です。 |
+| `onCheckedChange` | コアが受け入れたチェック状態を通知します。 |
+| `disabled` | 操作を無効にし、無効状態を公開します。 |
+

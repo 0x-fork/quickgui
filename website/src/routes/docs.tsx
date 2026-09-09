@@ -1,3 +1,4 @@
+import { frontendLabel } from "../lib/docs";
 import { redirect } from 'react-router'
 import { resolveDocsRoute } from '../lib/docs-routing'
 import type { Route } from './+types/docs'
@@ -67,7 +68,7 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
   const { locale, origin } = loaderData
   const page = localizedDocsPage(source, locale)
   const path = docsPath(page.frontend, page.slug)
-  const title = `${page.title} | QuickGUI ${page.frontend === 'go' ? 'Go' : 'MoonBit'}`
+  const title = `${page.title} | QuickGUI ${frontendLabel(page.frontend)}`
 
   return [
     ...siteMeta(origin, title),

@@ -1,0 +1,48 @@
+Displays a scalar measurement within a known range and semantic low, high, and optimum bands.
+
+## Import
+
+Import `Meter` from `@quickgui/solid`.
+
+```tsx
+import { Meter } from "@quickgui/solid";
+```
+
+## Usage
+
+```tsx
+<Meter.Root value={storage()} min={0} max={100} high={80} optimum={40} format="percent">
+  <Meter.Label><Text>Storage</Text></Meter.Label>
+  <Meter.Track><Meter.Indicator /></Meter.Track>
+  <Meter.Value />
+</Meter.Root>
+```
+
+## Anatomy
+
+- `Meter.Root`
+- `Meter.Track`
+- `Meter.Indicator`
+- `Meter.Label`
+- `Meter.Value`
+
+```tsx
+<Meter.Root>
+  <Meter.Track />
+  <Meter.Indicator />
+  <Meter.Label />
+  <Meter.Value />
+</Meter.Root>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `value` | Controlled value. The precise value type follows this component’s contract. |
+| `min` | Minimum accepted value. |
+| `max` | Maximum accepted value. |
+| `low` | Upper boundary of the low meter range. |
+| `high` | Lower boundary of the high meter range. |
+| `optimum` | Preferred point or range for the meter value. |
+

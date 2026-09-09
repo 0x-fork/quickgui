@@ -1,0 +1,36 @@
+A native segmented picker with value-selection and neutral Xcode-style tab roles.
+
+## Import
+
+Import `SegmentedControl` from `@quickgui/solid/swift-ui`.
+
+```tsx
+import { Host, SegmentedControl } from "@quickgui/solid/swift-ui";
+```
+
+## Usage
+
+```tsx
+<Host matchContents>
+  <SegmentedControl
+    role="tabs"
+    selection={layout()}
+    options={[
+      { value: "list", label: "List" },
+      { value: "grid", label: "Grid" },
+    ]}
+    onSelectionChange={setLayout}
+  />
+</Host>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `selection` | Controlled selection for a table, native picker, or color control. |
+| `options` | Ordered native picker options. |
+| `label` | Visible native SwiftUI control label. |
+| `role` | Accessibility role exposed by the retained node. |
+| `onSelectionChange` | Reports the selected native picker option or color. |
+

@@ -1,0 +1,40 @@
+独立してスタイルできるインジケーターを持つ、二値または不定状態の選択コントロールです。
+
+## インポート
+
+`@quickgui/solid` から `Checkbox` をインポートします。
+
+```tsx
+import { Checkbox } from "@quickgui/solid";
+```
+
+## 使い方
+
+```tsx
+<Checkbox.Root checked={checked()} onCheckedChange={setChecked}>
+  <Checkbox.Indicator><Text>✓</Text></Checkbox.Indicator>
+  <Text>Remember this device</Text>
+</Checkbox.Root>
+```
+
+## 構成
+
+- `Checkbox.Root`
+- `Checkbox.Indicator`
+
+```tsx
+<Checkbox.Root>
+  <Checkbox.Indicator />
+</Checkbox.Root>
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `checked` | 制御されたチェック状態です。 |
+| `defaultChecked` | コンポーネント自身が状態を管理するときの初期チェック状態です。 |
+| `onCheckedChange` | コアが受け入れたチェック状態を通知します。 |
+| `readOnly` | 値の変更を防ぎつつ、コントロールはフォーカス可能なままにします。 |
+| `disabled` | 操作を無効にし、無効状態を公開します。 |
+

@@ -1,0 +1,82 @@
+可完全组合的菜单，支持子菜单、分组、链接、复选项和单选项。
+
+## 导入
+
+从 `@quickgui/solid` 导入 `Menu`。
+
+```tsx
+import { Menu } from "@quickgui/solid";
+```
+
+## 用法
+
+```tsx
+<Menu.Root open={open()} onOpenChange={setOpen}>
+  <Menu.Trigger><Text>File</Text></Menu.Trigger>
+  <Menu.Portal>
+    <Menu.Positioner side="bottom">
+      <Menu.Popup>
+        <Menu.Item value="new"><Text>New</Text></Menu.Item>
+        <Menu.Separator />
+        <Menu.CheckboxItem value="sidebar" checked={sidebar()}><Text>Sidebar</Text></Menu.CheckboxItem>
+      </Menu.Popup>
+    </Menu.Positioner>
+  </Menu.Portal>
+</Menu.Root>
+```
+
+## 结构
+
+- `Menu.Root`
+- `Menu.Trigger`
+- `Menu.Portal`
+- `Menu.Backdrop`
+- `Menu.Positioner`
+- `Menu.Popup`
+- `Menu.Arrow`
+- `Menu.Item`
+- `Menu.LinkItem`
+- `Menu.SubmenuRoot`
+- `Menu.SubmenuTrigger`
+- `Menu.Group`
+- `Menu.GroupLabel`
+- `Menu.RadioGroup`
+- `Menu.RadioItem`
+- `Menu.RadioItemIndicator`
+- `Menu.CheckboxItem`
+- `Menu.CheckboxItemIndicator`
+- `Menu.Separator`
+
+```tsx
+<Menu.Root>
+  <Menu.Trigger />
+  <Menu.Portal />
+  <Menu.Backdrop />
+  <Menu.Positioner />
+  <Menu.Popup />
+  <Menu.Arrow />
+  <Menu.Item />
+  <Menu.LinkItem />
+  <Menu.SubmenuRoot />
+  <Menu.SubmenuTrigger />
+  <Menu.Group />
+  <Menu.GroupLabel />
+  <Menu.RadioGroup />
+  <Menu.RadioItem />
+  <Menu.RadioItemIndicator />
+  <Menu.CheckboxItem />
+  <Menu.CheckboxItemIndicator />
+  <Menu.Separator />
+</Menu.Root>
+```
+
+## 主要属性
+
+| 属性 | 说明 |
+| --- | --- |
+| `open` | 受控的打开状态。 |
+| `defaultOpen` | 组件自行管理打开状态时的初始状态。 |
+| `onOpenChange` | 报告核心做出的打开或关闭决定。 |
+| `orientation` | 水平或垂直布局，以及对应的键盘方向。 |
+| `loopFocus` | 到达当前菜单层级末端时循环键盘高亮。 |
+

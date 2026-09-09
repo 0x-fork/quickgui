@@ -9,8 +9,9 @@ import { DEMO_COMPONENTS } from "../src/lib/component-demos";
 
 const root = resolve(import.meta.dir, "../..");
 test("each frontend reference uses real declarations, examples, and source targets", () => {
+  const sourceLengths = new Map<string, number>();
   for (const component of ALL_COMPONENT_DOCS)
-    for (const frontend of ["go", "moonbit"] as const) {
+    for (const frontend of ["go", "moonbit", "typescript"] as const) {
       const api = getComponentApi(frontend, component.kind, component.slug);
       expect(api.example.length).toBeGreaterThan(0);
       expect(api.sections.length).toBeGreaterThan(0);
@@ -18,11 +19,12 @@ test("each frontend reference uses real declarations, examples, and source targe
         expect(section.signature).not.toContain("undefined");
         for (const entry of [section, ...section.entries]) {
           const [file, line] = entry.source.split("#L");
-          expect(existsSync(resolve(root, file))).toBe(true);
+          if (!sourceLengths.has(file)) {
+            expect(existsSync(resolve(root, file))).toBe(true);
+            sourceLengths.set(file, readFileSync(resolve(root, file), "utf8").split("\n").length);
+          }
           expect(Number(line)).toBeGreaterThan(0);
-          expect(
-            readFileSync(resolve(root, file), "utf8").split("\n").length,
-          ).toBeGreaterThanOrEqual(Number(line));
+          expect(sourceLengths.get(file)!).toBeGreaterThanOrEqual(Number(line));
         }
         expect(new Set(section.entries.map((entry) => entry.name)).size).toBe(
           section.entries.length,

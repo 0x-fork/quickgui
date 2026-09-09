@@ -206,6 +206,7 @@ replaceInlineCargoDependency("tests/downstream_smoke/Cargo.toml", "quickgui");
 
 for (const [relativePath, packageName] of [
   ["packages/native/package.json", "@quickgui/native"],
+  ["packages/solid/package.json", "@quickgui/solid"],
   ["packages/native-terminal/package.json", "@quickgui/native-terminal"],
   ["packages/native-updater/package.json", "@quickgui/native-updater"],
   ["packages/cli/package.json", "@quickgui/cli"],
@@ -241,6 +242,17 @@ edit("packages/cli/templates/moonbit/package.json", (contents) =>
     (_match, prefix, suffix) => `${prefix}${version}${suffix}`,
   ),
 );
+for (const packageName of ["native", "solid", "cli"]) {
+  const path = "packages/cli/templates/typescript/package.json";
+  edit(path, (contents) =>
+    replaceMatches(
+      path,
+      contents,
+      new RegExp(`("@quickgui/${packageName}": "\\^)[^"]+(")`),
+      (_match, prefix, suffix) => `${prefix}${version}${suffix}`,
+    ),
+  );
+}
 edit("moonbit/moon.mod", (contents) =>
   replaceMatches(
     "moonbit/moon.mod",
@@ -274,15 +286,21 @@ edit("packages/cli/templates/native/go.mod", (contents) =>
   ),
 );
 
-for (const extension of ["terminal", "updater"])
-  edit(`go/${extension}/quickgui.extension.json`, (contents) =>
-    replaceMatches(
-      `go/${extension}/quickgui.extension.json`,
-      contents,
-      /("version": ")[^"]+(")/,
-      (_match, prefix, suffix) => `${prefix}${version}${suffix}`,
-    ),
-  );
+for (const extension of ["terminal", "updater"]) {
+  for (const path of [
+    `go/${extension}/quickgui.extension.json`,
+    `packages/native-${extension}/quickgui.extension.json`,
+  ]) {
+    edit(path, (contents) =>
+      replaceMatches(
+        path,
+        contents,
+        /("version": ")[^"]+(")/,
+        (_match, before, after) => `${before}${version}${after}`,
+      ),
+    );
+  }
+}
 
 for (const directory of readdirSync(join(repositoryRoot, "examples"))) {
   const relativePath = `examples/${directory}/go.mod`;
@@ -312,6 +330,7 @@ for (const packageName of [
 
 for (const [workspacePath, packageName] of [
   ["packages/native", "@quickgui/native"],
+  ["packages/solid", "@quickgui/solid"],
   ["packages/native-terminal", "@quickgui/native-terminal"],
   ["packages/native-updater", "@quickgui/native-updater"],
   ["packages/cli", "@quickgui/cli"],

@@ -1,6 +1,6 @@
 # @quickgui/cli
 
-`@quickgui/cli` is a TypeScript/Bun tool for Go and MoonBit QuickGUI applications. It creates projects, watches source, compiles the selected frontend, and packages the executable with matching prebuilt native libraries. Go remains the default and builds with `CGO_ENABLED=0`.
+`@quickgui/cli` supports Go, MoonBit, and TypeScript QuickGUI applications. It creates projects, watches source, compiles the selected frontend, and packages the executable with matching prebuilt native libraries. Go remains the default and builds with `CGO_ENABLED=0`. Use `quickgui init my-app --frontend typescript` for Bun and Solid 2; see the [TypeScript guide](../../docs/typescript.md).
 
 ## Create a project
 

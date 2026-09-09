@@ -1,0 +1,27 @@
+継承されたタイポグラフィ、選択、アクセシビリティを使って Unicode テキストを組版・描画します。
+
+## インポート
+
+`@quickgui/solid` から `Text` をインポートします。
+
+```tsx
+import { Text } from "@quickgui/solid";
+```
+
+## 使い方
+
+```tsx
+<Text style={{ fontSize: 18, fontWeight: 600 }}>
+  Native, retained text
+</Text>
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `style` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
+| `children` | コンポーネント内にマウントする内容です。 |
+| `role` | 保持ノードが公開するアクセシビリティロールです。 |
+| `ref` | 保持されたネイティブノードを受け取ります。 |
+

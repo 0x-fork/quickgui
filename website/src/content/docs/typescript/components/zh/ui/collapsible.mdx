@@ -1,0 +1,41 @@
+通过触发器显示或隐藏单个面板，同时保留无障碍状态。
+
+## 导入
+
+从 `@quickgui/solid` 导入 `Collapsible`。
+
+```tsx
+import { Collapsible } from "@quickgui/solid";
+```
+
+## 用法
+
+```tsx
+<Collapsible.Root open={open()} onOpenChange={setOpen}>
+  <Collapsible.Trigger><Text>Advanced settings</Text></Collapsible.Trigger>
+  <Collapsible.Panel><AdvancedSettings /></Collapsible.Panel>
+</Collapsible.Root>
+```
+
+## 结构
+
+- `Collapsible.Root`
+- `Collapsible.Trigger`
+- `Collapsible.Panel`
+
+```tsx
+<Collapsible.Root>
+  <Collapsible.Trigger />
+  <Collapsible.Panel />
+</Collapsible.Root>
+```
+
+## 主要属性
+
+| 属性 | 说明 |
+| --- | --- |
+| `open` | 受控的打开状态。 |
+| `defaultOpen` | 组件自行管理打开状态时的初始状态。 |
+| `onOpenChange` | 报告核心做出的打开或关闭决定。 |
+| `keepMounted` | 保持非活动内容已挂载，但禁用其显示。 |
+

@@ -1,0 +1,31 @@
+受控的原生 SwiftUI 开关。
+
+## 导入
+
+从 `@quickgui/solid/swift-ui` 导入 `Toggle`。
+
+```tsx
+import { Host, Toggle } from "@quickgui/solid/swift-ui";
+```
+
+## 用法
+
+```tsx
+<Host matchContents>
+  <Toggle
+    label="Notifications"
+    isOn={notifications()}
+    onIsOnChange={setNotifications}
+  />
+</Host>
+```
+
+## 主要属性
+
+| 属性 | 说明 |
+| --- | --- |
+| `isOn` | 受控的 SwiftUI 开关值。 |
+| `label` | 原生 SwiftUI 控件的可见标签。 |
+| `onIsOnChange` | 报告原生 SwiftUI 开关接受的值。 |
+| `modifiers` | 应用于托管控件的有序 SwiftUI View 修饰器。 |
+

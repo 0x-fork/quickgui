@@ -1,0 +1,27 @@
+TypeScript ガイド本文は現在英語です。コンポーネントの API リファレンスには日本語の説明があります。
+
+## ホバーのトランジション
+
+```tsx
+<Button style={{ backgroundColor: "#2563eb", transition: { property: "background-color", duration: 160 }, hover: { backgroundColor: "#1d4ed8" } }}>Hover</Button>
+```
+
+## 状態によるアニメーション
+
+Change a reactive style value from application state. Rust interpolates supported transitions while retaining the node and its interaction state. Do not reconstruct the component on each frame.
+
+## 時間とフレームレート
+
+Transition durations accept supported numbers or duration strings. Set easing and `maxFps` when needed; the frame-rate value is a ceiling while animation is active, not an idle scheduling source.
+
+## 対応するプロパティ
+
+Native transitions cover the documented color, border, radius, opacity, and shadow properties. Transforms are supported as native style declarations. Consult the typed transition property union for interpolation support.
+
+## マウントと視差効果の抑制
+
+Keep an overlay mounted during its native exit transition when its component supports that lifecycle. Respect `reduceMotion` on window configuration and the platform preference instead of imposing a JavaScript animation loop.
+
+## アニメーション画像
+
+`Image` uses native image resources, including animated GIF/WebP sources. The core owns playback deadlines, cache limits, and visibility-based suspension; loading a static image does not request idle frames.

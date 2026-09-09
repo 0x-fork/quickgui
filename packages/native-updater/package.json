@@ -14,14 +14,16 @@
     "lib/*/*.dll",
     "lib/*/*.qgr",
     "lib/*/quickgui-updater-helper*",
-    "README.md"
+    "README.md",
+    "quickgui.extension.json"
   ],
   "os": [
     "darwin"
   ],
   "type": "module",
   "exports": {
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./quickgui.extension.json": "./quickgui.extension.json"
   },
   "publishConfig": {
     "access": "public"

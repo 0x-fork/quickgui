@@ -1,4 +1,4 @@
-/** Application compilation. Both frontends reuse the Rust shared library without relinking it. */
+/** Application compilation. All frontends reuse the Rust shared library without relinking it. */
 import { chmodSync, copyFileSync, constants, existsSync, mkdirSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import type { ResolvedQuickGuiConfig } from "./config.ts";
@@ -9,6 +9,7 @@ import { unpackResources } from "./extension-resources.ts";
 import { discoverExtensions, extensionLibraryName, resolveExtension } from "./extensions.ts";
 import { compileMoonbitApplication, moonbitBuildPlan, moonbitExtensions } from "./moonbit-build.ts";
 import { prepareGoWorkspace } from "./go-build.ts";
+import { compileTypeScriptApplication, typescriptExtensions } from "./typescript-build.ts";
 
 export interface NativeCompileOptions {
   config: ResolvedQuickGuiConfig;
@@ -104,13 +105,17 @@ export function goBuildPlan(options: NativeCompileOptions): {
 export async function compileNativeApplication(options: NativeCompileOptions): Promise<string[]> {
   const { config, target } = options;
   const moonbit = config.frontend === "moonbit";
+  const typescript = config.frontend === "typescript";
   if (moonbit) moonbitBuildPlan(options);
-  else if (!Bun.which("go")) throw new CliError("Go 1.23 or later is required on PATH");
+  else if (!typescript && !Bun.which("go"))
+    throw new CliError("Go 1.23 or later is required on PATH");
   const library = resolveHostLibrary(target, config.projectRoot, config.native.libraryPath);
   const plan = goBuildPlan(options);
-  const extensions = moonbit
-    ? moonbitExtensions(config.native.extensions)
-    : await discoverExtensions(config, plan.argv.at(-1)!, plan.env);
+  const extensions = typescript
+    ? typescriptExtensions(config.projectRoot, config.native.extensions)
+    : moonbit
+      ? moonbitExtensions(config.native.extensions)
+      : await discoverExtensions(config, plan.argv.at(-1)!, plan.env);
   if (
     extensions.some(
       (extension) =>
@@ -124,7 +129,7 @@ export async function compileNativeApplication(options: NativeCompileOptions): P
     const metadata = Buffer.from(
       JSON.stringify(updaterMetadata(config, target, options.mode)),
     ).toString("base64url");
-    if (!moonbit) {
+    if (!moonbit && !typescript) {
       const flagIndex = plan.argv.indexOf("-ldflags") + 1;
       plan.argv[flagIndex] += " -X github.com/egoist/quickgui/go/updater.buildMetadata=" + metadata;
     }
@@ -161,6 +166,10 @@ export async function compileNativeApplication(options: NativeCompileOptions): P
   if (moonbit) {
     const metadata = await compileMoonbitApplication(options, extensions);
     if (targetInfo(target).platform !== "darwin") libraries.push(metadata);
+    return libraries;
+  }
+  if (typescript) {
+    await compileTypeScriptApplication(options, extensions);
     return libraries;
   }
   const overlay = await prepareGoWorkspace(config.projectRoot, [plan.argv.at(-1)!], {

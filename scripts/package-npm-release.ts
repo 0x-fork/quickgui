@@ -23,6 +23,7 @@ const packages = [
   { name: "native", library: "quickgui_host" },
   { name: "native-terminal", library: "quickgui_terminal" },
   { name: "native-updater", library: "quickgui_updater" },
+  { name: "solid", library: undefined },
   { name: "cli", library: undefined },
 ];
 const archives: Record<string, string> = {};
@@ -72,6 +73,9 @@ for (const pkg of packages) {
   if (pkg.name === "cli") {
     for (const required of [
       "src/extensions.ts",
+      "src/typescript-build.ts",
+      "src/typescript-compiler.ts",
+      "templates/typescript/app.tsx",
       "src/extension-resources.ts",
       "src/init-extension.ts",
       "templates/extension/common/go.mod",

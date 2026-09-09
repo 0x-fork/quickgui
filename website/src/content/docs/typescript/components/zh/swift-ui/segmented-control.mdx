@@ -1,0 +1,36 @@
+原生分段选择器，支持值选择和中性的 Xcode 风格标签页角色。
+
+## 导入
+
+从 `@quickgui/solid/swift-ui` 导入 `SegmentedControl`。
+
+```tsx
+import { Host, SegmentedControl } from "@quickgui/solid/swift-ui";
+```
+
+## 用法
+
+```tsx
+<Host matchContents>
+  <SegmentedControl
+    role="tabs"
+    selection={layout()}
+    options={[
+      { value: "list", label: "List" },
+      { value: "grid", label: "Grid" },
+    ]}
+    onSelectionChange={setLayout}
+  />
+</Host>
+```
+
+## 主要属性
+
+| 属性 | 说明 |
+| --- | --- |
+| `selection` | 表格、原生选择器或颜色控件的受控选中值。 |
+| `options` | 有序的原生选择器选项。 |
+| `label` | 原生 SwiftUI 控件的可见标签。 |
+| `role` | 保留节点暴露的无障碍角色。 |
+| `onSelectionChange` | 报告选中的原生选择器选项或颜色。 |
+

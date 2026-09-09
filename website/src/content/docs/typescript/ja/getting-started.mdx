@@ -1,0 +1,51 @@
+TypeScript ガイド本文は現在英語です。コンポーネントの API リファレンスには日本語の説明があります。
+
+## 動作要件
+
+Use Bun 1.4 or later, TypeScript 7, and Xcode Command Line Tools on macOS. Solid, its universal renderer, and its compiler are pinned to 2.0.0-rc.7. QuickGUI uses the Rust renderer through Bun FFI; it does not embed a webview.
+
+## プロジェクトを作成
+
+```sh
+bunx @quickgui/cli init my-app --frontend typescript
+cd my-app
+bun run dev
+```
+
+In a checkout, install workspace dependencies and stage the shared library once with `bun run build:native`. Ordinary application edits compile TypeScript and reuse that library.
+
+## 最初のウィンドウ
+
+```tsx
+import { app, Window } from "@quickgui/native";
+import { Button, Text, View, createRenderer } from "@quickgui/solid";
+import { createSignal } from "solid-js";
+function Counter() {
+  const [count, setCount] = createSignal(0);
+  return <View padding={24} display="flex" flexDirection="column" gap={12}>
+    <Text>Count: {count()}</Text>
+    <Button onClick={() => setCount(count() + 1)}>Increment</Button>
+  </View>;
+}
+function openWindow() {
+  new Window({ title: "Counter", width: 720, height: 480, renderer: createRenderer(Counter) });
+}
+app.on("reopen", ({ hasVisibleWindows }) => { if (!hasVisibleWindows) openWindow(); });
+await app.whenReady();
+openWindow();
+```
+
+## 実行とビルド
+
+```sh
+bun run check
+bun run test
+bun run dev
+bun run build
+```
+
+The CLI owns the process main thread and native event loop. Application code runs in a Bun worker. Production builds bundle the executable and native libraries and create an app bundle and DMG on macOS.
+
+## 次のステップ
+
+Explore the [component reference](/docs/typescript/components), [native services](/docs/typescript/native-services), and [SwiftUI controls](/docs/typescript/swift-ui). The checkout includes `examples/components-typescript` and `examples/quick-git-typescript` as complete applications.

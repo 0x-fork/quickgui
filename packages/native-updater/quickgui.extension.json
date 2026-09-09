@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "name": "updater",
+  "abi": 1,
+  "package": "@quickgui/native-updater",
+  "version": "0.1.3",
+  "library": "quickgui_updater",
+  "resources": {
+    "darwin": [
+      "Sparkle.framework.qgr"
+    ],
+    "linux": [
+      "quickgui-updater-helper"
+    ],
+    "windows": [
+      "quickgui-updater-helper.exe"
+    ]
+  }
+}

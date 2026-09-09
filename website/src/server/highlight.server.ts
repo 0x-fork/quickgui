@@ -10,6 +10,7 @@ async function highlightAll(): Promise<HighlightedSnippets> {
     go,
     moonbit,
     bash,
+    tsx,
     githubLight,
     githubDark,
   ] = await Promise.all([
@@ -19,13 +20,14 @@ async function highlightAll(): Promise<HighlightedSnippets> {
     import("shiki/langs/go.mjs"),
     import("shiki/langs/moonbit.mjs"),
     import("shiki/langs/bash.mjs"),
+    import("shiki/langs/tsx.mjs"),
     import("shiki/themes/github-light.mjs"),
     import("shiki/themes/github-dark.mjs"),
   ]);
 
   const highlighter = await createHighlighterCore({
     themes: [githubLight.default, githubDark.default],
-    langs: [go.default, moonbit.default, bash.default],
+    langs: [go.default, moonbit.default, bash.default, tsx.default],
     engine: createJavaScriptRegexEngine({ forgiving: true }),
   });
 

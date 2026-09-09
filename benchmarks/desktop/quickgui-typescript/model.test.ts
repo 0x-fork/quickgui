@@ -1,0 +1,41 @@
+import { expect, test } from "bun:test";
+import { createRoot, flush } from "solid-js";
+import { createIssues } from "../workload.ts";
+import { createTracker } from "./model.ts";
+
+test("Orbit uses the shared workload, pages, filters, search, and per-issue session edits", () => {
+  createRoot((dispose) => {
+    const model = createTracker(createIssues());
+    expect(model.issues.length).toBe(1000);
+    expect(model.visible().length).toBe(100);
+    expect(model.completed()).toBe(200);
+    expect(model.current().id).toBe("APP-1001");
+    model.next();
+    flush();
+    expect(model.visible()[0]).toBe(100);
+    model.search("APP-1001");
+    flush();
+    expect(model.visible()).toEqual([0]);
+    expect(model.page()).toBe(0);
+    model.current().setNotes("Saved locally");
+    model.complete();
+    flush();
+    expect(model.completed()).toBe(201);
+    model.setFilter("Open");
+    flush();
+    expect(model.visible()).toEqual([]);
+    model.setFilter("Completed");
+    flush();
+    expect(model.visible()).toEqual([0]);
+    model.setSelected(1);
+    flush();
+    expect(model.current().notes()).not.toBe("Saved locally");
+    model.setSelected(0);
+    flush();
+    expect(model.current().notes()).toBe("Saved locally");
+    model.complete();
+    flush();
+    expect(model.completed()).toBe(200);
+    dispose();
+  });
+});

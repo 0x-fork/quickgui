@@ -1,0 +1,19 @@
+## Popover
+
+Compose `Popover.Root`, trigger, portal, positioner, popup, arrow, title, description, and close parts. Rust owns placement, collisions, focus, outside interaction, and dismissal. Use controlled `open` or the supported default-open option.
+
+## Dialog
+
+`Dialog` and `AlertDialog` add modal semantics and coordinated title, description, backdrop, viewport, and close parts. Restore focus through the native lifecycle; do not install a second JavaScript focus trap.
+
+## System popover
+
+`SystemPopover` owns a separate native panel anchored to a mounted node. It can cross the parent’s content bounds and is disposed with its owner. The content receives its own renderer root; an anchor must belong to an open window.
+
+## Native dialogs
+
+```tsx
+import { Dialog } from "@quickgui/native";
+const choice = await Dialog.showAlertDialog({ message: "Save changes?", buttons: [{ label: "Save" }, { label: "Cancel", role: "cancel" }] });
+const result = await Dialog.showOpenDialog({ properties: ["openFile", "multiSelections"] });
+```

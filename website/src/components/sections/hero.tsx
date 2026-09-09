@@ -1,8 +1,7 @@
 import { useTranslation } from "react-i18next";
-import { Button } from "@/components/ui/button";
 import { CopyButton } from "../copy-button";
-import { site } from "../../lib/site";
 import { FrontendPicker } from "../frontend-picker";
+import { FrontendDocsLinks } from "../frontend-docs-links";
 import type { DocsFrontend } from "../../lib/docs";
 
 export function Hero({
@@ -15,7 +14,7 @@ export function Hero({
   const { t, i18n } = useTranslation();
   const prefix = i18n.language === "en" ? "" : `/${i18n.language}`;
   const docsHref = `${prefix}/docs/${frontend}`;
-  const initCommand = `bunx @quickgui/cli init my-app${frontend === "moonbit" ? " --frontend moonbit" : ""}`;
+  const initCommand = `bunx @quickgui/cli init my-app${frontend === "go" ? "" : ` --frontend ${frontend}`}`;
 
   return (
     <section className="border-b border-border">
@@ -39,23 +38,7 @@ export function Hero({
         </p>
 
         <div className="animate-fade-up mt-10 flex flex-wrap items-center gap-3 [animation-delay:180ms]">
-          <Button asChild variant="outline" className="h-10 gap-2 px-5 text-sm">
-            <a href={`${prefix}${site.links.docs}`}>
-              <span className="i-simple-icons-go size-6 text-[#00add8]" aria-hidden />
-              {t("common.docsFor", { language: "Go" })}
-              <span className="i-lucide-arrow-right size-4" aria-hidden />
-            </a>
-          </Button>
-          <Button asChild variant="outline" className="h-10 gap-2 px-5 text-sm">
-            <a href={`${prefix}/docs/moonbit`}>
-              <span
-                className="size-5 shrink-0 bg-[#7c3aed] [mask:url(/icons/moonbit.svg)_center/contain_no-repeat]"
-                aria-hidden
-              />
-              {t("common.docsFor", { language: "MoonBit" })}
-              <span className="i-lucide-arrow-right size-4" aria-hidden />
-            </a>
-          </Button>
+          <FrontendDocsLinks />
         </div>
         <div className="animate-fade-up mt-6 flex flex-wrap items-center gap-3 [animation-delay:180ms]">
           <FrontendPicker value={frontend} onChange={onFrontendChange} />

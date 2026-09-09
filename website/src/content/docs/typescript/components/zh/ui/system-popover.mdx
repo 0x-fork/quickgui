@@ -1,0 +1,45 @@
+在独立的原生子窗口中显示 QuickGUI 内容，可超出所属窗口边界。
+
+## 导入
+
+从 `@quickgui/solid` 导入 `SystemPopover`。
+
+```tsx
+import { SystemPopover } from "@quickgui/solid";
+```
+
+## 用法
+
+```tsx
+<SystemPopover.Root open={open()} onOpenChange={setOpen}>
+  <SystemPopover.Trigger><Text>Open native popover</Text></SystemPopover.Trigger>
+  <SystemPopover.Content width={320} height={180} placement="bottom">
+    <SettingsPanel />
+  </SystemPopover.Content>
+</SystemPopover.Root>
+```
+
+## 结构
+
+- `SystemPopover.Root`
+- `SystemPopover.Trigger`
+- `SystemPopover.Content`
+
+```tsx
+<SystemPopover.Root>
+  <SystemPopover.Trigger />
+  <SystemPopover.Content />
+</SystemPopover.Root>
+```
+
+## 主要属性
+
+| 属性 | 说明 |
+| --- | --- |
+| `open` | 受控的打开状态。 |
+| `defaultOpen` | 组件自行管理打开状态时的初始状态。 |
+| `onOpenChange` | 报告核心做出的打开或关闭决定。 |
+| `width` | 声明的逻辑宽度。 |
+| `height` | 声明的逻辑高度。 |
+| `placement` | 请求的原生子窗口放置位置。 |
+

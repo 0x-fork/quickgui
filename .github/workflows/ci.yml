@@ -61,6 +61,8 @@ jobs:
           bun-version: 1.4.0
       - run: bun install --frozen-lockfile
       - run: bun run test:js
+      - run: bun run test:typescript
+      - run: bun scripts/generate-typescript.ts --check
       - run: bun run typecheck:js
       - run: bash scripts/check-go.sh
       - name: Compile CGO-free SDK for other platforms

@@ -1,0 +1,53 @@
+虚拟化表格集合，包含表头、行和单元格部件。
+
+## 导入
+
+从 `@quickgui/solid` 导入 `Table`。
+
+```tsx
+import { Table } from "@quickgui/solid";
+```
+
+## 用法
+
+```tsx
+<Table.Root
+  columns={[{ id: "name", label: "Name" }, { id: "status", label: "Status" }]}
+  rowCount={rows.length}
+  onVisibleRangeChange={setVisibleRange}
+>
+  <Table.Header column="name"><Text>Name</Text></Table.Header>
+  <For each={visibleRows()}>{(row) =>
+    <Table.Row index={row.index}>
+      <Table.Cell column="name"><Text>{row.name}</Text></Table.Cell>
+      <Table.Cell column="status"><Text>{row.status}</Text></Table.Cell>
+    </Table.Row>
+  }</For>
+</Table.Root>
+```
+
+## 结构
+
+- `Table.Root`
+- `Table.Header`
+- `Table.Row`
+- `Table.Cell`
+
+```tsx
+<Table.Root>
+  <Table.Header />
+  <Table.Row />
+  <Table.Cell />
+</Table.Root>
+```
+
+## 主要属性
+
+| 属性 | 说明 |
+| --- | --- |
+| `columns` | 虚拟表格的列声明。 |
+| `rowCount` | 逻辑总行数。 |
+| `rowHeight` | 每个虚拟化行的逻辑高度。 |
+| `selectionMode` | 允许表格单选或多选。 |
+| `selection` | 表格、原生选择器或颜色控件的受控选中值。 |
+

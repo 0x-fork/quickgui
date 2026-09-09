@@ -6,7 +6,7 @@ import { OG_LOCALES, SUPPORTED_LOCALES, resolveLocale, type Locale } from '../i1
 import { componentDocsPath, findComponentDoc, type ComponentDocKind } from '../lib/component-docs'
 import { localizedComponentDescription, localizedComponentOutline } from '../lib/docs-locales'
 import { componentMdx } from '../lib/docs-mdx'
-import { isDocsFrontend } from '../lib/docs'
+import { isDocsFrontend, frontendLabel } from '../lib/docs'
 import { getComponentApi } from '../lib/component-api.server'
 import { getDemoSource } from '../lib/demo-source.server'
 import { ComponentApiReference } from '../components/docs/component-api-reference'
@@ -52,7 +52,7 @@ export const meta: Route.MetaFunction = ({ loaderData }) => {
 
   const { locale, origin } = loaderData
   const path = componentDocsPath(component, loaderData.frontend)
-  const title = `${component.name} | QuickGUI ${loaderData.frontend === 'go' ? 'Go' : 'MoonBit'}`
+  const title = `${component.name} | QuickGUI ${frontendLabel(loaderData.frontend)}`
   const description = localizedComponentDescription(component, locale)
 
   return [

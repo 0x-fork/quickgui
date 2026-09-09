@@ -1,0 +1,63 @@
+The confirmation-focused dialog variant with stricter backdrop-dismissal defaults.
+
+## Import
+
+Import `AlertDialog` from `@quickgui/solid`.
+
+```tsx
+import { AlertDialog } from "@quickgui/solid";
+```
+
+## Usage
+
+```tsx
+<AlertDialog.Root open={open()} onOpenChange={setOpen}>
+  <AlertDialog.Trigger><Text>Delete project</Text></AlertDialog.Trigger>
+  <AlertDialog.Portal>
+    <AlertDialog.Backdrop />
+    <AlertDialog.Viewport>
+      <AlertDialog.Popup>
+        <AlertDialog.Title><Text>Delete this project?</Text></AlertDialog.Title>
+        <AlertDialog.Description><Text>This cannot be undone.</Text></AlertDialog.Description>
+        <AlertDialog.Close><Text>Cancel</Text></AlertDialog.Close>
+      </AlertDialog.Popup>
+    </AlertDialog.Viewport>
+  </AlertDialog.Portal>
+</AlertDialog.Root>
+```
+
+## Anatomy
+
+- `AlertDialog.Root`
+- `AlertDialog.Trigger`
+- `AlertDialog.Portal`
+- `AlertDialog.Backdrop`
+- `AlertDialog.Viewport`
+- `AlertDialog.Popup`
+- `AlertDialog.Title`
+- `AlertDialog.Description`
+- `AlertDialog.Close`
+
+```tsx
+<AlertDialog.Root>
+  <AlertDialog.Trigger />
+  <AlertDialog.Portal />
+  <AlertDialog.Backdrop />
+  <AlertDialog.Viewport />
+  <AlertDialog.Popup />
+  <AlertDialog.Title />
+  <AlertDialog.Description />
+  <AlertDialog.Close />
+</AlertDialog.Root>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `open` | Controlled open state. |
+| `defaultOpen` | Initial state when the component owns whether it is open. |
+| `onOpenChange` | Reports an open or close decision from the core. |
+| `dismissOnEscape` | Allows Escape to dismiss the surface. |
+| `exitDuration` | Keeps closing content mounted for the exact exit transition duration. |
+

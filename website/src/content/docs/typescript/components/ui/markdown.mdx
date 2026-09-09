@@ -1,0 +1,25 @@
+Renders retained Markdown, including an incremental mode for streaming content.
+
+## Import
+
+Import `Markdown` from `@quickgui/solid`.
+
+```tsx
+import { Markdown } from "@quickgui/solid";
+```
+
+## Usage
+
+```tsx
+<Markdown content={message()} streaming={isStreaming()} />
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `content` | Markdown source to shape and paint. |
+| `source` | Filesystem path, data URL, SVG document, or shader source expected by the component. |
+| `streaming` | Uses incremental Markdown reconciliation for appended content. |
+| `style` | QuickGUI layout, paint, typography, and interaction-state styles. |
+

@@ -1,0 +1,63 @@
+A modal or focus-trapping sheet with snap points and core-owned swipe dismissal.
+
+## Import
+
+Import `Drawer` from `@quickgui/solid`.
+
+```tsx
+import { Drawer } from "@quickgui/solid";
+```
+
+## Usage
+
+```tsx
+<Drawer.Root open={open()} snapPoints={[0.4, 0.9]} onOpenChange={setOpen}>
+  <Drawer.Trigger><Text>Open drawer</Text></Drawer.Trigger>
+  <Drawer.Portal>
+    <Drawer.Backdrop />
+    <Drawer.Viewport>
+      <Drawer.Popup><Drawer.SwipeArea /><Drawer.Content><Settings /></Drawer.Content></Drawer.Popup>
+    </Drawer.Viewport>
+  </Drawer.Portal>
+</Drawer.Root>
+```
+
+## Anatomy
+
+- `Drawer.Root`
+- `Drawer.Trigger`
+- `Drawer.Portal`
+- `Drawer.Backdrop`
+- `Drawer.Viewport`
+- `Drawer.Popup`
+- `Drawer.Content`
+- `Drawer.Title`
+- `Drawer.Description`
+- `Drawer.Close`
+- `Drawer.SwipeArea`
+
+```tsx
+<Drawer.Root>
+  <Drawer.Trigger />
+  <Drawer.Portal />
+  <Drawer.Backdrop />
+  <Drawer.Viewport />
+  <Drawer.Popup />
+  <Drawer.Content />
+  <Drawer.Title />
+  <Drawer.Description />
+  <Drawer.Close />
+  <Drawer.SwipeArea />
+</Drawer.Root>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `open` | Controlled open state. |
+| `defaultOpen` | Initial state when the component owns whether it is open. |
+| `onOpenChange` | Reports an open or close decision from the core. |
+| `snapPoints` | Allowed drawer extents, expressed as viewport fractions or pixels. |
+| `swipeDirection` | Edge toward which a swipe dismisses or moves the surface. |
+

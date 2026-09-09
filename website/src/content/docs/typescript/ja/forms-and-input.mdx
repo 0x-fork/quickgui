@@ -1,0 +1,25 @@
+TypeScript ガイド本文は現在英語です。コンポーネントの API リファレンスには日本語の説明があります。
+
+## テキスト入力
+
+```tsx
+const [value, setValue] = createSignal("");
+<Input value={value()} onInput={event => setValue(event.value ?? "")} placeholder="Name" />
+<TextArea value={notes()} onInput={event => setNotes(event.value ?? "")} />
+```
+
+## フィールド
+
+`Field`, `Fieldset`, labels, descriptions, controls, and error parts declare accessible relationships and validation. Field validity, touched/dirty state, validation triggers, and debounce deadlines are coordinated by Rust.
+
+## 選択コントロール
+
+Compose `Checkbox`, `CheckboxGroup`, `RadioGroup`, `Radio`, and `Switch` with their indicators and labels. Controlled state is updated through each root’s change callback; disabled/read-only state belongs to the native control.
+
+## Select
+
+`Select`, `Combobox`, and `Autocomplete` declare options ahead of native filtering and keyboard navigation. Their state hooks expose selection, query, highlight, and chips for custom parts. Keep option values stable.
+
+## イベント
+
+Input events carry text in `event.value`. Structured key, pointer, gesture, drop, component-change, and commit payloads have dedicated decoder helpers. Use declared handlers so the core knows which events must cross the FFI boundary.

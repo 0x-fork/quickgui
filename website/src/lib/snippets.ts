@@ -1,4 +1,48 @@
 export const snippets = {
+  typescriptSwiftUi: {
+    lang: "tsx",
+    code: `import { Button, Host } from "@quickgui/solid/swift-ui";
+import { buttonStyle } from "@quickgui/solid/swift-ui/modifiers";
+
+function SaveButton() {
+  return (
+    <Host matchContents>
+      <Button
+        label="Save changes"
+        systemImage="checkmark"
+        modifiers={[buttonStyle("glass")]}
+      />
+    </Host>
+  );
+}
+`,
+  },
+  typescriptCounter: {
+    lang: "tsx",
+    code: `function Counter() {
+  const [count, setCount] = createSignal(0);
+  return (
+    <View width="100%" height="100%"
+      display="flex" flexDirection="column"
+      alignItems="center" justifyContent="center"
+      gap={20} backgroundColor="#090d16"
+      color="#e2e8f0">
+      <Text>Count: {count()}</Text>
+      <Button padding={12} borderRadius={8}
+        backgroundColor="#2563eb"
+        onClick={() => setCount(count() + 1)}>
+        Increment
+      </Button>
+    </View>
+  );
+}
+`,
+  },
+  typescriptCliInit: {
+    lang: "bash",
+    code: "bunx @quickgui/cli init my-app --frontend typescript\ncd my-app\nbun run dev",
+  },
+  typescriptCliCheck: { lang: "bash", code: "bun run check\nbun run test\nbun run fmt" },
   counter: {
     lang: "go",
     code: `func Counter() *ui.Element {

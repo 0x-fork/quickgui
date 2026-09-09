@@ -1,0 +1,63 @@
+ポインターとキーボード操作をコアが管理する、単一または複数つまみの範囲入力です。
+
+## インポート
+
+`@quickgui/solid` から `Slider` をインポートします。
+
+```tsx
+import { Slider } from "@quickgui/solid";
+```
+
+## 使い方
+
+```tsx
+<Slider.Root
+  value={[volume()]}
+  min={0}
+  max={100}
+  step={1}
+  onValueChange={(values) => setVolume(values[0] ?? 0)}
+>
+  <Slider.Label><Text>Volume</Text></Slider.Label>
+  <Slider.Control>
+    <Slider.Track><Slider.Indicator /></Slider.Track>
+    <Slider.Thumb index={0} />
+  </Slider.Control>
+  <Slider.Value />
+</Slider.Root>
+```
+
+## 構成
+
+- `Slider.Root`
+- `Slider.Label`
+- `Slider.Value`
+- `Slider.Control`
+- `Slider.Track`
+- `Slider.Range`
+- `Slider.Indicator`
+- `Slider.Thumb`
+
+```tsx
+<Slider.Root>
+  <Slider.Label />
+  <Slider.Value />
+  <Slider.Control />
+  <Slider.Track />
+  <Slider.Range />
+  <Slider.Indicator />
+  <Slider.Thumb />
+</Slider.Root>
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `defaultValue` | コンポーネント自身が状態を管理するときの初期値です。 |
+| `min` | 受け入れる最小値です。 |
+| `max` | 受け入れる最大値です。 |
+| `step` | キーボード、ポインター、またはネイティブコントロール入力で使う増分です。 |
+| `onValueChange` | コアが受け入れた値を通知します。 |
+

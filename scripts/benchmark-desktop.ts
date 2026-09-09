@@ -81,6 +81,7 @@ function bytesInBundle(path: string, inodes = new Set<string>()): number {
 async function build(): Promise<App[]> {
   const dataset = JSON.stringify(createIssues(), null, 2);
   writeFileSync(join(fixtures, "quickgui-go/issues.generated.json"), dataset);
+  writeFileSync(join(fixtures, "quickgui-typescript/issues.generated.json"), dataset);
   writeFileSync(
     join(fixtures, "quickgui-moonbit/main/data_generated.mbt"),
     `// Generated from benchmarks/desktop/workload.ts.\nlet issues_json : String =\n${dataset
@@ -103,7 +104,7 @@ async function build(): Promise<App[]> {
   const quickguiVersion = JSON.parse(
     readFileSync(join(root, "packages/cli/package.json"), "utf8"),
   ).version;
-  for (const frontend of ["go", "moonbit"] as const) {
+  for (const frontend of ["go", "moonbit", "typescript"] as const) {
     console.log(`[benchmark] Building QuickGUI ${frontend} (release)`);
     const project = join(fixtures, `quickgui-${frontend}`);
     if (frontend === "go") await command(["go", "mod", "tidy"], project);
@@ -114,7 +115,7 @@ async function build(): Promise<App[]> {
     });
     apps.push({
       id: `quickgui-${frontend}`,
-      name: `QuickGUI ${frontend === "go" ? "Go" : "MoonBit"}`,
+      name: `QuickGUI ${frontend === "go" ? "Go" : frontend === "moonbit" ? "MoonBit" : "TypeScript"}`,
       version: quickguiVersion,
       appPath: result.artifactPath,
       executablePath: result.executablePath,
@@ -245,6 +246,8 @@ async function measure(apps: App[]) {
     moonbit: await command(["moon", "version", "--all"]),
     rust: await command(["rustc", "--version"]),
     bun: Bun.version,
+    solid: JSON.parse(readFileSync(join(fixtures, "quickgui-typescript/package.json"), "utf8"))
+      .dependencies["solid-js"],
     quickguiRevision: await command(["git", "rev-parse", "HEAD"]),
     quickguiWorkingTreeDirty: !!(await command(["git", "status", "--porcelain"])),
   };
@@ -419,6 +422,8 @@ async function measure(apps: App[]) {
         id: app.id,
         name: app.name,
         version: app.version,
+        measuredAt: new Date().toISOString(),
+        toolchain,
         bundleBytes: bytesInBundle(app.appPath),
         executableSha256: createHash("sha256")
           .update(readFileSync(app.executablePath))
@@ -454,7 +459,7 @@ async function measure(apps: App[]) {
       workload:
         "A 1100 × 720 issue tracker with 1,000 identical records, three sidebar filters, search, 100 retained rows per page, pagination, issue details, editable notes, and completion actions. Idle on the first page with the first issue selected. Edits stay in memory for the session; no network or database service.",
       build:
-        "Production builds; no optional plugins. Go uses the CLI release build; MoonBit uses its C release backend. Tauri uses the default Cargo release profile; Electron is packaged with ASAR.",
+        "Production builds; no optional plugins. Go uses the CLI release build; MoonBit uses its C release backend; TypeScript embeds Bun and a Solid 2 worker with the same native library. Tauri uses the default Cargo release profile; Electron is packaged with ASAR.",
       memory:
         "Sum of proc_pid_rusage physical footprints for the main app, bundled helper executables, and coalition-associated WebKit WebContent/GPU/Networking processes. AutoFill/SafariPlatformSupport and other macOS services are recorded but excluded. Includes compressed memory; this is not JavaScript heap size or RSS. Charts use decimal MB (1,000,000 bytes), as in Activity Monitor.",
       bundle:
@@ -514,5 +519,17 @@ if (import.meta.main) {
   const apps: App[] = process.argv.includes("--measure-only")
     ? JSON.parse(readFileSync(manifestPath, "utf8"))
     : await build();
+  for (const id of [
+    "quickgui-go",
+    "quickgui-moonbit",
+    "quickgui-typescript",
+    "tauri",
+    "electron",
+  ]) {
+    if (!apps.some((app) => app.id === id))
+      throw new Error(
+        `Benchmark manifest is missing ${id}; rebuild all fixtures before measuring or publishing`,
+      );
+  }
   if (!process.argv.includes("--build-only")) await measure(apps);
 }

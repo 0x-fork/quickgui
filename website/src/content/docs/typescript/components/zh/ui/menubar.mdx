@@ -1,0 +1,40 @@
+管理窗口内的水平菜单栏及其菜单项。
+
+## 导入
+
+从 `@quickgui/solid` 导入 `Menubar`。
+
+```tsx
+import { Menubar } from "@quickgui/solid";
+```
+
+## 用法
+
+```tsx
+<Menubar.Root count={2} open={openMenu()} onOpenChange={setOpenMenu}>
+  <Menubar.Item itemIndex={0}><FileMenu /></Menubar.Item>
+  <Menubar.Item itemIndex={1}><EditMenu /></Menubar.Item>
+</Menubar.Root>
+```
+
+## 结构
+
+- `Menubar.Root`
+- `Menubar.Item`
+
+```tsx
+<Menubar.Root>
+  <Menubar.Item />
+</Menubar.Root>
+```
+
+## 主要属性
+
+| 属性 | 说明 |
+| --- | --- |
+| `count` | 已声明的菜单栏项目数。 |
+| `open` | 受控的打开状态。 |
+| `defaultOpen` | 组件自行管理打开状态时的初始状态。 |
+| `onOpenChange` | 报告核心做出的打开或关闭决定。 |
+| `onActiveChange` | 报告当前持有移动焦点状态的项目。 |
+

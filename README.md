@@ -1,6 +1,6 @@
 # QuickGUI
 
-QuickGUI is a damage-driven, GPU-accelerated GUI framework for Go, MoonBit, and Rust desktop applications. It combines a GPUI-style fluent view API, Taffy Flexbox, CSS Grid and parent-size container queries, WGPU rendering, retained Unicode text, native accessibility, and bounded virtual scrolling.
+QuickGUI is a damage-driven, GPU-accelerated GUI framework for Go, MoonBit, TypeScript, and Rust desktop applications. It combines fluent native views, Solid 2 JSX for TypeScript, Taffy Flexbox, CSS Grid and parent-size container queries, WGPU rendering, retained Unicode text, native accessibility, and bounded virtual scrolling.
 
 The current focus is production-quality macOS behavior with low idle CPU and bounded memory. Windows and Linux compile through Winit/WGPU but still need native runtime and visual acceptance.
 
@@ -59,6 +59,16 @@ let (count, set_count) = @reactive.create_signal(0)
 Run `bun packages/cli/src/cli.ts dev --project examples/moonbit-counter` from this checkout. `quickgui init my-app --frontend moonbit` creates a MoonBit project; the default remains Go. Native application edits reuse the shared libraries. See the guide for the current API coverage and platform validation limits.
 
 The [MoonBit components gallery](examples/components-moonbit/README.md) includes all 43 demos from the Go gallery, including pickers, native menus, dialogs, animated controls, virtual tables, and lazy trees. Run `bun --cwd examples/components-moonbit dev`.
+
+## TypeScript with Bun and Solid 2
+
+The [TypeScript frontend](docs/typescript.md) uses Solid 2 JSX and `bun:ffi` with the same Rust shared library. Bun's main thread runs the native loop; a worker in the same process runs Solid and application I/O.
+
+```sh
+bun packages/cli/src/cli.ts dev --project examples/counter-typescript
+```
+
+Create a project with `quickgui init my-app --frontend typescript`. The [counter example](examples/counter-typescript) includes reactive text, input, conditional content, and native window lifecycle handling.
 
 ## View API
 
@@ -121,6 +131,7 @@ Start at the [documentation index](docs/README.md).
 
 - [View API and layout](docs/view-api.md)
 - [Go components and fine-grained reactivity](docs/go.md)
+- [TypeScript with Bun and Solid 2](docs/typescript.md)
 - [Project CLI and application packaging](docs/cli.md)
 - [Go dependencies and native libraries](docs/native-modules.md)
 - [Windows and shared state](docs/windows.md)
@@ -254,7 +265,7 @@ bun --cwd examples/quick-git-moonbit dev
 
 The TypeScript CLI compiles Go with `CGO_ENABLED=0` and bundles the reusable Rust shared library
 beside the executable. The application loads that library through purego in the same process.
-Bun runs the development tools; the application contains no Bun runtime.
+Bun runs the development tools for Go and MoonBit. TypeScript applications embed Bun and their Solid worker.
 Rust framework examples remain available directly through Cargo:
 
 ```console

@@ -1,0 +1,33 @@
+## Reactive state
+
+Solid components construct once. Read signals directly in JSX to bind only the affected property or child region. A plain read in setup is a snapshot; use an accessor when the value must remain reactive.
+
+```tsx
+const [count, setCount] = createSignal(0);
+<Text>Count: {count()}</Text>
+<Button onClick={() => setCount(count() + 1)}>Increment</Button>
+```
+
+## Derived state
+
+Use `createMemo` for derived state shared by multiple bindings. Keep derivations pure; perform writes from events or effects.
+
+```tsx
+const doubled = createMemo(() => count() * 2);
+<Text>{doubled()}</Text>
+```
+
+## Effects and cleanup
+
+Solid 2 effects separate dependency reads from their side effect. Register cleanup under the same owner so closing a window or removing a branch releases subscriptions.
+
+```tsx
+import { createEffect, onCleanup } from "solid-js";
+createEffect(() => count(), value => console.log(value));
+const stop = watchProject();
+onCleanup(stop);
+```
+
+## Batched updates
+
+Solid 2 batches ordinary signal writes automatically. QuickGUI coalesces resulting node mutations into a native batch and skips equivalent values. Use `flush()` in deterministic tests when assertions must observe queued render effects immediately; do not install a frame loop or polling timer for normal state updates.

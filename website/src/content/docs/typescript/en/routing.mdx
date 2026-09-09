@@ -1,0 +1,36 @@
+## Routes
+
+```tsx
+import { Router, Route, Outlet, Link } from "@quickgui/solid/router";
+<Router initialPath="/">
+  <Route path="/" component={() => <Text>Home</Text>} />
+  <Route path="/projects/:id" component={Project} />
+</Router>
+```
+
+Rust owns route matching, normalized locations, and bounded memory history. Solid declares routes and renders the matched component chain.
+
+## Nested layouts
+
+Nested routes are relative to their parent. Render `<Outlet />` or the layout component’s `children` where the next matched route belongs. A pathless route can provide a shared layout without adding a URL segment.
+
+## Navigation
+
+```tsx
+const navigate = useNavigate();
+<Button onClick={() => navigate("/projects/42")}>Open project</Button>
+<Link href="/">Home</Link>
+```
+
+The controller supports push, replace, back, forward, and relative history movement. Navigation remains in the native application; it does not require a browser history object.
+
+## Route parameters
+
+```tsx
+function Project() {
+  const params = useParams();
+  return <Text>Project {params().id}</Text>;
+}
+```
+
+`useLocation()` and `useSearchParams()` expose normalized reactive accessors. Repeated query keys are retained as arrays.

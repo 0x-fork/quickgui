@@ -77,6 +77,7 @@ use quickgui::{
 mod dialog;
 mod extension_services;
 mod integrations;
+mod queued_events;
 mod system;
 
 pub use dialog::{

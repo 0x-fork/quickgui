@@ -30,6 +30,14 @@ const moonbitFiles = [
   ["main/moon.pkg", "main/moon.pkg"],
   ["main/main.mbt", "main/main.mbt"],
 ] as const;
+const typescriptFiles = [
+  ["package.json", "package.json"],
+  ["quickgui.config.ts", "quickgui.config.ts"],
+  ["tsconfig.json", "tsconfig.json"],
+  ["app.tsx", "app.tsx"],
+  ["gitignore", ".gitignore"],
+  ["README.md", "README.md"],
+] as const;
 
 export async function initProject(options: InitProjectOptions): Promise<string> {
   const destination = resolve(options.directory);
@@ -56,10 +64,18 @@ export async function initProject(options: InitProjectOptions): Promise<string> 
 
   mkdirSync(destination, { recursive: true });
   const moonbit = options.frontend === "moonbit";
+  const typescript = options.frontend === "typescript";
   const templateRoot = fileURLToPath(
-    new URL(`../templates/${moonbit ? "moonbit" : "native"}/`, import.meta.url),
+    new URL(
+      `../templates/${typescript ? "typescript" : moonbit ? "moonbit" : "native"}/`,
+      import.meta.url,
+    ),
   );
-  for (const [sourceName, targetName] of moonbit ? moonbitFiles : templateFiles) {
+  for (const [sourceName, targetName] of typescript
+    ? typescriptFiles
+    : moonbit
+      ? moonbitFiles
+      : templateFiles) {
     const source = join(templateRoot, sourceName);
     if (!existsSync(source)) throw new CliError(`CLI template is missing: ${source}`);
     const target = join(destination, targetName);
@@ -84,7 +100,11 @@ export async function initProject(options: InitProjectOptions): Promise<string> 
         `Project created at ${destination}, but \`bun install\` failed with status ${status}`,
       );
     }
-    const argv = moonbit ? ["moon", "check", "--target", "native"] : ["go", "mod", "tidy"];
+    const argv = typescript
+      ? ["bun", "run", "check"]
+      : moonbit
+        ? ["moon", "check", "--target", "native"]
+        : ["go", "mod", "tidy"];
     const prepare = Bun.spawn(argv, {
       cwd: destination,
       stdin: "inherit",

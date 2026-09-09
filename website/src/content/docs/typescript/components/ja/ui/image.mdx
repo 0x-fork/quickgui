@@ -1,0 +1,29 @@
+ファイルパス、ファイル URL、base64 データ URL を保持型の画像リソースとして表示します。
+
+## インポート
+
+`@quickgui/solid` から `Image` をインポートします。
+
+```tsx
+import { Image } from "@quickgui/solid";
+```
+
+## 使い方
+
+```tsx
+<Image
+  source="assets/hero.png"
+  fit="cover"
+  style={{ width: 240, height: 160, borderRadius: 12 }}
+/>
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `source` | コンポーネントが受け取るファイルパス、データ URL、SVG ドキュメント、またはシェーダーソースです。 |
+| `fit` | 宣言したボックスに画像内容を収める方法です。 |
+| `objectFit` | 画像のフィット方針の別名です。 |
+| `style` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
+

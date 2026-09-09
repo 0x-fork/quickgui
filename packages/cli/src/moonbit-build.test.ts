@@ -29,7 +29,7 @@ test("MoonBit is opt-in and Go remains the default", () => {
     install: false,
   });
   expect(() => parseCliArgs(["init", "--frontend", "javascript"])).toThrow(
-    "expected go or moonbit",
+    "expected go, moonbit, or typescript",
   );
   expect(() =>
     resolveConfig({ ...input, frontend: "moonbit", native: { tags: ["foo"] } }, "/tmp"),

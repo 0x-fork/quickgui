@@ -145,11 +145,13 @@ export interface MacAppStoreConfig {
   entitlements?: string;
 }
 
-export type Frontend = "go" | "moonbit";
+export type Frontend = "go" | "moonbit" | "typescript";
 
 export function parseFrontend(value: string): Frontend {
-  if (value === "go" || value === "moonbit") return value;
-  throw new CliError(`Unknown frontend ${JSON.stringify(value)}; expected go or moonbit`);
+  if (value === "go" || value === "moonbit" || value === "typescript") return value;
+  throw new CliError(
+    `Unknown frontend ${JSON.stringify(value)}; expected go, moonbit, or typescript`,
+  );
 }
 
 /** Application compilation and native shared-library options. */
@@ -158,7 +160,7 @@ export interface NativeConfig {
   libraryPath?: string;
   /** Optional Go build tags. */
   tags?: string[];
-  /** MoonBit extension directories, each containing quickgui.extension.json. */
+  /** Provider directories; TypeScript also accepts scoped packages and terminal/updater names. */
   extensions?: string[];
 }
 
@@ -269,7 +271,8 @@ export function resolveConfig(
   const frontend = parseFrontend(optionalString(input.frontend, "frontend", 32) ?? "go");
   const entry = resolveRelative(
     projectRoot,
-    optionalString(input.entry, "entry", 1_024) ?? (frontend === "moonbit" ? "main" : "."),
+    optionalString(input.entry, "entry", 1_024) ??
+      (frontend === "moonbit" ? "main" : frontend === "typescript" ? "app.tsx" : "."),
   );
   const outDir = resolveRelative(
     projectRoot,
@@ -297,6 +300,8 @@ export function resolveConfig(
     );
   if (frontend === "moonbit" && native.tags !== undefined)
     throw new CliError("native.tags contains Go build tags and cannot be used with MoonBit");
+  if (frontend === "typescript" && native.tags !== undefined)
+    throw new CliError("native.tags contains Go build tags and is not supported by TypeScript");
   const linuxIcon = optionalString(linux.icon, "linux.icon", 1_024);
   const linuxMaintainer = optionalString(linux.maintainer, "linux.maintainer", 255);
   const linuxComment = optionalString(linux.comment, "linux.comment", 512);
@@ -324,7 +329,10 @@ export function resolveConfig(
         : {}),
       tags: stringArray(native.tags, "native.tags"),
       extensions: stringArray(native.extensions, "native.extensions").map((path) =>
-        resolveRelative(projectRoot, path),
+        frontend === "typescript" &&
+        (path === "terminal" || path === "updater" || path.startsWith("@"))
+          ? path
+          : resolveRelative(projectRoot, path),
       ),
     },
     resources,

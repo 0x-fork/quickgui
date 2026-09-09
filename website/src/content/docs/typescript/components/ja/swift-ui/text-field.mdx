@@ -1,0 +1,32 @@
+編集と送信のコールバックを持つ、制御されたネイティブ SwiftUI TextField です。
+
+## インポート
+
+`@quickgui/solid/swift-ui` から `TextField` をインポートします。
+
+```tsx
+import { Host, TextField } from "@quickgui/solid/swift-ui";
+```
+
+## 使い方
+
+```tsx
+<Host matchContents={{ vertical: true }} style={{ width: 280 }}>
+  <TextField
+    value={name()}
+    placeholder="Name"
+    onValueChange={setName}
+    onSubmit={save}
+  />
+</Host>
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `value` | 制御値です。具体的な型は、このコンポーネントの規約に従います。 |
+| `placeholder` | 編集値が空のときに表示するテキストです。 |
+| `onValueChange` | コアが受け入れた値を通知します。 |
+| `onSubmit` | ネイティブフィールドが現在値を送信したときに実行します。 |
+

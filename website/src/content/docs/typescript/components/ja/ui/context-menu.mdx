@@ -1,0 +1,38 @@
+トリガーを副ボタンで押すと、モデル駆動のネイティブメニューを開きます。
+
+## インポート
+
+`@quickgui/solid` から `ContextMenu` をインポートします。
+
+```tsx
+import { ContextMenu } from "@quickgui/solid";
+```
+
+## 使い方
+
+```tsx
+<ContextMenu.Root items={menuItems} onSelect={({ value }) => runCommand(value)}>
+  <ContextMenu.Trigger><ProjectRow /></ContextMenu.Trigger>
+</ContextMenu.Root>
+```
+
+## 構成
+
+- `ContextMenu.Root`
+- `ContextMenu.Trigger`
+
+```tsx
+<ContextMenu.Root>
+  <ContextMenu.Trigger />
+</ContextMenu.Root>
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `items` | 選択肢やキーボードナビゲーションに使う、上限付きの宣言モデルです。 |
+| `appearance` | コア描画のネイティブメニューまたはピッカーに使う構造色とジオメトリです。 |
+| `onSelect` | コアが選択したメニュー項目を通知します。 |
+| `loop` | メニューレベルの端でハイライト移動を循環させます。 |
+

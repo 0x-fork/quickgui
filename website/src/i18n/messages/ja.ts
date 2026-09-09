@@ -2,9 +2,9 @@ import type { en } from "./en";
 
 export const ja: typeof en = {
   meta: {
-    title: "QuickGUI — Go または MoonBit でネイティブデスクトップアプリを作る",
+    title: "QuickGUI — Go、MoonBit、TypeScript でネイティブデスクトップアプリを作る",
     description:
-      "Go または MoonBit でネイティブデスクトップアプリを構築。高速ビルド、細粒度のリアクティビティ、GPU 描画、アクセシブルなコンポーネント。メモリとアプリサイズの実測値も公開。",
+      "Go、MoonBit、TypeScript でネイティブデスクトップアプリを構築。高速ビルド、細粒度のリアクティビティ、GPU 描画、アクセシブルなコンポーネント。メモリとアプリサイズの実測値も公開。",
   },
   common: {
     skipToContent: "コンテンツへスキップ",
@@ -23,10 +23,10 @@ export const ja: typeof en = {
     benchmarks: "ベンチマーク",
   },
   hero: {
-    badge: "Go + MoonBit · 高速ビルド",
+    badge: "Go + MoonBit + TypeScript · 高速ビルド",
     titleLine1: "ネイティブデスクトップアプリを、",
-    titleLine2: "Go または MoonBit で。",
-    sub: "Go または MoonBit でネイティブ UI を構築。共通の GPU レンダラー、高速な増分ビルド、細粒度のリアクティビティ、アクセシブルなコンポーネントを利用できます。",
+    titleLine2: "Go、MoonBit、TypeScript で。",
+    sub: "Go、MoonBit、TypeScript でネイティブ UI を構築。共通の GPU レンダラー、高速な増分ビルド、細粒度のリアクティビティ、アクセシブルなコンポーネントを利用できます。",
   },
   features: {
     title: "機能",
@@ -37,11 +37,11 @@ export const ja: typeof en = {
       },
       fast: {
         title: "高速な増分ビルド",
-        body: "ネイティブランタイムを再利用し、Go または MoonBit のアプリを再コンパイル。待ち時間を減らし、UI の改善に集中できます。",
+        body: "ネイティブランタイムを再利用し、Go、MoonBit、TypeScript のアプリを再コンパイル。待ち時間を減らし、UI の改善に集中できます。",
       },
       layout: {
         title: "Flexbox と CSS Grid",
-        body: "Flexbox、CSS Grid、なじみのあるスタイルオプション。Go または MoonBit でレイアウトを組み立て、スタイルを再利用できます。",
+        body: "Flexbox、CSS Grid、なじみのあるスタイルオプション。Go、MoonBit、TypeScript でレイアウトを組み立て、スタイルを再利用できます。",
       },
       components: {
         title: "コンポーネント同梱",
@@ -70,19 +70,19 @@ export const ja: typeof en = {
     },
   },
   code: {
-    title: "Go と MoonBit のコード例",
-    lead: "Go は子要素の関数ブロックと組み合わせ可能なスタイル、MoonBit は子要素のリストとfluent なプロパティとイベントハンドラーを使います。どちらもシグナルを読むバインディングだけを更新し、ほかのノードは維持します。",
+    title: "Go、MoonBit、TypeScript のコード例",
+    lead: "Go は子要素の関数ブロックと組み合わせ可能なスタイル、MoonBit は子要素のリストとfluent なプロパティとイベントハンドラーを使います。TypeScript は Solid 2 JSX を使用します。いずれもシグナルを読むバインディングだけを更新し、ほかのノードは維持します。",
   },
   swiftUi: {
     title: "QuickGUI でネイティブ SwiftUI を使う",
-    lead: "macOS の Go または MoonBit アプリに本物の SwiftUI コントロールを埋め込み、QuickGUI コンポーネントと一緒に使えます。",
+    lead: "macOS の Go、MoonBit、TypeScript アプリに本物の SwiftUI コントロールを埋め込み、QuickGUI コンポーネントと一緒に使えます。",
   },
   quickstart: {
     title: "クイックスタート",
     create: "作成して実行",
     edit: "整形とビルド",
     ship: "署名とパッケージ化",
-    note: "Go 1.23+ または MoonBit ツールチェーンと、CLI 用の Bun が必要です。macOS では Xcode Command Line Tools も必要です。署名と公証には自分の Apple 開発者資格情報を使います。",
+    note: "TypeScript では Bun 1.4+ と Solid 2、Go と MoonBit では対応するツールチェーンが必要です。macOS では Xcode Command Line Tools も必要です。署名と公証には自分の Apple 開発者資格情報を使います。",
   },
   platforms: {
     available: "利用可能",
@@ -90,7 +90,7 @@ export const ja: typeof en = {
   },
   cta: {
     title: "QuickGUI をはじめる",
-    body: "Go または MoonBit のコンポーネントを書いて、ランタイムを同梱したネイティブアプリを配布しましょう。",
+    body: "Go、MoonBit、TypeScript のコンポーネントを書いて、ランタイムを同梱したネイティブアプリを配布しましょう。",
     docs: "ドキュメントを読む",
     star: "GitHub でスターする",
   },
@@ -99,7 +99,7 @@ export const ja: typeof en = {
   },
   benchmarks: {
     title: "ベンチマーク",
-    lead: "QuickGUI Go、QuickGUI MoonBit、Tauri、Electron のアイドル時メモリとインストールサイズを同じ Mac で測定しました。1,000 件の課題を扱う小規模な課題管理アプリでの比較です。大規模なアプリでは、機能や依存関係によってメモリとアプリサイズの差がさらに大きくなる場合があります。",
+    lead: "QuickGUI Go、QuickGUI MoonBit、QuickGUI TypeScript、Tauri、Electron のアイドル時メモリとインストールサイズを同じ Mac で測定しました。各アプリで同じ課題管理ツールを動かし、1,000 件の課題を読み込みます。",
     memory: "アプリのアイドル時メモリ",
     bundle: "インストールサイズ",
     measured: "測定日：{{date}}",
@@ -110,9 +110,9 @@ export const ja: typeof en = {
     memoryMethod:
       "メモリはアプリと描画補助プロセスの物理フットプリントの合計です。WebKit や Chromium の描画、GPU、ネットワークプロセスを含み、自動入力などの macOS サービスは除外します。測定中も CPU とメモリの安定を確認し、スクリーンショットは測定後に撮影します。圧縮メモリを含み、アクティビティモニタと同じ十進 MB（1,000,000 バイト）で表示します。強制 GC やキャッシュ削除は行いません。",
     bundleMethod:
-      "サイズは .app 内に配布するファイルを集計し、ネイティブライブラリやフレームワークを含みます。OS が提供する WebKit などは除外します。圧縮ダウンロードではなく、インストール後のサイズです。",
+      "サイズは .app 内に配布するファイルを集計し、ネイティブライブラリやフレームワークを含みます。QuickGUI TypeScript は Bun と Solid 2、Electron は Chromium と Node を同梱します。OS が提供する WebKit などは除外します。圧縮ダウンロードではなく、インストール後のサイズです。",
     scope:
-      "検索、状態フィルター、ページ切り替え、メモの編集、完了操作に対応しています。データはセッション中のメモリに保持し、データベースやネットワークサービスは使いません。グラフは読み込み後のアイドル時の使用量で、操作の処理性能を表すものではありません。結果はアプリ、マシン、OS によって変わります。QuickGUI は現在の開発チェックアウトからビルドしました。",
+      "検索、状態フィルター、ページ切り替え、メモの編集、完了操作に対応しています。データはセッション中のメモリに保持し、データベースやネットワークサービスは使いません。グラフは読み込み後のアイドル時の使用量で、操作の処理性能を表すものではありません。結果はアプリ、マシン、OS によって変わります。QuickGUI は開発版からビルドしており、各結果に使用したリビジョンを記録しています。",
     preview: "ベンチマーク用アプリ",
     previewAlt: "{{framework}} で 1,000 件の課題を表示するベンチマークアプリ",
     raw: "生の測定データ",

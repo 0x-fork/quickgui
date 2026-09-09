@@ -420,7 +420,7 @@ export const COMPONENT_DOC_LABELS = {
 export function localizedDocsPage(page: DocsPageMeta, locale: Locale): DocsPageMeta {
   if (locale === 'en') return page
   const translation =
-    page.frontend === 'moonbit'
+    page.frontend !== 'go'
       ? page.translations?.[locale]
       : GUIDE_TRANSLATIONS[locale][page.slug as DocsSlug]
   return {

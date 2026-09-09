@@ -1,0 +1,38 @@
+メニュー、セグメント、ラジオグループ、インラインの各スタイルに対応した、制御された SwiftUI Picker です。
+
+## インポート
+
+`@quickgui/solid/swift-ui` から `Picker` をインポートします。
+
+```tsx
+import { Host, Picker } from "@quickgui/solid/swift-ui";
+```
+
+## 使い方
+
+```tsx
+<Host matchContents>
+  <Picker
+    label="Theme"
+    selection={theme()}
+    options={[
+      { value: "system", label: "System" },
+      { value: "light", label: "Light" },
+      { value: "dark", label: "Dark" },
+    ]}
+    style="menu"
+    onSelectionChange={setTheme}
+  />
+</Host>
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `selection` | テーブル、ネイティブピッカー、カラーコントロールの制御選択値です。 |
+| `options` | 順序付きのネイティブピッカー選択肢です。 |
+| `label` | ネイティブ SwiftUI コントロールに表示するラベルです。 |
+| `style` | QuickGUI のレイアウト、描画、タイポグラフィ、インタラクション状態のスタイルです。 |
+| `onSelectionChange` | 選択したネイティブピッカー項目または色を通知します。 |
+

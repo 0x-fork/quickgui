@@ -5,7 +5,13 @@ import { SectionHeading } from "../section-heading";
 import { site } from "../../lib/site";
 
 const MB = 1_000_000;
-const colors = ["var(--peach)", "var(--mint)", "#64748b", "#71717a"];
+const colors: Record<string, string> = {
+  "quickgui-go": "var(--peach)",
+  "quickgui-moonbit": "var(--mint)",
+  "quickgui-typescript": "#7ea6e8",
+  tauri: "#64748b",
+  electron: "#71717a",
+};
 type Metric = "memory" | "bundle";
 
 function axisMaximum(value: number): number {
@@ -21,6 +27,11 @@ function MeasurementChart({ metric }: { metric: Metric }) {
   const id = useId();
   const number = (value: number) =>
     new Intl.NumberFormat(i18n.language, { maximumFractionDigits: 1 }).format(value);
+  const rowDate = new Intl.DateTimeFormat(i18n.language, {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
   const valueOf = (row: (typeof measured.results)[number]) =>
     (metric === "memory" ? row.memoryBytes : row.bundleBytes) / MB;
   const maximum = axisMaximum(
@@ -30,10 +41,12 @@ function MeasurementChart({ metric }: { metric: Metric }) {
       ),
     ),
   );
-  const left = 132;
+  const left = 148;
+  const chartHeight = measured.results.length * 54 + 48;
   const plotWidth = Math.max(1, width - left - 80);
   const x = (value: number) => left + (value / maximum) * plotWidth;
-  const ticks = Array.from({ length: 5 }, (_, index) => (maximum * index) / 4);
+  const tickCount = plotWidth < 100 ? 2 : plotWidth < 200 ? 3 : 5;
+  const ticks = Array.from({ length: tickCount }, (_, index) => (maximum * index) / (tickCount - 1));
   const title = t(`benchmarks.${metric}`);
 
   useEffect(() => {
@@ -53,8 +66,8 @@ function MeasurementChart({ metric }: { metric: Metric }) {
       <div ref={container} className="mt-6 w-full">
         <svg
           width="100%"
-          height="264"
-          viewBox={`0 0 ${width} 264`}
+          height={chartHeight}
+          viewBox={`0 0 ${width} ${chartHeight}`}
           role="img"
           aria-labelledby={`${id}-title ${id}-description`}
         >
@@ -68,14 +81,14 @@ function MeasurementChart({ metric }: { metric: Metric }) {
                 x1={x(tick)}
                 x2={x(tick)}
                 y1={8}
-                y2={230}
+                y2={chartHeight - 34}
                 stroke="var(--border)"
                 strokeDasharray={index ? "3 4" : undefined}
               />
               <text
                 x={x(tick)}
-                y={253}
-                textAnchor={index === 4 ? "end" : index === 0 ? "start" : "middle"}
+                y={chartHeight - 11}
+                textAnchor={index === ticks.length - 1 ? "end" : index === 0 ? "start" : "middle"}
                 fill="var(--muted-foreground)"
                 fontSize="11"
               >
@@ -86,12 +99,13 @@ function MeasurementChart({ metric }: { metric: Metric }) {
           {measured.results.map((row, index) => {
             const y = 28 + index * 54;
             const value = valueOf(row);
-            const range = metric === "memory"
-              ? ` · ${t("benchmarks.range", {
-                  min: number(row.memoryMinBytes / MB),
-                  max: number(row.memoryMaxBytes / MB),
-                })}`
-              : "";
+            const range =
+              metric === "memory"
+                ? ` · ${t("benchmarks.range", {
+                    min: number(row.memoryMinBytes / MB),
+                    max: number(row.memoryMaxBytes / MB),
+                  })}`
+                : "";
             return (
               <g key={row.id}>
                 <title>{`${row.name} ${row.version}: ${number(value)} MB${range}`}</title>
@@ -99,9 +113,15 @@ function MeasurementChart({ metric }: { metric: Metric }) {
                   {row.name}
                 </text>
                 <text x={0} y={y + 20} fill="var(--muted-foreground)" fontSize="10">
-                  v{row.version}
+                  v{row.version} · {rowDate.format(new Date(row.measuredAt))}
                 </text>
-                <rect x={left} y={y - 8} width={x(value) - left} height={20} fill={colors[index]} />
+                <rect
+                  x={left}
+                  y={y - 8}
+                  width={x(value) - left}
+                  height={20}
+                  fill={colors[row.id] ?? "var(--muted-foreground)"}
+                />
                 {metric === "memory" && (
                   <g stroke="var(--foreground)" strokeWidth="1.5">
                     <line
@@ -145,10 +165,12 @@ function MeasurementChart({ metric }: { metric: Metric }) {
 export function Benchmarks() {
   const { t, i18n } = useTranslation();
   const [preview, setPreview] = useState(measured.results[0]);
-  const date = new Intl.DateTimeFormat(i18n.language, {
+  const dates = measured.results.map((row) => Date.parse(row.measuredAt));
+  const dateFormat = new Intl.DateTimeFormat(i18n.language, {
     dateStyle: "medium",
     timeZone: "UTC",
-  }).format(new Date(measured.measuredAt));
+  });
+  const date = dateFormat.formatRange(new Date(Math.min(...dates)), new Date(Math.max(...dates)));
   return (
     <section id="benchmarks" className="border-b border-border">
       <SectionHeading title={t("benchmarks.title")} lead={t("benchmarks.lead")} />

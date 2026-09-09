@@ -1,0 +1,33 @@
+嵌入保留式 Ghostty 终端表面，并报告进程生命周期事件。
+
+## 导入
+
+从 `@quickgui/solid` 导入 `Terminal`。
+
+```tsx
+import { Terminal } from "@quickgui/solid";
+```
+
+## 用法
+
+```tsx
+<Terminal
+  program="/bin/zsh"
+  workingDirectory={projectPath}
+  scrollback={10_000}
+  onStatus={(event) => setTerminalStatus(event)}
+/>
+```
+
+## 主要属性
+
+| 属性 | 说明 |
+| --- | --- |
+| `program` | 终端启动的可执行文件。 |
+| `arguments` | 传递给终端进程的参数。 |
+| `workingDirectory` | 终端进程的初始工作目录。 |
+| `environment` | 添加到终端进程的环境变量。 |
+| `onStatus` | 报告终端进程的生命周期变化。 |
+
+
+<Note>Terminal requires the optional `@quickgui/native-terminal` package and `native.extensions: ["terminal"]` in the TypeScript project configuration.</Note>

@@ -1,0 +1,21 @@
+{
+  "name": "quickgui-benchmark-typescript",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun generate.ts && quickgui dev",
+    "build": "bun generate.ts && quickgui build",
+    "check": "bun generate.ts && quickgui check",
+    "test": "bun generate.ts && quickgui test"
+  },
+  "dependencies": {
+    "@quickgui/native": "workspace:*",
+    "@quickgui/solid": "workspace:*",
+    "solid-js": "2.0.0-rc.7"
+  },
+  "devDependencies": {
+    "@quickgui/cli": "workspace:*",
+    "@types/bun": "latest",
+    "typescript": "7.0.2"
+  }
+}

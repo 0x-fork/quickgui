@@ -1,0 +1,32 @@
+CSS 形式の RGBA 文字列を返す、ネイティブ SwiftUI カラーピッカーです。
+
+## インポート
+
+`@quickgui/solid/swift-ui` から `ColorPicker` をインポートします。
+
+```tsx
+import { Host, ColorPicker } from "@quickgui/solid/swift-ui";
+```
+
+## 使い方
+
+```tsx
+<Host matchContents>
+  <ColorPicker
+    label="Accent"
+    selection={accent()}
+    supportsOpacity
+    onSelectionChange={setAccent}
+  />
+</Host>
+```
+
+## 主なプロパティ
+
+| プロパティ | 説明 |
+| --- | --- |
+| `selection` | テーブル、ネイティブピッカー、カラーコントロールの制御選択値です。 |
+| `label` | ネイティブ SwiftUI コントロールに表示するラベルです。 |
+| `supportsOpacity` | ネイティブのカラーパネルでアルファ値を選択できるようにします。 |
+| `onSelectionChange` | 選択したネイティブピッカー項目または色を通知します。 |
+

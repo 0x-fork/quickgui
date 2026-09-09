@@ -1,0 +1,29 @@
+Displays a filesystem path, file URL, or base64 data URL with retained image resources.
+
+## Import
+
+Import `Image` from `@quickgui/solid`.
+
+```tsx
+import { Image } from "@quickgui/solid";
+```
+
+## Usage
+
+```tsx
+<Image
+  source="assets/hero.png"
+  fit="cover"
+  style={{ width: 240, height: 160, borderRadius: 12 }}
+/>
+```
+
+## Key props
+
+| Prop | Purpose |
+| --- | --- |
+| `source` | Filesystem path, data URL, SVG document, or shader source expected by the component. |
+| `fit` | How image content fits its declared box. |
+| `objectFit` | Alias for the image fit policy. |
+| `style` | QuickGUI layout, paint, typography, and interaction-state styles. |
+
