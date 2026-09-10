@@ -15,11 +15,11 @@ export const snippets = {
   const [count, setCount] = createSignal(0);
   return (
     <View flex-col size-full items-center justify-center gap-5
-      backgroundColor="#090d16"
+      background-color="#090d16"
       color="#e2e8f0">
       <Text>Count: {count()}</Text>
-      <Button p-3 rounded="lg"
-        backgroundColor="#2563eb"
+      <Button p-3 rounded-lg
+        background-color="#2563eb"
         onClick={() => setCount(count() + 1)}>
         Increment
       </Button>

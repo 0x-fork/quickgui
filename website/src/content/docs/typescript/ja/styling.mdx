@@ -2,21 +2,21 @@ TypeScript ガイド本文は現在英語です。コンポーネントの API �
 
 ## スタイルメソッド
 
-Use CSS-shaped camelCase style props or a `style` object. Numeric lengths are logical pixels; supported percentages and keywords are parsed by Rust. `color` and `textColor` declare inherited text color.
+Use kebab-case native style attributes or a `style` object with camelCase fields. Numeric lengths are logical pixels; supported percentages and keywords are parsed by Rust. `color` and `textColor` declare inherited text color.
 
 ```tsx
-<View padding={16} gap={12} backgroundColor="#18181b" color="#fafafa" />
+<View padding={16} gap={12} background-color="#18181b" color="#fafafa" />
 ```
 
-Rust's 325 layout and style helpers are available as kebab-case props and style fields:
+Rust's 272 fixed layout and style presets are available as boolean attributes and style fields:
 
 ```tsx
-<View flex-col p-3 gap-2 rounded="lg">
+<View flex-col p-3 gap-2 rounded-lg>
   <Text text-lg font-semibold>Panel title</Text>
 </View>
 ```
 
-`rounded` accepts a number or `"sm"`, `"md"`, `"lg"`, `"xl"`, `"2xl"`, and `"full"`; `"lg"` is 8 logical pixels. Corner helpers such as `rounded-t` and `rounded-tl` accept the same values. No-argument helpers become boolean props (`rounded-lg`, `items-center`, `p-3`); value helpers include `px={12}`, `grid-cols={3}`, `w-fraction={0.5}`, and `size={[320, 200]}`. Spacing presets use Rust's four-pixel unit: `p-3` is 12 pixels, while `p={3}` is three pixels. Use `position-sticky` for sticky layout. `flex` and `flex-wrap` accept booleans as well as their CSS values.
+Preset helpers are boolean attributes: `rounded-lg`, `flex-col`, `items-center`, `p-3`, `text-lg`, and `font-bold`. `rounded-lg` uses Rust's 8-pixel radius; `p-3` uses 12 pixels from Rust's four-pixel spacing scale. Helpers take no size or string value. For custom values, use native style attributes such as `border-radius={10}`, `padding={14}`, `grid-template-columns={3}`, and `width="50%"`. Corner radii use attributes such as `border-top-left-radius={8}`. `position-sticky` is the boolean sticky-layout helper.
 
 Helpers expand before style arrays merge. Direct helper props override the corresponding style fields; `false`, `null`, or `undefined` withdraws a helper and reveals the underlying style. The helper types and values are generated from Rust by `scripts/generate-style-helpers.ts`.
 
@@ -35,7 +35,7 @@ Use `JSX.Style` for reusable styles. Keep getters in JSX when their values shoul
 ```tsx
 import type { JSX } from "@quickgui/solid";
 
-const panel = { "p-3": true, rounded: "xl", backgroundColor: "#20242c" } satisfies JSX.Style;
+const panel = { "p-3": true, "rounded-xl": true, backgroundColor: "#20242c" } satisfies JSX.Style;
 <View style={panel}><Text>Reusable panel</Text></View>
 ```
 

@@ -73,7 +73,7 @@ import { updater } from "./updates";
 
 export function CheckForUpdatesButton() {
   return (
-    <Button p-3 rounded="lg" onClick={() => {
+    <Button p-3 rounded-lg onClick={() => {
       void updater.check().catch(console.error);
     }}>
       Check for Updates

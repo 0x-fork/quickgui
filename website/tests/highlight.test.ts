@@ -10,4 +10,8 @@ test("the homepage can highlight every frontend, including Solid TSX", async () 
     expect(html).toContain("</pre>");
   }
   expect(highlighted.typescriptCounter).toContain("createSignal");
+  expect(highlighted.typescriptCounter).toContain("background-color");
+  expect(snippets.typescriptCounter.code).not.toContain("backgroundColor");
+  expect(snippets.typescriptCounter.code).toMatch(/\brounded-lg(?:\s|>)/);
+  expect(snippets.typescriptCounter.code).not.toContain('rounded="');
 });

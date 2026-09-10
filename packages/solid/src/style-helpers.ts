@@ -1,6 +1,14 @@
-import { roundedPresets, styleHelpers, type HelperDeclaration } from "./style-helpers.generated.ts";
+import {
+  styleAttributeNames,
+  styleHelpers,
+  type HelperDeclaration,
+} from "./style-helpers.generated.ts";
 
 export { helperProperties, type StyleHelpers } from "./style-helpers.generated.ts";
+
+export function stylePropertyName(name: string): string {
+  return Object.hasOwn(styleAttributeNames, name) ? styleAttributeNames[name]! : name;
+}
 
 /** Expand a Rust convenience into ordinary native properties before retained diffing. */
 export function expandStyleHelper(name: string, value: unknown): HelperDeclaration | undefined {
@@ -10,28 +18,12 @@ export function expandStyleHelper(name: string, value: unknown): HelperDeclarati
   if (!Object.hasOwn(styleHelpers, name)) return undefined;
   if (value === undefined || value === null || value === false) return {};
   const helper = styleHelpers[name]!;
-  // Preserve the CSS flex shorthand and flex-wrap values alongside the boolean Rust helpers.
-  if (name === "flex" && value !== true) return flexDeclaration(value);
-  if (name === "flex-wrap" && typeof value === "string") return { flexWrap: value };
-  if (helper.parameters === 0) {
-    if (value !== true) throw new TypeError(`QuickGUI ${name} must be a boolean`);
-  } else if (helper.parameters === 2) {
-    if (!Array.isArray(value) || value.length !== 2) {
-      throw new TypeError(`QuickGUI ${name} accepts [width, height]`);
-    }
-  } else if (name.startsWith("rounded")) {
-    if (typeof value === "string" && Object.hasOwn(roundedPresets, value)) {
-      value = roundedPresets[value as keyof typeof roundedPresets];
-    } else if (typeof value !== "number" || !Number.isFinite(value)) {
-      throw new TypeError(
-        `QuickGUI ${name} accepts a finite radius or ${Object.keys(roundedPresets).join(", ")}`,
-      );
-    }
-  }
-  return helper.resolve(value);
+  if (value !== true) throw new TypeError(`QuickGUI ${name} must be a boolean`);
+  return helper.resolve();
 }
 
-function flexDeclaration(value: unknown): HelperDeclaration {
+/** CSS flex shorthand belongs to a reusable style, while the JSX flex helper is a flag. */
+export function flexDeclaration(value: unknown): HelperDeclaration {
   if (typeof value === "number") return { flexGrow: value, flexShrink: 1, flexBasis: 0 };
   const parts = String(value).trim().split(/\s+/);
   if (parts.length === 1 && parts[0] === "none") {

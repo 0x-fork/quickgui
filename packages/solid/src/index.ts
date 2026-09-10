@@ -52,8 +52,15 @@ import {
   setNativeProperty,
   type WindowRenderer,
 } from "@quickgui/native";
-import { expandStyleHelper, helperProperties, type StyleHelpers } from "./style-helpers.ts";
-export type { RoundedPreset, StyleHelpers } from "./style-helpers.generated.ts";
+import {
+  expandStyleHelper,
+  flexDeclaration,
+  helperProperties,
+  stylePropertyName,
+  type StyleHelpers,
+} from "./style-helpers.ts";
+import type { StyleAttributes } from "./style-helpers.generated.ts";
+export type { StyleHelpers } from "./style-helpers.generated.ts";
 
 type PropertyInput = unknown;
 type PropertyEntry = {
@@ -631,6 +638,7 @@ function setProperty(
     setStyle(node, value);
     return;
   }
+  name = stylePropertyName(name);
   const helper = expandStyleHelper(name, value);
   if (helper !== undefined || helperProperties.has(name)) {
     const state = helperPropertyState(node);
@@ -831,7 +839,10 @@ function mergeStyleInto(target: Record<string, unknown>, style: unknown): void {
   // `false`, `null`, and `undefined` entries are skipped, as is anything that is not a style.
   if (!isRecord(style)) return;
   for (const [name, value] of Object.entries(style)) {
-    const helper = expandStyleHelper(name, value);
+    const helper =
+      name === "flex" && (typeof value === "number" || typeof value === "string")
+        ? flexDeclaration(value)
+        : expandStyleHelper(name, value);
     if (helper !== undefined) {
       Object.assign(target, helper);
       continue;
@@ -8803,7 +8814,9 @@ export namespace JSX {
     key?: string | number;
   }
 
-  export interface Style extends StyleHelpers {
+  export interface Style extends Omit<StyleHelpers, "flex"> {
+    /** CSS flex shorthand, or the boolean display helper. */
+    flex?: number | string | boolean | null | undefined;
     textColor?: ColorValue;
     display?: "none" | "block" | "flex" | "grid";
     flexDirection?: "row" | "row-reverse" | "column" | "column-reverse";
@@ -9164,7 +9177,8 @@ export namespace JSX {
    */
   export type StyleProp = Style | false | null | undefined | ReadonlyArray<StyleProp>;
 
-  export interface NativeProps extends Omit<Style, StateName> {
+  export interface NativeProps extends Omit<Style, StateName | "flex">, StyleAttributes {
+    flex?: StyleHelpers["flex"];
     accessibilityLabel?: string;
     children?: unknown;
     style?: StyleProp;

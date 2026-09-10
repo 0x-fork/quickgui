@@ -73,7 +73,7 @@ function properties(
   seen = new Set<string>(),
 ): ApiEntry[] {
   const qualified = prefix + type;
-  if (seen.has(qualified) || (!includeStyle && (type === "Style" || type === "JSX.Style")))
+  if (seen.has(qualified) || (!includeStyle && (type === "Style" || type === "JSX.Style" || type === "StyleAttributes")))
     return [];
   seen.add(qualified);
   const declaration =
