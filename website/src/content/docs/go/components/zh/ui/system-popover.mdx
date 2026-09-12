@@ -13,11 +13,12 @@ import (
 ## 用法
 
 ```go
-func SystemPopoverExample() *native.Node {
-	systemPopover1 := ui.NewSystemPopover(ui.PopoverRootProps{})
-	return systemPopover1.Root().Children(func() *native.Node {
-		return ui.Fragment([]*native.Node{systemPopover1.Trigger(ui.PopoverTriggerProps{}).Children("Account").NativeNode(), systemPopover1.Content(ui.PopoverContentProps{Width: 240, Height: 120, Placement: "bottom-start"}).Children("Account settings").NativeNode()})
-	}).NativeNode()
+func SystemPopoverExample() *ui.Element {
+	popover := ui.NewSystemPopover()
+	return popover.Root().Children(
+		popover.Trigger().Child("Account"),
+		popover.Content(ui.PopoverContentProps{Width: 240, Height: 120, Placement: "bottom-start"}).Child("Account settings"),
+	)
 }
 ```
 

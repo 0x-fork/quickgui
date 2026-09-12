@@ -15,15 +15,16 @@ import (
 ## 使い方
 
 ```go
-func PopoverMenuExample() *native.Node {
-	popoverMenu1 := ui.NewPopoverMenu(ui.PopoverMenuRootProps{Items: func() []ui.MenuItemDeclaration {
+func PopoverMenuExample() *ui.Element {
+	menu := ui.NewPopoverMenu(ui.PopoverMenuRootProps{Items: func() []ui.MenuItemDeclaration {
 		return []ui.MenuItemDeclaration{{ID: "copy", Label: "Copy"}, {ID: "paste", Label: "Paste"}}
 	}, OnSelect: func(item ui.MenuSelectDetails, _ *native.Event) {
 		fmt.Println(item.ID)
 	}})
-	return popoverMenu1.Root().Children(func() *native.Node {
-		return ui.Fragment([]*native.Node{popoverMenu1.Trigger(ui.PartProps{}).Children("Edit").NativeNode(), popoverMenu1.Popup(ui.PopoverMenuPopupProps{}).NativeNode()})
-	}).NativeNode()
+	return menu.Root().Children(
+		menu.Trigger().Child("Edit"),
+		menu.Popup(),
+	)
 }
 ```
 

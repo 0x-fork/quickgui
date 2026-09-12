@@ -13,13 +13,14 @@ import (
 ## 使い方
 
 ```go
-func PreviewCardExample() *native.Node {
-	previewCard1 := ui.NewPreviewCard(ui.PreviewCardRootProps{Placement: "bottom-start"})
-	return previewCard1.Root().Children(func() *native.Node {
-		return ui.Fragment([]*native.Node{previewCard1.Trigger(ui.PreviewCardTriggerProps{Delay: 350}).Children("@ada").NativeNode(), previewCard1.Positioner(ui.PartProps{}).Children(func() *native.Node {
-			return previewCard1.Popup(ui.PartProps{}).Children("Ada Lovelace").NativeNode()
-		}).NativeNode()})
-	}).NativeNode()
+func PreviewCardExample() *ui.Element {
+	card := ui.NewPreviewCard().Placement("bottom-start")
+	return card.Root().Children(
+		card.Trigger(ui.PreviewCardTriggerProps{Delay: 350}).Child("@ada"),
+		card.Positioner().Child(
+			card.Popup().Child("Ada Lovelace"),
+		),
+	)
 }
 ```
 

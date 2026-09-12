@@ -13,13 +13,13 @@ import (
 ## 使い方
 
 ```go
-func MeterExample(value func() *float64) *native.Node {
-	meter1 := ui.NewMeter(ui.MeterProps{Value: value, Min: 0, Max: 100, Low: 25, High: 80, Optimum: 50})
-	return meter1.Root().Children(func() *native.Node {
-		return ui.Fragment([]*native.Node{meter1.Label(ui.PartProps{}).Children("Disk used").NativeNode(), meter1.Track(ui.PartProps{}).Children(func() *native.Node {
-			return meter1.Indicator(ui.PartProps{}).NativeNode()
-		}).NativeNode(), meter1.Value(ui.PartProps{}).NativeNode()})
-	}).NativeNode()
+func MeterExample(value func() *float64) *ui.Element {
+	meter := ui.NewMeter().SetValue(value).Min(0).Max(100).Low(25).High(80).Optimum(50)
+	return meter.Root().Children(
+		meter.Label().Child("Disk used"),
+		meter.Track().Child(meter.Indicator()),
+		meter.Value(),
+	)
 }
 ```
 

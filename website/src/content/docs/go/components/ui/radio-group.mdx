@@ -14,26 +14,23 @@ import (
 ## Usage
 
 ```go
-func RadioGroupExample() *native.Node {
+func RadioGroupExample() *ui.Element {
 	value, setValue := ui.CreateSignal("system")
-	radioGroup1 := ui.NewRadioGroup(ui.RadioGroupProps{Value: func() *string {
+	group := ui.NewRadioGroup(ui.RadioGroupProps{Value: func() *string {
 		current := value()
 		return &current
 	}, OnValueChange: func(next string, _ *native.Event) {
 		setValue(next)
 	}})
-	return radioGroup1.Root().Children(func() *native.Node {
-		var children []*native.Node
-		for _, option := range []string{"light", "dark", "system"} {
-			children = append(children, func() *native.Node {
-				radio2 := ui.NewRadio(ui.RadioProps{Value: option})
-				return radio2.Root().Children(func() *native.Node {
-					return ui.Fragment([]*native.Node{radio2.Indicator(ui.PartProps{}).NativeNode(), ui.Text(option).Node})
-				}).NativeNode()
-			}())
-		}
-		return ui.Fragment(children)
-	}).NativeNode()
+	options := make([]*ui.Element, 0, 3)
+	for _, value := range []string{"light", "dark", "system"} {
+		radio := ui.NewRadio().Value(value)
+		options = append(options, radio.Root().Children(
+			radio.Indicator(),
+			ui.Text(value),
+		))
+	}
+	return group.Root().Children(options)
 }
 ```
 

@@ -53,6 +53,44 @@ test("compound instances preserve callback types, inherited fields, and fluent p
     expect(view.entries.some((entry) => entry.name === name)).toBe(false);
 });
 
+test("Go component examples compose fluent elements without native boundary calls", () => {
+  for (const component of ALL_COMPONENT_DOCS.filter((component) => component.kind === "ui")) {
+    const sourcePath = resolve(
+      root,
+      "website/src/content/docs/go/components/ui",
+      `${component.slug}.mdx`,
+    );
+    const source = readFileSync(sourcePath, "utf8");
+    expect(source, component.slug).not.toContain(".NativeNode()");
+    const fences = [...source.matchAll(/```go\n[\s\S]*?```/g)].map((match) => match[0]);
+    for (const locale of ["ja", "zh"]) {
+      const localized = readFileSync(
+        resolve(
+          root,
+          "website/src/content/docs/go/components",
+          locale,
+          "ui",
+          `${component.slug}.mdx`,
+        ),
+        "utf8",
+      );
+      expect(
+        [...localized.matchAll(/```go\n[\s\S]*?```/g)].map((match) => match[0]),
+        `${locale}/${component.slug}`,
+      ).toEqual(fences);
+    }
+  }
+
+  const alertDialog = readFileSync(
+    resolve(root, "website/src/content/docs/go/components/ui/alert-dialog.mdx"),
+    "utf8",
+  ).split("## Anatomy", 1)[0];
+  expect(alertDialog).toContain("func AlertDialogExample() *ui.Element");
+  expect(alertDialog).toContain("return dialog.Root().Children(");
+  expect(alertDialog).not.toContain("func() *native.Node");
+  expect(alertDialog).not.toContain("ui.Fragment");
+});
+
 test("the browser catalog matches the Rust demo dispatcher", () => {
   const source = readFileSync(resolve(root, "crates/quickgui-docs-demo/src/lib.rs"), "utf8");
   const declared = [

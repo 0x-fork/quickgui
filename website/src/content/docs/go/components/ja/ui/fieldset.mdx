@@ -13,16 +13,16 @@ import (
 ## 使い方
 
 ```go
-func FieldsetExample(saving func() bool) *native.Node {
-	fieldset1 := ui.NewFieldset(ui.PartProps{Disabled: saving})
-	return fieldset1.Root().Children(func() *native.Node {
-		return ui.Fragment([]*native.Node{fieldset1.Legend(ui.PartProps{}).Children("Profile").NativeNode(), func() *native.Node {
-			field2 := ui.NewField(ui.FieldRootProps{})
-			return field2.Root().Children(func() *native.Node {
-				return ui.Fragment([]*native.Node{field2.Label(ui.FieldLabelProps{}).Children("Name").NativeNode(), field2.Control(ui.FieldControlProps{InputPartProps: ui.InputPartProps{Placeholder: "Ada"}}).NativeNode()})
-			}).NativeNode()
-		}()})
-	}).NativeNode()
+func FieldsetExample(saving func() bool) *ui.Element {
+	fieldset := ui.NewFieldset().Disabled(saving)
+	field := ui.NewField()
+	return fieldset.Root().Children(
+		fieldset.Legend().Child("Profile"),
+		field.Root().Children(
+			field.Label().Child("Name"),
+			field.Control(ui.FieldControlProps{InputPartProps: ui.InputPartProps{Placeholder: "Ada"}}),
+		),
+	)
 }
 ```
 

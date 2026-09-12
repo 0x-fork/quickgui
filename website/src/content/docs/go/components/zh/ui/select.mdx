@@ -14,16 +14,17 @@ import (
 ## 用法
 
 ```go
-func SelectExample() *native.Node {
+func SelectExample() *ui.Element {
 	value, setValue := ui.CreateSignal[*string](nil)
-	select1 := ui.NewSelect(ui.SelectRootProps{PickerSourceProps: ui.PickerSourceProps{Items: func() []ui.OptionDeclaration {
+	selectBox := ui.NewSelect(ui.SelectRootProps{PickerSourceProps: ui.PickerSourceProps{Items: func() []ui.OptionDeclaration {
 		return []ui.OptionDeclaration{{Value: "go", Label: "Go"}, {Value: "swift", Label: "Swift"}}
 	}}, Value: value, OnValueChange: func(next *string, _ *native.Event) {
 		setValue(next)
 	}})
-	return select1.Root().Children(func() *native.Node {
-		return ui.Fragment([]*native.Node{select1.Value(ui.PartProps{}).NativeNode(), select1.Icon(ui.PartProps{}).Children("▾").NativeNode()})
-	}).NativeNode()
+	return selectBox.Root().Children(
+		selectBox.Value(),
+		selectBox.Icon().Child("▾"),
+	)
 }
 ```
 

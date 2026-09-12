@@ -14,16 +14,19 @@ import (
 ## 用法
 
 ```go
-func FieldExample() *native.Node {
+func FieldExample() *ui.Element {
 	email, setEmail := ui.CreateSignal("")
-	field1 := ui.NewField(ui.FieldRootProps{Required: true, Filled: func() bool {
+	field := ui.NewField(ui.FieldRootProps{Required: true, Filled: func() bool {
 		return email() != ""
 	}})
-	return field1.Root().Children(func() *native.Node {
-		return ui.Fragment([]*native.Node{field1.Label(ui.FieldLabelProps{}).Children("Email").NativeNode(), field1.Control(ui.FieldControlProps{InputPartProps: ui.InputPartProps{Value: email, Placeholder: "you@example.com", OnInput: func(event *native.Event) {
+	return field.Root().Children(
+		field.Label().Child("Email"),
+		field.Control(ui.FieldControlProps{InputPartProps: ui.InputPartProps{Value: email, Placeholder: "you@example.com", OnInput: func(event *native.Event) {
 			setEmail(event.Value)
-		}}}).NativeNode(), field1.Description(ui.PartProps{}).Children("Used for receipts").NativeNode(), field1.Error(ui.PartProps{}).Children("Enter a valid email address").NativeNode()})
-	}).NativeNode()
+		}}}),
+		field.Description().Child("Used for receipts"),
+		field.Error().Child("Enter a valid email address"),
+	)
 }
 ```
 

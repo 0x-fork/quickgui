@@ -14,14 +14,14 @@ import (
 ## 使い方
 
 ```go
-func ComboboxExample() *native.Node {
+func ComboboxExample() *ui.Element {
 	value, setValue := ui.CreateSignal[*string](nil)
-	combobox1 := ui.NewCombobox(ui.ComboboxRootProps{PickerInputProps: ui.PickerInputProps{PickerSourceProps: ui.PickerSourceProps{Items: func() []ui.OptionDeclaration {
+	combobox := ui.NewCombobox(ui.ComboboxRootProps{PickerInputProps: ui.PickerInputProps{PickerSourceProps: ui.PickerSourceProps{Items: func() []ui.OptionDeclaration {
 		return []ui.OptionDeclaration{{Value: "go", Label: "Go"}, {Value: "swift", Label: "Swift"}}
 	}}, Placeholder: "Choose a language"}, Value: value, OnValueChange: func(next *string, _ *native.Event) {
 		setValue(next)
 	}})
-	return combobox1.Root().NativeNode()
+	return combobox.Root()
 }
 ```
 

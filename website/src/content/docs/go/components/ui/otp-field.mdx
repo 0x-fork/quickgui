@@ -15,20 +15,18 @@ import (
 ## Usage
 
 ```go
-func OtpFieldExample() *native.Node {
+func OtpFieldExample() *ui.Element {
 	code, setCode := ui.CreateSignal("")
-	otpField1 := ui.NewOtpField(ui.OtpFieldRootProps{Value: code, Length: 6, ValidationType: "numeric", OnValueChange: func(next string, _ *native.Event) {
+	field := ui.NewOtpField(ui.OtpFieldRootProps{Value: code, Length: 6, ValidationType: "numeric", OnValueChange: func(next string, _ *native.Event) {
 		setCode(next)
 	}, OnComplete: func(value string, _ *native.Event) {
 		fmt.Println("Complete:", value)
 	}})
-	return otpField1.Root().Children(func() *native.Node {
-		var children []*native.Node
-		for index := range 6 {
-			children = append(children, otpField1.InputWith(ui.OtpFieldInputProps{Index: index}).NativeNode())
-		}
-		return ui.Fragment(children)
-	}).NativeNode()
+	inputs := make([]*ui.Element, 0, 6)
+	for index := range 6 {
+		inputs = append(inputs, field.Input(index))
+	}
+	return field.Root().Children(inputs)
 }
 ```
 

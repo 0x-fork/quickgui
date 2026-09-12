@@ -13,22 +13,21 @@ import (
 ## 使い方
 
 ```go
-func TableExample(rows []string) *native.Node {
-	table1 := ui.NewTable(ui.TableRootProps{Columns: func() []ui.TableColumnDeclaration {
+func TableExample(rows []string) *ui.Element {
+	table := ui.NewTable(ui.TableRootProps{Columns: func() []ui.TableColumnDeclaration {
 		return []ui.TableColumnDeclaration{{ID: "name", Label: "Name", Track: "1fr", Sortable: true}}
 	}, RowCount: func() float64 {
 		return float64(len(rows))
 	}, RowHeight: 26, HeaderHeight: 28, PartProps: ui.PartProps{Style: ui.Style().Height(260).OverflowY("scroll")}})
-	return table1.Root().Children(func() *native.Node {
-		var children []*native.Node
-		children = append(children, table1.Header(ui.TableHeaderProps{Column: "name"}).Children("Name").NativeNode())
-		for index, name := range rows {
-			children = append(children, table1.Row(ui.TableRowProps{Index: index}).Children(func() *native.Node {
-				return table1.Cell(ui.TableCellProps{Column: "name"}).Children(name).NativeNode()
-			}).NativeNode())
-		}
-		return ui.Fragment(children)
-	}).NativeNode()
+	children := []*ui.Element{
+		table.Header(ui.TableHeaderProps{Column: "name"}).Child("Name"),
+	}
+	for index, name := range rows {
+		children = append(children, table.Row(ui.TableRowProps{Index: index}).Child(
+			table.Cell(ui.TableCellProps{Column: "name"}).Child(name),
+		))
+	}
+	return table.Root().Children(children)
 }
 ```
 

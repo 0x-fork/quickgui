@@ -14,31 +14,30 @@ import (
 ## 使い方
 
 ```go
-func ScrollAreaExample() *native.Node {
-	scrollArea1 := ui.NewScrollArea(ui.ScrollAreaRootProps{ViewportSize: func() ui.Extent {
+func ScrollAreaExample() *ui.Element {
+	scrollArea := ui.NewScrollArea(ui.ScrollAreaRootProps{ViewportSize: func() ui.Extent {
 		return ui.Extent{Width: 320, Height: 160}
 	}, ContentSize: func() ui.Extent {
 		return ui.Extent{Width: 320, Height: 880}
 	}})
-	return scrollArea1.Root().Children(func() *native.Node {
-		var children []*native.Node
+	return scrollArea.Root().Child(func() *native.Node {
 		state := ui.UseScrollAreaState()
-		children = append(children, scrollArea1.Viewport(ui.PartProps{Style: ui.Style().Width(320).Height(160).Overflow("hidden")}).Children(func() *native.Node {
-			return scrollArea1.Content(ui.PartProps{Style: func() ui.StyleBuilder {
+		viewport := scrollArea.Viewport().Width(320).Height(160).Overflow("hidden").Child(
+			scrollArea.Content(ui.PartProps{Style: func() ui.StyleBuilder {
 				return ui.Style().Transform(fmt.Sprintf("translateY(%gpx)", -state().Offset.Y))
-			}}).Children(func() *native.Node {
-				var children []*native.Node
+			}}).Child(func() *native.Node {
+				rows := make([]*ui.Element, 0, 40)
 				for index := range 40 {
-					children = append(children, ui.Text("Row ", index).Height(22).Node)
+					rows = append(rows, ui.Text("Row ", index).Height(22))
 				}
-				return ui.Fragment(children)
-			}).NativeNode()
-		}).NativeNode())
-		children = append(children, scrollArea1.Scrollbar(ui.ScrollAreaScrollbarProps{Orientation: "vertical"}).Children(func() *native.Node {
-			return scrollArea1.Thumb(ui.ScrollAreaThumbProps{Orientation: "vertical"}).NativeNode()
-		}).NativeNode())
-		return ui.Fragment(children)
-	}).NativeNode()
+				return ui.Fragment(rows)
+			}),
+		)
+		scrollbar := scrollArea.Scrollbar(ui.ScrollAreaScrollbarProps{Orientation: "vertical"}).Child(
+			scrollArea.Thumb(ui.ScrollAreaThumbProps{Orientation: "vertical"}),
+		)
+		return ui.Fragment(viewport, scrollbar)
+	})
 }
 ```
 

@@ -13,21 +13,17 @@ import (
 ## Usage
 
 ```go
-func CalendarExample(weeks [][]string) *native.Node {
-	calendar1 := ui.NewCalendar(ui.CalendarRootProps{DefaultValue: "2026-09-03"})
-	return calendar1.Root().Children(func() *native.Node {
-		var children []*native.Node
-		for index, week := range weeks {
-			children = append(children, calendar1.WeekWith(ui.CalendarWeekProps{Index: &index}).Children(func() *native.Node {
-				var children []*native.Node
-				for _, day := range week {
-					children = append(children, calendar1.DayWith(ui.CalendarDayProps{Day: day}).Children(day).NativeNode())
-				}
-				return ui.Fragment(children)
-			}).NativeNode())
+func CalendarExample(weeks [][]string) *ui.Element {
+	calendar := ui.NewCalendar().DefaultValue("2026-09-03")
+	weekElements := make([]*ui.Element, 0, len(weeks))
+	for index, week := range weeks {
+		dayElements := make([]*ui.Element, 0, len(week))
+		for _, day := range week {
+			dayElements = append(dayElements, calendar.Day(day).Child(day))
 		}
-		return ui.Fragment(children)
-	}).NativeNode()
+		weekElements = append(weekElements, calendar.Week(index).Children(dayElements))
+	}
+	return calendar.Root().Children(weekElements)
 }
 ```
 

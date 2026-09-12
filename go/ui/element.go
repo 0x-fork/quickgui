@@ -20,7 +20,9 @@ type Element struct {
 	content            *compoundContent
 }
 
-// NativeNode exposes this builder's retained node to windows and lazy components.
+// NativeNode mounts this declaration and exposes its retained node to low-level
+// APIs that explicitly require *native.Node. Compose and return Element values
+// directly in ordinary UI code.
 func (element *Element) NativeNode() *native.Node {
 	if element == nil {
 		return nil

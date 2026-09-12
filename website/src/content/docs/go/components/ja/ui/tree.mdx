@@ -13,14 +13,15 @@ import (
 ## 使い方
 
 ```go
-func TreeExample() *native.Node {
+func TreeExample() *ui.Element {
 	nodes := []ui.TreeNodeDeclaration{{ID: "src", Label: "src", Children: []ui.TreeNodeDeclaration{{ID: "src/main.go", Label: "main.go"}}}}
-	tree1 := ui.NewTree(ui.TreeRootProps{Nodes: func() []ui.TreeNodeDeclaration {
+	tree := ui.NewTree(ui.TreeRootProps{Nodes: func() []ui.TreeNodeDeclaration {
 		return nodes
 	}, DefaultExpanded: []string{"src"}, RowHeight: 26, PartProps: ui.PartProps{Style: ui.Style().Height(200)}})
-	return tree1.Root().Children(func() *native.Node {
-		return ui.Fragment([]*native.Node{tree1.Row(ui.TreeRowProps{NodeID: "src"}).Children("src").NativeNode(), tree1.Row(ui.TreeRowProps{NodeID: "src/main.go"}).Children("main.go").NativeNode()})
-	}).NativeNode()
+	return tree.Root().Children(
+		tree.Row(ui.TreeRowProps{NodeID: "src"}).Child("src"),
+		tree.Row(ui.TreeRowProps{NodeID: "src/main.go"}).Child("main.go"),
+	)
 }
 ```
 

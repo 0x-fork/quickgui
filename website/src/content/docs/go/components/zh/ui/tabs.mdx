@@ -13,13 +13,16 @@ import (
 ## 用法
 
 ```go
-func TabsExample() *native.Node {
-	tabs1 := ui.NewTabs(ui.TabsRootProps{DefaultValue: "overview", Activation: "automatic"})
-	return tabs1.Root().Children(func() *native.Node {
-		return ui.Fragment([]*native.Node{tabs1.List(ui.PartProps{}).Children(func() *native.Node {
-			return ui.Fragment([]*native.Node{tabs1.TabWith(ui.TabsTabProps{Value: "overview"}).Children("Overview").NativeNode(), tabs1.TabWith(ui.TabsTabProps{Value: "settings"}).Children("Settings").NativeNode()})
-		}).NativeNode(), tabs1.PanelWith(ui.TabsPanelProps{Value: "overview"}).Children("Overview content").NativeNode(), tabs1.PanelWith(ui.TabsPanelProps{Value: "settings"}).Children("Settings content").NativeNode()})
-	}).NativeNode()
+func TabsExample() *ui.Element {
+	tabs := ui.NewTabs().DefaultValue("overview").Activation("automatic")
+	return tabs.Root().Children(
+		tabs.List().Children(
+			tabs.Tab("overview").Child("Overview"),
+			tabs.Tab("settings").Child("Settings"),
+		),
+		tabs.Panel("overview").Child("Overview content"),
+		tabs.Panel("settings").Child("Settings content"),
+	)
 }
 ```
 

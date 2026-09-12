@@ -15,13 +15,13 @@ import (
 ## Usage
 
 ```go
-func AutocompleteExample() *native.Node {
-	autocomplete1 := ui.NewAutocomplete(ui.AutocompleteRootProps{PickerInputProps: ui.PickerInputProps{PickerSourceProps: ui.PickerSourceProps{Items: func() []ui.OptionDeclaration {
+func AutocompleteExample() *ui.Element {
+	autocomplete := ui.NewAutocomplete(ui.AutocompleteRootProps{PickerInputProps: ui.PickerInputProps{PickerSourceProps: ui.PickerSourceProps{Items: func() []ui.OptionDeclaration {
 		return []ui.OptionDeclaration{{Value: "go", Label: "Go"}, {Value: "swift", Label: "Swift"}}
 	}}, Placeholder: "Find a language", OnInputValueChange: func(query string, _ *native.Event) {
 		fmt.Println(query)
 	}}})
-	return autocomplete1.Root().NativeNode()
+	return autocomplete.Root()
 }
 ```
 

@@ -14,23 +14,19 @@ import (
 ## Usage
 
 ```go
-func CheckboxGroupExample() *native.Node {
+func CheckboxGroupExample() *ui.Element {
 	values, setValues := ui.CreateSignal([]string{"email"})
-	checkboxGroup1 := ui.NewCheckboxGroup(ui.CheckboxGroupProps{AllValues: []string{"email", "push"}, Value: values, OnValueChange: func(next []string, _ *native.Event) {
+	group := ui.NewCheckboxGroup(ui.CheckboxGroupProps{AllValues: []string{"email", "push"}, Value: values, OnValueChange: func(next []string, _ *native.Event) {
 		setValues(next)
 	}})
-	return checkboxGroup1.Root().Children(func() *native.Node {
-		return ui.Fragment([]*native.Node{func() *native.Node {
-			checkbox2 := ui.NewCheckbox(ui.CheckboxProps{Parent: true})
-			return checkbox2.Root().Children("All notifications").NativeNode()
-		}(), func() *native.Node {
-			checkbox3 := ui.NewCheckbox(ui.CheckboxProps{Value: "email"})
-			return checkbox3.Root().Children("Email").NativeNode()
-		}(), func() *native.Node {
-			checkbox4 := ui.NewCheckbox(ui.CheckboxProps{Value: "push"})
-			return checkbox4.Root().Children("Push").NativeNode()
-		}()})
-	}).NativeNode()
+	all := ui.NewCheckbox().Parent(true)
+	email := ui.NewCheckbox().Value("email")
+	push := ui.NewCheckbox().Value("push")
+	return group.Root().Children(
+		all.Root().Child("All notifications"),
+		email.Root().Child("Email"),
+		push.Root().Child("Push"),
+	)
 }
 ```
 

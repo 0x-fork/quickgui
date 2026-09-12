@@ -14,18 +14,19 @@ import (
 ## Usage
 
 ```go
-func SliderExample() *native.Node {
+func SliderExample() *ui.Element {
 	volume, setVolume := ui.CreateSignal([]float64{40})
-	slider1 := ui.NewSlider(ui.SliderRootProps{Value: volume, Min: 0, Max: 100, Step: 1, OnValueChange: func(next []float64, _ *native.Event) {
+	slider := ui.NewSlider(ui.SliderRootProps{Value: volume, Min: 0, Max: 100, Step: 1, OnValueChange: func(next []float64, _ *native.Event) {
 		setVolume(next)
 	}})
-	return slider1.Root().Children(func() *native.Node {
-		return ui.Fragment([]*native.Node{slider1.Label(ui.PartProps{}).Children("Volume").NativeNode(), slider1.Control(ui.PartProps{Style: ui.Style().Width(240).Height(24)}).Children(func() *native.Node {
-			return ui.Fragment([]*native.Node{slider1.Track(ui.PartProps{}).Children(func() *native.Node {
-				return slider1.Indicator(ui.PartProps{}).NativeNode()
-			}).NativeNode(), slider1.Thumb(ui.SliderThumbProps{}).NativeNode()})
-		}).NativeNode(), slider1.Value(ui.PartProps{}).NativeNode()})
-	}).NativeNode()
+	return slider.Root().Children(
+		slider.Label().Child("Volume"),
+		slider.Control().Width(240).Height(24).Children(
+			slider.Track().Child(slider.Indicator()),
+			slider.Thumb(),
+		),
+		slider.Value(),
+	)
 }
 ```
 

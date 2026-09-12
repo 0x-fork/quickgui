@@ -15,17 +15,18 @@ import (
 ## 用法
 
 ```go
-func MenuExample() *native.Node {
-	menu1 := ui.NewMenu(ui.MenuRootProps{})
-	return menu1.Root().Children(func() *native.Node {
-		return ui.Fragment([]*native.Node{menu1.Trigger(ui.MenuTriggerProps{}).Children("Actions").NativeNode(), menu1.Positioner(ui.MenuPositionerProps{}).Children(func() *native.Node {
-			return menu1.Popup(ui.PartProps{}).Children(func() *native.Node {
-				return menu1.Item(ui.MenuItemProps{Value: "copy", Label: "Copy", PartProps: ui.PartProps{OnClick: func(*native.Event) {
+func MenuExample() *ui.Element {
+	menu := ui.NewMenu()
+	return menu.Root().Children(
+		menu.Trigger().Child("Actions"),
+		menu.Positioner().Child(
+			menu.Popup().Child(
+				menu.Item(ui.MenuItemProps{Value: "copy", Label: "Copy", PartProps: ui.PartProps{OnClick: func(*native.Event) {
 					fmt.Println("Copy")
-				}}}).Children("Copy").NativeNode()
-			}).NativeNode()
-		}).NativeNode()})
-	}).NativeNode()
+				}}}).Child("Copy"),
+			),
+		),
+	)
 }
 ```
 

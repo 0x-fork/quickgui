@@ -13,15 +13,17 @@ import (
 ## 使い方
 
 ```go
-func TooltipExample() *native.Node {
-	return ui.NewTooltipProvider(ui.TooltipProviderProps{Delay: 500}).Root().Child(func() *native.Node {
-		tooltip1 := ui.NewTooltip(ui.TooltipRootProps{Side: "top"})
-		return tooltip1.Root().Children(func() *native.Node {
-			return ui.Fragment([]*native.Node{tooltip1.Trigger(ui.TooltipTriggerProps{}).Children("Hover me").NativeNode(), tooltip1.Positioner(ui.TooltipPositionerProps{}).Children(func() *native.Node {
-				return tooltip1.Popup(ui.PartProps{}).Children("Helpful information").NativeNode()
-			}).NativeNode()})
-		}).NativeNode()
-	}).NativeNode()
+func TooltipExample() *ui.Element {
+	provider := ui.NewTooltipProvider(ui.TooltipProviderProps{Delay: 500})
+	tooltip := ui.NewTooltip().Side("top")
+	return provider.Root().Child(
+		tooltip.Root().Children(
+			tooltip.Trigger().Child("Hover me"),
+			tooltip.Positioner().Child(
+				tooltip.Popup().Child("Helpful information"),
+			),
+		),
+	)
 }
 ```
 

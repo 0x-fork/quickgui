@@ -13,15 +13,16 @@ import (
 ## 使い方
 
 ```go
-func AccordionExample() *native.Node {
-	accordion1 := ui.NewAccordion(ui.AccordionRootProps{Multiple: true})
-	return accordion1.Root().Children(func() *native.Node {
-		return accordion1.ItemWith(ui.AccordionItemProps{Value: "details"}).Children(func() *native.Node {
-			return ui.Fragment([]*native.Node{accordion1.Header(ui.PartProps{}).Children(func() *native.Node {
-				return accordion1.Trigger(ui.PartProps{}).Children("Details").NativeNode()
-			}).NativeNode(), accordion1.Panel(ui.PartProps{}).Children("Mounted when opened").NativeNode()})
-		}).NativeNode()
-	}).NativeNode()
+func AccordionExample() *ui.Element {
+	accordion := ui.NewAccordion().Multiple(true)
+	return accordion.Root().Child(
+		accordion.Item("details").Children(
+			accordion.Header().Child(
+				accordion.Trigger().Child("Details"),
+			),
+			accordion.Panel().Child("Mounted when opened"),
+		),
+	)
 }
 ```
 

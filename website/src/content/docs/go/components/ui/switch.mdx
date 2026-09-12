@@ -14,14 +14,15 @@ import (
 ## Usage
 
 ```go
-func SwitchExample() *native.Node {
+func SwitchExample() *ui.Element {
 	on, setOn := ui.CreateSignal(false)
-	switch1 := ui.NewSwitch(ui.SwitchProps{Checked: on, OnCheckedChange: func(next bool, _ *native.Event) {
+	switchControl := ui.NewSwitch(ui.SwitchProps{Checked: on, OnCheckedChange: func(next bool, _ *native.Event) {
 		setOn(next)
 	}})
-	return switch1.Root().Children(func() *native.Node {
-		return ui.Fragment([]*native.Node{switch1.Thumb(ui.PartProps{}).NativeNode(), ui.Text("Notifications").Node})
-	}).NativeNode()
+	return switchControl.Root().Children(
+		switchControl.Thumb(),
+		ui.Text("Notifications"),
+	)
 }
 ```
 

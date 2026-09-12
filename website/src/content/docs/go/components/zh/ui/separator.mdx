@@ -13,9 +13,9 @@ import (
 ## 用法
 
 ```go
-func SeparatorExample() *native.Node {
-	separator1 := ui.NewSeparator(ui.SeparatorProps{Orientation: "horizontal", PartProps: ui.PartProps{Style: ui.Style().Height(1).BackgroundColor("#d1d5db")}})
-	return separator1.Root().NativeNode()
+func SeparatorExample() *ui.Element {
+	separator := ui.NewSeparator().Orientation("horizontal")
+	return separator.Root().Height(1).BackgroundColor("#d1d5db")
 }
 ```
 

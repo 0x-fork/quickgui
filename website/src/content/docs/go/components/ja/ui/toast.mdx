@@ -13,25 +13,25 @@ import (
 ## 使い方
 
 ```go
-func ToastExample() *native.Node {
-	toast1 := ui.NewToast(ui.ToastProviderProps{Timeout: 5000, Limit: 3})
-	return toast1.Provider().Children(func() *native.Node {
-		var children []*native.Node
+func ToastExample() *ui.Element {
+	toast := ui.NewToast(ui.ToastProviderProps{Timeout: 5000, Limit: 3})
+	return toast.Provider().Child(func() *native.Node {
 		manager := ui.UseToastManager()
-		children = append(children, ui.Button().Child("Save").OnClick(func() {
+		save := ui.Button().Child("Save").OnClick(func() {
 			manager.Add(ui.ToastRequest{Title: "Saved", Type: "success"})
-		}).Node)
-		children = append(children, toast1.Viewport(ui.ToastViewportProps{}).Children(func() *native.Node {
-			return ui.For(manager.Toasts, func(toast ui.ToastDeclaration, _ func() int) *native.Node {
-				return toast1.Root(ui.ToastPartProps{ToastID: toast.ID}).Children(func() *native.Node {
-					return ui.Fragment([]*native.Node{toast1.Title(ui.ToastPartProps{ToastID: toast.ID}).Children(toast.Title).NativeNode(), toast1.Close(ui.ToastPartProps{ToastID: toast.ID}).Children("Dismiss").NativeNode()})
-				}).NativeNode()
-			}, func(toast ui.ToastDeclaration) any {
-				return toast.ID
-			}, nil)
-		}).NativeNode())
-		return ui.Fragment(children)
-	}).NativeNode()
+		})
+		viewport := toast.Viewport().Child(
+			ui.For(manager.Toasts, func(item ui.ToastDeclaration, _ func() int) *ui.Element {
+				return toast.Root(ui.ToastPartProps{ToastID: item.ID}).Children(
+					toast.Title(ui.ToastPartProps{ToastID: item.ID}).Child(item.Title),
+					toast.Close(ui.ToastPartProps{ToastID: item.ID}).Child("Dismiss"),
+				)
+			}, func(item ui.ToastDeclaration) any {
+				return item.ID
+			}, nil),
+		)
+		return ui.Fragment(save, viewport)
+	})
 }
 ```
 

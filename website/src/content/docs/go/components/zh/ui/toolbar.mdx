@@ -13,11 +13,12 @@ import (
 ## 用法
 
 ```go
-func ToolbarExample() *native.Node {
-	toolbar1 := ui.NewToolbar(ui.ToolbarRootProps{Items: []ui.ComponentItem{{Value: "select"}, {Value: "draw"}}, DefaultActive: "select"})
-	return toolbar1.Root().Children(func() *native.Node {
-		return ui.Fragment([]*native.Node{toolbar1.Item(ui.ToolbarItemProps{Value: "select"}).Children("Select").NativeNode(), toolbar1.Item(ui.ToolbarItemProps{Value: "draw"}).Children("Draw").NativeNode()})
-	}).NativeNode()
+func ToolbarExample() *ui.Element {
+	toolbar := ui.NewToolbar(ui.ToolbarRootProps{Items: []ui.ComponentItem{{Value: "select"}, {Value: "draw"}}, DefaultActive: "select"})
+	return toolbar.Root().Children(
+		toolbar.Item(ui.ToolbarItemProps{Value: "select"}).Child("Select"),
+		toolbar.Item(ui.ToolbarItemProps{Value: "draw"}).Child("Draw"),
+	)
 }
 ```
 

@@ -13,19 +13,20 @@ import (
 ## 使い方
 
 ```go
-func NavigationMenuExample() *native.Node {
-	navigationMenu1 := ui.NewNavigationMenu(ui.NavigationMenuRootProps{Items: []ui.ComponentItem{{Value: "products"}}, Delay: 100})
-	return navigationMenu1.Root().Children(func() *native.Node {
-		return navigationMenu1.List(ui.PartProps{}).Children(func() *native.Node {
-			return navigationMenu1.Item(ui.NavigationMenuItemProps{Value: "products"}).Children(func() *native.Node {
-				return ui.Fragment([]*native.Node{navigationMenu1.Trigger(ui.NavigationMenuPartProps{}).Children("Products").NativeNode(), navigationMenu1.Positioner(ui.NavigationMenuPartProps{}).Children(func() *native.Node {
-					return navigationMenu1.Popup(ui.NavigationMenuPartProps{}).Children(func() *native.Node {
-						return navigationMenu1.Link(ui.NavigationMenuLinkProps{Value: "overview"}).Children("Overview").NativeNode()
-					}).NativeNode()
-				}).NativeNode()})
-			}).NativeNode()
-		}).NativeNode()
-	}).NativeNode()
+func NavigationMenuExample() *ui.Element {
+	menu := ui.NewNavigationMenu().Items([]ui.ComponentItem{{Value: "products"}}).Delay(100)
+	return menu.Root().Child(
+		menu.List().Child(
+			menu.Item(ui.NavigationMenuItemProps{Value: "products"}).Children(
+				menu.Trigger().Child("Products"),
+				menu.Positioner().Child(
+					menu.Popup().Child(
+						menu.Link(ui.NavigationMenuLinkProps{Value: "overview"}).Child("Overview"),
+					),
+				),
+			),
+		),
+	)
 }
 ```
 

@@ -14,14 +14,15 @@ import (
 ## Usage
 
 ```go
-func ToggleGroupExample() *native.Node {
+func ToggleGroupExample() *ui.Element {
 	values, setValues := ui.CreateSignal([]string{"bold"})
-	toggleGroup1 := ui.NewToggleGroup(ui.ToggleGroupProps{Multiple: true, Value: values, Items: []ui.ComponentItem{{Value: "bold"}, {Value: "italic"}}, OnValueChange: func(next []string, _ *native.Event) {
+	group := ui.NewToggleGroup(ui.ToggleGroupProps{Multiple: true, Value: values, Items: []ui.ComponentItem{{Value: "bold"}, {Value: "italic"}}, OnValueChange: func(next []string, _ *native.Event) {
 		setValues(next)
 	}})
-	return toggleGroup1.Root().Children(func() *native.Node {
-		return ui.Fragment([]*native.Node{toggleGroup1.ItemWith(ui.ToggleGroupItemProps{Value: "bold"}).Children("Bold").NativeNode(), toggleGroup1.ItemWith(ui.ToggleGroupItemProps{Value: "italic"}).Children("Italic").NativeNode()})
-	}).NativeNode()
+	return group.Root().Children(
+		group.Item("bold").Child("Bold"),
+		group.Item("italic").Child("Italic"),
+	)
 }
 ```
 

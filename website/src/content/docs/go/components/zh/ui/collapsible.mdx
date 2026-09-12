@@ -13,11 +13,12 @@ import (
 ## 用法
 
 ```go
-func CollapsibleExample() *native.Node {
-	collapsible1 := ui.NewCollapsible(ui.CollapsibleRootProps{})
-	return collapsible1.Root().Children(func() *native.Node {
-		return ui.Fragment([]*native.Node{collapsible1.Trigger(ui.PartProps{}).Children("Show details").NativeNode(), collapsible1.Panel(ui.PartProps{}).Children("Mounted when opened").NativeNode()})
-	}).NativeNode()
+func CollapsibleExample() *ui.Element {
+	collapsible := ui.NewCollapsible()
+	return collapsible.Root().Children(
+		collapsible.Trigger().Child("Show details"),
+		collapsible.Panel().Child("Mounted when opened"),
+	)
 }
 ```
 

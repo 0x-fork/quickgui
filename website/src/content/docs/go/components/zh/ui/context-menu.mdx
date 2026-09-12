@@ -15,15 +15,15 @@ import (
 ## 用法
 
 ```go
-func ContextMenuExample() *native.Node {
-	contextMenu1 := ui.NewContextMenu(ui.ContextMenuRootProps{Items: func() []ui.MenuItemDeclaration {
+func ContextMenuExample() *ui.Element {
+	menu := ui.NewContextMenu(ui.ContextMenuRootProps{Items: func() []ui.MenuItemDeclaration {
 		return []ui.MenuItemDeclaration{{ID: "copy", Label: "Copy"}}
 	}, OnSelect: func(item ui.MenuSelectDetails, _ *native.Event) {
 		fmt.Println(item.ID)
 	}})
-	return contextMenu1.Root().Children(func() *native.Node {
-		return contextMenu1.Trigger(ui.ContextMenuTriggerProps{}).Children("Right-click here").NativeNode()
-	}).NativeNode()
+	return menu.Root().Child(
+		menu.Trigger().Child("Right-click here"),
+	)
 }
 ```
 

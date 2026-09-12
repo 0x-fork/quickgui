@@ -13,16 +13,15 @@ import (
 ## 用法
 
 ```go
-func SplitterExample() *native.Node {
-	splitter1 := ui.NewSplitter(ui.SplitterRootProps{DefaultValue: []float64{240, 400}, Panes: []ui.SplitterPaneDeclaration{{}, {}}, PartProps: ui.PartProps{Style: ui.Style().Display("flex").Height(240)}})
-	return splitter1.Root().Children(func() *native.Node {
-		var children []*native.Node
-		first, second := 0, 1
-		children = append(children, splitter1.PaneWith(ui.SplitterPaneProps{Index: &first}).Children("Sidebar").NativeNode())
-		children = append(children, splitter1.HandleWith(ui.SplitterPaneProps{Index: &first, PartProps: ui.PartProps{Style: ui.Style().Width(6).Cursor("col-resize")}}).NativeNode())
-		children = append(children, splitter1.PaneWith(ui.SplitterPaneProps{Index: &second}).Children("Content").NativeNode())
-		return ui.Fragment(children)
-	}).NativeNode()
+func SplitterExample() *ui.Element {
+	splitter := ui.NewSplitter().
+		DefaultValue([]float64{240, 400}).
+		Panes([]ui.SplitterPaneDeclaration{{}, {}})
+	return splitter.Root().Display("flex").Height(240).Children(
+		splitter.Pane(0).Child("Sidebar"),
+		splitter.Handle(0).Width(6).Cursor("col-resize"),
+		splitter.Pane(1).Child("Content"),
+	)
 }
 ```
 
