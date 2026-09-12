@@ -1,3 +1,6 @@
+import type { KeyedTokensInfo } from "@shikijs/magic-move/types";
+import type { DocsFrontend } from "./docs";
+
 export const snippets = {
   typescriptSwiftUi: {
     lang: "tsx",
@@ -162,3 +165,17 @@ bun run build`,
 
 export type SnippetKey = keyof typeof snippets;
 export type HighlightedSnippets = Record<SnippetKey, string>;
+
+export const counterSnippets = {
+  go: "counter",
+  typescript: "typescriptCounter",
+  rust: "rustCounter",
+} as const satisfies Record<DocsFrontend, SnippetKey>;
+
+export const swiftUiSnippets = {
+  go: "swiftUi",
+  typescript: "typescriptSwiftUi",
+  rust: "rustSwiftUi",
+} as const satisfies Record<DocsFrontend, SnippetKey>;
+
+export type FrontendTokens = Record<DocsFrontend, KeyedTokensInfo>;

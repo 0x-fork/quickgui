@@ -2,6 +2,7 @@
 @import '@fontsource-variable/geist-mono';
 @import 'tailwindcss';
 @import 'tw-animate-css';
+@import '@shikijs/magic-move/style.css';
 
 @plugin '@egoist/tailwindcss-icons';
 
@@ -235,6 +236,34 @@ html:lang(ja) h2 {
 .slim-scroll {
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-color) transparent;
+}
+
+/* Reserve the longest example's height as individual code tokens move. */
+.code-morph .shiki-magic-move-container {
+  margin: 0;
+  min-width: max-content;
+  padding: 1.5rem;
+  font: inherit;
+  line-height: 1.7;
+  font-variant-ligatures: none;
+  tab-size: 2;
+}
+
+.code-morph .shiki-magic-move-item {
+  color: var(--shiki-light);
+}
+
+@media (prefers-color-scheme: dark) {
+  .code-morph .shiki-magic-move-item {
+    color: var(--shiki-dark);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .code-morph .shiki-magic-move-container,
+  .code-morph .shiki-magic-move-item {
+    transition: none !important;
+  }
 }
 
 .slim-scroll::-webkit-scrollbar {

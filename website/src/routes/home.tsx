@@ -11,7 +11,7 @@ import { SwiftUi } from "../components/sections/swift-ui";
 import { Quickstart } from "../components/sections/quickstart";
 import { Platforms } from "../components/sections/platforms";
 import { FinalCta } from "../components/sections/final-cta";
-import { getHighlightedSnippets } from "../server/highlight.server";
+import { getCounterTokens, getHighlightedSnippets, getSwiftUiTokens } from "../server/highlight.server";
 import { fetchRepoStats } from "../server/stats.server";
 import { siteMeta } from "../lib/meta";
 import type { DocsFrontend } from "../lib/docs";
@@ -31,11 +31,18 @@ export async function loader({ params, request }: Route.LoaderArgs) {
     throw new Response("Page not found", { status: 404 });
   }
 
-  const [highlighted, stats] = await Promise.all([getHighlightedSnippets(), fetchRepoStats()]);
+  const [highlighted, counters, swiftUi, stats] = await Promise.all([
+    getHighlightedSnippets(),
+    getCounterTokens(),
+    getSwiftUiTokens(),
+    fetchRepoStats(),
+  ]);
 
   return {
     frontend: readFrontendPreference(request.headers.get("Cookie")),
     highlighted,
+    counters,
+    swiftUi,
     locale,
     origin: new URL(request.url).origin,
     stats,
@@ -90,7 +97,7 @@ function SkipLink() {
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { highlighted, locale, stats } = loaderData;
+  const { highlighted, counters, swiftUi, locale, stats } = loaderData;
   const [i18n] = useState(() => createI18n(locale));
   const [frontend, setFrontend] = useState(loaderData.frontend);
 
@@ -115,11 +122,11 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           <Benchmarks />
           <Features />
           <CodeShowcase
-            highlighted={highlighted}
+            tokens={counters}
             frontend={frontend}
             onFrontendChange={selectFrontend}
           />
-          <SwiftUi highlighted={highlighted} frontend={frontend} onFrontendChange={selectFrontend} />
+          <SwiftUi tokens={swiftUi} frontend={frontend} onFrontendChange={selectFrontend} />
           <Quickstart
             highlighted={highlighted}
             frontend={frontend}

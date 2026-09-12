@@ -1,10 +1,15 @@
-import type { HighlightedSnippets, SnippetKey } from "../lib/snippets";
+import type { FrontendTokens, HighlightedSnippets, SnippetKey } from "../lib/snippets";
 
-let cached: Promise<HighlightedSnippets> | null = null;
+let cached: Promise<{
+  highlighted: HighlightedSnippets;
+  counters: FrontendTokens;
+  swiftUi: FrontendTokens;
+}> | null = null;
 
-async function highlightAll(): Promise<HighlightedSnippets> {
+async function highlightAll() {
   const [
-    { snippets },
+    { snippets, counterSnippets, swiftUiSnippets },
+    { codeToKeyedTokens },
     { createHighlighterCore },
     { createJavaScriptRegexEngine },
     go,
@@ -15,6 +20,7 @@ async function highlightAll(): Promise<HighlightedSnippets> {
     githubDark,
   ] = await Promise.all([
     import("../lib/snippets"),
+    import("@shikijs/magic-move/core"),
     import("shiki/core"),
     import("shiki/engine/javascript"),
     import("shiki/langs/go.mjs"),
@@ -40,10 +46,37 @@ async function highlightAll(): Promise<HighlightedSnippets> {
       defaultColor: false,
     });
   }
-  return out;
+  function highlightFrontends(examples: Record<keyof FrontendTokens, SnippetKey>): FrontendTokens {
+    return Object.fromEntries(
+      Object.entries(examples).map(([frontend, key]) => {
+        const { lang, code } = snippets[key];
+        return [frontend, codeToKeyedTokens(highlighter, code.trimEnd().replaceAll("\t", "  "), {
+          lang,
+          themes: { light: "github-light", dark: "github-dark" },
+          defaultColor: false,
+        })];
+      }),
+    ) as FrontendTokens;
+  }
+
+  return {
+    highlighted: out,
+    counters: highlightFrontends(counterSnippets),
+    swiftUi: highlightFrontends(swiftUiSnippets),
+  };
 }
 
-export function getHighlightedSnippets(): Promise<HighlightedSnippets> {
+export async function getHighlightedSnippets(): Promise<HighlightedSnippets> {
   cached ??= highlightAll();
-  return cached;
+  return (await cached).highlighted;
+}
+
+export async function getCounterTokens(): Promise<FrontendTokens> {
+  cached ??= highlightAll();
+  return (await cached).counters;
+}
+
+export async function getSwiftUiTokens(): Promise<FrontendTokens> {
+  cached ??= highlightAll();
+  return (await cached).swiftUi;
 }

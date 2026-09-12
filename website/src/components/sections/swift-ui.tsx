@@ -1,21 +1,21 @@
 import { useTranslation } from "react-i18next";
-import type { HighlightedSnippets, SnippetKey } from "../../lib/snippets";
-import { CodeBlock } from "../code-block";
+import type { FrontendTokens } from "../../lib/snippets";
+import { AnimatedCodeBlock } from "../animated-code-block";
 import type { DocsFrontend } from "../../lib/docs";
 import { FrontendPicker } from "../frontend-picker";
 
-const examples: Record<DocsFrontend, { file: string; snippet: SnippetKey }> = {
-  go: { file: "swiftui.go", snippet: "swiftUi" },
-  typescript: { file: "swiftui.tsx", snippet: "typescriptSwiftUi" },
-  rust: { file: "swiftui.rs", snippet: "rustSwiftUi" },
+const files: Record<DocsFrontend, string> = {
+  go: "swiftui.go",
+  typescript: "swiftui.tsx",
+  rust: "swiftui.rs",
 };
 
 export function SwiftUi({
-  highlighted,
+  tokens,
   frontend,
   onFrontendChange,
 }: {
-  highlighted: HighlightedSnippets;
+  tokens: FrontendTokens;
   frontend: DocsFrontend;
   onFrontendChange: (frontend: DocsFrontend) => void;
 }) {
@@ -40,10 +40,10 @@ export function SwiftUi({
         <div className="min-w-0 bg-card-2 p-6 sm:p-12">
           <div className="overflow-hidden border border-border bg-background">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card-2 px-5 py-2.5">
-              <span className="font-mono text-xs">{examples[frontend].file}</span>
+              <span className="font-mono text-xs">{files[frontend]}</span>
               <FrontendPicker value={frontend} onChange={onFrontendChange} />
             </div>
-            <CodeBlock html={highlighted[examples[frontend].snippet]} />
+            <AnimatedCodeBlock tokens={tokens} frontend={frontend} />
           </div>
         </div>
       </div>

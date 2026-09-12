@@ -4,9 +4,11 @@ import { cn } from '@/lib/utils'
 
 export function CopyButton({
   text,
+  label,
   className,
 }: {
   text: string
+  label?: string
   className?: string
 }) {
   const { t } = useTranslation()
@@ -34,7 +36,7 @@ export function CopyButton({
     <button
       type="button"
       onClick={copy}
-      aria-label={copied ? t('common.copied') : t('common.copy', { text })}
+      aria-label={copied ? t('common.copied') : t('common.copy', { text: label ?? text })}
       className={cn(
         'flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground',
         className,

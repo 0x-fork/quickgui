@@ -69,7 +69,12 @@ export const en = {
   },
   code: {
     title: "Go, TypeScript, and Rust examples",
-    lead: "Go uses fluent native views and composable styles. TypeScript uses Solid 2 JSX. Rust implements View and links the crate directly. In each language, updates change the bindings that read them while the rest of the tree stays mounted.",
+    lead: "One reactive counter, three familiar languages. Pick a language to explore the code. Each version updates just the bindings that change, keeping the rest of the tree mounted.",
+    frontends: {
+      go: "Fluent native views and composable styles, with signals that keep your UI in sync.",
+      typescript: "Solid 2 signals and familiar JSX, rendered as native components.",
+      rust: "Native views with Rust builders, linked directly into your app with Cargo.",
+    },
   },
   swiftUi: {
     title: "Use native SwiftUI in QuickGUI.",

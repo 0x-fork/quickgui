@@ -71,7 +71,12 @@ export const ja: typeof en = {
   },
   code: {
     title: "Go、TypeScript、Rust のコード例",
-    lead: "Go は fluent なネイティブビューと組み合わせ可能なスタイルを使い、TypeScript は Solid 2 JSX を使い、Rust は View を実装してクレートを直接リンクします。更新はそれを読むバインディングだけに届き、ほかのノードは維持されます。",
+    lead: "同じリアクティブなカウンターを、3 つの言語で。言語を選んでコードを見てみましょう。どの言語でも、変更されたバインディングだけを更新し、ほかのノードは維持されます。",
+    frontends: {
+      go: "メソッドチェーンで組み立てるネイティブビューと再利用できるスタイル。シグナルが UI を同期します。",
+      typescript: "Solid 2 のシグナルとなじみのある JSX で、ネイティブコンポーネントを描画します。",
+      rust: "Rust のビルダーでネイティブビューを構築し、Cargo でアプリに直接リンクします。",
+    },
   },
   swiftUi: {
     title: "QuickGUI でネイティブ SwiftUI を使う",

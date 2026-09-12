@@ -71,7 +71,12 @@ export const zh: typeof en = {
   },
   code: {
     title: "Go、TypeScript 与 Rust 示例",
-    lead: "Go 使用链式原生视图和可组合样式，TypeScript 使用 Solid 2 JSX，Rust 实现 View 并直接链接 crate。更新只作用于读取它的绑定，其余节点保持挂载。",
+    lead: "同一个响应式计数器，三种熟悉的语言。选择语言，查看对应代码。每个版本都只更新发生变化的绑定，其余节点保持挂载。",
+    frontends: {
+      go: "链式原生视图、可组合样式与信号，让界面随状态同步更新。",
+      typescript: "使用 Solid 2 信号与熟悉的 JSX，渲染真正的原生组件。",
+      rust: "用 Rust 构建原生视图，通过 Cargo 直接链接到应用。",
+    },
   },
   swiftUi: {
     title: "在 QuickGUI 中使用原生 SwiftUI",

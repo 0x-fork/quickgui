@@ -3,18 +3,21 @@ import { renderToString } from "react-dom/server";
 import { I18nextProvider } from "react-i18next";
 import { MemoryRouter } from "react-router";
 import { Hero } from "../src/components/sections/hero";
+import { CodeShowcase } from "../src/components/sections/code-showcase";
 import { SwiftUi } from "../src/components/sections/swift-ui";
 import { Quickstart } from "../src/components/sections/quickstart";
 import { FinalCta } from "../src/components/sections/final-cta";
 import { DocsShell } from "../src/components/docs/docs-shell";
 import { DOCS_FRONTENDS, docsPath, frontendLabel } from "../src/lib/docs";
 import { createI18n, SUPPORTED_LOCALES } from "../src/i18n";
-import { getHighlightedSnippets } from "../src/server/highlight.server";
+import { getCounterTokens, getHighlightedSnippets, getSwiftUiTokens } from "../src/server/highlight.server";
 
 const plain = (html: string) => html.replace(/<[^>]*>/g, "");
 
 test("homepage frontends share the init command and select their examples and docs links", async () => {
   const highlighted = await getHighlightedSnippets();
+  const counters = await getCounterTokens();
+  const swiftUi = await getSwiftUiTokens();
   for (const locale of SUPPORTED_LOCALES) {
     const i18n = createI18n(locale);
     const prefix = locale === "en" ? "" : `/${locale}`;
@@ -27,6 +30,22 @@ test("homepage frontends share the init command and select their examples and do
       expect(hero).not.toContain("--frontend");
       expect(hero).not.toContain('role="group"');
       const cta = render(<FinalCta />);
+      const showcase = render(
+        <CodeShowcase tokens={counters} frontend={frontend} onFrontendChange={() => {}} />,
+      );
+      expect(showcase.match(/role="tab"/g)).toHaveLength(3);
+      expect(showcase.match(/role="tabpanel"/g)).toHaveLength(1);
+      expect(showcase.match(/aria-selected="true"/g)).toHaveLength(1);
+      expect(showcase).toContain(`href="${prefix}${docsPath(frontend)}"`);
+      expect(plain(showcase)).toContain(i18n.t(`code.frontends.${frontend}`));
+      const signatures = {
+        go: "func Counter()",
+        typescript: "function Counter()",
+        rust: "impl View for Counter",
+      };
+      for (const target of DOCS_FRONTENDS) {
+        expect(plain(showcase).includes(signatures[target])).toBe(target === frontend);
+      }
       for (const target of DOCS_FRONTENDS) {
         for (const html of [hero, cta]) {
           expect(html).toContain(`href="${prefix}${docsPath(target)}"`);
@@ -37,7 +56,7 @@ test("homepage frontends share the init command and select their examples and do
       }
       const swift = plain(
         render(
-          <SwiftUi highlighted={highlighted} frontend={frontend} onFrontendChange={() => {}} />,
+          <SwiftUi tokens={swiftUi} frontend={frontend} onFrontendChange={() => {}} />,
         ),
       );
       const extension = { go: "go", typescript: "tsx", rust: "rs" }[frontend];
