@@ -16,7 +16,7 @@ In this source checkout, run `bun install` and `bun run build:native` once, then
 bun packages/cli/src/cli.ts dev --project examples/counter-typescript
 ```
 
-Use Bun 1.4 or later. Solid, `@solidjs/compiler`, and `@solidjs/universal` are pinned to `2.0.0-rc.7`. Solid 2 is a release candidate, and Bun labels its FFI API experimental. TypeScript targets the repository's macOS workflow; Windows/Linux native runtime acceptance remains outstanding.
+Use Bun 1.4 or later. `solid-js`, `@solidjs/compiler`, and `@solidjs/universal` are pinned to `2.0.0-rc.8`. Solid 2 is a release candidate, and Bun labels its FFI API experimental. TypeScript targets the repository's macOS workflow; Windows/Linux native runtime acceptance remains outstanding.
 
 ## Components and windows
 

@@ -14,6 +14,8 @@ function Counter() {
         alignItems: "center",
         justifyContent: "center",
         gap: 16,
+        bg: "#ffffff",
+        textColor: "#111827",
       }}
     >
       <Text style={{ fontSize: 24 }}>Count: {count()}</Text>

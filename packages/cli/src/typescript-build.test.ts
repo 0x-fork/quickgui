@@ -94,7 +94,7 @@ test("TypeScript scaffold pins Solid 2 and configures JSX and native window owne
   expect(config.name).toBe('Quoted "App"');
   expect(existsSync(join(project, "go.mod"))).toBe(false);
   const manifest = JSON.parse(readFileSync(join(project, "package.json"), "utf8"));
-  expect(manifest.dependencies["solid-js"]).toBe("2.0.0-rc.7");
+  expect(manifest.dependencies["solid-js"]).toBe("2.0.0-rc.8");
   expect(manifest.dependencies["@quickgui/solid"]).toBeTruthy();
   const source = readFileSync(join(project, "app.tsx"), "utf8");
   expect(source).toContain("await app.whenReady()");

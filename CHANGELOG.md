@@ -4,6 +4,14 @@ All notable user-facing changes to QuickGUI are recorded here.
 
 ## Unreleased
 
+## 0.1.4-next.1 - 2026-09-13
+
+### CLI
+
+- The TypeScript runtime, universal renderer, and JSX compiler now use Solid `2.0.0-rc.8`
+  together. Fresh installs could pair the rc.7 runtime with rc.8 Signals and crash `quickgui dev`
+  while Solid's development diagnostics initialized.
+
 ## 0.1.4 - 2026-09-13
 
 ### CLI

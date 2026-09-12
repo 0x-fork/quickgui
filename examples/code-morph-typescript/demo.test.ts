@@ -1,5 +1,5 @@
 import { expect, mock, test } from "bun:test";
-import { createComponent, DEV, flush } from "solid-js";
+import { createComponent, DEV, flush, OBSERVE } from "solid-js";
 import type { NativeNode } from "@quickgui/native";
 import { fakeBinding, setEventDispatcher } from "../../packages/native/test/fake-binding.ts";
 import { loadSnippets } from "./snippets.ts";
@@ -50,8 +50,9 @@ async function close(host: InstanceType<typeof Window>) {
 
 test("component setup and language switches do not read reactive state outside tracking scopes", async () => {
   expect(DEV).toBeDefined();
+  expect(OBSERVE).toBeDefined();
   const warnings: string[] = [];
-  const unsubscribe = DEV!.diagnostics.subscribe((event) => {
+  const unsubscribe = OBSERVE!.diagnostics.subscribe((event) => {
     if (event.code === "STRICT_READ_UNTRACKED") warnings.push(event.message);
   });
   let host: InstanceType<typeof Window> | undefined;
