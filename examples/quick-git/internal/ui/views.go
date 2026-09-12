@@ -37,7 +37,7 @@ func visibleWindow[T any](items []T, window gui.VisibleRange) []visibleItem[T] {
 func ChangesView() *gui.Element {
 	app := UseApp()
 	store := app.Store
-	return gui.View(
+	return gui.View().Children(
 
 		resizablePanel("Resize file list", store.ChangesSplit, store.SetChangesSplit, 220, 800,
 			func() *native.Node {
@@ -70,9 +70,9 @@ func fileList(list model.ListID) *gui.Element {
 	if list == model.ListStaged {
 		label = "Staged"
 	}
-	return gui.View(
+	return gui.View().Children(
 
-		gui.View(
+		gui.View().Children(
 
 			gui.Text(
 				label,
@@ -299,7 +299,7 @@ func changeName(list model.ListID, item func() git.ChangeItem) *gui.Element {
 		}
 		return text
 	}
-	return gui.View(
+	return gui.View().Children(
 
 		gui.Text(
 			item().Path,
@@ -394,7 +394,7 @@ func confirmDiscard(app AppContext, items []git.ChangeItem) {
 func commitComposer() *gui.Element {
 	app := UseApp()
 	store := app.Store
-	return gui.View(
+	return gui.View().Children(
 
 		gui.Input(
 
@@ -403,7 +403,7 @@ func commitComposer() *gui.Element {
 
 		gui.TextArea().Placeholder("Description").Value(store.Body()).OnInputEvent(func(event *native.Event) { store.SetBody(event.Value) }).
 			Display("flex").Width("100%").MinHeight(72).PaddingLeft(7).PaddingRight(7).PaddingTop(4).PaddingBottom(4).BackgroundColor(app.Theme().Input).TextColor(app.Theme().Text).BorderWidth(1).BorderColor(app.Theme().InputBorder).BorderRadius(6).FontSize(UIFontSize),
-		gui.View(
+		gui.View().Children(
 
 			CheckRow("Amend", store.Amend, store.SetAmend),
 			gui.View().Flex(1),
@@ -435,12 +435,12 @@ func commitComposer() *gui.Element {
 func DiffPane() *gui.Element {
 	app := UseApp()
 	store := app.Store
-	return gui.View(
+	return gui.View().Child(
 
 		gui.Show(
 			store.Diff().Target != nil,
 			func() *native.Node {
-				return gui.Fragment([]*native.Node{gui.View(
+				return gui.Fragment([]*native.Node{gui.View().Children(
 
 					gui.Text(
 						func() string {
@@ -510,7 +510,7 @@ func diffActions() *native.Node {
 		func() *gui.Element {
 			mode := store.Diff().Target.Kind
 			lineCount := store.SelectedDiffLineCount()
-			return gui.View(
+			return gui.View().Child(
 
 				gui.Show(
 					lineCount > 0,
@@ -745,9 +745,9 @@ func diffTableRow(row func() git.DiffRow, index func() int) *native.Node {
 						},
 					},
 					func() *gui.Element {
-						return gui.View(
+						return gui.View().Children(
 
-							gui.View(
+							gui.View().Child(
 								func() *native.Node {
 									var children []*native.Node
 									if mark != "" {
@@ -906,7 +906,7 @@ func historyTableRow(row func() visibleItem[git.Commit], graphWidth func() float
 						},
 					},
 					func() *gui.Element {
-						return gui.View(
+						return gui.View().Children(
 
 							commitRefs(func() []git.CommitRef { return row().Item.Refs }),
 							gui.Text(
@@ -948,11 +948,11 @@ func historyTableRow(row func() visibleItem[git.Commit], graphWidth func() float
 func HistoryView() *gui.Element {
 	app := UseApp()
 	store := app.Store
-	return gui.View(
+	return gui.View().Children(
 
 		resizablePanel("Resize history", store.HistorySplit, store.SetHistorySplit, 260, 1000,
 			func() *native.Node {
-				return gui.Fragment([]*native.Node{gui.View(
+				return gui.Fragment([]*native.Node{gui.View().Children(
 
 					gui.Text(
 						func() string {
@@ -993,7 +993,7 @@ func HistoryView() *gui.Element {
 				MinHeight(0).
 				FlexDirection("column"),
 		),
-		gui.View(
+		gui.View().Children(
 
 			commitDetail(),
 			DiffPane(),
@@ -1109,12 +1109,12 @@ func commitFileTable() *native.Node {
 func commitDetail() *gui.Element {
 	app := UseApp()
 	store := app.Store
-	return gui.View(
+	return gui.View().Child(
 
 		gui.Show(
 			store.SelectedCommit() != nil,
 			func() *native.Node {
-				return gui.Fragment([]*native.Node{gui.View(
+				return gui.Fragment([]*native.Node{gui.View().Children(
 
 					gui.Text(
 						func() string {
@@ -1170,9 +1170,9 @@ func commitDetail() *gui.Element {
 func BranchesView() *gui.Element {
 	app := UseApp()
 	store := app.Store
-	return gui.View(
+	return gui.View().Children(
 
-		gui.View(
+		gui.View().Children(
 
 			gui.Text(
 				"Local branches",
@@ -1239,7 +1239,7 @@ func BranchesView() *gui.Element {
 		gui.For(
 			func() []git.BranchRef { return store.Refs().Remote },
 			func(branch git.BranchRef, _ func() int) *gui.Element {
-				return gui.View(
+				return gui.View().Children(
 
 					gui.Text(
 						branch.Name,
@@ -1260,9 +1260,9 @@ func BranchesView() *gui.Element {
 func WorktreesView() *gui.Element {
 	app := UseApp()
 	store := app.Store
-	return gui.View(
+	return gui.View().Children(
 
-		gui.View(
+		gui.View().Children(
 
 			gui.Text(
 				"Worktrees",
@@ -1325,9 +1325,9 @@ func WorktreesView() *gui.Element {
 func StashesView() *gui.Element {
 	app := UseApp()
 	store := app.Store
-	return gui.View(
+	return gui.View().Children(
 
-		gui.View(
+		gui.View().Children(
 
 			gui.Text(
 				"Stashes",
@@ -1346,7 +1346,7 @@ func StashesView() *gui.Element {
 					func(stash git.StashEntry, _ func() int) *gui.Element {
 						return gui.Button(
 
-							gui.View(
+							gui.View().Children(
 
 								gui.Text(stash.Summary).LineClamp(1),
 								gui.Text(
@@ -1394,7 +1394,7 @@ func StashesView() *gui.Element {
 
 func emptyState(title, description string) *gui.Element {
 	app := UseApp()
-	return gui.View(
+	return gui.View().Children(
 
 		gui.Text(
 			title,

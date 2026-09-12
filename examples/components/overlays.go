@@ -145,7 +145,7 @@ func SystemContextMenuDemo() *ui.Element {
 		)
 	}
 	return panel("System context menu", "The operating system draws this menu. Actions update the readout below; reopen it to see the current checkmarks.", func() *native.Node {
-		return ui.Fragment([]*native.Node{ui.View(
+		return ui.Fragment([]*native.Node{ui.View().Child(
 			"Right-click here for the system menu",
 		).Display("flex").Height(96).AlignItems("center").JustifyContent("center").BorderRadius(10).BorderWidth(1).BorderStyle("dashed").BorderColor(color(func(p palette) string { return p.Border })).BackgroundColor(color(func(p palette) string { return p.PanelAlt })).TextColor(color(func(p palette) string { return p.Muted })).AppRegion("no-drag").UserSelect("none").OnContextMenu(func(event *native.Event) {
 			event.PreventDefault()

@@ -60,7 +60,7 @@ func control(label any, click func(), disabled func() bool) *ui.Element {
 		OnClick(click).Disabled(disabled)
 }
 func property(label string, value any) *ui.Element {
-	return ui.View(caption(label), ui.Text(value).FontSize(12).FontWeight(500)).
+	return ui.View().Children(caption(label), ui.Text(value).FontSize(12).FontWeight(500)).
 		Style(row()).JustifyContent("space-between")
 }
 
@@ -114,7 +114,7 @@ func issueTracker() *ui.Element {
 		return matches[start:min(start+pageSize, len(matches))]
 	})
 
-	sidebar := ui.View(
+	sidebar := ui.View().Children(
 		ui.Text("Orbit").FontSize(22).FontWeight(700).PaddingLeft(12).MarginBottom(6),
 		caption("Product workspace").PaddingLeft(12).MarginBottom(24),
 		ui.For(
@@ -150,8 +150,8 @@ func issueTracker() *ui.Element {
 	).Style(column()).Width(176).FlexShrink(0).PaddingTop(24).PaddingBottom(24).
 		PaddingLeft(12).PaddingRight(12).Gap(8).BackgroundColor("#f4f5f7").BorderRightWidth(1).BorderColor(line)
 
-	header := ui.View(
-		ui.View(
+	header := ui.View().Children(
+		ui.View().Children(
 			ui.Text("Issue inbox").FontSize(24).FontWeight(700),
 			caption(func() string {
 				return strconv.Itoa(len(issues)-completed()) + " open · " + strconv.Itoa(completed()) + " completed"
@@ -164,8 +164,8 @@ func issueTracker() *ui.Element {
 	).Style(row()).Height(94).FlexShrink(0).PaddingLeft(24).PaddingRight(24).
 		JustifyContent("space-between").BorderBottomWidth(1).BorderColor(line)
 
-	inbox := ui.View(
-		ui.View(
+	inbox := ui.View().Children(
+		ui.View().Children(
 			caption(func() string { return strconv.Itoa(len(matching())) + " issues" }),
 			caption("Updated this week"),
 		).Style(row()).Height(48).FlexShrink(0).PaddingLeft(20).PaddingRight(20).
@@ -176,7 +176,7 @@ func issueTracker() *ui.Element {
 				return []string{query() + "|" + filter() + "|" + strconv.Itoa(currentPage())}
 			},
 			func(_ string, _ func() int) *ui.Element {
-				return ui.View(
+				return ui.View().Child(
 					ui.For(
 						visible,
 						func(index int, _ func() int) *ui.Element {
@@ -205,19 +205,19 @@ func issueTracker() *ui.Element {
 			func(key string) any { return key },
 			nil,
 		),
-		ui.View(
+		ui.View().Children(
 			caption(func() string { return "Page " + strconv.Itoa(currentPage()+1) + " of " + strconv.Itoa(pages()) }),
-			ui.View(
+			ui.View().Children(
 				control("Previous", func() { setPage(currentPage() - 1) }, func() bool { return currentPage() == 0 }),
 				control("Next", func() { setPage(currentPage() + 1) }, func() bool { return currentPage()+1 >= pages() }),
 			).Style(row()).Gap(8),
 		).Style(row()).Height(58).FlexShrink(0).JustifyContent("space-between").PaddingLeft(20).PaddingRight(20).BorderTopWidth(1).BorderColor(line),
 	).Style(column()).Flex(1)
 
-	detailsContent := ui.View(
+	detailsContent := ui.View().Children(
 		caption(func() string { return current().ID + " / " + current().Project }),
 		ui.Text(func() string { return current().Title }).FontSize(21).LineHeight(28).FontWeight(700).MarginTop(14).MarginBottom(22),
-		ui.View(
+		ui.View().Children(
 			property("Status", func() string { return current().status() }),
 			property("Assignee", func() string { return current().Owner }),
 			property("Priority", func() string { return current().Priority }),
@@ -245,12 +245,12 @@ func issueTracker() *ui.Element {
 			MarginTop(16).BackgroundColor(accent).TextColor("white").FontWeight(500),
 		ui.Text("Changes are kept for this session.").FontSize(11).TextColor(muted).MarginTop(10),
 	).Style(column()).FlexShrink(0)
-	details := ui.View(detailsContent).Style(column()).Width(350).FlexShrink(0).OverflowY("auto").Padding(24).BorderLeftWidth(1).BorderColor(line)
-	return ui.View(
+	details := ui.View().Child(detailsContent).Style(column()).Width(350).FlexShrink(0).OverflowY("auto").Padding(24).BorderLeftWidth(1).BorderColor(line)
+	return ui.View().Children(
 		sidebar,
-		ui.View(
+		ui.View().Children(
 			header,
-			ui.View(inbox, details).Style(row()).Flex(1).MinHeight(0).AlignItems("stretch"),
+			ui.View().Children(inbox, details).Style(row()).Flex(1).MinHeight(0).AlignItems("stretch"),
 		).Style(column()).Flex(1),
 	).Style(row()).Width("100%").Height("100%").AlignItems("stretch").TextColor(ink).FontSize(14).BackgroundColor("white")
 }

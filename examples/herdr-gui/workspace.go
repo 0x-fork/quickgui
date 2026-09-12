@@ -7,7 +7,7 @@ import (
 )
 
 func appView(m *model) *ui.Element {
-	return ui.View(
+	return ui.View().Children(
 
 		sidebar(m),
 		workspace(m),
@@ -15,7 +15,7 @@ func appView(m *model) *ui.Element {
 	).Position("relative").Display("flex").FlexDirection("row").Width("100%").Height("100%").MinWidth(0).MinHeight(0).BackgroundColor(m.color(func(t theme) string { return t.App })).TextColor(m.color(func(t theme) string { return t.Text })).FontWeight(500)
 }
 func workspace(m *model) *ui.Element {
-	return ui.View(
+	return ui.View().Child(
 		func() *native.Node {
 			var children []*native.Node
 			children = append(children, tabBar(m).Node)
@@ -24,7 +24,7 @@ func workspace(m *model) *ui.Element {
 
 				// Hide inactive surfaces without unmounting them. Each native PTY, scrollback,
 				// selection and working directory survives tab and space navigation.
-				children, ui.View(
+				children, ui.View().Children(
 
 					ui.KeyedFor(
 						m.Tabs.Read,
@@ -37,7 +37,7 @@ func workspace(m *model) *ui.Element {
 					ui.Show(
 						m.activeTab() == nil,
 						func() *ui.Element {
-							return ui.View(
+							return ui.View().Children(
 
 								icon("terminal", 24, m.color(func(t theme) string { return t.TextGhost })),
 								ui.Text(
@@ -63,7 +63,7 @@ func workspace(m *model) *ui.Element {
 			children = append(children, ui.Show(
 				errorMessage() != "",
 				func() *ui.Element {
-					return ui.View(
+					return ui.View().Children(
 
 						ui.Text(
 							errorMessage,
@@ -96,16 +96,16 @@ func workspace(m *model) *ui.Element {
 	).Display("flex").Flex(1).MinWidth(0).MinHeight(0).FlexDirection("column").BackgroundColor(m.color(func(t theme) string { return t.App }))
 }
 func tabBar(m *model) *ui.Element {
-	return ui.View(
+	return ui.View().Children(
 
-		ui.View(
+		ui.View().Children(
 
 			ui.KeyedFor(
 				m.spaceTabs,
 				func(t workspaceTab) any { return t.ID },
 				func(tab func() workspaceTab, _ func() int) *ui.Element {
 					active := func() bool { return tab().ID == m.ActiveTabID.Read() }
-					return ui.View(
+					return ui.View().Children(
 
 						ui.Button(
 
@@ -155,7 +155,7 @@ func tabBar(m *model) *ui.Element {
 	).Display("flex").Height(40).FlexShrink(0).AlignItems("center").Gap(4).PaddingLeft(8).PaddingRight(8).AppRegion("drag")
 }
 func tabSurface(m *model, tab func() workspaceTab) *ui.Element {
-	return ui.View(
+	return ui.View().Child(
 
 		// Restart replaces the pane object; other model updates preserve its identity.
 		ui.For(
@@ -180,9 +180,9 @@ func terminalPane(m *model, p *pane) *ui.Element {
 			directory = s.Path
 		}
 	}
-	return ui.View(
+	return ui.View().Child(
 
-		ui.View(
+		ui.View().Child(
 
 			terminal.View(terminal.Props{
 				Program:          p.Program,

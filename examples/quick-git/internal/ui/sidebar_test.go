@@ -20,7 +20,7 @@ func TestSidebarSelectionMovesWithoutRemountingRows(t *testing.T) {
 			return ProvideApp(AppContext{Theme: theme, Store: &model.Store{}}, func() *gui.Element {
 				changes = navRow("Changes", func() bool { return selected() == "Changes" }, func() string { return "3" }, func() { setSelected("Changes") }).Node
 				history = navRow("History", func() bool { return selected() == "History" }, func() string { return "" }, func() { setSelected("History") }).Node
-				return gui.View(changes, history)
+				return gui.View().Children(changes, history)
 			})
 		})
 		first := root.Children[0]

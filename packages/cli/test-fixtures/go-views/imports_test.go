@@ -15,10 +15,10 @@ func TestImportedComponentAndPlainStructProps(t *testing.T) {
 		defer dispose()
 		quantity, setQuantity := ui.CreateSignal(1)
 		label := parts.Label(parts.Props{Name: "Mug", Quantity: quantity()})
-		first, second := label.Children[0], label.Children[1]
+		first, second := label.Node.Children[0], label.Node.Children[1]
 		before := label.Pending.MutationCount()
 		setQuantity(2)
-		if label.Children[0] != first || label.Children[1] != second || first.Text != "Mug" || second.Text != "2" || label.Pending.MutationCount()-before != 1 {
+		if label.Node.Children[0] != first || label.Node.Children[1] != second || first.Text != "Mug" || second.Text != "2" || label.Pending.MutationCount()-before != 1 {
 			t.Fatal("imported struct props did not preserve their bindings")
 		}
 		return struct{}{}

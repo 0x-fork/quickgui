@@ -40,15 +40,15 @@ func Vibrancy() *ui.Element {
 	window := native.CurrentWindow()
 	material, setMaterial := ui.CreateSignal("sidebar")
 	state, setState := ui.CreateSignal("followWindow")
-	return ui.View(
+	return ui.View().Children(
 
-		ui.View(
+		ui.View().Children(
 
-			ui.View(
+			ui.View().Child(
 
 				ui.Text("Vibrancy").FontSize(13).FontWeight(700),
 			).Display("flex").Height(52).FlexShrink(0).AlignItems("center").PaddingLeft(90).PaddingRight(14).AppRegion("drag"),
-			ui.View(
+			ui.View().Child(
 				func() *native.Node {
 					var children []*native.Node
 					for _, option := range materials {
@@ -72,12 +72,12 @@ func Vibrancy() *ui.Element {
 					return ui.Fragment(children)
 				},
 			).Display("flex").FlexDirection("column").Flex(1).MinHeight(0).Gap(3).PaddingLeft(10).PaddingRight(10).PaddingBottom(10).OverflowY("auto"),
-			ui.View(
+			ui.View().Children(
 
 				ui.Text(
 					"EFFECT STATE",
 				).TextColor("#59667b").FontSize(11).FontWeight(700),
-				ui.View(
+				ui.View().Child(
 					func() *native.Node {
 						var children []*native.Node
 						for _, option := range effectStates {
@@ -99,15 +99,15 @@ func Vibrancy() *ui.Element {
 				).Display("flex").Gap(5),
 			).Display("flex").FlexDirection("column").FlexShrink(0).Gap(7).Padding(12).BorderColor("#c1c1c2").BorderTopWidth(1),
 		).Display("flex").FlexDirection("column").Width(254).Height("100%").FlexShrink(0).BackgroundColor("transparent").BorderColor("#cccccc").BorderRightWidth(1),
-		ui.View(
+		ui.View().Children(
 
-			ui.View(
+			ui.View().Child(
 
 				ui.Text(material()).FontSize(13).FontWeight(700),
 			).Display("flex").Height(52).FlexShrink(0).AlignItems("center").JustifyContent("center").BorderColor("#e2e8f0").BorderBottomWidth(1).AppRegion("drag"),
-			ui.View(
+			ui.View().Child(
 
-				ui.View(
+				ui.View().Children(
 
 					ui.Text(
 						"GO + QUICKGUI",
@@ -120,7 +120,7 @@ func Vibrancy() *ui.Element {
 							"NSVisualEffectView while the retained QuickGUI tree and Metal surface stay mounted. "+
 							"This pane is opaque, so the selected material remains visually confined to the translucent sidebar.",
 					).TextColor("#667085").FontSize(14).LineHeight(21),
-					ui.View(
+					ui.View().Children(
 
 						readout("Material", material),
 						readout("Effect state", state),

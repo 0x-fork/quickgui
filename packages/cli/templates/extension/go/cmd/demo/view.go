@@ -8,7 +8,7 @@ import (
 
 func App() *ui.Element {
 	message, setMessage := ui.CreateSignal("Hello from a pure Go extension")
-	return ui.View(
+	return ui.View().Children(
 		ui.Text("{{NAME}}").FontSize(24).FontWeight(700),
 		extension.Notice(message, ui.Style().FontSize(16)),
 		ui.Button("Update message").

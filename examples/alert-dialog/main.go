@@ -42,7 +42,7 @@ func Alerts() *ui.Element {
 			},
 		)
 	}
-	return ui.View(
+	return ui.View().Children(
 
 		ui.Text(
 			"System-owned UI",
@@ -50,7 +50,7 @@ func Alerts() *ui.Element {
 		ui.Text(
 			"Present a native alert from an event handler and receive the selected button in its completion callback.",
 		).TextColor("#9aa6b7").FontSize(14).LineHeight(21),
-		ui.View(
+		ui.View().Children(
 
 			button("Information", pending, func() {
 				show(native.AlertDialogOptions{

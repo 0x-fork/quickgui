@@ -9,7 +9,7 @@ String and numeric signals can be children directly: `ui.Text("Count: ", count)`
 ```go
 func TextExample() *ui.Element {
 	count, setCount := ui.CreateSignal(0)
-	return ui.View(
+	return ui.View().Children(
 		ui.Text(
 			"Count: ",
 			count(),
@@ -27,7 +27,7 @@ Use `ui.CreateMemo` for a value computed from other signals. It returns an acces
 func DerivedExample() *ui.Element {
 	count, setCount := ui.CreateSignal(0)
 	doubled := ui.CreateMemo(func() int { return count() * 2 })
-	return ui.View(
+	return ui.View().Children(
 		ui.Text("Doubled: ", doubled()),
 		ui.Button("Increment").OnClick(func() { setCount(count() + 1) }),
 	)
@@ -48,7 +48,7 @@ func EffectExample() *ui.Element {
 		log.Print("Subscribe: ", current)
 		ui.OnCleanup(func() { log.Print("Unsubscribe: ", current) })
 	})
-	return ui.View(
+	return ui.View().Children(
 		ui.Text("Watching: ", topic()),
 		ui.Button(
 			"Switch topic",
@@ -80,7 +80,7 @@ func BatchedExample() *ui.Element {
 			setLast("Hopper")
 		})
 	}
-	return ui.View(
+	return ui.View().Children(
 		ui.Text(first(), " ", last()),
 		ui.Button("Apply profile").OnClick(applyProfile),
 	)

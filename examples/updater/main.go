@@ -39,7 +39,7 @@ func main() {
 			Width:  520,
 			Height: 340,
 			Component: func() *ui.Element {
-				return ui.View(
+				return ui.View().Children(
 
 					ui.Text(
 						"Application updates",

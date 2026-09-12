@@ -2,7 +2,7 @@ QuickGUI 将无样式基础组件与具备无障碍行为的复合控件组合�
 
 ## 定义组件
 
-Go 组件返回 `*ui.Element` 或 `*native.Node`。参数使用普通类型，子节点直接组合。编译器根据返回类型识别组件，因此 `CounterLabel(count())` 无需注解或 `ui.View(func() { ... })` 包装即可保持响应式。窗口根组件可直接传入函数。
+Go 组件返回 `*ui.Element` 或 `*native.Node`。参数使用普通类型，子节点直接组合。编译器根据返回类型识别组件，因此 `CounterLabel(count())` 无需注解或 `ui.View().Child(func() *ui.Element { ... })` 包装即可保持响应式。窗口根组件可直接传入函数。
 
 ```go
 func CounterLabel(count int) *ui.Element {
@@ -11,7 +11,7 @@ func CounterLabel(count int) *ui.Element {
 
 func ComponentExample() *ui.Element {
 	count, setCount := ui.CreateSignal(0)
-	return ui.View(
+	return ui.View().Children(
 		CounterLabel(count()),
 		ui.Button("Increment").OnClick(func() { setCount(count() + 1) }),
 	)
@@ -33,7 +33,7 @@ func LineItem(product Product, quantity int) *ui.Element {
 
 func Cart() *ui.Element {
 	quantity, setQuantity := ui.CreateSignal(1)
-	return ui.View(
+	return ui.View().Children(
 		LineItem(Product{ID: "mug", Name: "Mug", Price: 12}, quantity()),
 		ui.Button("Add one").OnClick(func() { setQuantity(quantity() + 1) }),
 	)
@@ -44,7 +44,7 @@ func Cart() *ui.Element {
 
 ```go
 func CardComponent(title string, children ...any) *ui.Element {
-	return ui.View(
+	return ui.View().Children(
 		ui.Text(title).FontWeight(600),
 		children,
 	).Padding(20).Gap(12).FlexCol()
@@ -60,7 +60,7 @@ func CardComposition() *ui.Element {
 
 ## 基础组件
 
-从 `ui.View`、`ui.Text`、`ui.Button` 和 `ui.Input` 开始。可以直接传入选项与文本。`func() { ... }` 参数将多个子节点分组到当前父节点下。
+从 `ui.View`、`ui.Text`、`ui.Button` 和 `ui.Input` 开始。使用 `ui.View()` 创建容器，通过 `.Child(...)` 或 `.Children(...)` 追加子节点，并链式设置样式、属性和事件。组件与延迟构建回调均返回节点。
 
 ```go
 func ButtonExample(save func()) *ui.Element {

@@ -34,7 +34,7 @@ func checkmark() *ui.Element {
 }
 
 func readout(label string, value any) *ui.Element {
-	return ui.View(
+	return ui.View().Children(
 
 		ui.Text(label).TextColor("#8a94a6").FontSize(11),
 		ui.Text(

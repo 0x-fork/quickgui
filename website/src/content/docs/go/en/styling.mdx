@@ -1,7 +1,7 @@
-Go elements and `ui.Style()` share fluent style modifiers, including `.P4()`, `.MxAuto()`, `.GridCols(3)`, and `.RoundedLg()`. Pass children to constructors and apply reusable styles with `.Style(shared)`.
+Go elements and `ui.Style()` share fluent style modifiers, including `.P4()`, `.MxAuto()`, `.GridCols(3)`, and `.RoundedLg()`. Append children with `.Child(...)` or `.Children(...)` and apply reusable styles with `.Style(shared)`.
 
 ```go
-return ui.View(ui.Text("hello"), ui.Input().Value("xxx")).
+return ui.View().Children(ui.Text("hello"), ui.Input().Value("xxx")).
 	FlexCol().PaddingLeft(20).RoundedLg().TextAlign("center")
 ```
 
@@ -11,7 +11,7 @@ Declarations apply in order. Later values override the same property, including 
 
 ```go
 func Card() *ui.Element {
-	return ui.View(ui.Text("Hello").TextColor("#e2e8f0")).
+	return ui.View().Child(ui.Text("Hello").TextColor("#e2e8f0")).
 		Padding(20).BorderRadius(12).Bg("#111827")
 }
 ```
@@ -24,7 +24,7 @@ func Card() *ui.Element {
 func MergedCard() *ui.Element {
 	base := ui.Style().Padding(20).BorderRadius(8).Bg("#111827")
 	overrides := ui.Style().BorderRadius(12)
-	return ui.View("Merged styles").Style(base).Style(overrides)
+	return ui.View().Child("Merged styles").Style(base).Style(overrides)
 }
 ```
 
@@ -37,8 +37,8 @@ func SharedCard() *native.Node {
 	var children []*native.Node
 	card := ui.Style().Padding(20).BorderRadius(12)
 	emphasized := card.PaddingLeft(28).Bg("#1e293b")
-	children = append(children, ui.View("Hello").Style(card).Bg("#111827").Node)
-	children = append(children, ui.View("Another card").Style(emphasized).Node)
+	children = append(children, ui.View().Child("Hello").Style(card).Bg("#111827").Node)
+	children = append(children, ui.View().Child("Another card").Style(emphasized).Node)
 	return ui.Fragment(children)
 }
 ```
@@ -51,7 +51,7 @@ Use `.Flex()`, `.FlexRow()`, or `.FlexCol()` to select a flex layout. Give scrol
 
 ```go
 func Row() *ui.Element {
-	return ui.View(
+	return ui.View().Children(
 		ui.Text("Flexible content").Flex1().MinWidth(0),
 		ui.Button("Action").FlexShrink(0),
 	).Flex().Gap(12).ItemsCenter()
@@ -64,7 +64,7 @@ Grid accepts track strings and the same Rust layout helpers on elements and styl
 
 ```go
 func Grid() *ui.Element {
-	return ui.View(ui.Text("Sidebar"), ui.Text("Content")).
+	return ui.View().Children(ui.Text("Sidebar"), ui.Text("Content")).
 		Display("grid").GridTemplateColumns("220px 1fr").Gap(16)
 }
 ```
@@ -75,7 +75,7 @@ Typography inherits through the node tree. Colors accept hex, `rgb()`/`rgba()`, 
 
 ```go
 func TypographyExample() *ui.Element {
-	return ui.View(
+	return ui.View().Children(
 		ui.Text("Inbox").FontSize(24).FontWeight(600),
 		ui.Text("All caught up."),
 	).TextColor("#334155").FontSize(14).Padding(20)
@@ -103,7 +103,7 @@ func SelectableButton() *ui.Element {
 
 ```go
 func GroupExample() *ui.Element {
-	return ui.View(
+	return ui.View().Child(
 		ui.Text("Changes when the card is hovered").
 			TextColor("#64748b").
 			GroupHoverNamed("card", func(s ui.StyleBuilder) ui.StyleBuilder {

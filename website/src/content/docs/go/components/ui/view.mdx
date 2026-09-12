@@ -14,11 +14,10 @@ import (
 
 ```go
 func ViewExample() *ui.Element {
-	return ui.View(
-
-		ui.Text("Hello from Go"),
-		ui.Button("Continue").OnClick(func() {}),
-	).Padding(20).Gap(12)
+	return ui.View().
+		Padding(20).Gap(12).
+		Child(ui.Text("Hello from Go")).
+		Child(ui.Button().OnClick(func() {}).Child("Continue"))
 }
 ```
 
@@ -27,6 +26,6 @@ func ViewExample() *ui.Element {
 | Prop | Purpose |
 | --- | --- |
 | `ui.Style().BackgroundColor(...)`, `ui.Style().Padding(...)`, `ui.Style().Hover(...)` | QuickGUI layout, paint, typography, and interaction-state styles. |
-| `children` | Content mounted inside the component. |
+| `Child`, `Children` | Content mounted inside the component. |
 | `OnClick` | Runs after the core resolves an activation. |
 | `Ref` | Receives the retained native node. |

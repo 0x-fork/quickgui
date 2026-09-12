@@ -141,15 +141,15 @@ func TestRouterMountsMatchedChainAndKeepsPageOnParamChange(t *testing.T) {
 	var navigate func(string, ...NavigateOptions)
 
 	reactive.CreateRoot(func(dispose func()) struct{} {
-		parent := View(Props{})
+		parent := View()
 		node := Router(RouterProps{
 			Routes: []*RouteDeclaration{
 				Route("/", func() *Element {
 					shellCreated++
-					return View(Props{Children: []any{
-						Text(Props{Children: "shell"}),
+					return View().Children(
+						Text("shell"),
 						Outlet(),
-					}})
+					)
 				}, Route("", func() *Element {
 					homeCreated++
 					navigate = UseNavigate()
@@ -210,7 +210,7 @@ func TestRouterRetainsNestedLayoutsAndDisposesOnlyReplacedBranches(t *testing.T)
 		return func() *Element {
 			mounted[name]++
 			reactive.OnCleanup(func() { disposed[name]++ })
-			view := View(Text(name), children)
+			view := View().Children(Text(name), children)
 			nodes[name] = view.Node
 			return view
 		}
@@ -327,7 +327,7 @@ func TestLinkNavigatesAndSetsRole(t *testing.T) {
 	defer restore()
 
 	reactive.CreateRoot(func(dispose func()) struct{} {
-		parent := View(Props{})
+		parent := View()
 		node := Router(RouterProps{
 			Routes: []*RouteDeclaration{
 				Route("/", func() *native.Node {

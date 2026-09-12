@@ -33,5 +33,5 @@ func GenericLabel[T ~int](value T) *ui.Element {
 }
 
 func VariadicLabel(value int, children ...any) *ui.Element {
-	return ui.View(ui.Text(value), children)
+	return ui.View().Children(ui.Text(value), children)
 }

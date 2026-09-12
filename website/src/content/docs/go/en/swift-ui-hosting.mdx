@@ -31,7 +31,7 @@ func SwiftUiQuickguiHostViewExample() *native.Node {
 			return ui.SwiftUI.QuickGUIHostView(
 				ui.SwiftUIQuickGUIHostViewProps{Width: 320, Height: 180},
 				func() *ui.Element {
-					return ui.View(
+					return ui.View().Child(
 						"QuickGUI inside SwiftUI",
 					).Width("100%").Height("100%").Padding(16)
 				},

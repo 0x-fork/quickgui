@@ -39,7 +39,8 @@ test("Go application compilation rejects implicit construction at the authored l
     await prepareGoWorkspace(project, ["."]);
     for (const body of [
       `ui.Button("discarded")`,
-      `ui.View(func() { ui.Text("implicit") })`,
+      `ui.View().Child(func() { ui.Text("implicit") })`,
+      `ui.View().Children(ui.Text("first"), func() {})`,
       `ui.Show(false, func() {})`,
       `ui.For[int](func() []int { return []int{1} }, func(int, func() int) {}, nil, nil)`,
     ]) {

@@ -9,7 +9,7 @@ func TextAlignment() *ui.Element {
 	return Panel("Text alignment", func() *native.Node {
 		var children []*native.Node
 		for _, align := range []string{"left", "center", "right", "justify", "start", "end"} {
-			children = append(children, ui.View(
+			children = append(children, ui.View().Child(
 
 				ui.Text(
 					"textAlign: \""+align+"\" — the core resolves start and end against the inherited direction.",
@@ -40,7 +40,7 @@ func TextStyling() *ui.Element {
 			ui.Text(
 				"line-through and overline together",
 			).FontSize(14).TextColor(ink).TextDecoration("line-through overline").TextDecorationColor("#f43f5e").Node,
-			ui.View(
+			ui.View().Child(
 
 				ui.Text(
 					"wordBreak break-all with overflowWrap anywhere: supercalifragilisticexpialidocious",
@@ -51,7 +51,7 @@ func TextStyling() *ui.Element {
 
 func Direction() *ui.Element {
 	return Panel("Right to left", func() *native.Node {
-		return ui.Fragment([]*native.Node{ui.View(
+		return ui.Fragment([]*native.Node{ui.View().Children(
 
 			ui.View().Width(28).Height(20).BorderRadius(6).BackgroundColor("#38bdf8"),
 			ui.View().Width(20).Height(20).BorderRadius(6).BackgroundColor("#334155"),

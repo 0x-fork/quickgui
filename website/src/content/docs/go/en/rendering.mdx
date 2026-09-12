@@ -6,7 +6,7 @@ Every component and UI construction callback returns `*ui.Element` or `*native.N
 
 ```go
 func ViewExample() *ui.Element {
-	return ui.View(
+	return ui.View().Children(
 
 		ui.Text("Hello from Go"),
 		ui.Button("Continue").OnClick(func() {}),
@@ -21,7 +21,7 @@ Use `ui.Show` when state should mount or remove children. A normal Go `if` runs 
 ```go
 func DisclosureExample() *ui.Element {
 	open, setOpen := ui.CreateSignal(false)
-	return ui.View(
+	return ui.View().Children(
 		ui.Button("Toggle details").OnClick(func() { setOpen(!open()) }),
 		ui.Show(
 			open,
@@ -45,7 +45,7 @@ type ListPerson struct {
 
 func KeyedListExample() *ui.Element {
 	people, setPeople := ui.CreateSignal([]ListPerson{{1, "Ada"}, {2, "Grace"}})
-	return ui.View(
+	return ui.View().Children(
 		ui.Button(
 			"Reorder and rename",
 		).OnClick(func() {

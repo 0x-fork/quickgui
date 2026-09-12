@@ -23,6 +23,23 @@ func (element *Element) NativeNode() *native.Node {
 	return element.Node
 }
 
+// Child appends content and returns this element. Content can be an element,
+// native node, scalar, accessor, or node-returning construction callback.
+func (element *Element) Child(child any) *Element {
+	if element.Removed {
+		panic("a removed QuickGUI element cannot be configured")
+	}
+	insertChildren(element.Node, child)
+	return element
+}
+
+// Children appends multiple children in order without replacing existing content.
+// It also accepts []any, []*Element, and []*native.Node slices as arguments.
+// Read the retained child nodes through element.Node.Children.
+func (element *Element) Children(children ...any) *Element {
+	return element.Child(children)
+}
+
 func newElement(tag uint8, arguments []any) *Element {
 	element := &Element{Node: native.CreateElement(tag)}
 	configured := false

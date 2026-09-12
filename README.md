@@ -38,7 +38,7 @@ native.NewWindow(native.WindowOptions{
 })
 ```
 
-Components are ordinary `func()` declarations, the same as children blocks. Fluent styles, event handlers, nested children, and signal accessors bind directly to retained native nodes: `ui.View(ui.Text("Hello")).FlexCol().Padding(20).RoundedLg()`. Go exposes Rust's layout conveniences. See the [Go guide](docs/go.md) and [counter](examples/counter/main.go) for a complete application.
+Components and deferred child callbacks return `*ui.Element` or `*native.Node`. Fluent styles, event handlers, nested children, and signal accessors bind directly to retained native nodes: `ui.View().Child(ui.Text("Hello")).FlexCol().Padding(20).RoundedLg()`. Go exposes Rust's layout conveniences. See the [Go guide](docs/go.md) and [counter](examples/counter/main.go) for a complete application.
 
 ## TypeScript with Bun and Solid 2
 

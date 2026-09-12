@@ -11,10 +11,10 @@ import (
 )
 
 func TestShadowsAndTransitionsUseTheHostWireFormat(t *testing.T) {
-	node := View(styleData{
+	node := newElement(protocol.TagView, []any{styleData{
 		BoxShadow:  "0 2px 8px rgba(0, 0, 0, 0.2), inset 0 0 0 1px currentColor",
 		Transition: "background-color 120ms ease, opacity 0.2s ease-out, transform 0.2s ease-out",
-	})
+	}})
 	if bytes.Contains(node.Pending.Body(), []byte("rgba(")) {
 		t.Fatal("CSS shadow was sent as text even though the host requires JSON")
 	}
@@ -34,8 +34,8 @@ func TestGradientBindingClearsThePreviousPaintKind(t *testing.T) {
 	reactive.CreateRoot(func(dispose func()) struct{} {
 		defer dispose()
 		background := reactive.NewSignal[any](GradientDeclaration{Type: "linear", Stops: []GradientStop{{Color: "red"}, {Color: "blue"}}})
-		node := View(styleData{Background: background.Read}, "kept")
-		child := node.Children[0]
+		node := newElement(protocol.TagView, []any{styleData{Background: background.Read}, "kept"})
+		child := node.Node.Children[0]
 		if !bytes.Contains(node.Pending.Body(), []byte(`{"type":"linear","stops":[{"color":"red"},{"color":"blue"}]}`)) {
 			t.Fatal("structured gradient did not reach the host")
 		}
@@ -44,7 +44,7 @@ func TestGradientBindingClearsThePreviousPaintKind(t *testing.T) {
 		expected := protocol.NewBatch()
 		expected.SetColor(node.ID, protocol.BackgroundColor, native.ParseColor("#123456"))
 		expected.ClearProperty(node.ID, protocol.BackgroundGradient)
-		if !bytes.Equal(node.Pending.Body()[offset:], expected.Body()) || node.Children[0] != child {
+		if !bytes.Equal(node.Pending.Body()[offset:], expected.Body()) || node.Node.Children[0] != child {
 			t.Fatal("solid background did not replace just the gradient paint")
 		}
 		return struct{}{}
@@ -56,11 +56,11 @@ func TestStateStylesKeepGradientsShadowsAndNamedActiveGroups(t *testing.T) {
 		Background: "linear-gradient(red, blue)",
 		BoxShadow:  "0 1px 2px black", Opacity: .5,
 	}
-	node := View(
+	node := newElement(protocol.TagView, []any{
 		styleData{Invalid: &style, Dragging: &style, DragOver: &style, FocusWithin: &style},
 		styleGroupActiveNamed("card", styleData{TextColor: "white"}),
 		styleGroupActiveNamed("toolbar", styleData{Opacity: .2}),
-	)
+	})
 	if !bytes.Contains(node.Pending.Body(), []byte(`"group":"card"`)) || !bytes.Contains(node.Pending.Body(), []byte(`"group":"toolbar"`)) {
 		t.Fatal("named pressed-group rules were not serialized")
 	}
@@ -83,7 +83,7 @@ func TestOptionalReactiveStateFieldsClearWithoutLosingMergedSiblings(t *testing.
 		defer dispose()
 		color := reactive.NewSignal[any]("#ff0000")
 		width := reactive.NewSignal[any](2)
-		node := View(styleData{Hover: &styleData{TextColor: color.Read, BorderWidth: width.Read}}, styleData{Hover: &styleData{Opacity: .7}})
+		node := newElement(protocol.TagView, []any{styleData{Hover: &styleData{TextColor: color.Read, BorderWidth: width.Read}}, styleData{Hover: &styleData{Opacity: .7}}})
 		offset := len(node.Pending.Body())
 		reactive.Batch(func() { color.Write(nil); width.Write(nil) })
 		expected := protocol.NewBatch()

@@ -37,7 +37,7 @@ var centered = ui.Style().
 
 func Panel(title string, children ui.Component) *ui.Element {
 	warm := warmPalette.Use()
-	return ui.View(
+	return ui.View().Children(
 
 		ui.Text(title).Style(captionStyle),
 		children,
@@ -49,9 +49,12 @@ func Panel(title string, children ui.Component) *ui.Element {
 
 }
 
-func swatch(label string, options ...any) *ui.Element {
-	args := []any{func() *ui.Element { return ui.Text(label).FontSize(12).TextColor(ink) }, centered}
-	return ui.View(append(args, options...)...)
+func swatch(label string, styles ...ui.StyleBuilder) *ui.Element {
+	style := centered
+	for _, next := range styles {
+		style = style.Merge(next)
+	}
+	return ui.View().Style(style).Child(ui.Text(label).FontSize(12).TextColor(ink))
 }
 
 func ptr[T any](value T) *T { return &value }

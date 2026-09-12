@@ -44,7 +44,7 @@ func openDetailsWindow() {
 		Background:    "#111827",
 		Component: func() *ui.Element {
 			window := native.CurrentWindow()
-			return ui.View(
+			return ui.View().Children(
 
 				ui.Text(
 					"Created while the app is running",
@@ -81,8 +81,8 @@ func openDetailsWindow() {
 
 func Counter() *ui.Element {
 	count, setCount := ui.CreateSignal(0)
-	return ui.View(
-		ui.View(
+	return ui.View().Children(
+		ui.View().Child(
 			ui.Text("QuickGUI · Go").FontWeight(600),
 		).Display("flex").
 			Height(52).
@@ -93,9 +93,9 @@ func Counter() *ui.Element {
 			BorderColor("#1e293b").
 			BorderWidth(1),
 
-		ui.View(
+		ui.View().Child(
 
-			ui.View(
+			ui.View().Children(
 
 				ui.Text(
 					"Fine-grained native UI",

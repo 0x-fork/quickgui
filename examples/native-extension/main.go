@@ -23,7 +23,7 @@ func main() {
 
 func App() *ui.Element {
 	message, setMessage := ui.CreateSignal("Hello from an independent native library")
-	return ui.View(
+	return ui.View().Children(
 
 		ui.Text(message()),
 		ui.Button(

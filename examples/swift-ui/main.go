@@ -69,7 +69,7 @@ func Gallery() *ui.Element {
 		current := string(state.page())
 		return &current
 	}
-	return ui.View(
+	return ui.View().Child(
 
 		ui.Tabs.Root(
 			ui.TabsRootProps{
@@ -152,9 +152,9 @@ func (s *galleryState) current() demo {
 }
 
 func sidebar(state *galleryState) *ui.Element {
-	return ui.View(
+	return ui.View().Children(
 
-		ui.View(
+		ui.View().Child(
 
 			ui.Text(
 				"SwiftUI",
@@ -163,7 +163,7 @@ func sidebar(state *galleryState) *ui.Element {
 		ui.Text(
 			"COMPONENTS",
 		).FlexShrink(0).PaddingLeft(18).PaddingBottom(7).TextColor("#747b87").FontSize(10).FontWeight(700).LetterSpacing(0.7),
-		ui.View(
+		ui.View().Child(
 
 			ui.Tabs.List(
 				ui.PartProps{
@@ -225,7 +225,7 @@ func sidebar(state *galleryState) *ui.Element {
 				},
 			),
 		).Display("flex").FlexDirection("column").Flex(1).MinHeight(0).OverflowY("scroll"),
-		ui.View(
+		ui.View().Child(
 
 			ui.Text(
 				strconv.Itoa(len(demos))+" native components",
@@ -235,9 +235,9 @@ func sidebar(state *galleryState) *ui.Element {
 }
 
 func pane(state *galleryState, body ui.Component) *ui.Element {
-	return ui.View(
+	return ui.View().Children(
 
-		ui.View(
+		ui.View().Children(
 
 			ui.Text(
 				state.current().Label,
@@ -246,7 +246,7 @@ func pane(state *galleryState, body ui.Component) *ui.Element {
 				"Native SwiftUI · QuickGUI state",
 			).TextColor("#858b96").FontSize(11),
 		).Display("flex").FlexDirection("row").AlignItems("center").JustifyContent("space-between").Height(54).FlexShrink(0).PaddingLeft(22).PaddingRight(22).BorderWidth(1).BorderColor("#d7d8dc").AppRegion("drag"),
-		ui.View(body).Display("flex").FlexDirection("column").Flex(1).MinHeight(0).AlignItems("center").OverflowY("scroll").Padding(30),
+		ui.View().Child(body).Display("flex").FlexDirection("column").Flex(1).MinHeight(0).AlignItems("center").OverflowY("scroll").Padding(30),
 	).Display("flex").FlexDirection("column").Flex(1).MinWidth(0).Height("100%").BackgroundColor("#f6f6f8")
 }
 
@@ -262,21 +262,21 @@ func renderDemo(state *galleryState) *native.Node {
 }
 
 func demoPage(description string, status func() string, control ui.Component) *ui.Element {
-	return ui.View(
+	return ui.View().Children(
 
 		ui.Text(
 			description,
 		).TextColor("#5f6672").FontSize(14).LineHeight(21),
-		ui.View(
+		ui.View().Children(
 
 			ui.Text(
 				"LIVE SWIFTUI DEMO",
 			).TextColor("#858b96").FontSize(11).FontWeight(700).LetterSpacing(0.8),
-			ui.View(
+			ui.View().Child(
 				control,
 			).Display("flex").Flex(1).MinHeight(170).Width("100%").AlignItems("center").JustifyContent("center"),
 		).Display("flex").FlexDirection("column").Width("100%").MinHeight(250).Padding(22).Gap(16).BorderWidth(1).BorderColor("#dedfe3").BorderRadius(14).BackgroundColor("#ffffff"),
-		ui.View(
+		ui.View().Children(
 
 			ui.Text(
 				"NATIVE STATE",
@@ -442,7 +442,7 @@ func demoControl(state *galleryState) *native.Node {
 		return ui.Fragment(children)
 
 	case "text-field":
-		children = append(children, ui.View(
+		children = append(children, ui.View().Children(
 
 			host(ui.SwiftUIMatchContents{Vertical: true}, field, ui.SwiftUI.TextField(ui.SwiftUITextFieldProps{
 				Value:         state.name,
@@ -497,7 +497,7 @@ func demoControl(state *galleryState) *native.Node {
 									Height: 200,
 								},
 								func() *ui.Element {
-									return ui.View(
+									return ui.View().Children(
 
 										ui.Text(
 											"QuickGUI inside SwiftUI",

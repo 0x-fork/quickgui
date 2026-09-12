@@ -88,7 +88,7 @@ func paintGraphRow(row git.GraphRow, width, height float64) []graphLayer {
 
 func historyGraph(row func() *git.GraphRow, width func() float64) *gui.Element {
 	app := UseApp()
-	return gui.View(
+	return gui.View().Child(
 
 		gui.KeyedFor(
 			func() []graphLayer {

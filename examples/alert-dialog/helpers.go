@@ -12,15 +12,15 @@ func run(options native.WindowOptions, component ui.Component) {
 	options.TitleBarStyle = "hiddenInset"
 	options.TrafficLightPosition = &native.Point{X: 16, Y: 14}
 	options.Component = func() *ui.Element {
-		return ui.View(
+		return ui.View().Children(
 
-			ui.View(
+			ui.View().Child(
 
 				ui.Text(
 					options.Title,
 				).FontSize(14).FontWeight(600),
 			).Display("flex").Height(52).FlexShrink(0).AlignItems("center").JustifyContent("center").AppRegion("drag").BorderColor("#1f2530").BorderBottomWidth(1),
-			ui.View(
+			ui.View().Child(
 				component,
 			).Display("flex").Flex(1).MinHeight(0).Padding(36).AlignItems("center").JustifyContent("center").OverflowY("auto"),
 		).Display("flex").FlexDirection("column").Width("100%").Height("100%").BackgroundColor("#0b0e14").TextColor("#f4f7fb")
@@ -73,7 +73,7 @@ func button(label string, disabled func() bool, click func()) *ui.Element {
 }
 
 func dialogStatus(status func() string, pending func() bool) *ui.Element {
-	return ui.View(
+	return ui.View().Child(
 
 		ui.Text(
 			status(),

@@ -32,7 +32,7 @@ func dynamicIcon(name func() string, size float64, color func() string) *ui.Elem
 }
 func statusGlyph(m *model, status func() string, compact bool) *ui.Element {
 	size := choose(compact, 12.0, 14.0)
-	return ui.View(
+	return ui.View().Child(
 
 		dynamicIcon(func() string {
 			switch status() {

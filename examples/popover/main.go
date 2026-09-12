@@ -62,19 +62,19 @@ func Popovers() *ui.Element {
 		ViewportMargin: &margin,
 		PartProps:      ui.PartProps{Style: ui.Style().Width("100%").Height("100%")},
 	}
-	return ui.View(
+	return ui.View().Children(
 
-		ui.View(
+		ui.View().Child(
 
 			ui.Text(
 				"Native popover surfaces",
 			).FontSize(14).FontWeight(600),
 		).Display("flex").Height(52).FlexShrink(0).AlignItems("center").JustifyContent("center").AppRegion("drag").BorderColor("#202838").BorderBottomWidth(1),
-		ui.View(
+		ui.View().Child(
 
-			ui.View(
+			ui.View().Children(
 
-				ui.View(
+				ui.View().Children(
 
 					ui.Text(
 						"System and in-window popovers",
@@ -83,7 +83,7 @@ func Popovers() *ui.Element {
 						"Both use the same controlled Go API. SystemPopover opens a native child window; Popover stays in this window's retained overlay plane.",
 					).TextColor("#9ba8bc").FontSize(14).LineHeight(21),
 				).Display("flex").FlexDirection("column").Gap(8),
-				ui.View(
+				ui.View().Children(
 
 					card("SystemPopover", "A child window that may cross the owner's edge and stays within the display.", func() *native.Node {
 						return ui.SystemPopover.Root(
@@ -140,7 +140,7 @@ func Popovers() *ui.Element {
 						)
 					}),
 				).Display("flex").Gap(14),
-				ui.View(
+				ui.View().Child(
 
 					ui.Text(
 						status(),

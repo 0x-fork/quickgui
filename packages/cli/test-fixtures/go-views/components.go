@@ -6,7 +6,7 @@ import (
 )
 
 func ValueCard(value int, visible bool, cleanup func()) *ui.Element {
-	return ui.View(
+	return ui.View().Children(
 		ui.Text(value),
 		ui.Show(
 			visible,

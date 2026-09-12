@@ -26,10 +26,10 @@ func HoverAction() *ui.Element {
 ```go
 func AnimatedSelection() *ui.Element {
 	selected, setSelected := ui.CreateSignal(false)
-	return ui.View(
+	return ui.View().Children(
 
 		ui.Button("Toggle emphasis").OnClick(func() { setSelected(!selected()) }),
-		ui.View(
+		ui.View().Child(
 			"Your selection",
 		).
 			Padding(20).

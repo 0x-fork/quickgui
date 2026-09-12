@@ -79,14 +79,14 @@ func TestFluentStyleSharedAccessorsUpdateIndependentlyAndDispose(t *testing.T) {
 			t.Fatal("building a reusable style evaluated its accessors")
 		}
 		parent := View()
-		first := View(Text("kept")).Style(shared)
+		first := View().Child(Text("kept")).Style(shared)
 		second := View().Style(shared)
 		part := View()
 		applyPart(part.Node, PartProps{Style: shared})
 		for _, node := range []*Element{first, second, part} {
 			native.InsertNode(parent.Node, node.Node, nil)
 		}
-		child := first.Children[0]
+		child := first.Node.Children[0]
 		shared = shared.Width(999)
 		offset := len(parent.Pending.Body())
 		width.Write(30)
@@ -97,7 +97,7 @@ func TestFluentStyleSharedAccessorsUpdateIndependentlyAndDispose(t *testing.T) {
 		if !bytes.Equal(parent.Pending.Body()[offset:], expected.Body()) {
 			t.Fatal("a shared accessor changed unrelated properties or lost its applied snapshot")
 		}
-		if first.Children[0] != child || len(width.Observers) != 3 || len(color.Observers) != 3 {
+		if first.Node.Children[0] != child || len(width.Observers) != 3 || len(color.Observers) != 3 {
 			t.Fatal("reusing a style rebuilt children or shared a node's subscriptions")
 		}
 		first.Style(Style().Width(0))

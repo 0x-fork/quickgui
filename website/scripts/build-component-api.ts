@@ -160,6 +160,8 @@ function goApi(component: (typeof ALL_COMPONENT_DOCS)[number]): ApiSection[] {
   if (!constructor) throw new Error(`Missing Go constructor: ${name}`);
   const props = constructor.signature.match(/\((?:props|options) (\w+)/)?.[1];
   const common = [
+    "Child",
+    "Children",
     "Style",
     "Disabled",
     "AriaLabel",

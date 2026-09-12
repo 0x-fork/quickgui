@@ -14,11 +14,10 @@ import (
 
 ```go
 func ViewExample() *ui.Element {
-	return ui.View(
-
-		ui.Text("Hello from Go"),
-		ui.Button("Continue").OnClick(func() {}),
-	).Padding(20).Gap(12)
+	return ui.View().
+		Padding(20).Gap(12).
+		Child(ui.Text("Hello from Go")).
+		Child(ui.Button().OnClick(func() {}).Child("Continue"))
 }
 ```
 
@@ -27,6 +26,6 @@ func ViewExample() *ui.Element {
 | 属性 | 说明 |
 | --- | --- |
 | `ui.Style().BackgroundColor(...)`, `ui.Style().Padding(...)`, `ui.Style().Hover(...)` | QuickGUI 的布局、绘制、排版和交互状态样式。 |
-| `children` | 挂载在组件内部的内容。 |
+| `Child`, `Children` | 挂载在组件内部的内容。 |
 | `OnClick` | 在核心完成激活判定后运行。 |
 | `Ref` | 接收保留式原生节点。 |

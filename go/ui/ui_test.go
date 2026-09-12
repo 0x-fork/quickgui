@@ -14,7 +14,7 @@ func TestRemovingDynamicNodesDisposesSubscriptions(t *testing.T) {
 		value, setValue := CreateSignal("initial")
 		visible, setVisible := CreateSignal(true)
 		renders := 0
-		parent := View(Props{})
+		parent := View()
 		region := Show(visible, func() *Element {
 			renders++
 			return Input(Props{Value: value, Children: value})
@@ -24,7 +24,7 @@ func TestRemovingDynamicNodesDisposesSubscriptions(t *testing.T) {
 		setValue("removed")
 		setVisible(false)
 		setVisible(true)
-		if renders != 1 || len(parent.Children) != 0 {
+		if renders != 1 || len(parent.Node.Children) != 0 {
 			t.Fatal("removed region is still reactive")
 		}
 		return struct{}{}
@@ -35,7 +35,7 @@ func TestSignalChangesOnlyItsBoundText(t *testing.T) {
 	reactive.CreateRoot(func(dispose func()) struct{} {
 		defer dispose()
 		value, setValue := CreateSignal("first")
-		parent := View(Props{Children: []any{Text(Props{Children: "static"}), Text(Props{Children: value})}})
+		parent := View().Child(Text("static")).Child(Text(value))
 		before := parent.Pending.MutationCount()
 		Batch(func() { setValue("second"); setValue("third") })
 		if got := parent.Pending.MutationCount() - before; got != 1 {
@@ -47,17 +47,12 @@ func TestSignalChangesOnlyItsBoundText(t *testing.T) {
 
 func TestViewAppliesStyleAndChildren(t *testing.T) {
 	native.ResetTreeStateForTests()
-	node := View(Props{
-		Style: Style().Flex().Width("100%").Gap(12).Bg("#112233"),
-		Children: []any{
-			Text(Props{Children: "hello"}),
-		},
-	})
+	node := View().Style(Style().Flex().Width("100%").Gap(12).Bg("#112233")).Child(Text("hello"))
 	if node.Tag != protocol.TagView {
 		t.Fatal(node.Tag)
 	}
-	if len(node.Children) != 1 {
-		t.Fatalf("children %d", len(node.Children))
+	if len(node.Node.Children) != 1 {
+		t.Fatalf("children %d", len(node.Node.Children))
 	}
 	if node.Pending == nil || node.Pending.Empty() {
 		t.Fatal("expected recorded mutations")
@@ -87,7 +82,7 @@ func TestShowCreatesChildrenOnDemand(t *testing.T) {
 		defer dispose()
 		visible, setVisible := CreateSignal(false)
 		created := 0
-		parent := View(Props{})
+		parent := View()
 		sentinel := Show(func() bool { return visible() }, func() *Element {
 			created++
 			return Text(Props{Children: "shown"})

@@ -19,7 +19,7 @@ func TestKeyedComponentsRetainMultipleRootsAndDisposeRemovedRows(t *testing.T) {
 		items, setItems := CreateSignal([]item{{1, "one"}, {2, "two"}})
 		mounts, cleanups, fallbackMounts, fallbackCleanups := 0, 0, 0, 0
 		refs := map[int]*native.Node{}
-		root := View(func() *native.Node {
+		root := View().Child(func() *native.Node {
 			return Fragment([]*native.Node{Text("before").Node,
 				KeyedFor(items, func(i item) any { return i.ID }, func(read func() item, index func() int) *native.Node {
 					var children_ []*native.Node
@@ -74,15 +74,15 @@ func TestChildrenBlocksPreserveNestingAndFineGrainedUpdates(t *testing.T) {
 			mounts++
 			nestedView := func() *Element {
 				mounts++
-				return View(Text(value), Button("Increment"))
+				return View().Children(Text(value), Button("Increment"))
 			}
 			nested = nestedView().Node
-			return View(Text("before"), nested, Text("after"))
+			return View().Children(Text("before"), nested, Text("after"))
 		}
 		root := build()
 		before := root.Pending.MutationCount()
 		Batch(func() { setValue("second"); setValue("third") })
-		if mounts != 2 || len(root.Children) != 3 || root.Children[1] != nested || len(nested.Children) != 2 {
+		if mounts != 2 || len(root.Node.Children) != 3 || root.Node.Children[1] != nested || len(nested.Children) != 2 {
 			t.Fatal("a block reran or its children escaped their parent")
 		}
 		if root.Pending.MutationCount()-before != 1 || nested.Children[0].Children[0].Text != "third" {
@@ -98,7 +98,7 @@ func TestChildrenBlocksHandleLazyRegionsAndComponentHelpers(t *testing.T) {
 		visible, setVisible := CreateSignal(true)
 		created := 0
 		helper := func() *Element { return Text(Props{}, "helper") }
-		root := View(Props{}, func() *native.Node {
+		root := View().Child(func() *native.Node {
 			var children_ []*native.Node
 			children_ = append(children_, helper().Node)
 			children_ = append(children_, Show(visible, func() *native.Node {
@@ -131,7 +131,7 @@ func TestCompoundChildrenInheritContextAndDisposeEffects(t *testing.T) {
 		defer dispose()
 		value, setValue := CreateSignal(0)
 		effects, cleanups := 0, 0
-		parent := View(Props{})
+		parent := View()
 		root := Tabs.Root(TabsRootProps{DefaultValue: "one"}, func() *native.Node {
 			return Fragment([]*native.Node{Tabs.List(PartProps{}, func() *native.Node { return Tabs.Tab(TabsTabProps{Value: "one"}, "One") }),
 				Tabs.Panel(TabsPanelProps{Value: "one"}, func() *Element {
@@ -154,11 +154,11 @@ func TestCompoundChildrenInheritContextAndDisposeEffects(t *testing.T) {
 func TestChildrenBlockRestoresBuilderAfterPanic(t *testing.T) {
 	func() *Element {
 		defer func() { _ = recover() }()
-		return View(Props{}, func() *Element { panic("interrupted build") })
+		return View().Child(func() *Element { panic("interrupted build") })
 	}()
 	prebuilt := Text(Props{}, "existing")
-	root := View(Props{}, prebuilt, Text(Props{}, "new"))
-	if len(root.Children) != 2 || root.Children[0] != prebuilt.Node {
+	root := View().Child(prebuilt).Child(Text("new"))
+	if len(root.Node.Children) != 2 || root.Node.Children[0] != prebuilt.Node {
 		t.Fatal("the builder leaked or declared a child twice")
 	}
 }
@@ -173,7 +173,7 @@ func TestDynamicViewSelectionPreservesChildBindings(t *testing.T) {
 			OnCleanup(func() { cleanups++ })
 			return Text(value)
 		}
-		root := View(func() *native.Node {
+		root := View().Child(func() *native.Node {
 			return Dynamic(func() Component {
 				if selected() {
 					return func() *Element { return Text("other view") }
@@ -218,10 +218,10 @@ func TestNumericChildrenRetainTextAndDisposeBindings(t *testing.T) {
 		count, setCount := CreateSignal(1000)
 		reads := 0
 		node := Text("Count: ", func() int { reads++; return count() })
-		prefix, number := node.Children[0], node.Children[1]
+		prefix, number := node.Node.Children[0], node.Node.Children[1]
 		before := node.Pending.MutationCount()
 		Batch(func() { setCount(2000); setCount(3000) })
-		if prefix.Text != "Count: " || number.Text != "3000" || node.Children[1] != number || reads != 2 {
+		if prefix.Text != "Count: " || number.Text != "3000" || node.Node.Children[1] != number || reads != 2 {
 			t.Fatal("numeric update remounted a child or changed the static prefix")
 		}
 		if got := node.Pending.MutationCount() - before; got != 1 {
@@ -246,13 +246,13 @@ func checkScalarChild[T comparable](t *testing.T, initial, updated T, first, sec
 		defer dispose()
 		value, setValue := CreateSignal(initial)
 		node := Text(initial, value, func() T { return value() })
-		for _, child := range node.Children {
+		for _, child := range node.Node.Children {
 			if child.Text != first {
 				t.Fatalf("%T: expected %q, got %q", initial, first, child.Text)
 			}
 		}
 		setValue(updated)
-		if node.Children[0].Text != first || node.Children[1].Text != second || node.Children[2].Text != second {
+		if node.Node.Children[0].Text != first || node.Node.Children[1].Text != second || node.Node.Children[2].Text != second {
 			t.Fatalf("%T: scalar/accessor/function children diverged: %v", initial, blockText(node.Node))
 		}
 		return struct{}{}
@@ -273,7 +273,7 @@ func TestNumericChildTypes(t *testing.T) {
 	checkScalarChild(t, uintptr(0), uintptr(123), "0", "123")
 	checkScalarChild(t, float32(1.2), float32(-1.25), "1.2", "-1.25")
 	checkScalarChild(t, float64(1.2), float64(-1.25), "1.2", "-1.25")
-	if len(Text(nil, false, true).Children) != 0 {
+	if len(Text(nil, false, true).Node.Children) != 0 {
 		t.Fatal("boolean children must remain hidden")
 	}
 }

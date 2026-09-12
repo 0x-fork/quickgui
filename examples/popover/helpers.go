@@ -19,7 +19,7 @@ var buttonStyle = ui.Style().
 	Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor("#3b82f6") })
 
 func card(title, description string, children ui.Component) *ui.Element {
-	return ui.View(
+	return ui.View().Children(
 
 		ui.Text(title).FontSize(17).FontWeight(700),
 		ui.Text(
@@ -38,9 +38,9 @@ func content(kind, description string, close func()) *ui.Element {
 		Flex(1).
 		Width(0).
 		Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor("#465166") })
-	return ui.View(
+	return ui.View().Children(
 
-		ui.View(
+		ui.View().Children(
 
 			ui.Text(
 				kind,
@@ -52,7 +52,7 @@ func content(kind, description string, close func()) *ui.Element {
 				description,
 			).TextColor("#aeb8c9").FontSize(13).LineHeight(19),
 		).Display("flex").FlexDirection("column").Gap(6),
-		ui.View(
+		ui.View().Children(
 
 			ui.Button(
 				ui.Text("Count: ", count()),

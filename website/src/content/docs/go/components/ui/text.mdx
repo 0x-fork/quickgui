@@ -15,7 +15,7 @@ import (
 ```go
 func TextExample() *ui.Element {
 	count, setCount := ui.CreateSignal(0)
-	return ui.View(
+	return ui.View().Children(
 		ui.Text(
 			"Count: ",
 			count(),

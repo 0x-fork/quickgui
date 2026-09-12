@@ -47,9 +47,9 @@ func TestNativeNodeReturnDefinesTheComponentBoundary(t *testing.T) {
 		value, setValue := ui.CreateSignal(1)
 		node := RawNodeLabel(value())
 		initial := ordinaryValue(value())
-		snapshot := ui.View(ui.Text(initial))
+		snapshot := ui.View().Child(ui.Text(initial))
 		setValue(2)
-		if node.Children[0].Text != "2" || snapshot.Children[0].Children[0].Text != "1" {
+		if node.Children[0].Text != "2" || snapshot.Node.Children[0].Children[0].Text != "1" {
 			t.Fatal("only a declared node return should create a component prop boundary")
 		}
 		return struct{}{}

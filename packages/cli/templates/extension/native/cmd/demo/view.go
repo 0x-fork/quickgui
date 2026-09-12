@@ -8,7 +8,7 @@ import (
 
 func App() *ui.Element {
 	message, setMessage := ui.CreateSignal("Ready to call the {{TYPE}} extension")
-	return ui.View(
+	return ui.View().Children(
 		ui.Text("{{NAME}}").FontSize(24).FontWeight(700),
 		ui.Text(message()).FontSize(16),
 		ui.Button("Call extension").OnClick(func() {

@@ -14,7 +14,7 @@ func TestWrapsFluentDeclarations(t *testing.T) {
 	source := []byte(`package example
 import ui "github.com/egoist/quickgui/go/ui"
 func root() {
-ui.View(ui.Text("hello"), ui.Input().Value("xxx")).Flex().Style(ui.Style().Merge(ui.Style().PaddingLeft(20), ui.Style().TextAlign("center"), ui.Style().Bg("#112233")))
+ui.View().Child(ui.Text("hello")).Child(ui.Input().Value("xxx")).Flex().Style(ui.Style().Merge(ui.Style().PaddingLeft(20), ui.Style().TextAlign("center"), ui.Style().Bg("#112233")))
 ui.Button("Toggle").When(func() bool { return selected() }, ui.Style().BackgroundColor("blue"), ui.Style().TextColor("white"))
 }`)
 	result := checkFormat(t, source)
@@ -49,7 +49,7 @@ func TestPreservesCommentsRawStringsAndVariadics(t *testing.T) {
 	source := []byte("package example\n" +
 		"import ui \"github.com/egoist/quickgui/go/ui\"\n" +
 		"func root() {\n" +
-		"ui.View(/* leading, comma */ ui.Style().Padding(20), // spacing\n" +
+		"ui.Text(/* leading, comma */ ui.Style().Padding(20), // spacing\n" +
 		"/* next argument */ ui.Style().BackgroundColor(\"a long value which should wrap the containing UI declaration\"), `raw\n  text, stays exact`, args... /* final, comment */)\n" +
 		"}")
 	result := checkFormat(t, source)
@@ -65,7 +65,7 @@ import (
  native "github.com/egoist/quickgui/go/native"
 )
 func root() {
-gui.View(gui.Props{Style: gui.Style().Flex().Width("100%").Height("100%").Bg("#ccc"), OnClick: func(event *native.Event) { handle(event) }}, func() { child() })
+gui.Text(gui.Props{Style: gui.Style().Flex().Width("100%").Height("100%").Bg("#ccc"), OnClick: func(event *native.Event) { handle(event) }}, func() { child() })
 gui.For[int](values, func(item int, index func() int) *native.Node { return row(item, index) }, nil, nil)
 }`)
 	result := checkFormat(t, source)

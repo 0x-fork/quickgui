@@ -109,12 +109,12 @@ func TestWhenRestoresBaseStyleWithoutRebuildingChildren(t *testing.T) {
 		defer dispose()
 		selected, setSelected := CreateSignal(false)
 		mounts := 0
-		node := View(
+		node := newElement(protocol.TagView, []any{
 			styleBackgroundColor("#ccc"),
 			When(selected, styleBackgroundColor("#2563eb"), styleTextColor("white")),
 			func() *Element { mounts++; return Text("child") },
-		)
-		child := node.Children[0]
+		})
+		child := node.Node.Children[0]
 		setSelected(true)
 		offset := len(node.Pending.Body())
 		setSelected(false)
@@ -124,7 +124,7 @@ func TestWhenRestoresBaseStyleWithoutRebuildingChildren(t *testing.T) {
 		if !bytes.Equal(node.Pending.Body()[offset:], expected.Body()) {
 			t.Fatalf("expected only the base background and cleared color, got %v", node.Pending.Body()[offset:])
 		}
-		if mounts != 1 || len(node.Children) != 1 || node.Children[0] != child {
+		if mounts != 1 || len(node.Node.Children) != 1 || node.Node.Children[0] != child {
 			t.Fatal("a conditional option rebuilt its children")
 		}
 		return struct{}{}
@@ -138,13 +138,13 @@ func TestStyleRecordsComposeAndConditionalStylesRestoreBindings(t *testing.T) {
 		baseColor := reactive.NewSignal("#334455")
 		selectedColor := reactive.NewSignal("#ddeeff")
 		mounts := 0
-		node := View(
+		node := newElement(protocol.TagView, []any{
 			func() *Element { mounts++; return Text("retained") },
 			styleData{BackgroundColor: baseColor.Read, TextColor: "white", Padding: 12},
 			styleData{Padding: 0},
 			When(selected, styleData{BackgroundColor: selectedColor.Read, Opacity: .5}),
-		)
-		child := node.Children[0]
+		})
+		child := node.Node.Children[0]
 		expected := protocol.NewBatch()
 		expected.SetNumber(node.ID, protocol.Padding, 0)
 		if !bytes.Contains(node.Pending.Body(), expected.Body()) {
@@ -166,7 +166,7 @@ func TestStyleRecordsComposeAndConditionalStylesRestoreBindings(t *testing.T) {
 		if !bytes.Equal(node.Pending.Body()[offset:], expected.Body()) {
 			t.Fatalf("conditional style did not restore the latest base color: %v", node.Pending.Body()[offset:])
 		}
-		if len(baseColor.Observers) != 1 || len(selectedColor.Observers) != 0 || mounts != 1 || node.Children[0] != child {
+		if len(baseColor.Observers) != 1 || len(selectedColor.Observers) != 0 || mounts != 1 || node.Node.Children[0] != child {
 			t.Fatal("style composition remounted children or retained an inactive binding")
 		}
 		return struct{}{}
@@ -241,7 +241,7 @@ func TestNestedWhenTracksOnlyTheActiveBranch(t *testing.T) {
 		outer, setOuter := CreateSignal(false)
 		inner := reactive.NewSignal(true)
 		parent := View()
-		node := View(When(outer, When(inner.Read, styleTextColor("white"))))
+		node := newElement(protocol.TagView, []any{When(outer, When(inner.Read, styleTextColor("white")))})
 		native.InsertNode(parent.Node, node.Node, nil)
 		if len(inner.Observers) != 0 {
 			t.Fatal("inactive branch was evaluated")

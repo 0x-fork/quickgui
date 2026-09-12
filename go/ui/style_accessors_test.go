@@ -16,9 +16,9 @@ func TestScalarStyleBindingsUpdateIndependentlyAndDispose(t *testing.T) {
 		color := reactive.NewSignal("#112233")
 		mounts := 0
 		parent := View()
-		node := View(styleWidth(width.Read), styleBackgroundColor(color.Read), func() *Element { mounts++; return Text("kept") })
+		node := newElement(protocol.TagView, []any{styleWidth(width.Read), styleBackgroundColor(color.Read), func() *Element { mounts++; return Text("kept") }})
 		native.InsertNode(parent.Node, node.Node, nil)
-		child := node.Children[0]
+		child := node.Node.Children[0]
 		offset := len(parent.Pending.Body())
 		width.Write(420)
 		expected := protocol.NewBatch()
@@ -33,7 +33,7 @@ func TestScalarStyleBindingsUpdateIndependentlyAndDispose(t *testing.T) {
 		if !bytes.Equal(parent.Pending.Body()[offset:], expected.Body()) {
 			t.Fatal("color updated unrelated properties")
 		}
-		if mounts != 1 || child != node.Children[0] {
+		if mounts != 1 || child != node.Node.Children[0] {
 			t.Fatal("style update remounted children")
 		}
 		native.RemoveNode(parent.Node, node.Node)
@@ -49,7 +49,7 @@ func TestConditionalStyleAccessorsReleaseAndRestoreBase(t *testing.T) {
 		defer dispose()
 		active, setActive := CreateSignal(true)
 		width := reactive.NewSignal(50)
-		node := View(styleWidth(20), When(active, styleWidth(width.Read)))
+		node := newElement(protocol.TagView, []any{styleWidth(20), When(active, styleWidth(width.Read))})
 		for range 3 {
 			if len(width.Observers) != 1 {
 				t.Fatal("missing or duplicate conditional style observer")
@@ -77,14 +77,14 @@ func TestStateStyleTracksThemeAndReleasesBindings(t *testing.T) {
 		parent := View()
 		node := Button(styleHover(styleBackgroundColor(accent.Read)), styleFocus(styleOutlineWidth(2), styleOutlineColor(accent.Read)), "Retained")
 		native.InsertNode(parent.Node, node.Node, nil)
-		child := node.Children[0]
+		child := node.Node.Children[0]
 		before := len(parent.Pending.Body())
 		accent.Write("#abcdef")
 		updates := parent.Pending.Body()[before:]
 		if !bytes.Contains(updates, []byte(`"outline":"2px #abcdefff"`)) {
 			t.Fatal("focus outline did not track the accent")
 		}
-		if node.Children[0] != child || len(accent.Observers) != 2 {
+		if node.Node.Children[0] != child || len(accent.Observers) != 2 {
 			t.Fatal("state style update remounted children or accumulated bindings")
 		}
 		native.RemoveNode(parent.Node, node.Node)

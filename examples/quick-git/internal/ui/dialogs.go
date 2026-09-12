@@ -112,7 +112,7 @@ func dialogFrame(title, description string, body *gui.Element, actions *gui.Elem
 										},
 										body,
 									),
-									gui.View(
+									gui.View().Children(
 
 										gui.Dialog.Close(
 											gui.PartProps{
@@ -248,7 +248,7 @@ func newBranchDialog() *native.Node {
 		}
 		return items
 	}
-	return dialogFrame("New Branch", "", gui.View(
+	return dialogFrame("New Branch", "", gui.View().Children(
 
 		gui.Text(
 			"Name",
@@ -341,7 +341,7 @@ func newWorktreeDialog() *native.Node {
 		}
 		store.AddWorktree(path(), "", branch(), "")
 	}
-	return dialogFrame("New Worktree", "Adds a linked working tree beside this repository.", gui.View(
+	return dialogFrame("New Worktree", "Adds a linked working tree beside this repository.", gui.View().Children(
 
 		CheckRow("Create a new branch", createNew, setCreateNew),
 		gui.Text(
@@ -389,7 +389,7 @@ func stashDialog() *native.Node {
 		app.CloseDialog()
 		store.StashPush(message(), include())
 	}
-	return dialogFrame("Stash Changes", "Saves local changes and returns the working tree to HEAD.", gui.View(
+	return dialogFrame("Stash Changes", "Saves local changes and returns the working tree to HEAD.", gui.View().Children(
 
 		gui.Input(
 

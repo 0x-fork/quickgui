@@ -131,9 +131,9 @@ func Gallery() *native.Node {
 			}},
 		},
 		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.View(
+			return ui.Fragment([]*native.Node{ui.View().Children(
 				ui.View().Display("flex").Height(52).FlexShrink(0).AlignItems("center").PaddingLeft(82).AppRegion("drag"),
-				ui.View(
+				ui.View().Child(
 
 					ui.Tabs.List(
 						ui.PartProps{Style: ui.Style().
@@ -186,9 +186,9 @@ func Gallery() *native.Node {
 					),
 				).Display("flex").FlexDirection("column").Flex(1).MinHeight(0).OverflowY("scroll"),
 			).Display("flex").FlexDirection("column").Width(214).FlexShrink(0).Height("100%").BackgroundColor(color(func(p palette) string { return p.Sidebar })).BorderRightWidth(1).BorderColor(color(func(p palette) string { return p.Border })).Node,
-				ui.View(
+				ui.View().Children(
 
-					ui.View(
+					ui.View().Children(
 
 						row(func() *native.Node {
 							return ui.Fragment([]*native.Node{ui.Text(
@@ -215,7 +215,7 @@ func Gallery() *native.Node {
 							},
 						).FontSize(11).TextColor(color(func(p palette) string { return p.Faint })),
 					).Display("flex").AlignItems("center").JustifyContent("space-between").Height(52).FlexShrink(0).PaddingLeft(20).PaddingRight(20).BorderBottomWidth(1).BorderColor(color(func(p palette) string { return p.Border })).AppRegion("drag"),
-					ui.View(
+					ui.View().Child(
 						func() *native.Node {
 							var children []*native.Node
 							for _, entry := range demos {

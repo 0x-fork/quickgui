@@ -12,8 +12,7 @@ import (
 // branches. Every construction callback returns *Element or *native.Node.
 type Component = native.Component
 
-// withChildren keeps Props.Children compatible while allowing ordinary children
-// arguments: View(func() { ... }, style) and Text("Hello", style).
+// withChildren combines Props.Children with ordinary content arguments.
 func withChildren(previous any, children []any) any {
 	if len(children) == 0 {
 		return previous

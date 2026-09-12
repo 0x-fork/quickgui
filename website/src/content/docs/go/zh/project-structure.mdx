@@ -20,7 +20,7 @@ my-app/
 
 ```go
 func ViewExample() *ui.Element {
-	return ui.View(
+	return ui.View().Children(
 
 		ui.Text("Hello from Go"),
 		ui.Button("Continue").OnClick(func() {}),

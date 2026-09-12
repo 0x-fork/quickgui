@@ -15,13 +15,13 @@ func TestFluentChildrenDeclareOneRetainedRoot(t *testing.T) {
 		defer dispose()
 		var view *Element
 		roots := native.CollectChildren(func() *Element {
-			view = View(Text("hello"), Input().Value("xxx")).Flex().PaddingLeft(20).TextAlign("center")
+			view = View().Flex().Child(Text("hello")).PaddingLeft(20).Child(Input().Value("xxx")).TextAlign("center")
 			return view
 		})
-		if len(roots) != 1 || roots[0] != view.Node || len(view.Children) != 2 {
-			t.Fatal("nested constructor arguments escaped their parent or were declared twice")
+		if len(roots) != 1 || roots[0] != view.Node || len(view.Node.Children) != 2 {
+			t.Fatal("chained children escaped their parent or were declared twice")
 		}
-		label, input := view.Children[0], view.Children[1]
+		label, input := view.Node.Children[0], view.Node.Children[1]
 		if label.Children[0].Text != "hello" || input.Tag != protocol.TagInput {
 			t.Fatal("fluent nesting lost text or input content")
 		}
@@ -34,12 +34,46 @@ func TestFluentChildrenDeclareOneRetainedRoot(t *testing.T) {
 			t.Fatal("fluent declarations did not reach the native properties")
 		}
 		var empty *Element
-		other := View([]*Element{Text("one"), nil, empty, Text("two")})
-		if len(other.Children) != 2 {
-			t.Fatal("element slices did not omit nil children")
+		other := View().Child("before").Children([]*Element{Text("one"), nil, empty, Text("two")}).
+			Children([]*native.Node{nil, Text("three").Node}).Children("four", []any{"five", nil}).Child("after")
+		if got := blockText(other.Node); fmt.Sprint(got) != "[before one two three four five after]" {
+			t.Fatalf("appending children lost order or nil handling: %v", got)
+		}
+		before = other.Pending.MutationCount()
+		if other.Children().Child(nil).Children(false, empty, (*native.Node)(nil)) != other || other.Pending.MutationCount() != before {
+			t.Fatal("empty children must return the same element without mutations")
 		}
 		return struct{}{}
 	})
+}
+
+func TestFluentChildrenRejectRemovedParentsBeforeRunningFactories(t *testing.T) {
+	for _, method := range []string{"Child", "Children"} {
+		t.Run(method, func(t *testing.T) {
+			reactive.CreateRoot(func(dispose func()) struct{} {
+				defer dispose()
+				view := View()
+				parent := View().Child(view)
+				native.RemoveNode(parent.Node, view.Node)
+				before := parent.Pending.MutationCount()
+				mounts := 0
+				build := func() *Element { mounts++; return Text("removed") }
+				var recovered any
+				func() {
+					defer func() { recovered = recover() }()
+					if method == "Child" {
+						view.Child(build)
+					} else {
+						view.Children(build)
+					}
+				}()
+				if recovered == nil || mounts != 0 || parent.Pending.MutationCount() != before {
+					t.Fatal("appending to a removed parent must fail before constructing children")
+				}
+				return struct{}{}
+			})
+		})
+	}
 }
 
 func TestFluentReplacementDisposesBindingsAndClearsProperties(t *testing.T) {
@@ -75,13 +109,13 @@ func TestFluentBindingsStayIndependentAndChildrenKeepTheirOwners(t *testing.T) {
 		width, color, text := reactive.NewSignal(100), reactive.NewSignal("#112233"), reactive.NewSignal("first")
 		mounts, cleanups := 0, 0
 		parent := View()
-		view := View(func() *Element {
+		view := View().Child(func() *Element {
 			mounts++
 			OnCleanup(func() { cleanups++ })
 			return Text(text.Read)
 		}).Width(width.Read).Bg(color.Read).PaddingLeft(20)
 		native.InsertNode(parent.Node, view.Node, nil)
-		child := view.Children[0]
+		child := view.Node.Children[0]
 		offset := len(parent.Pending.Body())
 		Batch(func() { width.Write(120); width.Write(140) })
 		expected := protocol.NewBatch()
@@ -94,7 +128,7 @@ func TestFluentBindingsStayIndependentAndChildrenKeepTheirOwners(t *testing.T) {
 			t.Fatal("fluent override leaked bindings or disposed child ownership")
 		}
 		text.Write("second")
-		if view.Children[0] != child || child.Children[0].Text != "second" || mounts != 1 || cleanups != 0 {
+		if view.Node.Children[0] != child || child.Children[0].Text != "second" || mounts != 1 || cleanups != 0 {
 			t.Fatal("fluent configuration remounted or disposed children")
 		}
 		native.RemoveNode(parent.Node, view.Node)
@@ -111,13 +145,13 @@ func TestFluentConditionsRestoreStylesAndReleaseHandlers(t *testing.T) {
 		selected, setSelected := CreateSignal(false)
 		base, active := reactive.NewSignal(10), reactive.NewSignal(30)
 		calls := 0
-		view := View(Text("kept")).Width(base.Read).
+		view := View().Child(Text("kept")).Width(base.Read).
 			When(selected, styleWidth(active.Read), OnClick(func() { calls++ })).PaddingLeft(20)
-		child := view.Children[0]
+		child := view.Node.Children[0]
 		setSelected(true)
 		view.Listeners[0].Listener(&native.Event{})
 		setSelected(false)
-		if calls != 1 || len(view.Listeners) != 0 || len(active.Observers) != 0 || len(base.Observers) != 1 || view.Children[0] != child {
+		if calls != 1 || len(view.Listeners) != 0 || len(active.Observers) != 0 || len(base.Observers) != 1 || view.Node.Children[0] != child {
 			t.Fatal("conditional styles or listeners leaked across a fluent chain")
 		}
 		before := view.Pending.MutationCount()
@@ -152,7 +186,7 @@ func TestFluentConfigurationIsImmediateInsideBatchesAndEventsBatchWrites(t *test
 
 		})
 		input.Listeners[0].Listener(&native.Event{Value: "typed"})
-		if reads != 2 || refs != 1 || label.Children[0].Text != "typed" {
+		if reads != 2 || refs != 1 || label.Node.Children[0].Text != "typed" {
 			t.Fatal("input callback lost text or failed to batch writes")
 		}
 		input.OnInput(nil)

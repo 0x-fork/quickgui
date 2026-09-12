@@ -140,7 +140,7 @@ func overlay() ui.PartProps {
 	return ui.PartProps{Style: s}
 }
 func panel(title, hint string, children ui.Component) *ui.Element {
-	return ui.View(
+	return ui.View().Children(
 
 		ui.Text(title).FontSize(17).FontWeight(700),
 		ui.Text(
@@ -150,12 +150,12 @@ func panel(title, hint string, children ui.Component) *ui.Element {
 	).Display("flex").FlexDirection("column").Gap(14).Padding(20).BorderRadius(12).BorderWidth(1).BorderColor(color(func(p palette) string { return p.Border })).BackgroundColor(color(func(p palette) string { return p.Panel })).FlexShrink(0)
 }
 func row(children ui.Component) *ui.Element {
-	return ui.View(
+	return ui.View().Child(
 		children,
 	).Display("flex").FlexDirection("row").AlignItems("center").FlexWrap("wrap").Gap(10)
 }
 func col(children ui.Component) *ui.Element {
-	return ui.View(
+	return ui.View().Child(
 		children,
 	).Display("flex").FlexDirection("column").Gap(8)
 }

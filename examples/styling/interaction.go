@@ -45,11 +45,11 @@ func InteractionStates() *ui.Element {
 		FocusStyle(func(s ui.StyleBuilder) ui.StyleBuilder { return s.Outline("2px solid #93c5fd") }).
 		DisabledStyle(func(s ui.StyleBuilder) ui.StyleBuilder { return s.Opacity(0.35).Cursor("not-allowed") })
 	return Panel("Interaction states", func() *native.Node {
-		return ui.Fragment([]*native.Node{ui.View(
+		return ui.Fragment([]*native.Node{ui.View().Child(
 			func() *native.Node {
 				var children []*native.Node
 				for index, title := range []string{"Quarterly report", "Roadmap draft"} {
-					children = append(children, ui.View(
+					children = append(children, ui.View().Children(
 
 						ui.Text(
 							title,
@@ -89,7 +89,7 @@ func InteractionStates() *ui.Element {
 			},
 		).Display("flex").FlexDirection("column").Gap(12).Group("list").Node,
 
-			ui.View(
+			ui.View().Children(
 				"Drag swatch",
 				centered,
 			).Height(30).BorderRadius(8).BackgroundColor("#1d4ed8").TextColor(ink).FontSize(12).UserSelect("none").Dragging(func(s ui.StyleBuilder) ui.StyleBuilder { return s.Opacity(0.45) }).Draggable(ui.DragSource{
@@ -97,7 +97,7 @@ func InteractionStates() *ui.Element {
 				Text: "swatch",
 			}).Node,
 
-			ui.View(
+			ui.View().Children(
 
 				ui.Text(
 					dropStatus(),
@@ -124,7 +124,7 @@ func InteractionStates() *ui.Element {
 
 func StickyHeaders() *ui.Element {
 	return Panel("Sticky headers", func() *ui.Element {
-		return ui.View(
+		return ui.View().Child(
 			func() *native.Node {
 				var children []*native.Node
 				for index, section := range []string{"Inbox", "Archive", "Trash"} {
@@ -132,17 +132,17 @@ func StickyHeaders() *ui.Element {
 					if index%2 != 0 {
 						color = "#3c2858"
 					}
-					children = append(children, ui.View(
+					children = append(children, ui.View().Child(
 						func() *native.Node {
 							var children []*native.Node
-							children = append(children, ui.View(
+							children = append(children, ui.View().Child(
 
 								ui.Text(
 									section,
 								).FontSize(12).FontWeight(700).TextColor(ink),
 							).Display("flex").AlignItems("center").Position("sticky").Top(0).Height(28).FlexShrink(0).PaddingLeft(12).BackgroundColor(color).Node)
 							for row := range 6 {
-								children = append(children, ui.View(
+								children = append(children, ui.View().Child(
 
 									ui.Text(
 										section,
@@ -164,11 +164,11 @@ func StickyHeaders() *ui.Element {
 func ScrollSnap() *ui.Element {
 	tints := []string{"#1d4ed8", "#7c3aed", "#0f766e", "#b45309", "#be123c"}
 	return Panel("Mandatory scroll snap", func() *native.Node {
-		return ui.Fragment([]*native.Node{ui.View(
+		return ui.Fragment([]*native.Node{ui.View().Child(
 			func() *native.Node {
 				var children []*native.Node
 				for index, tint := range tints {
-					children = append(children, ui.View(
+					children = append(children, ui.View().Children(
 
 						ui.Text(
 							"page ",

@@ -13,7 +13,7 @@ func TestHoverGroupUsesNativeGroupPropertyAndTracksNames(t *testing.T) {
 	reactive.CreateRoot(func(dispose func()) struct{} {
 		defer dispose()
 		name := reactive.NewSignal("card")
-		node := View(Group(name.Read))
+		node := newElement(protocol.TagView, []any{Group(name.Read)})
 		expected := protocol.NewBatch()
 		expected.SetString(node.ID, protocol.HoverGroup, "card")
 		if !bytes.Contains(node.Pending.Body(), expected.Body()) {
@@ -53,16 +53,16 @@ func TestNamedGroupRulesAccumulateAndTrackColorsWithoutRemounting(t *testing.T) 
 		color := reactive.NewSignal("#112233")
 		enabled := reactive.NewSignal(true)
 		parent := View()
-		node := View(styleGroupHover(styleOpacity(.5)), When(enabled.Read, styleGroupHoverNamed("card", styleTextColor(color.Read))), "kept")
+		node := newElement(protocol.TagView, []any{styleGroupHover(styleOpacity(.5)), When(enabled.Read, styleGroupHoverNamed("card", styleTextColor(color.Read))), "kept"})
 		native.InsertNode(parent.Node, node.Node, nil)
-		child := node.Children[0]
+		child := node.Node.Children[0]
 		offset := len(parent.Pending.Body())
 		color.Write("#abcdef")
 		updates := parent.Pending.Body()[offset:]
 		if !bytes.Contains(updates, []byte(`"group":"card"`)) || !bytes.Contains(updates, []byte(`[{"opacity":0.5},{"color":`)) {
 			t.Fatal("ordered named rules were not encoded")
 		}
-		if child != node.Children[0] || len(color.Observers) != 1 {
+		if child != node.Node.Children[0] || len(color.Observers) != 1 {
 			t.Fatal("rule update remounted children or duplicated bindings")
 		}
 		enabled.Write(false)

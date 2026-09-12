@@ -70,7 +70,7 @@ func historyButton(label, path string, click func(), disabled func() bool) *ui.E
 }
 
 func page(title, description any, children ...any) *ui.Element {
-	return ui.View(
+	return ui.View().Children(
 
 		ui.Text(
 			title,

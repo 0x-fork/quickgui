@@ -60,7 +60,7 @@ func App(store *model.Store, appearance reactive.Accessor[string], openRepositor
 func shell() *gui.Element {
 	app := UseApp()
 	store := app.Store
-	return gui.View(
+	return gui.View().Children(
 
 		gui.Show(
 			store.Repository() != nil,
@@ -78,7 +78,7 @@ func shell() *gui.Element {
 						FlexShrink(0).
 						BackgroundColor(app.Theme().SidebarWash),
 				),
-					gui.View(
+					gui.View().Children(
 
 						Toolbar(),
 						mainView(),
@@ -281,12 +281,12 @@ func Welcome() *gui.Element {
 		}
 		return path
 	}
-	return gui.View(
+	return gui.View().Children(
 
 		gui.View().Height(TitlebarHeight).FlexShrink(0).AppRegion("drag"),
-		gui.View(
+		gui.View().Children(
 
-			gui.View(
+			gui.View().Child(
 
 				icon(branchIcon, 32, func() string { return app.Theme().TextOnAccent }),
 			).Display("flex").Width(64).Height(64).AlignItems("center").JustifyContent("center").BorderRadius(18).BackgroundColor(app.Theme().Accent).TextColor(app.Theme().TextOnAccent),
@@ -305,7 +305,7 @@ func Welcome() *gui.Element {
 			gui.Show(
 				len(store.RecentRepositories()) > 0,
 				func() *gui.Element {
-					return gui.View(
+					return gui.View().Children(
 
 						gui.Text(
 							"Recent",
@@ -321,7 +321,7 @@ func Welcome() *gui.Element {
 							func(path string, _ func() int) *gui.Element {
 								return gui.Button(
 
-									gui.View(
+									gui.View().Children(
 
 										gui.Text(
 
@@ -373,15 +373,15 @@ func Sidebar() *native.Node {
 		{model.ViewHistory, "History"},
 	}
 	children = append(children, gui.View().Display("flex").Height(TitlebarHeight).FlexShrink(0).AlignItems("center").PaddingLeft(84).PaddingRight(10).AppRegion("drag").Node)
-	children = append(children, gui.View(
+	children = append(children, gui.View().Children(
 
 		gui.Button(
 
-			gui.View(
+			gui.View().Child(
 
 				icon(branchIcon, 18, func() string { return app.Theme().TextOnAccent }),
 			).Display("flex").Width(28).Height(28).FlexShrink(0).AlignItems("center").JustifyContent("center").BorderRadius(7).BackgroundColor(app.Theme().Accent).TextColor(app.Theme().TextOnAccent),
-			gui.View(
+			gui.View().Children(
 
 				gui.Text(
 					store.RepositoryName(),
@@ -534,7 +534,7 @@ func sectionRow(label string, count func() int, selected func() bool, onClick, a
 		}
 		return app.Theme().TextTertiary
 	}
-	return gui.View(
+	return gui.View().Children(
 
 		gui.Button(
 

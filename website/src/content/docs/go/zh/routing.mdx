@@ -40,7 +40,7 @@ func NestedRouterExample() *native.Node {
 		Routes: []*ui.RouteDeclaration{
 			ui.Layout(
 				func() *ui.Element {
-					return ui.View(
+					return ui.View().Children(
 
 						ui.Link(ui.LinkProps{Href: "/"}, "Home"),
 						ui.Link(ui.LinkProps{Href: "/settings"}, "Settings"),
@@ -88,7 +88,7 @@ func ParameterRouterExample() *native.Node {
 				func() *ui.Element {
 					params := ui.UseParams()
 					search := ui.UseSearchParams()
-					return ui.View(
+					return ui.View().Children(
 						ui.Text(
 							"Project: ",
 							params()["name"],

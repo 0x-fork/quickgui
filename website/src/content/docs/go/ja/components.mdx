@@ -2,7 +2,7 @@ QuickGUI はスタイルなしのプリミティブとアクセシブルな複�
 
 ## コンポーネントの定義
 
-Go コンポーネントは `*ui.Element` または `*native.Node` を返します。通常の型の props と子ノードを直接組み合わせます。戻り値の型でコンポーネントを識別するため、`CounterLabel(count())` は注釈や `ui.View(func() { ... })` のラッパーなしで更新されます。ウィンドウには関数を直接渡せます。
+Go コンポーネントは `*ui.Element` または `*native.Node` を返します。通常の型の props と子ノードを直接組み合わせます。戻り値の型でコンポーネントを識別するため、`CounterLabel(count())` は注釈や `ui.View().Child(func() *ui.Element { ... })` のラッパーなしで更新されます。ウィンドウには関数を直接渡せます。
 
 ```go
 func CounterLabel(count int) *ui.Element {
@@ -11,7 +11,7 @@ func CounterLabel(count int) *ui.Element {
 
 func ComponentExample() *ui.Element {
 	count, setCount := ui.CreateSignal(0)
-	return ui.View(
+	return ui.View().Children(
 		CounterLabel(count()),
 		ui.Button("Increment").OnClick(func() { setCount(count() + 1) }),
 	)
@@ -33,7 +33,7 @@ func LineItem(product Product, quantity int) *ui.Element {
 
 func Cart() *ui.Element {
 	quantity, setQuantity := ui.CreateSignal(1)
-	return ui.View(
+	return ui.View().Children(
 		LineItem(Product{ID: "mug", Name: "Mug", Price: 12}, quantity()),
 		ui.Button("Add one").OnClick(func() { setQuantity(quantity() + 1) }),
 	)
@@ -44,7 +44,7 @@ func Cart() *ui.Element {
 
 ```go
 func CardComponent(title string, children ...any) *ui.Element {
-	return ui.View(
+	return ui.View().Children(
 		ui.Text(title).FontWeight(600),
 		children,
 	).Padding(20).Gap(12).FlexCol()
@@ -60,7 +60,7 @@ func CardComposition() *ui.Element {
 
 ## プリミティブ
 
-`ui.View`、`ui.Text`、`ui.Button`、`ui.Input` から始めます。オプションとテキストを直接渡せます。`func() { ... }` 引数は複数の子を現在の親の下にまとめます。
+`ui.View`、`ui.Text`、`ui.Button`、`ui.Input` から始めます。`ui.View()` でコンテナを作り、`.Child(...)` または `.Children(...)` で子要素を追加します。スタイル、プロパティ、イベントは fluent メソッドで設定します。コンポーネントと遅延構築コールバックはノードを返します。
 
 ```go
 func ButtonExample(save func()) *ui.Element {

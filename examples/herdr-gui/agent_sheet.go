@@ -52,9 +52,9 @@ func agentSheet(m *model) *native.Node {
 									BorderRadius(9),
 							}},
 							func() *native.Node {
-								return ui.Fragment([]*native.Node{ui.View(
+								return ui.Fragment([]*native.Node{ui.View().Children(
 
-									ui.View(
+									ui.View().Children(
 
 										ui.Dialog.Title(
 											ui.PartProps{Style: ui.Style().
@@ -79,7 +79,7 @@ func agentSheet(m *model) *native.Node {
 								).Display("flex").AlignItems("flex-start").Node,
 									formGroup(func() *native.Node {
 										return ui.Fragment([]*native.Node{formLabel(m, "Agent").Node,
-											ui.View(
+											ui.View().Child(
 
 												ui.KeyedFor(
 													m.Launchers.Read,
@@ -88,13 +88,13 @@ func agentSheet(m *model) *native.Node {
 														selected := func() bool { return read().ID == m.SelectedLauncherID.Read() }
 														return ui.Button(
 
-															ui.View(
+															ui.View().Child(
 
 																ui.Text(
 																	read().Mark,
 																).FontSize(13).FontWeight(750),
 															).Display("flex").Width(24).Height(24).FlexShrink(0).AlignItems("center").JustifyContent("center").BackgroundColor(m.color(func(t theme) string { return t.AccentWash })).BorderRadius(5),
-															ui.View(
+															ui.View().Children(
 
 																ui.Text(
 																	read().Label,
@@ -168,7 +168,7 @@ func agentSheet(m *model) *native.Node {
 											return true
 										},
 										func() *ui.Element {
-											return ui.View(
+											return ui.View().Child(
 
 												ui.Text(
 													"No supported agent CLI was found. You can still open a terminal and run any installed agent; the sidebar detects it automatically.",
@@ -176,7 +176,7 @@ func agentSheet(m *model) *native.Node {
 											).Display("flex").MinHeight(36).AlignItems("center").PaddingLeft(10).PaddingRight(10).PaddingTop(7).PaddingBottom(7).BackgroundColor(m.color(func(t theme) string { return t.AccentWash })).BorderRadius(5)
 										},
 									),
-									ui.View(
+									ui.View().Child(
 										func() *native.Node {
 											var children_ []*native.Node
 											children_ = append(children_, ui.Button(
@@ -203,7 +203,7 @@ func agentSheet(m *model) *native.Node {
 	)
 }
 func formGroup(children ui.Component) *ui.Element {
-	return ui.View(
+	return ui.View().Child(
 		children,
 	).Display("flex").FlexDirection("column").Gap(7)
 }

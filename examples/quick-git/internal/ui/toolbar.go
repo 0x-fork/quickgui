@@ -22,7 +22,7 @@ func Toolbar() *gui.Element {
 		status := store.Status()
 		return busy() || status == nil || status.Branch == ""
 	}
-	return gui.View(
+	return gui.View().Children(
 
 		gui.Button(
 
@@ -50,7 +50,7 @@ func Toolbar() *gui.Element {
 				return status != nil && status.HasUpstreamCounts && (status.Ahead > 0 || status.Behind > 0)
 			},
 			func() *gui.Element {
-				return gui.View(
+				return gui.View().Children(
 
 					toolbarIcon(pushIcon),
 					gui.Text(fmt.Sprint(store.Status().Ahead)),
@@ -80,7 +80,7 @@ func Toolbar() *gui.Element {
 func toolbarBusy() *gui.Element {
 	app := UseApp()
 	store := app.Store
-	return gui.View(
+	return gui.View().Children(
 
 		gui.Progress.Root(
 			gui.ProgressProps{

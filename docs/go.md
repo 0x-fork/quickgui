@@ -4,7 +4,7 @@ QuickGUI applications are ordinary Go programs. `purego` loads the prebuilt Rust
 
 ## Components
 
-Components return a retained native node: `*ui.Element` for the fluent builder or `*native.Node` for lower-level code. Pass a root directly as `WindowOptions.Component`, and compose children as `ui.View(Child(...), ui.Text(count()))`. The compiler recognizes the return type and keeps props and native view expressions reactive without a children callback. Optional callbacks remain available for deferred construction and controls that establish child context.
+Components return a retained native node: `*ui.Element` for the fluent builder or `*native.Node` for lower-level code. Pass a root directly as `WindowOptions.Component`, and compose children as `ui.View().Child(Child(...)).Child(ui.Text(count()))`. The compiler recognizes the return type and keeps props and native view expressions reactive without a children callback. Optional callbacks remain available for deferred construction and controls that establish child context.
 
 ```go
 package main
@@ -39,35 +39,38 @@ func main() {
 
 func Counter() *ui.Element {
 	count, setCount := ui.CreateSignal(0)
-	return ui.View(
-		ui.Text("Fine-grained native UI").FontSize(28).FontWeight(700),
-		ui.Text("Count: ", count()),
-		ui.Button("Increment").
-			OnClick(func() { setCount(count() + 1) }).
-			Padding(12).
-			RoundedLg().
-			Bg("#2563eb").
-			Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor("#3b82f6") }),
-	).FlexCol().
+	return ui.View().
+		FlexCol().
 		SizeFull().
 		ItemsCenter().
 		JustifyCenter().
 		Gap(20).
 		Bg("#090d16").
-		TextColor("#e2e8f0")
+		TextColor("#e2e8f0").
+		Child(ui.Text("Fine-grained native UI").FontSize(28).FontWeight(700)).
+		Child(ui.Text("Count: ", count())).
+		Child(ui.Button().
+			OnClick(func() { setCount(count() + 1) }).
+			Padding(12).
+			RoundedLg().
+			Bg("#2563eb").
+			Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor("#3b82f6") }).
+			Child("Increment"))
 }
 ```
 
 Components and deferred construction callbacks return a node and run once when mounted. UI nodes are used explicitly: return them, assign them, or pass them as children. Discarded construction calls and `func()` declaration blocks are rejected. Ordinary `if` and `for` statements are useful for static construction. Reading a signal inside an accessor subscribes that binding; setting it changes the affected native properties or text nodes. Event handlers batch writes automatically. Use `ui.Batch` to group writes outside an event. Pass string or numeric accessors directly as children: `ui.Text("Count: ", count)` retains the prefix and updates only the number. Numbers use typed `strconv` conversions. Use direct reads such as `ui.Text(count())` and `CounterLabel(count())` when building with QuickGUI. The compiler preserves their reactivity. A setup assignment such as `initial := count()` remains a snapshot. Use `strconv` and concatenation when a property needs one combined string, such as an input value or accessibility label.
 
-Pass children or content to constructors, then chain properties, styles, and handlers:
+Start containers with `ui.View()`, then append children and chain properties, styles, and handlers:
 
 ```go
-return ui.View(
-	ui.Text("hello"),
-	ui.Input().Value("xxx").OnInput(func(value string) { /* save value */ }),
-).Flex().PaddingLeft(20).TextAlign("center").RoundedLg()
+return ui.View().
+	Flex().PaddingLeft(20).TextAlign("center").RoundedLg().
+	Child(ui.Text("hello")).
+	Child(ui.Input().Value("xxx").OnInput(func(value string) { /* save value */ }))
 ```
+
+`View` takes no arguments. `.Child(value)` appends one child; `.Children(first, second)` appends several, and also accepts `[]*ui.Element`, `[]*native.Node`, or `[]any` slices. Both methods preserve existing children and return the same element, so they can be mixed with styles and handlers. Scalars, accessors, and node-returning callbacks use the same retained bindings as constructor content. Inspect the native child list through `element.Node.Children`.
 
 Go primitives return `*ui.Element`. `.Value`, `.Width`, `.PaddingLeft`, and the other modifiers return the same retained element. Accessors remain fine-grained bindings; later declarations replace earlier values without remounting children. `.OnClick(func() { ... })` handles clicks, and `.OnInput(func(value string) { ... })` receives text. Use `.OnClickEvent`, `.OnInputEvent`, or `.OnSubmitEvent` for the full native event. `.Style(shared)` applies a reusable style built with `ui.Style()`.
 
@@ -79,8 +82,8 @@ Use `ui.Style().Padding(12).BorderRadius(8)` to share styles or fill a compound 
 var children []*native.Node
 card := ui.Style().Padding(20).RoundedLg().
 	Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.Bg("#1e293b") })
-children = append(children, ui.View("Hello").Style(card).Node)
-children = append(children, ui.View("Another card").Style(card.PaddingLeft(28)).Node)
+children = append(children, ui.View().Child("Hello").Style(card).Node)
+children = append(children, ui.View().Child("Another card").Style(card.PaddingLeft(28)).Node)
 return ui.Fragment(children)
 ```
 
@@ -112,10 +115,10 @@ Use `quickgui fmt --check` in CI or `quickgui fmt --project path/to/app` for ano
 
 ```go
 func GroupExample() *ui.Element {
-	return ui.View(
+	return ui.View().Children(
 		ui.Text("Changes when the card is hovered").TextColor("#64748b").
 			GroupHover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.TextColor("#2563eb") }),
-		ui.View(
+		ui.View().Child(
 			ui.Text("Follows the card and the nested toolbar").
 				GroupHoverNamed("card", func(s ui.StyleBuilder) ui.StyleBuilder { return s.TextColor("#2563eb") }).
 				GroupHoverNamed("toolbar", func(s ui.StyleBuilder) ui.StyleBuilder { return s.Opacity(0.8) }),

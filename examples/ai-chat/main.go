@@ -102,10 +102,10 @@ func inputStyle() ui.StyleBuilder {
 }
 
 func (controller *chatController) view() *ui.Element {
-	return ui.View(
+	return ui.View().Children(
 
 		controller.sidebar(),
-		ui.View(
+		ui.View().Children(
 
 			controller.toolbar(),
 			ui.VirtualList(
@@ -126,14 +126,14 @@ func (controller *chatController) view() *ui.Element {
 }
 
 func (controller *chatController) sidebar() *ui.Element {
-	return ui.View(
+	return ui.View().Children(
 
 		ui.Text("Conversations").FontSize(18).FontWeight(700),
 		ui.Button(
 			"New chat",
 		).Style(buttonStyle()).Disabled(controller.busy.Read).OnClick(controller.newConversation),
 
-		ui.View(
+		ui.View().Child(
 
 			ui.KeyedFor(
 				func() []Conversation { return controller.state.Read().Conversations },
@@ -167,9 +167,9 @@ func (controller *chatController) sidebar() *ui.Element {
 }
 
 func (controller *chatController) toolbar() *ui.Element {
-	return ui.View(
+	return ui.View().Children(
 
-		ui.View(
+		ui.View().Children(
 
 			ui.Text(
 				controller.current().Title,
@@ -213,7 +213,7 @@ func (controller *chatController) toolbar() *ui.Element {
 }
 
 func messageCard(message func() ChatMessage) *ui.Element {
-	return ui.View(
+	return ui.View().Children(
 
 		ui.Text(
 			func() string {
@@ -242,7 +242,7 @@ func messageCard(message func() ChatMessage) *ui.Element {
 }
 
 func (controller *chatController) composer() *ui.Element {
-	return ui.View(
+	return ui.View().Children(
 
 		ui.Show(
 			controller.status.Read() != "",
@@ -252,7 +252,7 @@ func (controller *chatController) composer() *ui.Element {
 				).FontSize(12).TextColor("#94a3b8")
 			},
 		),
-		ui.View(
+		ui.View().Children(
 
 			ui.Input().Style(inputStyle()).Flex(1).MinWidth(0).Value(controller.current().Draft).Placeholder("Message DeepSeek…").Disabled(controller.busy.Read).OnInputEvent(func(event *native.Event) { controller.setDraft(event.Value) }).OnSubmitEvent(func(event *native.Event) {
 				controller.setDraft(event.Value)
@@ -293,13 +293,13 @@ func (controller *chatController) providerSettings() *ui.Element {
 	errorText, setError := ui.CreateSignal("")
 	window := native.CurrentWindow()
 	close := func() { controller.settingsOpen.Write(false) }
-	return ui.View(
+	return ui.View().Children(
 
 		ui.Text("DeepSeek API key").FontSize(19).FontWeight(700),
 		ui.Text(
 			"Stored in your operating system’s credential store. Your key is never written to conversation history.",
 		).FontSize(12).LineHeight(18).TextColor("#94a3b8"),
-		ui.View(
+		ui.View().Children(
 
 			ui.Input().Style(inputStyle()).Flex(1).MinWidth(0).Value(value()).Password(!reveal()).Disabled(controller.credentialBusy.Read).OnInputEvent(func(event *native.Event) { setValue(event.Value) }),
 
@@ -316,7 +316,7 @@ func (controller *chatController) providerSettings() *ui.Element {
 			errorText(),
 		).FontSize(12).TextColor("#fca5a5").MinHeight(18),
 		ui.View().Flex(1),
-		ui.View(
+		ui.View().Children(
 
 			ui.Button(
 				"Remove key",

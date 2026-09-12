@@ -5,7 +5,7 @@ Applications remain valid Go with ordinary parameter types and editor tooling.
 No annotations, CGO, application JavaScript, or extra host processes are involved.
 
 Go components return `*ui.Element` or `*native.Node`. Compose native children
-and component results directly, such as `return ui.View(Label(count()))`.
+and component results directly, such as `return ui.View().Child(Label(count()))`.
 Window roots, routes, conditional branches, list renderers, and deferred child
 callbacks also return nodes. Use `ui.Fragment(...)` for multiple siblings without
 a layout container. Only the returned tree mounts. Implicit declarations and
@@ -27,7 +27,8 @@ Setup assignments remain snapshots. Parameters assigned to or addressed as
 local storage keep ordinary Go value semantics. Ordinary function values retain
 their original signatures and normal eager argument evaluation.
 
-`ui.Text(count())`, `.Width(width())`, `.When(selected(), style)`, and
+`ui.Text(count())`, `.Child(count())`, `.Children("Count: ", count())`,
+`.Width(width())`, `.When(selected(), style)`, and
 `ui.Show(visible(), Details)` preserve live reads without accessor wrappers.
 Native scalar text and fluent properties accepting accessors bind independently
 through the existing frontend. The component body runs once. Each retained node

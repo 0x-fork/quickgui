@@ -9,9 +9,9 @@ import (
 )
 
 func sidebar(m *model) *native.Node {
-	return ui.Fragment([]*native.Node{ui.View(
+	return ui.Fragment([]*native.Node{ui.View().Children(
 
-		ui.View(
+		ui.View().Children(
 
 			ui.View().Flex(1),
 			ui.Button(
@@ -32,7 +32,7 @@ func sidebar(m *model) *native.Node {
 					)
 				}).Node})
 		}),
-		ui.View(
+		ui.View().Child(
 
 			ui.View().Width("100%").Height(1).BackgroundColor(m.color(func(t theme) string { return t.Border })),
 		).AriaLabel("Resize sidebar sections").Display("flex").Height(7).FlexShrink(0).AlignItems("center").PaddingLeft(8).PaddingRight(8).Cursor("ns-resize").AppRegion("no-drag").OnPointer(m.handleSectionPointer),
@@ -45,7 +45,7 @@ func sidebar(m *model) *native.Node {
 						func(p *pane, _ func() int) *ui.Element { return agentRow(m, p) },
 						func(p *pane) any { return p },
 						func() *ui.Element {
-							return ui.View(
+							return ui.View().Child(
 
 								ui.Text(
 									"Agents appear here when detected in a pane.",
@@ -56,24 +56,24 @@ func sidebar(m *model) *native.Node {
 				}).Node})
 		}),
 	).Display("flex").FlexDirection("column").FlexShrink(0).MinWidth(0).MinHeight(0).Width(m.SidebarWidth.Read).BackgroundColor(m.color(func(t theme) string { return t.Sidebar })).Node,
-		ui.View(
+		ui.View().Child(
 
 			ui.View().Width(1).Height("100%").BackgroundColor(m.color(func(t theme) string { return t.Border })),
 		).AriaLabel("Resize sidebar").Position("relative").Display("flex").Width(1).FlexShrink(0).HitSlopLeft(5).Cursor("ew-resize").AppRegion("no-drag").OnPointer(m.handleSidebarPointer).
 			Node})
 }
 func sidebarSection(grow func() float64, children ui.Component) *ui.Element {
-	return ui.View(
+	return ui.View().Child(
 		children,
 	).Display("flex").FlexBasis(0).FlexGrow(grow()).MinHeight(0).FlexDirection("column").PaddingLeft(8).PaddingRight(8)
 }
 func sidebarList(children ui.Component) *ui.Element {
-	return ui.View(
+	return ui.View().Child(
 		children,
 	).Display("flex").Flex(1).MinHeight(0).FlexDirection("column").Gap(2).PaddingBottom(8).OverflowY("auto")
 }
 func sectionHeader(m *model, label, trailing string, action func()) *ui.Element {
-	return ui.View(
+	return ui.View().Child(
 		func() *native.Node {
 			var children_ []*native.Node
 			children_ = append(children_, ui.Text(
@@ -93,12 +93,12 @@ func sectionHeader(m *model, label, trailing string, action func()) *ui.Element 
 	).Display("flex").Height(30).FlexShrink(0).AlignItems("center").PaddingLeft(10).PaddingRight(6)
 }
 func twoLineRow(children ui.Component) *ui.Element {
-	return ui.View(
+	return ui.View().Child(
 		children,
 	).Display("flex").Flex(1).MinWidth(0).FlexDirection("column").JustifyContent("center").Gap(1)
 }
 func rowLine(children ui.Component) *ui.Element {
-	return ui.View(
+	return ui.View().Child(
 		children,
 	).Display("flex").MinWidth(0).AlignItems("center").Gap(5)
 }
@@ -123,7 +123,7 @@ func spaceRow(m *model, s space) *ui.Element {
 		}
 		return out
 	}
-	return ui.View(
+	return ui.View().Children(
 
 		ui.Button(
 

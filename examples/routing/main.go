@@ -55,11 +55,11 @@ func Routes() *native.Node {
 
 func Navigation() *ui.Element {
 	router, location := ui.UseRouter(), ui.UseLocation()
-	return ui.View(
+	return ui.View().Children(
 
-		ui.View(
+		ui.View().Children(
 
-			ui.View(
+			ui.View().Child(
 				ui.Text("Router").FontWeight(700),
 			).Display("flex").Height("100%").AlignItems("center").PaddingRight(10).AppRegion("drag"),
 			link("Home", "/", true),
@@ -69,13 +69,13 @@ func Navigation() *ui.Element {
 			historyButton("Go back", "M19 12H5m6-6-6 6 6 6", router.Back, func() bool { return !router.State().CanGoBack }),
 			historyButton("Go forward", "M5 12h14m-6-6 6 6-6 6", router.Forward, func() bool { return !router.State().CanGoForward }),
 		).Display("flex").Height(54).FlexShrink(0).AlignItems("center").PaddingLeft(78).PaddingRight(16).Gap(8).BorderBottomWidth(1).BorderColor(border),
-		ui.View(
+		ui.View().Child(
 
 			ui.Text(
 				location().Href,
 			).FontFamily("monospace").FontSize(12).TextColor(muted),
 		).Display("flex").Height(34).FlexShrink(0).AlignItems("center").PaddingLeft(20).PaddingRight(20).BackgroundColor("#0e1526").BorderBottomWidth(1).BorderColor(border),
-		ui.View(
+		ui.View().Child(
 			ui.Outlet(),
 		).Flex(1).MinHeight(0),
 	).Display("flex").FlexDirection("column").Width("100%").Height("100%").BackgroundColor(background).TextColor(textColor)
@@ -83,7 +83,7 @@ func Navigation() *ui.Element {
 
 func Home() *ui.Element {
 	return page("Core-owned routing", "The native core owns matching, decoded parameters, query parsing, active paths, and bounded memory history. The application renders the returned route chain.", func() *ui.Element {
-		return ui.View(
+		return ui.View().Children(
 
 			card("Dynamic parameters", "Open /projects/quickgui and read :projectId from the matched core route.", "/projects/quickgui?tab=overview"),
 			card("Nested layouts", "Settings keeps its local navigation mounted while its Outlet changes.", "/settings"),
@@ -94,7 +94,7 @@ func Home() *ui.Element {
 
 func Projects() *ui.Element {
 	return page("Projects", "These links push memory-history entries. Use the title-bar arrows to traverse them.", func() *ui.Element {
-		return ui.View(
+		return ui.View().Children(
 
 			card("QuickGUI", "A native retained UI framework.", "/projects/quickgui?tab=overview"),
 			card("Screenflare", "A polished native screen recorder.", "/projects/screenflare?tab=activity"),
@@ -105,7 +105,7 @@ func Projects() *ui.Element {
 func Project() *ui.Element {
 	projectID, search, navigate := ui.UseParam("projectId"), ui.UseSearchParams(), ui.UseNavigate()
 	return page([]any{"Project: ", projectID}, "The page stays mounted when only the query changes; its reactive core snapshot updates in place.", func() *ui.Element {
-		return ui.View(
+		return ui.View().Children(
 
 			ui.Text("Decoded :projectId").TextColor(muted),
 			ui.Text(projectID).FontFamily("monospace").TextColor(blue),
@@ -118,7 +118,7 @@ func Project() *ui.Element {
 					return "overview"
 				},
 			).FontFamily("monospace").TextColor(blue),
-			ui.View(
+			ui.View().Children(
 
 				button("Overview", func() { navigate("?tab=overview") }),
 				button("Activity", func() { navigate("?tab=activity") }),
@@ -129,15 +129,15 @@ func Project() *ui.Element {
 }
 
 func SettingsLayout() *ui.Element {
-	return ui.View(
+	return ui.View().Children(
 
-		ui.View(
+		ui.View().Children(
 
 			ui.Text("Settings").MarginBottom(6).FontWeight(700),
 			link("General", "/settings", true),
 			link("Appearance", "/settings/appearance", false),
 		).Display("flex").FlexDirection("column").Width(190).FlexShrink(0).Padding(16).Gap(8).BackgroundColor(panel).BorderRightWidth(1).BorderColor(border),
-		ui.View(
+		ui.View().Child(
 			ui.Outlet(),
 		).Flex(1).MinWidth(0),
 	).Display("flex").Width("100%").Height("100%")

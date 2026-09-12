@@ -12,7 +12,7 @@ import (
 
 func TestVoidConstructionCallbacksAreUnsupported(t *testing.T) {
 	for name, mount := range map[string]func(){
-		"view":          func() { View(func() {}) },
+		"view":          func() { View().Child(func() {}) },
 		"hidden branch": func() { Show(false, func() {}) },
 		"rows":          func() { For(func() []int { return []int{1} }, func(int) {}, nil, nil) },
 	} {
@@ -37,21 +37,21 @@ func TestReturnedChildFactoriesRetainContextAndCleanupWithoutWrapperNodes(t *tes
 		builds, cleaned := 0, 0
 		var child *Element
 		root := reactive.Provide(context, "inside", func() *Element {
-			return View(func() *Element {
+			return View().Child(func() *Element {
 				builds++
 				OnCleanup(func() { cleaned++ })
 				child = Text(context.Use(), value)
 				return child
 			})
 		})
-		if len(root.Children) != 1 || root.Children[0] != child.Node {
+		if len(root.Node.Children) != 1 || root.Node.Children[0] != child.Node {
 			t.Fatal("returning a child added a wrapper node")
 		}
 		setValue("two")
 		if builds != 1 || !reflect.DeepEqual(blockText(root.Node), []string{"inside", "two"}) {
 			t.Fatal("returned child lost context or remounted")
 		}
-		parent := View(root)
+		parent := View().Child(root)
 		native.RemoveNode(parent.Node, root.Node)
 		if cleaned != 1 {
 			t.Fatal("child factory cleanup did not follow its parent")
@@ -72,8 +72,8 @@ func TestReturnedConditionalAndKeyedComponentsKeepIdentity(t *testing.T) {
 		visible, setVisible := CreateSignal(true)
 		mounted, cleaned := 0, 0
 		refs := map[int]*native.Node{}
-		root := View(Show(visible, func() *Element {
-			return View(KeyedFor(items, func(value item) any { return value.ID }, func(read func() item) *Element {
+		root := View().Child(Show(visible, func() *Element {
+			return View().Child(KeyedFor(items, func(value item) any { return value.ID }, func(read func() item) *Element {
 				mounted++
 				OnCleanup(func() { cleaned++ })
 				node := Text(func() string { return read().Name })

@@ -80,7 +80,7 @@ func TestGenericAndVariadicProps(t *testing.T) {
 		children := []any{"spread"}
 		d := VariadicLabel(value(), children...)
 		setValue(2)
-		if a.Children[0].Text != "2" || b.Children[0].Text != "2" || c.Children[0].Children[0].Text != "2" || d.Children[0].Children[0].Text != "2" {
+		if a.Node.Children[0].Text != "2" || b.Node.Children[0].Text != "2" || c.Node.Children[0].Children[0].Text != "2" || d.Node.Children[0].Children[0].Text != "2" {
 			t.Fatal("generic or variadic props stopped tracking")
 		}
 		return struct{}{}

@@ -470,7 +470,7 @@ func CalendarDemo() *ui.Element {
 					PartProps:     columnPart(),
 				},
 				func() *native.Node {
-					return ui.Fragment([]*native.Node{ui.View(
+					return ui.Fragment([]*native.Node{ui.View().Child(
 						func() *native.Node {
 							var children []*native.Node
 							for _, name := range []string{"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"} {

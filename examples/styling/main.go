@@ -37,9 +37,9 @@ func main() {
 func Styling() *ui.Element {
 	warm, setWarm := ui.CreateSignal(false)
 	return reactive.Provide(warmPalette, (func() bool)(warm), func() *ui.Element {
-		return ui.View(
+		return ui.View().Children(
 
-			ui.View(
+			ui.View().Children(
 
 				ui.Text(
 					"Declared styling",
@@ -50,7 +50,7 @@ func Styling() *ui.Element {
 					return s.BackgroundColor("#243047")
 				}).OnClick(func() { setWarm(!warm()) }),
 			).Display("flex").Height(52).FlexShrink(0).AlignItems("center").JustifyContent("space-between").PaddingLeft(96).PaddingRight(20).AppRegion("drag"),
-			ui.View(
+			ui.View().Children(
 
 				TextAlignment(),
 				TextStyling(),

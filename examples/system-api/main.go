@@ -92,12 +92,12 @@ func SystemAPIs() *ui.Element {
 			{Label: "Minimize", Role: "minimize-window"}, {Label: "Close", Role: "close-window"},
 		}},
 	})
-	return ui.View(
+	return ui.View().Children(
 
-		ui.View(
+		ui.View().Child(
 			"Native system APIs",
 		).Display("flex").Height(52).FlexShrink(0).AlignItems("center").JustifyContent("center").FontSize(14).FontWeight(600).AppRegion("drag").BorderColor("#1f2530").BorderBottomWidth(1),
-		ui.View(
+		ui.View().Children(
 
 			ui.Text(
 				"Native integrations",
@@ -105,7 +105,7 @@ func SystemAPIs() *ui.Element {
 			ui.Text(
 				"Typed Go APIs for application state, desktop services, notifications, and native resources.",
 			).TextColor("#9aa6b7").FontSize(14).LineHeight(21),
-			ui.View(
+			ui.View().Child(
 				func() *native.Node {
 					var children []*native.Node
 					for _, item := range state.actions() {
@@ -118,7 +118,7 @@ func SystemAPIs() *ui.Element {
 					return ui.Fragment(children)
 				},
 			).Display("flex").FlexWrap("wrap").Gap(10),
-			ui.View(
+			ui.View().Child(
 
 				ui.Text(
 					status(),

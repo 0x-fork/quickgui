@@ -80,7 +80,11 @@ func Validate(fs *token.FileSet, file *ast.File, info *types.Info) error {
 				break
 			}
 			if selector, ok := value.Fun.(*ast.SelectorExpr); ok && info.Selections[selector] != nil && element(info.Selections[selector].Recv()) {
-				break
+				// Child builders accept construction callbacks; other fluent
+				// methods can accept ordinary event and lifecycle callbacks.
+				if obj.Name() != "Child" && obj.Name() != "Children" {
+					break
+				}
 			}
 			for _, arg := range value.Args {
 				if voidCallback(arg) {

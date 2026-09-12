@@ -8,7 +8,7 @@ go mod tidy
 bun run dev
 ```
 
-`bun run dev` compiles `main.go` with CGO disabled, packages and launches the app, and rebuilds on source changes. `bun run build` produces a distributable application with its prebuilt Rust host shared library. Components return `*ui.Element` or `*native.Node` and are passed directly as `Component: Counter`. Compose children with `ui.View(ui.Text(count()), ...)`; plain props and direct signal reads stay reactive without callback wrappers. Implicit declarations and void construction callbacks are unsupported.
+`bun run dev` compiles `main.go` with CGO disabled, packages and launches the app, and rebuilds on source changes. `bun run build` produces a distributable application with its prebuilt Rust host shared library. Components return `*ui.Element` or `*native.Node` and are passed directly as `Component: Counter`. Compose children with `ui.View().Child(ui.Text(count())).Child(...)`; plain props and direct signal reads stay reactive without callback wrappers. Implicit declarations and void construction callbacks are unsupported.
 
 Use Go 1.23+, Bun, and Xcode Command Line Tools on macOS. Application builds do not invoke Rust or a C compiler. The application uses purego to call Rust in process.
 

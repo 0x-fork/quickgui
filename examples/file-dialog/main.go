@@ -50,7 +50,7 @@ func FileDialogs() *ui.Element {
 		}
 		return path
 	}
-	return ui.View(
+	return ui.View().Children(
 
 		ui.Text(
 			"Open and save",
@@ -58,7 +58,7 @@ func FileDialogs() *ui.Element {
 		ui.Text(
 			"Native file panels return selected paths and cancellation state. Choosing a save destination does not write a file.",
 		).TextColor("#9aa6b7").FontSize(14).LineHeight(21),
-		ui.View(
+		ui.View().Children(
 
 			button("Open files", pending, func() {
 				if !start() {

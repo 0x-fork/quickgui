@@ -32,10 +32,10 @@ func NativeElement(tag uint8, arguments ...any) *Element {
 	return newElement(tag, arguments)
 }
 
-// View constructs a retained container from children. Configure it with fluent
-// properties, events, and styles. Apply reusable styles with Element.Style.
-func View(children ...any) *Element {
-	return newElement(protocol.TagView, children)
+// View constructs an empty retained container. Append content with Child or
+// Children and configure it with fluent properties, events, and styles.
+func View() *Element {
+	return newElement(protocol.TagView, nil)
 }
 
 func Text(children ...any) *Element {

@@ -15,7 +15,7 @@ func commitRefBadge(ref git.CommitRef) *gui.Element {
 	} else if ref.Kind == "tag" {
 		background, color = theme.WarningWash, theme.Warning
 	}
-	return gui.View(
+	return gui.View().Child(
 
 		gui.Text(
 			ref.Name,
@@ -41,7 +41,7 @@ func commitRefs(read func() []git.CommitRef) *native.Node {
 	return gui.Show(
 		len(visible()) > 0,
 		func() *gui.Element {
-			return gui.View(
+			return gui.View().Child(
 
 				gui.For(
 					visible,

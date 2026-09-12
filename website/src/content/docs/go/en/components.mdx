@@ -2,7 +2,7 @@ QuickGUI combines unstyled primitives with accessible compound controls. Compose
 
 ## Defining components
 
-A Go component returns `*ui.Element` or `*native.Node`. Use plain typed props and compose children directly. The return type identifies the component, so `CounterLabel(count())` stays reactive without annotations or a `ui.View(func() { ... })` wrapper. Window roots accept the component function directly.
+A Go component returns `*ui.Element` or `*native.Node`. Use plain typed props and compose children directly. The return type identifies the component, so `CounterLabel(count())` stays reactive without annotations or a `ui.View().Child(func() *ui.Element { ... })` wrapper. Window roots accept the component function directly.
 
 ```go
 func CounterLabel(count int) *ui.Element {
@@ -11,7 +11,7 @@ func CounterLabel(count int) *ui.Element {
 
 func ComponentExample() *ui.Element {
 	count, setCount := ui.CreateSignal(0)
-	return ui.View(
+	return ui.View().Children(
 		CounterLabel(count()),
 		ui.Button("Increment").OnClick(func() { setCount(count() + 1) }),
 	)
@@ -33,18 +33,18 @@ func LineItem(product Product, quantity int) *ui.Element {
 
 func Cart() *ui.Element {
 	quantity, setQuantity := ui.CreateSignal(1)
-	return ui.View(
+	return ui.View().Children(
 		LineItem(Product{ID: "mug", Name: "Mug", Price: 12}, quantity()),
 		ui.Button("Add one").OnClick(func() { setQuantity(quantity() + 1) }),
 	)
 }
 ```
 
-Containers can accept children directly, as shown below. A children callback is optional and runs once when mounted; use it when construction must happen lazily or inside a compound control’s context. Event handlers remain callbacks.
+Start containers with `ui.View()` and append content with `.Child(...)` or `.Children(...)`, as shown below. A children callback is optional and runs once when mounted; use it when construction must happen lazily or inside a compound control’s context. Event handlers remain callbacks.
 
 ```go
 func CardComponent(title string, children ...any) *ui.Element {
-	return ui.View(
+	return ui.View().Children(
 		ui.Text(title).FontWeight(600),
 		children,
 	).Padding(20).Gap(12).FlexCol()
@@ -60,7 +60,7 @@ func CardComposition() *ui.Element {
 
 ## Primitives
 
-Start with `ui.View`, `ui.Text`, `ui.Button`, and `ui.Input`. Pass content or children to constructors, then chain styles, properties, and handlers. Return a node from component functions and deferred child callbacks.
+Start with `ui.View`, `ui.Text`, `ui.Button`, and `ui.Input`. Use `ui.View().Child(...).Child(...)` or `.Children(...)` for containers, and chain styles, properties, and handlers. Return a node from component functions and deferred child callbacks.
 
 ```go
 func ButtonExample(save func()) *ui.Element {

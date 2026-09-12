@@ -35,7 +35,7 @@ func TestEveryNativeEventHasAConditionalPrimitiveHandler(t *testing.T) {
 				option := propertyOption(func(props *Props) {
 					reflect.ValueOf(props).Elem().FieldByName("On" + name).Set(reflect.ValueOf(handler))
 				})
-				node := View(When(enabled, option))
+				node := newElement(protocol.TagView, []any{When(enabled, option)})
 				host := &native.NodeHost{Nodes: map[uint32]*native.Node{node.ID: node.Node}}
 				native.DispatchEvent(host, i+1, node.ID, "payload", true)
 				setEnabled(false)
@@ -59,7 +59,7 @@ func TestConditionalHoverHandlerPreservesSharedListener(t *testing.T) {
 		defer dispose()
 		enabled, setEnabled := CreateSignal(true)
 		enters := 0
-		node := View(OnMouseEnter(func(*native.Event) { enters++ }), When(enabled, OnMouseLeave(func(*native.Event) {})))
+		node := newElement(protocol.TagView, []any{OnMouseEnter(func(*native.Event) { enters++ }), When(enabled, OnMouseLeave(func(*native.Event) {}))})
 		offset := len(node.Pending.Body())
 		setEnabled(false)
 		disabled := protocol.NewBatch()
@@ -87,13 +87,12 @@ func TestPrimitiveAccessibilityAndDragDeclarationsAreReactive(t *testing.T) {
 		label := reactive.NewSignal("first")
 		selected := reactive.NewSignal(true)
 		drag := reactive.NewSignal(DragSource{ID: "first", Text: "first"})
-		node := View(
-			AriaLabel(label.Read), Selected(selected.Read), TabIndex(0), Role("button"),
-			FocusableWhenDisabled(selected.Read),
-			TooltipText("Drag this item"), TooltipDelay("0.2s"),
-			Keymap([]KeyBinding{{Keys: "cmd+s", Action: "save"}}),
-			Draggable(drag.Read), DropKinds([]string{"local", "files"}),
-		)
+		node := View().
+			AriaLabel(label.Read).Selected(selected.Read).TabIndex(0).Role("button").
+			FocusableWhenDisabled(selected.Read).
+			TooltipText("Drag this item").TooltipDelay("0.2s").
+			Keymap([]KeyBinding{{Keys: "cmd+s", Action: "save"}}).
+			Draggable(drag.Read).DropKinds([]string{"local", "files"})
 		for _, declaration := range []string{`{"cmd+s":"save"}`, `{"id":"first","text":"first"}`, `["local","files"]`} {
 			if !bytes.Contains(node.Pending.Body(), []byte(declaration)) {
 				t.Fatalf("missing native declaration %s", declaration)
@@ -119,11 +118,10 @@ func TestInputEventDetailsKeepNativeCoordinatesAndModifiers(t *testing.T) {
 	var key *KeyEventDetails
 	var drop *DropEventDetails
 	var wheel *WheelEventDetails
-	node := View(
-		OnKeyDown(func(event *native.Event) { key = KeyFromEvent(event) }),
-		OnFilesDropped(func(event *native.Event) { drop = DropFromEvent(event) }),
-		OnWheel(func(event *native.Event) { wheel = WheelFromEvent(event) }),
-	)
+	node := View().
+		OnKeyDown(func(event *native.Event) { key = KeyFromEvent(event) }).
+		OnFilesDropped(func(event *native.Event) { drop = DropFromEvent(event) }).
+		OnWheel(func(event *native.Event) { wheel = WheelFromEvent(event) })
 	host := &native.NodeHost{Nodes: map[uint32]*native.Node{node.ID: node.Node}}
 	native.DispatchEvent(
 		host,

@@ -60,7 +60,7 @@ func Filters() *ui.Element {
 		children = append(children, swatch("hue-rotate", tile, raster, ui.Style().Filter("hue-rotate(140deg)")).Node)
 		children = append(children, swatch("subtree blur", tile, ui.Style().Filter("blur(2px)")).Node)
 		children = append(children, swatch("drop-shadow", tile, ui.Style().Filter("drop-shadow(0 6px 12px #0b1220)")).Node)
-		children = append(children, ui.View(
+		children = append(children, ui.View().Child(
 
 			swatch("backdropFilter", ui.Style().
 				Width("100%").
@@ -101,7 +101,7 @@ func Transforms() *ui.Element {
 						Background("linear-gradient(90deg, #1d4ed8, #38bdf8)").
 						Outline("2px solid #93c5fd")
 				})).Node,
-			ui.View(
+			ui.View().Child(
 				func() *native.Node {
 					var children []*native.Node
 					for _, tile := range []struct{ color, blend string }{
