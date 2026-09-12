@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
-import { ShikiMagicMovePrecompiled } from "@shikijs/magic-move/react";
+import { useEffect, useState } from "react";
+import { ShikiMagicMoveRenderer } from "@shikijs/magic-move/react";
+import type { KeyedTokensInfo } from "@shikijs/magic-move/types";
 import type { FrontendTokens } from "../lib/snippets";
-import { DOCS_FRONTENDS, type DocsFrontend } from "../lib/docs";
+import type { DocsFrontend } from "../lib/docs";
+import { syncSimilarTokenKeys } from "../lib/code-morph";
 
 const MOVE_OPTIONS = {
   duration: 550,
@@ -22,8 +24,18 @@ export function AnimatedCodeBlock({
   frontend: DocsFrontend;
 }) {
   const [animate, setAnimate] = useState(false);
-  const steps = useMemo(() => DOCS_FRONTENDS.map((value) => tokens[value]), [tokens]);
-  const lineCount = Math.max(...steps.map((item) => item.code.split("\n").length));
+  const selected = tokens[frontend];
+  const [transition, setTransition] = useState<{
+    input: KeyedTokensInfo;
+    current: KeyedTokensInfo;
+    previous?: KeyedTokensInfo;
+  }>(() => ({ input: selected, current: selected }));
+  const lineCount = Math.max(...Object.values(tokens).map((item) => item.code.split("\n").length));
+
+  if (transition.input !== selected) {
+    const { from, to } = syncSimilarTokenKeys(transition.current, selected);
+    setTransition({ input: selected, current: to, previous: from });
+  }
 
   useEffect(() => {
     const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -38,9 +50,9 @@ export function AnimatedCodeBlock({
       className="code-morph slim-scroll overflow-auto font-mono text-[12px] sm:text-[13px]"
       style={{ height: `calc(${lineCount} * 1.7em + 3rem)` }}
     >
-      <ShikiMagicMovePrecompiled
-        steps={steps}
-        step={DOCS_FRONTENDS.indexOf(frontend)}
+      <ShikiMagicMoveRenderer
+        tokens={transition.current}
+        previous={transition.previous}
         animate={animate}
         options={MOVE_OPTIONS}
       />
