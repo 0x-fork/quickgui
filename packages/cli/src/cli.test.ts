@@ -290,6 +290,7 @@ test("macOS metadata is escaped and complete", () => {
 test("project initialization renders a complete native scaffold", async () => {
   const root = temporaryRoot();
   const project = join(root, "sample-app");
+  const cli = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
   await initProject({
     directory: project,
     install: false,
@@ -300,7 +301,7 @@ test("project initialization renders a complete native scaffold", async () => {
   expect(JSON.parse(readFileSync(join(project, "package.json"), "utf8"))).toMatchObject({
     name: "sample-app",
     scripts: { dev: "quickgui dev", build: "quickgui build" },
-    devDependencies: { "@quickgui/cli": "^0.1.3" },
+    devDependencies: { "@quickgui/cli": `^${cli.version}` },
   });
   expect(readFileSync(join(project, "quickgui.config.ts"), "utf8")).toContain('identifier: "com.example.sample-app"');
   expect(readFileSync(join(project, "quickgui.config.ts"), "utf8")).toContain('language: "go"');

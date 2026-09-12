@@ -111,17 +111,22 @@ function replaceCargoSectionVersion(relativePath: string, sectionName: string) {
   });
 }
 
-function replaceInlineCargoDependency(relativePath: string, dependencyName: string) {
+function replaceInlineCargoDependency(
+  relativePath: string,
+  dependencyName: string,
+  expectedMatches = 1,
+) {
   edit(relativePath, (contents) => {
     const dependencyPattern = new RegExp(
       `(^${escapeRegExp(dependencyName)} = \\{[^\\n]*?version = ")([^"]+)("[^\\n]*\\}$)`,
-      "m",
+      "gm",
     );
     return replaceMatches(
       relativePath,
       contents,
       dependencyPattern,
       (_match, prefix, _oldVersion, suffix) => `${prefix}=${version}${suffix}`,
+      expectedMatches,
     );
   });
 }
@@ -194,9 +199,10 @@ for (const [relativePath, packageName] of cargoPackages) {
   replaceCargoPackageVersion(relativePath, packageName);
 }
 
-for (const dependencyName of ["accesskit_winit", "glyphon", "quickgui-system", "winit"]) {
+for (const dependencyName of ["accesskit_winit", "glyphon", "winit"]) {
   replaceInlineCargoDependency("Cargo.toml", dependencyName);
 }
+replaceInlineCargoDependency("Cargo.toml", "quickgui-system", 2);
 replaceInlineCargoDependency("vendor/accesskit_winit/Cargo.toml.orig", "winit");
 replaceCargoSectionVersion("vendor/accesskit_winit/Cargo.toml", "dependencies.winit");
 replaceCargoSectionVersion("vendor/accesskit_winit/Cargo.toml", "dev-dependencies.winit");

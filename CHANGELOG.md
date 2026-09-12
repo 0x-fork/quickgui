@@ -4,6 +4,8 @@ All notable user-facing changes to QuickGUI are recorded here.
 
 ## Unreleased
 
+## 0.1.4 - 2026-09-13
+
 ### CLI
 
 - `@quickgui/cli` now builds native Rust applications with `cargo`. Rust apps link the `quickgui` crate and do not bundle `libquickgui_host`. `quickgui init --language rust` scaffolds a crate; `fmt`, `check`, and `test` dispatch to Cargo. Packaged identity and fonts are written to `quickgui.json` beside the executable, or in `Contents/Resources` on macOS.
