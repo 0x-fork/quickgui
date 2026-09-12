@@ -8,7 +8,7 @@ application. It is an explicit Cargo feature:
 
 ```toml
 [dependencies]
-quickgui = { version = "0.1", features = ["inspector"] }
+quickgui = { version = "...", features = ["inspector"] }
 ```
 
 Without that feature, the module, window field, commands, snapshot traversal, input branches, and
@@ -85,7 +85,7 @@ Downstream tests can combine `inspector` and `test-support`:
 
 ```toml
 [dev-dependencies]
-quickgui = { version = "0.1", features = ["inspector", "test-support"] }
+quickgui = { version = "...", features = ["inspector", "test-support"] }
 ```
 
 `TestAppContext::inspector_snapshot(window)` materializes production layout on demand and returns

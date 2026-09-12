@@ -1,8 +1,8 @@
-Enable the `swift-ui` crate feature. Hosted controls are AppKit/SwiftUI views composed with QuickGUI’s retained scene, not replicas painted by wgpu.
+Enable the `swift-ui` crate feature. Ordinary QuickGUI components work without it.
 
 ## Host
 
-Construct `MacSwiftUiHost`, `sync` a descriptor tree, and mount the NSView with `native_view`.
+Construct `MacSwiftUiHost`, `sync` a descriptor tree, and mount it with `native_view`.
 
 ```rust
 let mut host = MacSwiftUiHost::new(|_id| {})?;
@@ -12,7 +12,7 @@ native_view(host.view())
 
 ## Native controls
 
-The host includes buttons, toggles, sliders, steppers, progress views, gauges, text and secure fields, pickers, segmented controls, date/color pickers, and popovers. Each component’s reference lists its builder methods.
+Buttons, toggles, sliders, steppers, progress views, gauges, text and secure fields, pickers, segmented controls, date and color pickers, and popovers.
 
 ## Controlled values
 
@@ -29,8 +29,8 @@ native_view(host.view())
 
 ## Sizing
 
-`MacSwiftUiHost::fitting_size` reports intrinsic native sizing. Keep the parent’s dimensions constrained so native measurement and GPU layout agree.
+`MacSwiftUiHost::fitting_size` reports the control’s intrinsic size. Constrain the parent when you want a fixed width.
 
 ## Platform support
 
-SwiftUI hosting is macOS-specific. System availability determines optional appearances, including Liquid Glass. Go and TypeScript expose the same core capability through their adapters.
+SwiftUI hosting requires macOS. Optional appearances such as Liquid Glass depend on the operating-system version.

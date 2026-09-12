@@ -1,19 +1,23 @@
+An extension is either a TypeScript package of reusable components, or a native library your app can call. Start with a TypeScript package. Add a native library when you need an optional backend.
+
 ## Choose an extension type
 
-Use an ordinary TypeScript package for reusable Solid components. Use a native extension when a feature needs a Rust, Go, or Zig service or an optional native renderer backend. All native extensions load into the same process.
+Use an ordinary TypeScript package for reusable Solid components. Use a native extension when a feature needs a Rust, Go, or Zig service. Native extensions load into the same process as the app.
 
 ## Create an extension project
 
 ```sh
-quickgui init-extension my-extension --type rust
+quickgui init-extension my-components --type go
+quickgui init-extension my-service --type rust
 ```
 
-Extension scaffolds use the shared extension ABI. A TypeScript consumer can use the same extension package as Go.
+TypeScript apps consume the same native packages as Go. `--npm-package` sets the artifact package name.
 
 ## Share a component
 
 ```tsx
 import { Button, type JSX } from "@quickgui/solid";
+
 export function PrimaryButton(props: JSX.NativeProps) {
   return (
     <Button
@@ -24,9 +28,11 @@ export function PrimaryButton(props: JSX.NativeProps) {
 }
 ```
 
+Publish the package and add it as an application dependency.
+
 ## Lay out a native extension
 
-A native extension ships `quickgui.extension.json`, a versioned shared library, and any declared resources. Its manifest identifies the service name, ABI, npm package, release version, library, and per-platform resources.
+A native extension ships `quickgui.extension.json`, a versioned shared library, and any declared resources. The manifest names the service, ABI, npm package, version, and library. See the Go [Authoring Extensions](/docs/go/extensions) guide for the native contract and the [`native-extension` example](https://github.com/egoist/quickgui/tree/main/examples/native-extension).
 
 ## Declare dependencies
 
@@ -34,29 +40,32 @@ A native extension ships `quickgui.extension.json`, a versioned shared library, 
 import { defineConfig } from "@quickgui/cli";
 
 export default defineConfig({
-  language: "typescript", name: "Terminal App", identifier: "com.example.terminal",
+  language: "typescript",
+  name: "Terminal App",
+  identifier: "com.example.terminal",
   extensions: ["@quickgui/extension-terminal"],
 });
 ```
 
-Add `@quickgui/extension-terminal` to application dependencies. Custom extensions may be selected by a scoped package such as `@acme/extension-echo`, an unscoped package such as `quickgui-extension-echo`, or a directory containing their manifest.
+Add the matching npm package to application dependencies. Custom extensions may use a scoped name such as `@acme/extension-echo`.
 
 ## Implement the native contract
 
-Implement the bounded `ServiceApi` or renderer extension contract in the native extension. Copy borrowed input before returning, keep event streams scoped to their sessions, and release worker resources when the session stops.
+Implement `invoke` and `shutdown` in the native library. Copy borrowed input before returning, keep events scoped to their sessions, and release workers when a session stops.
 
 ## Automatic registration
 
-The CLI resolves and bundles declared extensions. The worker registers their descriptors and exact versions through FFI before creating the application, so components use the same core renderer and native resource registry.
+The CLI bundles declared extensions. The app loads them at startup, so components can call them after `app.whenReady()`.
 
 ## Build and package artifacts
 
-App edits reuse prebuilt extension artifacts. Rebuild an extension when its native implementation changes, then rebuild the application to stage those bytes. Extension resources are copied before signing.
+Rebuild the native library when its implementation changes, then rebuild the app. Resources listed in the manifest are copied next to the library.
 
 ## Test and distribute
 
 ```tsx
 import { ExtensionSession, invokeExtension } from "@quickgui/native";
+
 const result = await invokeExtension("acme-service", "lookup", { key: "example" });
 const session = new ExtensionSession("acme-service", {}, event => console.log(event));
 await session.ready;
@@ -64,4 +73,4 @@ await session.request("refresh", null);
 await session.close();
 ```
 
-Test against a packed extension and CLI in a fresh project. Extension commands are asynchronous and share the bounded native event transport.
+Test against a packed extension in a fresh project. Confirm that an app without the package does not bundle the library.

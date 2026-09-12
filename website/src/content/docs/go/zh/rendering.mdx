@@ -1,22 +1,23 @@
-组件在挂载时创建保留树。响应式绑定更新受影响的节点，原生核心负责布局、绘制和无障碍行为。
+组件在挂载时构建界面。当子节点需要随状态出现、消失或重新排序时，使用 `ui.Show` 和 `ui.For`。
 
-## 渲染模型
+## 视图如何工作
 
-所有组件和 UI 构建回调都返回 `*ui.Element` 或 `*native.Node`。子节点直接传入，多个同级节点可返回 `ui.Fragment(...)`。编译器会拒绝丢弃 UI 构建结果和无返回值的声明块。事件和 effect 回调仍使用普通签名。用 `ui.Show` 和 `ui.For` 表达响应式子节点结构。
+每个组件都返回 `*ui.Element`。用 `.Child(...)` 或 `.Children(...)` 传入子节点。多个兄弟节点可以返回 `ui.Fragment(...)`，无需额外包裹。
 
 ```go
 func ViewExample() *ui.Element {
-	return ui.View().Children(
-
+	return ui.View().Padding(20).Gap(12).Children(
 		ui.Text("Hello from Go"),
 		ui.Button().Child("Continue").OnClick(func() {}),
-	).Padding(20).Gap(12)
+	)
 }
 ```
 
+普通的 Go `if` 或 `for` 只在构建组件时运行，之后不会再更新。
+
 ## 条件内容
 
-当状态需要挂载或移除子节点时，使用 `ui.Show`。普通 Go `if` 只在构造时执行。条件保持在同一分支时，子节点会保留；移除分支时会清理其绑定。
+用 `ui.Show` 根据状态挂载或移除子节点。
 
 ```go
 func DisclosureExample() *ui.Element {
@@ -31,11 +32,9 @@ func DisclosureExample() *ui.Element {
 }
 ```
 
-## 列表与节点身份
+## 列表
 
-用 `ui.For` 声明响应式列表，并提供稳定且唯一的键。保留的行需要读取变化的数据时，使用 `ui.KeyedFor` 接收条目访问器。移除的行会释放订阅；移动带键的行会保留原生节点身份。虚拟表格和列表将大集合的挂载范围限制在可见行。
-
-使用数据库 ID 等稳定标识作为键，不要使用位置。这个例子重排已有行，并通过行访问器更新 ID 为 1 的名称；父组件不会重建列表。修改数据时传入新切片，让信号收到更新。原地修改已存储的切片不会通知订阅者。
+用 `ui.For` 渲染会变化的列表。给每一行稳定且唯一的 key——用数据库 ID，不要用下标。`ui.KeyedFor` 还会给行一个访问当前项的 accessor。
 
 ```go
 type ListPerson struct {
@@ -66,11 +65,11 @@ func KeyedListExample() *ui.Element {
 }
 ```
 
+编辑数据时传入新的切片。原地修改已存储的切片不会通知订阅者。长列表请使用 [VirtualList](/docs/go/components/virtual-list) 或 [Table](/docs/go/components/table)。
+
 ## 窗口生命周期
 
-`WindowOptions.Component` 为每个窗口创建一个响应式根。关闭窗口会释放节点和副作用。使用 `ui.OnCleanup` 注册资源清理；后台任务可使用 `ui.Async`，它会将结果送回 UI goroutine，并在组件释放时取消。
-
-在组件挂载时启动后台任务。`load` 在 UI goroutine 之外执行，并应遵守上下文的取消信号；完成回调可以安全写入信号。移除组件所属分支或关闭窗口时，上下文会被取消，过期的完成回调也不会再执行。这个例子使用标准库的 `context` 包。
+每个窗口有自己的组件根。关闭窗口会释放它的界面和 effect。用 `ui.OnCleanup` 注册清理。`ui.Async` 在 UI goroutine 之外运行工作，把结果送回，并在组件消失时取消。
 
 ```go
 func LoadingPanel(load func(context.Context) (string, error)) *ui.Element {
@@ -91,7 +90,7 @@ func LoadingPanel(load func(context.Context) (string, error)) *ui.Element {
 
 ## 当前窗口
 
-在组件挂载时捕获 `native.CurrentWindow()`，之后在回调中使用该窗口。不要从无关的 goroutine 中查询当前窗口。窗口事件与原生请求通过异步回调返回。
+在组件挂载时捕获 `native.CurrentWindow()`，然后在回调里使用这个句柄。
 
 ```go
 func CloseButton() *ui.Element {
@@ -100,6 +99,6 @@ func CloseButton() *ui.Element {
 }
 ```
 
-## 检查、测试与调试
+## 测试
 
-在应用模块中运行 `quickgui test`，使用与开发构建相同的视图编译器，通过 `quickgui fmt --check` 检查格式。应用是原生 Go 可执行文件，普通 Go 诊断和调试工具直接使用原始源码。
+在应用模块中运行 `quickgui test`。`quickgui fmt --check` 检查格式。应用是 Go 可执行文件，因此常用的 Go 调试器和堆栈会指向你的源文件。

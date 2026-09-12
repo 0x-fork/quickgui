@@ -1,16 +1,14 @@
-An extension can be an ordinary Go package that composes QuickGUI components, or a Go package backed by a separately built native library. Start with Go when the existing UI and platform APIs cover your feature. Add a native extension when you need an optional native dependency, as the terminal and [updater](/docs/go/updater) packages do.
+An extension is either a Go package of reusable components, or a Go package plus a native library for a service the app can call. Start with a Go package. Add a native library only when you need an optional backend, as the terminal and [updater](/docs/go/updater) packages do.
 
 ## Choose an extension type
 
-| What you are adding | What you ship | Core changes |
-| --- | --- | --- |
-| Components, themes, or application logic | A Go module | None |
-| A native service, SDK, or optional backend | A Go package, manifest, and native library implementing the service ABI | None |
-| UI backed by native data | A native service plus Go components using existing primitives | None |
+| What you are adding | What you ship |
+| --- | --- |
+| Components or application logic | A Go module |
+| A native service or optional backend | A Go package, a manifest, and a native library |
+| UI backed by native data | A native service plus Go components |
 
-Native services register automatically by name. Use your own Go module, npm package or scope, and release cycle. Consumers import your Go package; the CLI discovers its manifest and bundles the selected native artifact. No core registry entry, extension-specific kind, CLI fork, or QuickGUI release-pipeline change is needed.
-
-An extension runs in the application's process. The Go application loads the core and selected extensions through purego. Each extension owns its backend dependencies; the core keeps the renderer, layout engine, and native event loop. Go edits reuse these libraries, so consumers do not rebuild the native backend on every edit.
+Consumers import your Go package. The CLI finds the manifest and bundles the matching native artifact.
 
 ## Create an extension project
 
@@ -20,22 +18,18 @@ quickgui init-extension my-service --type zig
 quickgui init-extension my-service --type rust
 ```
 
-`go` is the default and creates a reusable component with a reactive demo. `zig` and `rust` create a standalone native service with a typed Go wrapper, a manifest, vendored ABI definitions, and an npm artifact package. Every template includes `cmd/demo` and `quickgui.toml`:
+`go` is the default and scaffolds a reusable component. `zig` and `rust` scaffold a native service with a typed Go wrapper, a manifest, and an npm artifact package. Every template includes `cmd/demo` and `quickgui.toml`:
 
 ```sh
 cd my-service
 bun run dev
 ```
 
-Use `--module github.com/acme/my-service` for your Go module and `--npm-package @acme/extension-my-service` for a native artifact package. `--name` overrides the directory-derived extension name. Defaults are `example.com/<name>` and `quickgui-extension-<name>`. `--no-install` skips `bun install` and `go mod tidy`; initialization preserves non-empty directories.
-
-The Zig template requires Zig 0.16.x; Rust uses stable Cargo/Rust. Build scripts are TypeScript run with Bun. `bun run build` builds the native library for the current machine into `artifacts/lib/<target>/`. The manifest supplies its identity and release version to the Go wrapper, generated native constants, and npm package. `bun run dev` builds it once, then reuses it while watching Go edits. Restart after editing native code. Pure Go extensions have no native build step or artifact package.
-
-Before the packages are published, use `bun packages/cli/src/cli.ts init-extension <directory> --type <type> --no-install` from this checkout. Set the generated Go SDK requirement to the local `go` directory with a `replace` directive and the CLI dependency to a local `file:` path, then install dependencies. The generated README describes development and publishing.
+Use `--module github.com/acme/my-service` for the Go module and `--npm-package @acme/extension-my-service` for the artifact package. Zig templates need Zig 0.16.x. From this checkout, run `bun packages/cli/src/cli.ts init-extension` until the CLI is published.
 
 ## Share a component
 
-Create a module under your own repository path, depend on the Go SDK, and export component functions. This package needs neither a native manifest nor an npm package:
+Export component functions from your own module. This package needs no native manifest.
 
 ```go
 package notice
@@ -55,13 +49,11 @@ func Notice(message func() string, styles ...ui.StyleBuilder) *ui.Element {
 }
 ```
 
-Return `notice.Notice(message, ui.Style().Padding(16))` or pass its result as a child. The accessor stays reactive, and the caller's style merges after the defaults. Component functions and deferred construction callbacks must return a node. Use `ui.OnCleanup` for resources owned by a mounted component; keep application-wide services outside component ownership.
-
-Publish the module using Go version tags, and document the SDK versions you support. Consumers add it with `go get` using your module path. Transitive imports of `terminal` or `updater` still opt the application into those native extensions, so keep optional integrations in separate packages or build-tagged files.
+Publish with Go version tags. Consumers add it with `go get`. Importing `terminal` or `updater` still opts an app into those native packages, so keep optional integrations in separate packages.
 
 ## Lay out a native extension
 
-The working [`native-extension` example](https://github.com/egoist/quickgui/tree/main/examples/native-extension) pairs a Go package with a small C library named `acme-echo`. It builds against the standalone [C ABI header](https://github.com/egoist/quickgui/blob/main/include/quickgui_extension.h), with no renderer or core crate dependency. In your own repository, use a layout such as:
+The [`native-extension` example](https://github.com/egoist/quickgui/tree/main/examples/native-extension) pairs a Go package with a small C library. It builds against [`quickgui_extension.h`](https://github.com/egoist/quickgui/blob/main/include/quickgui_extension.h).
 
 ```text
 go.mod
@@ -77,13 +69,11 @@ artifacts/
 build-extension.ts
 ```
 
-Vendor the small header into your project. C, C++, Rust, and other languages that export a C ABI can implement an extension. Rust extensions can vendor the equivalent [`extension_api.rs`](https://github.com/egoist/quickgui/blob/main/src/extension_api.rs) layouts and build a `cdylib`, without linking `quickgui`, `quickgui-host`, WGPU, or Taffy. The [updater backend](https://github.com/egoist/quickgui/tree/main/crates/quickgui-updater) demonstrates an asynchronous service.
-
-The extension in this guide uses its own release `1.0.0`. Its descriptor, manifest, npm package, and `RequireExtension` version must agree. The service ABI version and table layout determine core compatibility; the extension's release does not need to match QuickGUI's release. Document the Go SDK and service ABI versions your package requires. The built-in terminal's typed rendering contract remains tied to its matching core release.
+C, C++, Rust, and other languages that export a C ABI can implement an extension. Rust extensions can vendor [`extension_api.rs`](https://github.com/egoist/quickgui/blob/main/src/extension_api.rs) and build a `cdylib` without linking QuickGUI itself.
 
 ## Declare dependencies
 
-Place this manifest **beside the imported Go package's source**, not just at the module root or in application configuration:
+Place this manifest **beside the imported Go package’s source**:
 
 ```json
 {
@@ -96,9 +86,9 @@ Place this manifest **beside the imported Go package's source**, not just at the
 }
 ```
 
-Names start with a lowercase letter and contain at most 64 lowercase letters, digits, or hyphens. Choose a distinctive name; `host` is reserved and `terminal` uses its built-in typed contract. The library field is `quickgui_` plus the name with hyphens replaced by underscores, without `lib` or a file extension. The npm package may use any valid scope or be unscoped. The manifest is limited to 16 KiB, and an application can require at most 32 extensions.
+Names start with a lowercase letter and contain at most 64 lowercase letters, digits, or hyphens. `host` is reserved. The library field is `quickgui_` plus the name with hyphens replaced by underscores.
 
-The Go package declares the matching release during initialization and exposes a typed operation:
+The Go package records the requirement and exposes a typed call:
 
 ```go
 package echo
@@ -125,100 +115,31 @@ func Send(message string, done func(string, error)) {
 }
 ```
 
-`RequireExtension` only records a requirement. Do not load libraries, open windows, or start workers in `init`. Call operations after `native.Run` reports readiness, on the UI goroutine. Replies also run there. `native.InvokeExtension` sends any JSON-encodable value and returns the extension's JSON result, preserving explicit `null` members. Methods start with an ASCII letter and contain up to 64 ASCII letters, digits, dots, underscores, or hyphens.
+Call operations after `native.Run` is ready. For a persistent service, `native.OpenExtension(name, options, changed, ready)` returns a session. Close it on the UI goroutine when the owner is disposed.
 
-For a persistent service, call `native.OpenExtension(name, options, changed, ready)` and wait for its successful `ready` callback. Use `session.Request("lookup", value, done)` for a JSON result, or `session.Command` when only an error is needed. Each command has its own reply; events remain subscribed until `session.Close()`. Close on the UI goroutine when the owner is disposed. Reserve `start` and `stop` for session lifecycle. Wrap these low-level calls with typed options, events, and methods in your public package.
-
-The CLI discovers manifests through `go list -deps`, using the same entry package, target, and build tags as compilation. Transitive imports count; excluded files do not. Both the manifest and the `RequireExtension` call are needed: one controls bundling, the other controls loading.
+The CLI discovers manifests through `go list -deps`. Both the manifest and `RequireExtension` are required: one controls bundling, the other controls loading.
 
 ## Implement the native contract
 
-Export `quickgui_extension_v1` with C linkage and default symbol visibility. It returns a static descriptor containing your name, exact extension version, ABI version `1`, service kind `2`, and a two-function table. All services share this kind; do not invent a new kind per extension. The public header defines every field and callback signature.
+Export `quickgui_extension_v1` with C linkage. It returns a descriptor with your name, version, ABI version `1`, and a two-function table (`invoke` and `shutdown`). Copy borrowed request bytes before keeping them, return quickly, and reply later.
 
-A Rust service implements `ServiceApi.invoke` and `ServiceApi.shutdown`. This descriptor fragment uses a local copy of the ABI definitions:
+| Request | What the extension does |
+| --- | --- |
+| A one-shot method such as `echo` | Reply once |
+| `start` | Open a session and keep its event sink |
+| A command such as `send` | Find that session and reply to this command |
+| `stop` | Cancel that session |
+| `shutdown` | Cancel every session without blocking |
 
-```rust
-mod abi;
-
-static API: abi::ServiceApi = abi::ServiceApi { invoke, shutdown };
-
-static EXTENSION: abi::Extension = abi::Extension {
-    abi_version: abi::ABI_VERSION,
-    descriptor_size: size_of::<abi::Extension>() as u32,
-    kind: abi::SERVICE_EXTENSION,
-    api_size: size_of::<abi::ServiceApi>() as u32,
-    name: abi::Bytes::new(b"acme-echo"),
-    version: abi::Bytes::new(env!("CARGO_PKG_VERSION").as_bytes()),
-    api: std::ptr::addr_of!(API).cast(),
-};
-
-/// # Safety
-/// Use this descriptor only according to the matching QuickGUI extension ABI.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn quickgui_extension_v1() -> *const abi::Extension {
-    &EXTENSION
-}
-```
-
-Only C layouts, fixed-width fields, borrowed byte spans, and function pointers cross the boundary. Keep language-owned objects and allocator ownership inside their library. The descriptor, strings, and table have static lifetimes. Copy borrowed request bytes before retaining them, enqueue slow work, and return immediately. Do not wait for network I/O, worker completion, or native main-thread execution. Bound queues, active sessions, and retained data; catch recoverable panics before crossing an `extern "C"` boundary.
-
-The Go session protocol is:
-
-| Request | Parameters | Extension responsibility |
-| --- | --- | --- |
-| A one-shot method such as `echo` | The value passed to `InvokeExtension` | Reply once, then release its sink |
-| `start` | The options JSON passed to `OpenExtension` | Use the request ID as the session ID; reply and retain its event sink |
-| A command such as `send` | `{"session": 123, "value": "hello"}` | Find that session and settle this command's own reply |
-| `stop` | `{"session": 123}` | Stop accepting work for that session, cancel its resources, and reply |
-| `shutdown` function | No parameters | Cancel all sessions without blocking the UI thread |
-
-`ServiceSink.emit` kind `0` carries one successful JSON reply, kind `1` a UTF-8 error, and kind `2` a JSON session event. Use `null` for success without a result. Request and emitted payloads are each limited to 64 KiB. Payload bytes are borrowed only during `emit`; the host copies them into its existing event queue. Workers may emit from any thread. Schedule OS APIs that require the main thread on that thread without blocking the calling Go goroutine.
-
-The start sink stays alive after the start reply so it can deliver events. Command sinks are separate. Call each sink's `release` exactly once, including errors and rejected work, after its final callback. Closing a session must suppress later events and release workers; keeping a library loaded must not keep its sessions alive. Extension images remain loaded for process lifetime because callbacks may still reference their function pointers.
-
-The [C echo implementation](https://github.com/egoist/quickgui/blob/main/examples/native-extension/backend/echo.c) shows the complete one-shot contract. For visual features, publish changed data to reactive Go components built from existing QuickGUI primitives. The service ABI does not add custom renderer node kinds; a new rendering primitive still requires a renderer implementation.
+Request and reply payloads are each limited to 64 KiB. The [C echo implementation](https://github.com/egoist/quickgui/blob/main/examples/native-extension/backend/echo.c) is a complete one-shot example.
 
 ## Automatic registration
 
-Before application startup, the Go loader opens each selected image, calls its exported entry point, and passes the descriptor and required version to the core. The core validates the header before reading its layout, then checks the name, release, ABI, table size, and non-null callbacks. It stores service tables by name and automatically routes `extension/acme-echo/<method>` requests and application shutdown.
-
-Identical registrations are idempotent. Different versions or tables under the same name are rejected, and the CLI also rejects conflicting npm packages under that name. Extension callbacks run outside the registry lock. The registry and loaded images persist for the process lifetime; your shutdown function must cancel all remaining sessions. There is no extension-specific registry code to edit.
+The app loads each selected library at startup and checks its name, version, and ABI. Conflicting versions of the same name fail. Images stay loaded for the process lifetime; your shutdown function must cancel remaining sessions.
 
 ## Build and package artifacts
 
-Use TypeScript scripts run with Bun to build native artifacts once. The example's [`build-extension.ts`](https://github.com/egoist/quickgui/blob/main/examples/native-extension/build-extension.ts) compiles its C extension directly with Clang and stages the current host target. A Rust extension can invoke Cargo from its own repository in the same way:
-
-```ts
-import { copyFileSync, mkdirSync } from "node:fs";
-import { join, resolve } from "node:path";
-
-const root = import.meta.dir;
-const platforms: Partial<Record<NodeJS.Platform, string>> = {
-  darwin: "darwin", linux: "linux", win32: "windows",
-};
-const platform = platforms[process.platform];
-if (!platform || !["arm64", "x64"].includes(process.arch)) {
-  throw new Error("Unsupported build host");
-}
-const build = Bun.spawn(["cargo", "build", "--manifest-path", "native/Cargo.toml", "--lib", "--release"], {
-  cwd: root,
-  stdin: "inherit",
-  stdout: "inherit",
-  stderr: "inherit",
-});
-if (await build.exited !== 0) throw new Error("Native build failed");
-
-const filename = platform === "darwin" ? "libquickgui_acme_echo.dylib"
-  : platform === "windows" ? "quickgui_acme_echo.dll" : "libquickgui_acme_echo.so";
-const destination = join(root, "artifacts/lib", `${platform}-${process.arch}`);
-const cargoTarget = resolve(root, process.env.CARGO_TARGET_DIR ?? "native/target");
-mkdirSync(destination, { recursive: true });
-copyFileSync(join(cargoTarget, "release", filename), join(destination, filename));
-```
-
-Set the Rust library name to `quickgui_acme_echo` and its crate type to `cdylib`. Run `bun build-extension.ts` on each supported host. This script does not cross-compile. Target directories are `darwin-arm64`, `darwin-x64`, `linux-arm64`, `linux-x64`, `windows-arm64`, and `windows-x64`. Ship only targets you build and validate.
-
-The native npm package contains artifacts and exposes its metadata for the resolver:
+Build the native library for each host you support and stage it under `artifacts/lib/<platform>-<arch>/`. Publish that folder as an npm package whose `version` matches the manifest.
 
 ```json
 {
@@ -229,30 +150,10 @@ The native npm package contains artifacts and exposes its metadata for the resol
 }
 ```
 
-Replace `@acme` with your own scope. Publish this artifact package with your own release workflow and keep it optional; the Go import selects it. Your build script and releases are independent of QuickGUI's built-in `--extension` command and version synchronization. Consumers reuse your prebuilts during Go edits.
-
-If your extension needs helper executables or resources, declare their basenames in a manifest `resources` object keyed by `darwin`, `linux`, or `windows`. Each platform accepts up to 16 distinct files; the same platform list applies to both architectures. Put those files next to the library in every applicable target directory. The CLI copies them alongside the native libraries and marks plain resource executables as executable.
-
-Directory resources use `.qgr` bundles produced by the repository's [`packResources`](https://github.com/egoist/quickgui/blob/main/packages/cli/src/extension-resources.ts) helper. It preserves executable modes and confined relative symlinks with entry and byte limits. Resource paths cannot overwrite core or extension images. macOS frameworks must also satisfy the platform's signing requirements. Sparkle resources receive the existing macOS signing and bundle configuration; other services do not need updater settings.
+Helper files go next to the library. Declare their basenames in a manifest `resources` object keyed by `darwin`, `linux`, or `windows`.
 
 ## Test and distribute
 
-Try the standalone example from a QuickGUI checkout:
+Consumers `go get` your module and run `quickgui dev`. The CLI fetches the matching npm package, or you can set `QUICKGUI_EXTENSION_DIR` to a local artifact directory while developing.
 
-```sh
-bun examples/native-extension/build-extension.ts dev
-```
-
-For your own consumer, add your Go module with `go get`, import its package, and run `quickgui dev` or `quickgui build`. Install the matching native npm package for offline or private distribution, or let the CLI fetch the exact release from the public npm registry. For development, set `QUICKGUI_EXTENSION_DIR` to the absolute target artifact directory. This override must contain every required library and resource, including transitive requirements.
-
-Resolution checks the explicit directory, installed npm package, then exact-version npm download; source-checkout fallback applies only to QuickGUI's built-in packages. Downloads require SHA-512 integrity, only declared artifacts are extracted, and caches include the npm package identity. Private registry downloads are not automatic; install private packages with your package manager first.
-
-Before shipping, verify these behaviors:
-
-- An app without the import bundles no extension or optional backend dependencies. Adding and removing a transitive import changes a fresh bundle correctly.
-- The bundled executable loads the extension through purego with the matching core. Missing files, names, ABI versions, release versions, and conflicting requirements produce errors.
-- Starting, closing before startup finishes, repeated closing, cancellation, and application shutdown release every callback context and worker. Events stop after disposal.
-- Background work never blocks the UI. Clean sessions sleep; queues, snapshots, caches, and resource payloads have limits. Follow the [performance guide](https://github.com/egoist/quickgui/blob/main/docs/go/architecture/performance.md).
-- `bun pm pack` includes every library and resource your manifest declares. Install the resulting archive into a separate consumer, build with native source staging unavailable, and exercise it on each supported OS and architecture.
-
-The repository's [`scripts/check-extensions.ts`](https://github.com/egoist/quickgui/blob/main/scripts/check-extensions.ts) builds the independent C extension, exercises its real replies through purego, and bundles a separate consumer with its own Go module and npm scope. It also checks the built-in extensions and their combinations. Add equivalent checks to your extension repository. End users receive the packaged application with all selected libraries; they need no Bun, Cargo, npm packages, or native toolchain to run it.
+Confirm that an app without the import does not bundle the extension, that adding the import includes it, and that closing sessions stops events. End users receive the packaged app; they do not need Bun or a native toolchain to run it.

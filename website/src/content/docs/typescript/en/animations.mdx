@@ -1,25 +1,43 @@
+Animate style changes with `transition` on the base style. The component does not rerun for each frame.
+
 ## Hover transitions
 
 ```tsx
-<Button style={{ bg: "#2563eb", transition: { property: "bg", duration: 160 }, hover: { bg: "#1d4ed8" } }}>Hover</Button>
+<Button style={{
+  bg: "#2563eb",
+  transition: { property: "bg", duration: 160 },
+  hover: { bg: "#1d4ed8" },
+}}>Hover</Button>
 ```
 
 ## State-driven animation
 
-Change a reactive style value from application state. Rust interpolates supported transitions while retaining the node and its interaction state. Do not reconstruct the component on each frame.
+Change a style from state and keep the node mounted. Do not rebuild the component on each frame.
+
+```tsx
+<View style={{
+  bg: selected() ? "#2563eb" : "#334155",
+  opacity: selected() ? 1 : 0.6,
+  transition: { property: ["bg", "opacity"], duration: 180 },
+}} />
+```
 
 ## Timing and frame rate
 
-Transition durations accept supported numbers or duration strings. Set easing and `maxFps` when needed; the frame-rate value is a ceiling while animation is active, not an idle scheduling source.
+Durations accept milliseconds or strings such as `"180ms"`. Set easing and `maxFps` when you want a cap. Omit `maxFps` to follow the display.
 
 ## Supported properties
 
-Native transitions cover the documented color, border, radius, opacity, and shadow properties. Transforms are supported as native style declarations. Consult the typed transition property union for interpolation support.
+Color, border, radius, opacity, shadow, and transform interpolate. Width, height, and padding do not.
 
 ## Mounting and reduced motion
 
-Keep an overlay mounted during its native exit transition when its component supports that lifecycle. Respect `reduceMotion` on window configuration and the platform preference instead of imposing a JavaScript animation loop.
+Keep an overlay mounted during its exit transition when the component supports that. `Show` removes children immediately. Transitions follow the system Reduce Motion setting. Set `reduceMotion` on the window to override it.
 
 ## Animated images
 
-`Image` uses native image resources, including animated GIF/WebP sources. The core owns playback deadlines, cache limits, and visibility-based suspension; loading a static image does not request idle frames.
+`Image` plays GIF and WebP files from the path you pass. You do not need a timer.
+
+```tsx
+<Image value={path} style={{ width: 96, height: 96, objectFit: "contain" }} />
+```

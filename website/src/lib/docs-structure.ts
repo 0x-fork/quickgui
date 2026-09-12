@@ -7,19 +7,19 @@ import type { DocsOutlineItem, DocsSlug } from './docs'
 export const DOCS_GUIDE_ORDER = [
   'getting-started',
   'project-structure',
-  'updater',
-  'extensions',
-  'native-services',
+  'components',
   'reactivity',
   'rendering',
-  'components',
-  'routing',
   'styling',
-  'animations',
   'forms-and-input',
   'overlays-and-dialogs',
+  'routing',
+  'animations',
+  'native-services',
   'swift-ui',
   'swift-ui-hosting',
+  'updater',
+  'extensions',
 ] as const
 
 const sectionTitles = {
@@ -99,21 +99,21 @@ const sectionTitles = {
   },
   rendering: {
     en: [
-      'Rendering model',
+      'How views work',
       'Conditional content',
-      'Lists and identity',
+      'Lists',
       'Window lifecycle',
       'Current window',
-      'Checking, testing, and debugging',
+      'Testing',
     ],
-    zh: ['渲染模型', '条件内容', '列表与节点身份', '窗口生命周期', '当前窗口', '检查、测试与调试'],
+    zh: ['视图如何工作', '条件内容', '列表', '窗口生命周期', '当前窗口', '测试'],
     ja: [
-      'レンダリングモデル',
+      'ビューの仕組み',
       '条件付きコンテンツ',
-      'リストとノードの同一性',
+      'リスト',
       'ウィンドウのライフサイクル',
       '現在のウィンドウ',
-      'チェック・テスト・デバッグ',
+      'テスト',
     ],
   },
   components: {
@@ -263,9 +263,9 @@ const guideTitles = {
     zh: '响应式',
   },
   rendering: {
-    en: 'Rendering',
-    ja: 'レンダリング',
-    zh: '渲染',
+    en: 'Views',
+    ja: 'ビュー',
+    zh: '视图',
   },
   components: {
     en: 'Components',

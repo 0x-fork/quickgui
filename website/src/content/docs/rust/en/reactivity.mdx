@@ -1,8 +1,8 @@
-Store state on the `View`. `render` reads that state to build elements. Call `cx.invalidate()` after a mutation so the window schedules another render. The native core still retains layout, paint, and accessibility between frames.
+Store state on the `View`. `render` reads that state to build elements. Call `cx.invalidate()` after a mutation so the window redraws.
 
 ## Reactive state
 
-Keep fields on the view struct. Register listeners with `cx.listener` so activations can mutate those fields. A value you copy in `render` is the current frame's snapshot.
+Keep fields on the view struct. Register listeners with `cx.listener` so events can mutate those fields.
 
 ```rust
 struct Counter {
@@ -21,9 +21,11 @@ impl View for Counter {
 }
 ```
 
+A value you copy in `render` is the current frame’s snapshot.
+
 ## Derived state
 
-Compute derived values in `render` from the fields you already store. Keep derivations pure; perform writes from listeners.
+Compute derived values in `render` from the fields you already store.
 
 ```rust
 let doubled = self.count * 2;
@@ -34,7 +36,7 @@ Store an expensive derivation on the view when several children need the same va
 
 ## Effects and cleanup
 
-Rust views do not subscribe with Go/TypeScript-style effects. Start external work from listeners or `Application` callbacks, and drop that work when the view is dropped. Window close releases the view and its listeners.
+Start external work from listeners or `Application` callbacks, and stop it when the view is dropped. Closing a window drops the view and its listeners.
 
 ```rust
 impl Drop for WatcherView {
@@ -46,4 +48,4 @@ impl Drop for WatcherView {
 
 ## Batched updates
 
-Calling `cx.invalidate()` marks the window dirty. Multiple invalidations in one event coalesce into one render. Do not install a frame loop for ordinary state updates; the window sleeps while it is clean.
+Calling `cx.invalidate()` marks the window dirty. Multiple invalidations in one event become one render. Do not install a timer to redraw when nothing changed.

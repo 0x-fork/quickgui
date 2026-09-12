@@ -27,7 +27,6 @@ const GUIDE_TRANSLATIONS: Record<TranslatedLocale, Record<DocsSlug, GuideTransla
         'zig',
         'rust',
         '原生后端',
-        'purego',
         'manifest',
         'ABI',
         'ServiceApi',
@@ -41,34 +40,31 @@ const GUIDE_TRANSLATIONS: Record<TranslatedLocale, Record<DocsSlug, GuideTransla
       searchTerms: ['更新', 'Sparkle', 'appcast', '扩展', '签名'],
     },
     'getting-started': {
-      description: '使用 QuickGUI UI 创建并运行原生 QuickGUI 应用。',
+      description: '用 Go 创建原生桌面应用并打开第一个窗口。',
       searchTerms: ['安装', '创建', '命令行', '窗口', 'Bun', 'macOS'],
     },
     'project-structure': {
-      description: '了解生成的 QuickGUI UI 项目中各个文件的用途。',
+      description: '了解 QuickGUI Go 项目中各个文件的用途。',
       searchTerms: ['文件', '配置', '入口', '软件包', 'quickgui.config'],
     },
     reactivity: {
-      description:
-        '信号将状态连接到读取它的文本和属性。更新只改变保留的节点，不会重新执行整个组件。',
+      description: '用信号、memo、effect 和批量更新保持界面同步。',
       searchTerms: ['signal', 'reactivity', 'memo', 'effect', 'batch', 'cleanup'],
     },
     rendering: {
-      description:
-        '组件在挂载时创建保留树。响应式绑定更新受影响的节点，原生核心负责布局、绘制和无障碍行为。',
+      description: '显示和隐藏内容、渲染列表，并使用当前窗口。',
       searchTerms: ['rendering', 'retained', 'children', 'mount', 'lifecycle', 'keyed'],
     },
     routing: {
-      description:
-        '路由根据应用当前路径选择组件并维护导航历史。路由内容在当前窗口中以原生 QuickGUI 节点渲染。',
+      description: '声明路由、嵌套布局和应用内导航。',
       searchTerms: ['router', 'route', 'layout', 'outlet', 'navigation', 'history', 'parameters'],
     },
     styling: {
-      description: '使用熟悉的属性布局并设置原生节点样式。',
+      description: '用 Flexbox、网格和交互状态布局并设置样式。',
       searchTerms: ['样式', '布局', 'Flexbox', '网格', '颜色', '悬停'],
     },
     animations: {
-      description: '在保留式 Go 组件中为原生样式变化和图像添加动画。',
+      description: '为悬停、颜色和不透明度添加动画，并播放 GIF 或 WebP。',
       searchTerms: [
         '过渡',
         '动画',
@@ -94,7 +90,7 @@ const GUIDE_TRANSLATIONS: Record<TranslatedLocale, Record<DocsSlug, GuideTransla
       searchTerms: ['浮层', '对话框', '弹窗', '警告', '文件选择器'],
     },
     'swift-ui': {
-      description: '在 QuickGUI UI 应用中挂载真正的 SwiftUI 控件。',
+      description: '在 Go 应用中嵌入真正的 SwiftUI 控件。',
       searchTerms: ['SwiftUI', '托管', '滑块', '开关', '选择器', '原生'],
     },
     'swift-ui-hosting': {
@@ -118,7 +114,6 @@ const GUIDE_TRANSLATIONS: Record<TranslatedLocale, Record<DocsSlug, GuideTransla
         'zig',
         'rust',
         'ネイティブバックエンド',
-        'purego',
         'manifest',
         'ABI',
         'ServiceApi',
@@ -132,35 +127,32 @@ const GUIDE_TRANSLATIONS: Record<TranslatedLocale, Record<DocsSlug, GuideTransla
       searchTerms: ['更新', 'Sparkle', 'appcast', '拡張', '署名'],
     },
     'getting-started': {
-      description: 'QuickGUI UI を使ってネイティブ QuickGUI アプリを作成し、実行します。',
+      description: 'Go でネイティブデスクトップアプリを作成し、最初のウィンドウを開きます。',
       searchTerms: ['インストール', '作成', 'CLI', 'ウィンドウ', 'Bun', 'macOS'],
     },
     'project-structure': {
-      description: '生成された QuickGUI UI プロジェクトの各ファイルを理解します。',
+      description: 'QuickGUI の Go プロジェクトの各ファイルの役割です。',
       searchTerms: ['ファイル', '設定', 'エントリ', 'パッケージ', 'quickgui.config'],
     },
     reactivity: {
-      description:
-        'シグナルは状態を、それを読むテキストやプロパティに結び付けます。更新時は保持されたノードだけを変更し、コンポーネント全体を再実行しません。',
+      description: 'シグナル、memo、effect、バッチ更新で UI を同期します。',
       searchTerms: ['signal', 'reactivity', 'memo', 'effect', 'batch', 'cleanup'],
     },
     rendering: {
-      description:
-        'コンポーネントはマウント時に保持ツリーを作成します。リアクティブなバインディングが対象ノードを更新し、レイアウト、描画、アクセシビリティはネイティブコアが担当します。',
+      description: '内容の表示と非表示、リスト、現在のウィンドウを扱います。',
       searchTerms: ['rendering', 'retained', 'children', 'mount', 'lifecycle', 'keyed'],
     },
     routing: {
-      description:
-        'ルーターは現在のアプリ内パスからコンポーネントを選び、ナビゲーション履歴を管理します。ルートは現在のウィンドウにネイティブ QuickGUI コンテンツを描画します。',
+      description: 'ルート、入れ子のレイアウト、アプリ内ナビゲーションを宣言します。',
       searchTerms: ['router', 'route', 'layout', 'outlet', 'navigation', 'history', 'parameters'],
     },
     styling: {
-      description: '使い慣れたプロパティでネイティブノードを配置し、スタイルします。',
+      description: 'Flexbox、グリッド、インタラクション状態でレイアウトとスタイルを設定します。',
       searchTerms: ['スタイル', 'レイアウト', 'Flexbox', 'グリッド', '色', 'ホバー'],
     },
     animations: {
       description:
-        '保持型の Go コンポーネントでネイティブのスタイル変更や画像をアニメーション化します。',
+        'ホバー、色、不透明度をアニメーションし、GIF や WebP を再生します。',
       searchTerms: [
         'トランジション',
         'アニメーション',

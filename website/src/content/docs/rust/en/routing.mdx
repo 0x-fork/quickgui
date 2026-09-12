@@ -1,4 +1,4 @@
-`Router` owns route matching, normalized locations, and bounded memory history. The view chooses which elements to mount from the current match.
+Declare routes, render the match in the current window, and navigate with `push` / `replace`.
 
 ## Routes
 
@@ -16,7 +16,7 @@ let router = Router::new(
 
 ## Nested layouts
 
-Match the route chain and wrap inner content with layout elements. Pathless layouts appear in `matched` ancestry without adding a URL segment.
+Match the route chain and wrap inner content with layout elements. Pathless layouts appear in the match without adding a URL segment.
 
 ```rust
 RouteDefinition::layout("shell").parent("root")
@@ -29,7 +29,7 @@ self.router.push("/projects/42")?;
 cx.invalidate();
 ```
 
-The controller supports `push`, `replace`, `back`, and `forward`. Navigation stays in the native application.
+The controller supports `push`, `replace`, `back`, and `forward`. Navigation stays inside the app.
 
 ## Route parameters
 
@@ -46,5 +46,3 @@ if let Some(matched) = self.router.matched() {
     text("Page not found")
 }
 ```
-
-Query pairs are retained as bounded lists on `RouteLocation`.

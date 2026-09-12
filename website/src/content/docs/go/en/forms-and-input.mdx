@@ -2,7 +2,7 @@ Keep field values in signals and write accepted changes back from callbacks.
 
 ## Text input
 
-`ui.Input` and `ui.TextArea` host native text editors. Bind `ui.Value` to an accessor and update it from `event.Value` in `OnInput`. `OnSubmit` handles Return in a single-line input.
+`ui.Input` and `ui.TextArea` are native text editors. Bind `Value` and update it from `OnInput`. `OnSubmit` handles Return in a single-line input.
 
 ```go
 func InputExample() *ui.Element {
@@ -17,65 +17,83 @@ func InputExample() *ui.Element {
 
 ## Fields
 
-`Field.Root` associates a label, control, description, and error. Set `Required`, `Invalid`, and `ValidationMessage` from application state. `ValidationMode` and `ValidationDebounceTime` configure when the core requests validation; your application owns the validation rule.
+`Field` groups a label, control, description, and error. Drive `Required`, `Invalid`, and `ValidationMessage` from your own state.
 
 ```go
-func FieldExample() *native.Node {
+func FieldExample() *ui.Element {
 	email, setEmail := ui.CreateSignal("")
-	field1 := ui.NewField(ui.FieldRootProps{Required: true, Filled: func() bool {
-		return email() != ""
-	}})
-	return field1.Root().Children(func() *native.Node {
-		return ui.Fragment([]*native.Node{field1.Label(ui.FieldLabelProps{}).Children("Email").NativeNode(), field1.Control(ui.FieldControlProps{InputPartProps: ui.InputPartProps{Value: email, Placeholder: "you@example.com", OnInput: func(event *native.Event) {
-			setEmail(event.Value)
-		}}}).NativeNode(), field1.Description(ui.PartProps{}).Children("Used for receipts").NativeNode(), field1.Error(ui.PartProps{}).Children("Enter a valid email address").NativeNode()})
-	}).NativeNode()
+	field := ui.NewField(ui.FieldRootProps{
+		Required: true,
+		Filled:   func() bool { return email() != "" },
+	})
+	return field.Root().FlexCol().Gap(6).Children(
+		field.Label().Child("Email"),
+		field.Control(ui.FieldControlProps{
+			InputPartProps: ui.InputPartProps{
+				Value:       email,
+				Placeholder: "you@example.com",
+				OnInput:     func(event *native.Event) { setEmail(event.Value) },
+			},
+		}),
+		field.Description().Child("Used for receipts"),
+		field.Error().Child("Enter a valid email address"),
+	)
 }
 ```
 
+See [Field](/docs/go/components/field) for validation modes.
+
 ## Choices
 
-Checkboxes accept `bool` or `ui.CheckedIndeterminate` through `ui.CheckedState`. Radio groups keep one value; checkbox and toggle groups can keep several. Read-only controls remain distinct from disabled controls.
+Checkboxes accept `bool` or mixed state. Radio groups keep one value; checkbox and toggle groups can keep several. Disabled and read-only are separate.
 
 ```go
-func CheckboxGroupExample() *native.Node {
+func CheckboxGroupExample() *ui.Element {
 	values, setValues := ui.CreateSignal([]string{"email"})
-	checkboxGroup1 := ui.NewCheckboxGroup(ui.CheckboxGroupProps{AllValues: []string{"email", "push"}, Value: values, OnValueChange: func(next []string, _ *native.Event) {
-		setValues(next)
-	}})
-	return checkboxGroup1.Root().Children(func() *native.Node {
-		return ui.Fragment([]*native.Node{func() *native.Node {
-			checkbox2 := ui.NewCheckbox(ui.CheckboxProps{Parent: true})
-			return checkbox2.Root().Children("All notifications").NativeNode()
-		}(), func() *native.Node {
-			checkbox3 := ui.NewCheckbox(ui.CheckboxProps{Value: "email"})
-			return checkbox3.Root().Children("Email").NativeNode()
-		}(), func() *native.Node {
-			checkbox4 := ui.NewCheckbox(ui.CheckboxProps{Value: "push"})
-			return checkbox4.Root().Children("Push").NativeNode()
-		}()})
-	}).NativeNode()
+	group := ui.NewCheckboxGroup(ui.CheckboxGroupProps{
+		AllValues: []string{"email", "push"},
+		Value:     values,
+		OnValueChange: func(next []string, _ *native.Event) {
+			setValues(next)
+		},
+	})
+	email := ui.NewCheckbox(ui.CheckboxProps{Value: "email"})
+	push := ui.NewCheckbox(ui.CheckboxProps{Value: "push"})
+	return group.Root().FlexCol().Gap(8).Children(
+		email.Root().Child("Email"),
+		push.Root().Child("Push"),
+	)
 }
 ```
 
 ## Select
 
-Declare picker options through `PickerSourceProps.Items`. Select uses a chosen value; Combobox combines text filtering and selection; Autocomplete accepts free-form input. Multiple pickers use `Values` and `OnValuesChange`.
+Select chooses from a list. Combobox mixes typing and selection. Autocomplete accepts free-form input. Multiple selection uses `Values` and `OnValuesChange`.
 
 ```go
-func SelectExample() *native.Node {
+func SelectExample() *ui.Element {
 	value, setValue := ui.CreateSignal[*string](nil)
-	select1 := ui.NewSelect(ui.SelectRootProps{PickerSourceProps: ui.PickerSourceProps{Items: func() []ui.OptionDeclaration {
-		return []ui.OptionDeclaration{{Value: "go", Label: "Go"}, {Value: "swift", Label: "Swift"}}
-	}}, Value: value, OnValueChange: func(next *string, _ *native.Event) {
-		setValue(next)
-	}})
-	return select1.Root().Children(func() *native.Node {
-		return ui.Fragment([]*native.Node{select1.Value(ui.PartProps{}).NativeNode(), select1.Icon(ui.PartProps{}).Children("▾").NativeNode()})
-	}).NativeNode()
+	picker := ui.NewSelect(ui.SelectRootProps{
+		PickerSourceProps: ui.PickerSourceProps{
+			Items: func() []ui.OptionDeclaration {
+				return []ui.OptionDeclaration{
+					{Value: "go", Label: "Go"},
+					{Value: "swift", Label: "Swift"},
+				}
+			},
+		},
+		Value: value,
+		OnValueChange: func(next *string, _ *native.Event) {
+			setValue(next)
+		},
+	})
+	return picker.Root().Children(
+		picker.Value(),
+		picker.Icon().Child("▾"),
+	)
 }
 ```
 
 ## Events
 
-Plain buttons accept `ui.OnClick(func() { ... })`. Use `ui.OnClickEvent` when you need `*native.Event`. Compound callbacks use typed values and include the native event when relevant. Keep UI state updates on the UI goroutine; use `ui.Async` for background work.
+Buttons take `OnClick(func() { ... })`. Use `OnClickEvent` when you need `*native.Event`. Compound callbacks include the typed value and, when relevant, the event. Keep UI updates on the UI goroutine; use `ui.Async` for background work.

@@ -1,20 +1,34 @@
-TypeScript 指南正文目前以英文提供，组件 API 参考包含中文说明。
-
 ## 系统要求
 
-Use Bun 1.4 or later, TypeScript 7, and Xcode Command Line Tools on macOS. Solid, its universal renderer, and its compiler are pinned to 2.0.0-rc.7. QuickGUI uses the Rust renderer through Bun FFI; it does not embed a webview.
+- macOS 14 或更新版本
+- Bun 1.4 或更新版本
+- TypeScript 7
+- Xcode Command Line Tools（`xcode-select --install`）
+
+当前支持的目标平台是 macOS。
 
 ## 创建项目
 
-运行以下命令，并在提示时选择 **TypeScript**。
+最快的试用方式是运行本仓库中的计数器示例：
 
 ```sh
-bunx @quickgui/cli init my-app
+git clone https://github.com/egoist/quickgui.git
+cd quickgui
+bun install
+bun run build:native
+cd examples/counter-typescript
+bun run dev
+```
+
+软件包发布后：
+
+```sh
+bunx @quickgui/cli init my-app --language typescript
 cd my-app
 bun run dev
 ```
 
-In a checkout, install workspace dependencies and stage the shared library once with `bun run build:native`. Ordinary application edits compile TypeScript and reuse that library.
+从源码仓库可以用 `bun packages/cli/src/cli.ts init ../my-app --language typescript` 生成同样的项目。
 
 ## 第一个窗口
 
@@ -22,6 +36,7 @@ In a checkout, install workspace dependencies and stage the shared library once 
 import { app, Window } from "@quickgui/native";
 import { Button, Text, View, createRenderer } from "@quickgui/solid";
 import { createSignal } from "solid-js";
+
 function Counter() {
   const [count, setCount] = createSignal(0);
   return (
@@ -31,13 +46,19 @@ function Counter() {
     </View>
   );
 }
+
 function openWindow() {
   new Window({ title: "Counter", width: 720, height: 480, renderer: createRenderer(Counter) });
 }
-app.on("reopen", ({ hasVisibleWindows }) => { if (!hasVisibleWindows) openWindow(); });
+
+app.on("reopen", ({ hasVisibleWindows }) => {
+  if (!hasVisibleWindows) openWindow();
+});
 await app.whenReady();
 openWindow();
 ```
+
+当用户点击 Dock 图标且没有可见窗口时，`reopen` 会再次打开窗口。
 
 ## 运行与构建
 
@@ -48,8 +69,10 @@ bun run dev
 bun run build
 ```
 
-The CLI owns the process main thread and native event loop. Application code runs in a Bun worker. Production builds bundle the executable and native libraries and create an app bundle and DMG on macOS.
+`dev` 会在你编辑时重新构建。`build` 把打包后的应用写到 `dist/`。
 
 ## 后续步骤
 
-Explore the [component reference](/docs/typescript/components), [native services](/docs/typescript/native-services), and [SwiftUI controls](/docs/typescript/swift-ui). The checkout includes `examples/components-typescript` and `examples/quick-git-typescript` as complete applications.
+- 编写[组件](/docs/typescript/components)。
+- 用[信号](/docs/typescript/reactivity)保持界面同步。
+- 添加[样式与布局](/docs/typescript/styling)。

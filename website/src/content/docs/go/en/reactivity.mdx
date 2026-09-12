@@ -1,10 +1,8 @@
-Signals connect state to the text and properties that read it. Updates change retained nodes without rerunning the entire component.
+A component function runs once when its window (or parent) mounts. Signals keep text and properties up to date without rebuilding the whole tree.
 
 ## Reactive state
 
-Read signals directly in component text and fluent properties, such as `ui.Text("Count: ", count())` and `.Width(width())`. Custom components accept ordinary `int`, `string`, and struct parameters; calling `LineItem(product, quantity())` preserves its live inputs. The QuickGUI CLI generates the internal getters and bindings automatically. Setup assignments such as `initial := count()` remain snapshots. Explicit accessors are still supported, and are required when using raw Go commands that bypass the view compiler. Event handlers batch writes automatically. Use `ui.Batch` for a group of writes elsewhere, and `ui.CreateMemo` for derived values.
-
-String and numeric signals can be children directly: `ui.Text("Count: ", count)`. The prefix stays retained while only the number updates. Numeric bindings use `strconv`; they do not parse a format string. For a combined string property, use `strconv.Itoa(count())` and concatenation inside an accessor.
+Create a signal with `ui.CreateSignal`. Read it in text and properties: `ui.Text("Count: ", count())`, `.Width(width())`. Event handlers batch writes automatically.
 
 ```go
 func TextExample() *ui.Element {
@@ -19,9 +17,13 @@ func TextExample() *ui.Element {
 }
 ```
 
+`initial := count()` is a snapshot. Read the signal again later when the value should stay live. You can also pass a signal as a child: `ui.Text("Count: ", count)` keeps the prefix and updates only the number.
+
+Custom components take ordinary `int`, `string`, and struct arguments. `LineItem(product, quantity())` stays subscribed to `quantity`.
+
 ## Derived state
 
-Use `ui.CreateMemo` for a value computed from other signals. It returns an accessor, so consumers subscribe to the derived value just like any other signal.
+Use `ui.CreateMemo` for a value computed from other signals.
 
 ```go
 func DerivedExample() *ui.Element {
@@ -36,9 +38,7 @@ func DerivedExample() *ui.Element {
 
 ## Effects and cleanup
 
-Use `ui.CreateEffect` to synchronize a side effect with the signals it reads. Dependencies follow the reads made during each run, including conditional branches. Register teardown with `ui.OnCleanup`; disposing the owning component releases its effects and subscriptions. Bind changing text and props directly instead of rebuilding a view inside an effect.
-
-Use an effect for work outside the view tree, such as synchronizing a subscription or updating a native window title. The effect runs initially and again when a value it read changes. Cleanup registered inside that effect runs before the next execution and when its owner is disposed. This example logs the lifecycle; replace the log calls with your subscription’s start and stop operations. Capture the topic for that execution so cleanup refers to the old topic.
+Use `ui.CreateEffect` for work outside the tree, such as a subscription or a window title. It runs after mount and again when a value it read changes. `ui.OnCleanup` runs before the next execution and when the component goes away.
 
 ```go
 func EffectExample() *ui.Element {
@@ -61,11 +61,11 @@ func EffectExample() *ui.Element {
 }
 ```
 
+Update text and properties directly. Do not rebuild UI inside an effect.
+
 ## Batched updates
 
-Event handlers batch signal writes automatically. Wrap related writes elsewhere in `ui.Batch(func() { ... })` so dependent work flushes together. `ui.Untrack` reads state without subscribing the current computation. Signal access belongs on the UI goroutine; use `ui.Async` or `native.Dispatch` to deliver background results.
-
-Here both fields change as one update. Observers see “Grace Hopper” after the batch rather than an intermediate “Grace Lovelace”. The button handler already batches automatically; the explicit batch also makes `applyProfile` safe to call from other UI code. Batches are synchronous: background work must dispatch its results back before writing signals. The logging examples use Go’s standard `log` package.
+Click handlers already batch writes. Wrap related writes elsewhere in `ui.Batch` so observers see one result. `ui.Untrack` reads a signal without subscribing. Read and write signals on the UI goroutine; use `ui.Async` or `native.Dispatch` to deliver background results.
 
 ```go
 func BatchedExample() *ui.Element {

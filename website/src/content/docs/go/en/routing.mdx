@@ -1,21 +1,18 @@
-The router selects components from the current application path and keeps a navigation history. Routes render native QuickGUI content in the current window.
+Declare routes, render the match in the current window, and navigate with links or `UseRouter`.
 
 ## Routes
 
-Declare routes with `ui.Route` and `ui.Layout`. A layout mounts its matched child with `ui.Outlet`. Read parameters with `ui.UseParams`, or navigate with `ui.UseRouter`.
+Use `ui.Route` for pages and `ui.Layout` for shared chrome. `ui.Outlet` is where the matched child renders.
 
 ```go
-func RouterExample() *native.Node {
+func RouterExample() *ui.Element {
 	return ui.Router(ui.RouterProps{
 		InitialPath: "/",
 		Routes: []*ui.RouteDeclaration{
 			ui.Route(
 				"/",
-				func() *native.Node {
-					return ui.Link(
-						ui.LinkProps{Href: "/settings"},
-						"Settings",
-					)
+				func() *ui.Element {
+					return ui.Link(ui.LinkProps{Href: "/settings"}, "Settings")
 				},
 			),
 			ui.Route(
@@ -30,22 +27,19 @@ func RouterExample() *native.Node {
 
 ## Nested layouts
 
-Wrap related routes in `ui.Layout`. Its component calls `ui.Outlet()` where the matched child belongs. Navigation between sibling routes keeps their common layout mounted, preserving its state. Only the changed route branch is replaced.
-
-Keep shared navigation outside the outlet. Its local state survives switching between Home and Settings because both routes share the same layout. The outlet supplies only the active child.
+Wrap related routes in `ui.Layout`. Navigation between sibling routes keeps the layout mounted, so its local state survives.
 
 ```go
-func NestedRouterExample() *native.Node {
+func NestedRouterExample() *ui.Element {
 	return ui.Router(ui.RouterProps{
 		Routes: []*ui.RouteDeclaration{
 			ui.Layout(
 				func() *ui.Element {
-					return ui.View().Children(
-
+					return ui.View().FlexCol().Gap(12).Children(
 						ui.Link(ui.LinkProps{Href: "/"}, "Home"),
 						ui.Link(ui.LinkProps{Href: "/settings"}, "Settings"),
 						ui.Outlet(),
-					).Display("flex").FlexDirection("column").Gap(12)
+					)
 				},
 				ui.Route(
 					"/",
@@ -63,7 +57,7 @@ func NestedRouterExample() *native.Node {
 
 ## Navigation
 
-Inside a route component, `ui.UseRouter()` exposes `Navigate`, `Replace`, `Back`, and `Forward`. `ui.Link` declares a navigation target. Pushes add a history entry; replacing changes the current entry.
+`ui.UseRouter()` exposes `Navigate`, `Replace`, `Back`, and `Forward`. `ui.Link` declares a target. Push adds a history entry; replace updates the current one.
 
 ```go
 func BackButton() *ui.Element {
@@ -74,12 +68,10 @@ func BackButton() *ui.Element {
 
 ## Route parameters
 
-Read matched path parameters with `ui.UseParams`, query values with `ui.UseSearchParams`, and the current location with `ui.UseLocation`. These return accessors; read them inside a binding when the displayed value should update. A parameter-only change keeps the matched route component mounted.
-
-A `:name` segment captures one path parameter. Keep reads inside text accessors: capturing `params()["name"]` during setup would leave the label at its initial value. Query parameters are separate from path parameters. This route initially displays `quickgui` and `history`.
+Read path parameters with `ui.UseParams`, query values with `ui.UseSearchParams`, and the current location with `ui.UseLocation`. Read them when you display the value so the text stays current. A `:name` segment captures one path parameter.
 
 ```go
-func ParameterRouterExample() *native.Node {
+func ParameterRouterExample() *ui.Element {
 	return ui.Router(ui.RouterProps{
 		InitialPath: "/projects/quickgui?tab=history",
 		Routes: []*ui.RouteDeclaration{

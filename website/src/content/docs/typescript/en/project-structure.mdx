@@ -1,34 +1,50 @@
+A TypeScript project keeps application code in `app.tsx` and development commands in `package.json`.
+
 ## Generated files
 
-The scaffold contains `app.tsx`, `quickgui.config.ts`, `tsconfig.json`, and `package.json`. Keep reusable components and application data access in ordinary TypeScript modules. Generated build files live in `.quickgui` and release artifacts in `dist`.
+```text
+my-app/
+├── app.tsx
+├── quickgui.config.ts
+├── tsconfig.json
+├── package.json
+└── README.md
+```
+
+Keep reusable components in ordinary TypeScript modules. Build output lives in `.quickgui`; packaged apps live in `dist`.
 
 ## Application entry
 
-Import `app` and `Window` from `@quickgui/native`; import components and `createRenderer` from `@quickgui/solid`. Await `app.whenReady()` before opening windows. Each window owns and disposes one renderer root. The CLI starts the event consumer; application code does not call `app.run()`.
+Import `app` and `Window` from `@quickgui/native`. Import components and `createRenderer` from `@quickgui/solid`. Await `app.whenReady()` before opening windows. Each window has its own renderer, disposed when the window closes.
 
 ## Configuration
 
-```tsx
+```ts
 import { defineConfig } from "@quickgui/cli";
+
 export default defineConfig({
-  language: "typescript", name: "My App", identifier: "com.example.my-app",
-  entry: "app.tsx", fonts: ["assets/MyFont.ttf"], resources: ["assets"],
+  language: "typescript",
+  name: "My App",
+  identifier: "com.example.my-app",
+  entry: "app.tsx",
+  fonts: ["assets/MyFont.ttf"],
+  resources: ["assets"],
 });
 ```
 
-TOML supports the same configuration keys. Set `jsx` to `preserve` and `jsxImportSource` to `@quickgui/solid` in `tsconfig.json`; the CLI applies the Solid universal transform.
+TOML supports the same keys. In `tsconfig.json`, set `jsx` to `"preserve"` and `jsxImportSource` to `"@quickgui/solid"`.
 
 ## Packages
 
-Applications depend directly on `@quickgui/native`, `@quickgui/solid`, and `solid-js`. `@quickgui/cli`, TypeScript, and Bun type definitions are development dependencies. Optional terminal and updater extensions are separate packages.
+Applications depend on `@quickgui/native`, `@quickgui/solid`, and `solid-js`. `@quickgui/cli` is a development dependency. Terminal and updater are optional packages — see [Auto Updater](/docs/typescript/updater) and [Authoring Extensions](/docs/typescript/extensions).
 
 ## Local development
 
 ```sh
-bun install
-bun run build:native
-bun run --cwd examples/components-typescript dev
-bun run --cwd examples/quick-git-typescript dev
+bun run check
+bun run test
+bun run dev
+bun run build
 ```
 
-Use `quickgui check` for typechecking and `quickgui test` for application tests with the same Solid compiler and reactive client runtime as packaged builds.
+`check` typechecks the project. `test` runs tests with the same compiler as builds.

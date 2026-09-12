@@ -1,19 +1,32 @@
+Create windows after `app.whenReady()`. Each window has its own UI root.
+
 ## Window lifetime
 
-Create a `Window` with `renderer: createRenderer(...)`. `onClose` and `on("closed", ...)` observe native destruction; `onCloseRequested` can hold a user close request. `close()` completes it. `whenReady()` resolves after the native window is mounted, including hidden windows. Returned snapshots use `bounds`, `viewportSize`, and `scaleFactor`.
+```tsx
+new Window({
+  title: "My App",
+  width: 720,
+  height: 480,
+  renderer: createRenderer(App),
+});
+```
+
+`onClose` and `on("closed", ...)` run after the window is gone. `onCloseRequested` can hold a close so you can ask the user to save. `whenReady()` resolves after the native window exists, including hidden windows.
+
+Handle the Dock icon with `app.on("reopen", ...)` and open a window when `hasVisibleWindows` is false.
 
 ## Commands and services
 
 ```tsx
-import { app, Window, Clipboard, Dialog, Menu, Shell, Screen } from "@quickgui/native";
+import { app, Clipboard, Dialog, Menu, Shell, Screen } from "@quickgui/native";
+
 await app.whenReady();
 const displays = await Screen.getAllDisplays();
 const selected = await Dialog.showOpenDialog({ properties: ["openDirectory"] });
-// Menus, dialogs, clipboard, displays, appearance, and window operations use Rust services.
 ```
 
-Native result operations return promises. Window mutations declare work immediately and are submitted after native creation. System menus and file dialogs remain native controls.
+Calls that return a value are promises. Menus, file dialogs, clipboard, appearance, notifications, and tray icons are available from `@quickgui/native`.
 
 ## Events and file watching
 
-Window events include focus, resize, appearance, ready-to-show, minimize, fullscreen, and close. Application events include ready, reopen, activation, quit, open URLs, and keyboard-layout changes. Use Bun file watching and asynchronous I/O for application data; dispose watchers with their owner window. Quick Git demonstrates cancellation, bounded subprocess output, and per-window stores.
+Window events include focus, resize, appearance, minimize, fullscreen, and close. Application events include ready, reopen, activation, quit, and open URLs. Use Bun file watching for project files, and stop watchers in `onCleanup` when they belong to a window.

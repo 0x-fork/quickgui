@@ -1,8 +1,8 @@
-SwiftUI modifiers style native controls. Reverse hosting puts an ordinary QuickGUI subtree inside SwiftUI.
+Modifiers style native SwiftUI controls. Reverse hosting puts QuickGUI content inside SwiftUI.
 
 ## Modifiers
 
-Apply modifier factories from `ui.SwiftUI` in order through `Modifiers`. Available factories include ButtonStyle, ButtonBorderShape, ControlSize, LabelStyle, Tint, and Disabled.
+Pass modifier factories through `Modifiers`. Available factories include ButtonStyle, ButtonBorderShape, ControlSize, LabelStyle, Tint, and Disabled.
 
 ```go
 return ui.SwiftUI.Button(ui.SwiftUIButtonProps{
@@ -17,23 +17,22 @@ return ui.SwiftUI.Button(ui.SwiftUIButtonProps{
 
 ## Liquid Glass
 
-On supported systems, request the native glass button style with `ui.SwiftUI.ButtonStyle("glass")`. macOS owns the final appearance.
+On supported systems, `ui.SwiftUI.ButtonStyle("glass")` requests the system glass button. macOS chooses the final look.
 
 ## Reverse hosting
 
-`ui.SwiftUI.QuickGUIHostView` owns a QuickGUI subtree inside the native hierarchy. Provide its size and declare children in a callback so they mount under the embedded window’s lifecycle.
+`ui.SwiftUI.QuickGUIHostView` hosts a QuickGUI subtree. Give it a size and declare children in the callback.
 
 ```go
-func SwiftUiQuickguiHostViewExample() *native.Node {
+func SwiftUiQuickguiHostViewExample() *ui.Element {
 	return ui.SwiftUI.Host(
 		ui.SwiftUIHostProps{MatchContents: true},
-		func() *native.Node {
+		func() *ui.Element {
 			return ui.SwiftUI.QuickGUIHostView(
 				ui.SwiftUIQuickGUIHostViewProps{Width: 320, Height: 180},
 				func() *ui.Element {
-					return ui.View().Child(
-						"QuickGUI inside SwiftUI",
-					).Width("100%").Height("100%").Padding(16)
+					return ui.View().Child("QuickGUI inside SwiftUI").
+						Width("100%").Height("100%").Padding(16)
 				},
 			)
 		},
@@ -43,30 +42,36 @@ func SwiftUiQuickguiHostViewExample() *native.Node {
 
 ## SwiftUI popover
 
-The SwiftUI popover composes a native trigger through `Render`. Its content can reverse-host interactive QuickGUI components.
+The SwiftUI popover uses a native trigger. Its content can host QuickGUI children.
 
 ```go
-func SwiftUiPopoverExample() *native.Node {
+func SwiftUiPopoverExample() *ui.Element {
 	open, setOpen := ui.CreateSignal(false)
 	return ui.SwiftUI.Host(
 		ui.SwiftUIHostProps{MatchContents: true},
-		func() *native.Node {
+		func() *ui.Element {
 			return ui.SwiftUI.Popover.Root(
 				ui.SwiftUIPopoverProps{
 					IsPresented:         open,
 					OnIsPresentedChange: setOpen,
 				},
-				func() *native.Node {
-					return ui.Fragment([]*native.Node{ui.SwiftUI.Popover.Trigger(ui.SwiftUIPopoverTriggerProps{Render: func() *native.Node { return ui.SwiftUI.Button(ui.SwiftUIButtonProps{Label: "Account"}) }}),
+				func() *ui.Element {
+					return ui.Fragment(
+						ui.SwiftUI.Popover.Trigger(ui.SwiftUIPopoverTriggerProps{
+							Render: func() *ui.Element {
+								return ui.SwiftUI.Button(ui.SwiftUIButtonProps{Label: "Account"})
+							},
+						}),
 						ui.SwiftUI.Popover.Content(
 							ui.SwiftUIPopoverContentProps{},
-							func() *native.Node {
+							func() *ui.Element {
 								return ui.SwiftUI.QuickGUIHostView(
 									ui.SwiftUIQuickGUIHostViewProps{Width: 240, Height: 120},
 									"Account settings",
 								)
 							},
-						)})
+						),
+					)
 				},
 			)
 		},
@@ -76,4 +81,4 @@ func SwiftUiPopoverExample() *native.Node {
 
 ## Lifetime
 
-The host creates its embedded surface after the owner window is mounted and closes it when removed. Declare reverse-hosted children inside the provided callback so their bindings and resources belong to that embedded window. Do not move retained nodes between windows.
+The host appears after the owner window is shown and closes when it is removed. Declare reverse-hosted children inside the callback so they belong to that embedded surface.

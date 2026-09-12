@@ -1,8 +1,8 @@
-`View::render` builds an element tree after invalidation or OS damage. Native layout, painting, focus, input, and accessibility remain in the core. Stable `Element::id` values preserve identity across renders.
+`View::render` builds the UI after you invalidate or the operating system asks for a redraw. Use `id` so rows keep their identity across renders.
 
-## Rendering model
+## How views work
 
-Return `impl IntoElement` from `render`. Fluent builders construct retained elements. The window sleeps until `invalidate` or platform damage. Do not rebuild from a timer when nothing changed.
+Return `impl IntoElement` from `render`. The window sleeps until `invalidate` or a platform event.
 
 ## Conditional content
 
@@ -14,9 +14,9 @@ if self.expanded {
 }
 ```
 
-Omitting a branch drops its nodes. Sibling elements with stable ids keep their identities.
+Omitting a branch drops those nodes.
 
-## Lists and identity
+## Lists
 
 ```rust
 div().children(self.items.iter().map(|item| {
@@ -24,11 +24,11 @@ div().children(self.items.iter().map(|item| {
 }))
 ```
 
-Give stateful rows stable `id`s. Use `VirtualList` or `TableState` for large collections and only mount visible rows.
+Give stateful rows stable `id`s. For long collections, use `VirtualList` or `Table`.
 
 ## Window lifecycle
 
-Each `open_window` owns an independent view. Closing a child window must not drop its siblings. Handle macOS Dock reopening by constructing a fresh window when `has_visible_windows` is false.
+Each `open_window` owns an independent view. Closing one window does not drop the others. Handle the Dock icon by opening a new window when `has_visible_windows` is false.
 
 ## Current window
 
@@ -41,13 +41,11 @@ fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
 }
 ```
 
-`ViewContext` and `EventContext` expose the current `WindowHandle` during render and event dispatch.
-
-## Checking, testing, and debugging
+## Testing
 
 ```sh
 quickgui check
 quickgui test
 ```
 
-`examples/base_ui_components.rs` is the broad UI gallery. Enable the `inspector` crate feature for the in-app inspector. Native integration checks are separate from `cargo test`.
+`examples/base_ui_components.rs` is the UI gallery. Enable the `inspector` crate feature for the in-app inspector.

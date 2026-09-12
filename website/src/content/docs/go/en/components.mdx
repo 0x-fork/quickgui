@@ -1,8 +1,8 @@
-QuickGUI combines unstyled primitives with accessible compound controls. Compose both through ordinary Go functions.
+Write a function that returns `*ui.Element`. Start with `View`, `Text`, and `Button`, then compose the rest of the control set the same way.
 
 ## Defining components
 
-A Go component returns `*ui.Element` or `*native.Node`. Use plain typed props and compose children directly. The return type identifies the component, so `CounterLabel(count())` stays reactive without annotations or a `ui.View().Child(func() *ui.Element { ... })` wrapper. Window roots accept the component function directly.
+Pass ordinary Go values. If an argument reads a signal, that binding stays live after the function returns — you do not need extra annotations.
 
 ```go
 func CounterLabel(count int) *ui.Element {
@@ -18,7 +18,7 @@ func ComponentExample() *ui.Element {
 }
 ```
 
-Struct props use ordinary Go types too. Updating `quantity` changes the bound text while `LineItem` and its nodes remain mounted.
+Structs work the same way. Updating `quantity` changes the text; `LineItem` stays mounted.
 
 ```go
 type Product struct {
@@ -40,27 +40,20 @@ func Cart() *ui.Element {
 }
 ```
 
-Start containers with `ui.View()` and append content with `.Child(...)` or `.Children(...)`, as shown below. A children callback is optional and runs once when mounted; use it when construction must happen lazily or inside a compound control’s context. Event handlers remain callbacks.
+Start containers with `ui.View()` and append content with `.Child(...)` or `.Children(...)`.
 
 ```go
 func CardComponent(title string, children ...any) *ui.Element {
-	return ui.View().Children(
+	return ui.View().FlexCol().Padding(20).Gap(12).Children(
 		ui.Text(title).FontWeight(600),
 		children,
-	).Padding(20).Gap(12).FlexCol()
-}
-
-func CardComposition() *ui.Element {
-	return CardComponent("Account",
-		ui.Text("Manage your account settings."),
-		ui.Button().Child("Save").OnClick(func() { log.Print("Saved") }),
 	)
 }
 ```
 
 ## Primitives
 
-Start with `ui.View`, `ui.Text`, `ui.Button`, and `ui.Input`. Use `ui.View().Child(...).Child(...)` or `.Children(...)` for containers, and chain styles, properties, and handlers. Return a node from component functions and deferred child callbacks.
+`View`, `Text`, `Button`, and `Input` cover most layout and text. Chain styles, properties, and handlers on the same element.
 
 ```go
 func ButtonExample(save func()) *ui.Element {
@@ -73,52 +66,49 @@ func ButtonExample(save func()) *ui.Element {
 		BorderRadius(8).
 		Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor("#3b82f6") }).
 		OnClick(save)
-
 }
 ```
 
 ## Compound components
 
-Create a component instance and compose its named parts. Every part returns a fluent `*ui.Element`; strings work directly as children, just as `.child("text")` does in Rust.
+Create an instance, then compose its named parts. Strings work as children.
 
 ```go
 func TabsExample() *ui.Element {
-    tabs := ui.NewTabs().DefaultValue("account")
-    return tabs.Root().Children(
-        tabs.List().Children(
-            tabs.Tab("account").Child("Account"),
-            tabs.Tab("security").Child("Security"),
-        ),
-        tabs.Panel("account").Child("Account settings"),
-        tabs.Panel("security").Child("Security settings"),
-    )
+	tabs := ui.NewTabs().DefaultValue("account")
+	return tabs.Root().Children(
+		tabs.List().Children(
+			tabs.Tab("account").Child("Account"),
+			tabs.Tab("security").Child("Security"),
+		),
+		tabs.Panel("account").Child("Account settings"),
+		tabs.Panel("security").Child("Security settings"),
+	)
 }
 ```
 
-Configure behavior on the instance and styles on its parts. Parts establish their context when inserted, so ordinary nesting works without provider callbacks. At native boundaries, `.NativeNode()` resolves a compound element; `.Node` becomes available after insertion.
+Configure behavior on the instance and styles on its parts. Nest parts the way you nest any other children.
 
 ## Controlled state
 
-Instance settings accept values and accessors. The Go view compiler retains direct reactive expressions, while the component body runs once.
+Pass the current value and write the next value from the change callback. Create each instance inside the component that owns it.
 
 ```go
 func CheckboxExample() *ui.Element {
-    checked, setChecked := ui.CreateSignal(false)
-    checkbox := ui.NewCheckbox().Checked(checked()).OnCheckedChange(
-        func(next bool, _ *native.Event) { setChecked(next) },
-    )
-    return checkbox.Root().FlexRow().Gap(8).Children(
-        checkbox.Indicator().Child("✓"),
-        "Remember me",
-    )
+	checked, setChecked := ui.CreateSignal(false)
+	checkbox := ui.NewCheckbox().Checked(checked()).OnCheckedChange(
+		func(next bool, _ *native.Event) { setChecked(next) },
+	)
+	return checkbox.Root().FlexRow().Gap(8).Children(
+		checkbox.Indicator().Child("✓"),
+		"Remember me",
+	)
 }
 ```
 
-Create each instance inside the component that owns it. Its state and bindings are released with its mounted root. Child factories remain useful for content that closes and later constructs new nodes when it reopens.
-
 ## Component families
 
-The reference covers forms, pickers, layout and data, overlays, menus, and routing. `examples/components` contains all 42 original gallery demos, including a 5,000-row table and lazy tree. The separate `examples/swift-ui` gallery demonstrates native SwiftUI hosting.
+The [component reference](/docs/go/components/button) covers forms, overlays, menus, tables, trees, and more. Run the gallery from this repository:
 
 ```bash
 bun packages/cli/src/cli.ts dev --project examples/components
@@ -126,13 +116,11 @@ bun packages/cli/src/cli.ts dev --project examples/components
 
 ## Styling parts
 
-Apply fluent styles directly to parts or share styles with `ui.Style()` and `.Merge(...)`:
+Apply styles on the part itself, or share a `ui.Style()` value:
 
 ```go
 triggerStyle := ui.Style().Padding(12).RoundedLg().Bg("#2563eb")
 return popover.Trigger().Style(triggerStyle).TextColor("#ffffff").Child("Account")
 ```
 
-Scalar accessors retain independent bindings. Adding a user click handler preserves a part's default action; `OnClickEvent` can call `PreventDefault()` to cancel it.
-
-Use `ui.NewPopover()`, `ui.NewTabs()`, and the corresponding component constructors. Constructors accept optional initial settings; instance methods configure individual settings before mounting.
+Adding `OnClick` keeps the part’s default action. Call `PreventDefault()` on `OnClickEvent` when you need to cancel it.

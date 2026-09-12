@@ -1,4 +1,4 @@
-Go elements and `ui.Style()` share fluent style modifiers, including `.P4()`, `.MxAuto()`, `.GridCols(3)`, and `.RoundedLg()`. Append children with `.Child(...)` or `.Children(...)` and apply reusable styles with `.Style(shared)`.
+Chain style methods on elements or on `ui.Style()`. Append children with `.Child(...)` or `.Children(...)`, and reuse a style with `.Style(shared)`.
 
 ```go
 return ui.View().Children(ui.Text("hello"), ui.Input().Value("xxx")).
@@ -7,7 +7,7 @@ return ui.View().Children(ui.Text("hello"), ui.Input().Value("xxx")).
 
 ## Style modifiers
 
-Declarations apply in order. Later values override the same property, including explicit zero. Numeric lengths are logical pixels; strings also accept percentages.
+Later values override the same property. Lengths are logical pixels; strings also accept percentages.
 
 ```go
 func Card() *ui.Element {
@@ -16,9 +16,11 @@ func Card() *ui.Element {
 }
 ```
 
+Helpers such as `.FlexCol()`, `.P4()`, `.GridCols(3)`, and `.RoundedLg()` match the TypeScript presets.
+
 ## Merging styles
 
-`.Style(base).Style(overrides)` merges declarations in order. Use `.Merge(...)` to compose reusable builders. Repeated interaction states merge their properties too.
+`.Style(base).Style(overrides)` applies declarations in order. Use `.Merge(...)` to combine reusable builders.
 
 ```go
 func MergedCard() *ui.Element {
@@ -30,24 +32,24 @@ func MergedCard() *ui.Element {
 
 ## Reusable styles
 
-`ui.Style()` returns a `ui.StyleBuilder`. Modifiers return new values, leaving shared styles unchanged. Assign the result when deriving a style. Apply it with `.Style(...)` or a compound part’s `PartProps.Style` field; parts also accept slices of builders and accessors returning them. Scalar accessors stay reactive and bind independently on each mounted node.
+`ui.Style()` returns a value. Methods return a new value, so a shared style is never mutated. Assign the result when you derive a variation.
 
 ```go
-func SharedCard() *native.Node {
-	var children []*native.Node
+func SharedCard() *ui.Element {
 	card := ui.Style().Padding(20).BorderRadius(12)
 	emphasized := card.PaddingLeft(28).Bg("#1e293b")
-	children = append(children, ui.View().Child("Hello").Style(card).Bg("#111827").Node)
-	children = append(children, ui.View().Child("Another card").Style(emphasized).Node)
-	return ui.Fragment(children)
+	return ui.View().Gap(12).Children(
+		ui.View().Child("Hello").Style(card).Bg("#111827"),
+		ui.View().Child("Another card").Style(emphasized),
+	)
 }
 ```
 
-`.When(condition, func(s ui.StyleBuilder) ui.StyleBuilder { ... })` conditionally derives a builder from a boolean value. For a reactive condition, use the element’s `.When(getter, style)` or evaluate the builder inside a part’s style accessor. Pass scalar signal getters to modifiers, such as `.Width(width)`; calling `width()` during setup captures its current value.
+`.When(condition, style)` applies extra styles while the condition is true. For a reactive condition, pass a getter: `.When(selected, ui.Style().Bg("#2563eb"))`. Passing `width()` during setup captures the current number; pass `width` (the getter) when it should stay live.
 
 ## Flexbox
 
-Use `.Flex()`, `.FlexRow()`, or `.FlexCol()` to select a flex layout. Give scrolling flex children `.MinHeight(0)` or `.MinWidth(0)` so they can shrink.
+`.Flex()`, `.FlexRow()`, or `.FlexCol()` start a flex layout. Give scrolling children `.MinHeight(0)` or `.MinWidth(0)` so they can shrink.
 
 ```go
 func Row() *ui.Element {
@@ -60,8 +62,6 @@ func Row() *ui.Element {
 
 ## Grid
 
-Grid accepts track strings and the same Rust layout helpers on elements and style builders.
-
 ```go
 func Grid() *ui.Element {
 	return ui.View().Children(ui.Text("Sidebar"), ui.Text("Content")).
@@ -69,9 +69,11 @@ func Grid() *ui.Element {
 }
 ```
 
+`.GridCols(3)` and `.ColSpanFull()` are also available.
+
 ## Text and color
 
-Typography inherits through the node tree. Colors accept hex, `rgb()`/`rgba()`, or packed RGBA values. Override only the child properties that differ. Padding and borders do not inherit.
+Typography inherits to children. Colors accept hex, `rgb()` / `rgba()`, or packed RGBA values. Padding and borders do not inherit.
 
 ```go
 func TypographyExample() *ui.Element {
@@ -84,7 +86,7 @@ func TypographyExample() *ui.Element {
 
 ## Interaction states
 
-Elements and style builders use callbacks for `.Hover(...)`, `.Active(...)`, `.FocusStyle(...)`, `.DisabledStyle(...)`, and `.SelectedStyle(...)`. These states run in the native core. Add `.Transition(...)` to the base style to animate paint changes; see [Transitions & Animation](/docs/go/animations).
+Use `.Hover(...)`, `.Active(...)`, `.FocusStyle(...)`, `.DisabledStyle(...)`, and `.SelectedStyle(...)`. Add `.Transition(...)` on the base style to animate paint changes. See [Transitions & Animation](/docs/go/animations).
 
 ```go
 func SelectableButton() *ui.Element {
@@ -99,7 +101,7 @@ func SelectableButton() *ui.Element {
 
 ## Groups and named group hover
 
-`.Group(true)` marks an unnamed group; `.Group("card")` names it. `.GroupHover(...)` follows the nearest ancestor group, while `.GroupHoverNamed("card", ...)` follows the nearest ancestor with that name. Repeated rules accumulate in declaration order; a node’s own hover style wins for overlapping properties.
+`.Group(true)` marks an unnamed group; `.Group("card")` names it. `.GroupHover(...)` follows the nearest ancestor group. `.GroupHoverNamed("card", ...)` follows the nearest ancestor with that name.
 
 ```go
 func GroupExample() *ui.Element {
@@ -113,4 +115,4 @@ func GroupExample() *ui.Element {
 }
 ```
 
-`.GroupActive(...)` and `.GroupActiveNamed(...)` follow pressed groups. `.FocusWithin(...)` follows focus in the node or a descendant. These states accept paint properties and cannot set the cursor. Hovering group padding or descendants activates the rules without rerunning components.
+`.GroupActive(...)` and `.FocusWithin(...)` work the same way for pressed and focused groups. These states accept paint properties; they cannot set the cursor.

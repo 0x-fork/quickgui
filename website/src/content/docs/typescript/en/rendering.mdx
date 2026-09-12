@@ -1,6 +1,8 @@
-## Rendering model
+JSX builds native UI, not HTML. Use `Show` and `For` when children should appear, disappear, or reorder as state changes.
 
-The Solid universal compiler creates native nodes and retained bindings. It selects the reactive client build even though Bun normally resolves server conditions. Native layout, painting, focus, input, accessibility, and component state remain in Rust.
+## How views work
+
+A component function runs once. Solid updates the properties and child slots that read changing values. Each window has its own root, disposed when the window closes.
 
 ## Conditional content
 
@@ -10,19 +12,19 @@ The Solid universal compiler creates native nodes and retained bindings. It sele
 </Show>
 ```
 
-A conditional region owns its effects and nodes. Removing the region disposes those resources; unrelated sibling nodes keep their identities.
+Removing a branch disposes its effects. Sibling content is left alone.
 
-## Lists and identity
+## Lists
 
 ```tsx
 <For each={items()}>{item => <Text>{item.name}</Text>}</For>
 ```
 
-Use stable item identities for stateful rows. `For` moves existing nodes when order changes. Use `Table` or `Tree` for large native virtual collections and feed only requested visible data.
+Give stateful rows a stable identity so reordering keeps their state. For long collections, use [Table](/docs/typescript/components/table) or [Tree](/docs/typescript/components/tree).
 
 ## Window lifecycle
 
-Each `Window` owns an independent Solid root. Closing a child window must not dispose its siblings. Handle macOS Dock reopening by constructing a fresh window when `hasVisibleWindows` is false.
+Each `Window` has an independent root. Closing one window does not close the others. Handle the Dock icon by opening a new window when `hasVisibleWindows` is false.
 
 ## Current window
 
@@ -33,13 +35,13 @@ function Content() {
 }
 ```
 
-The current window exists during renderer construction and native event dispatch. Capture it in setup or pass it explicitly to asynchronous work.
+Capture the window during setup, or pass it into async work. Do not look it up from an unrelated callback later.
 
-## Checking, testing, and debugging
+## Testing
 
 ```sh
 quickgui check
 quickgui test
 ```
 
-The components gallery is the broad UI example. Quick Git exercises native menus, file dialogs, virtualized rows, splitters, shortcuts, multiple windows, background Git work, and persistence. Native integration checks are separate from headless adapter tests.
+`examples/components-typescript` is the UI gallery. `examples/quick-git-typescript` is a larger app with menus, dialogs, and multiple windows.

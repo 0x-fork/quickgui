@@ -1,22 +1,23 @@
-Components construct a retained tree once when mounted. Reactive bindings update the affected nodes; the native core handles layout, painting, and accessibility.
+A component builds its UI when it mounts. Use `ui.Show` and `ui.For` when children should appear, disappear, or reorder as state changes.
 
-## Rendering model
+## How views work
 
-Every component and UI construction callback returns `*ui.Element` or `*native.Node`. Pass nodes directly as children, or return a `ui.Fragment(...)` for multiple siblings. The compiler rejects discarded UI construction calls and void declaration blocks. Event and effect callbacks retain their normal signatures. Use `ui.Show` and `ui.For` for reactive child structure.
+Every component returns `*ui.Element`. Pass children with `.Child(...)` or `.Children(...)`. Return `ui.Fragment(...)` for several siblings without a wrapper.
 
 ```go
 func ViewExample() *ui.Element {
-	return ui.View().Children(
-
+	return ui.View().Padding(20).Gap(12).Children(
 		ui.Text("Hello from Go"),
 		ui.Button().Child("Continue").OnClick(func() {}),
-	).Padding(20).Gap(12)
+	)
 }
 ```
 
+A plain Go `if` or `for` runs only while the component is being built. It will not update later.
+
 ## Conditional content
 
-Use `ui.Show` when state should mount or remove children. A normal Go `if` runs only during construction. Branch children keep their nodes while the condition stays in the same branch, and disposal removes their bindings.
+Use `ui.Show` to mount or remove children from state.
 
 ```go
 func DisclosureExample() *ui.Element {
@@ -31,11 +32,9 @@ func DisclosureExample() *ui.Element {
 }
 ```
 
-## Lists and identity
+## Lists
 
-Use `ui.For` for a reactive list and provide stable, unique keys. Use `ui.KeyedFor` when retained rows need an accessor to changing item data. Removed rows release their subscriptions; moving a keyed row preserves its native identity. Virtualized tables and lists keep large collections bounded to visible rows.
-
-Use a database ID or another stable identity as the key, not an item’s position. In this example reordering moves the existing rows, and renaming item 1 updates its label through the row accessor. The parent does not recreate the list. Pass a new slice when editing data so the signal receives the update; mutating a previously stored slice in place does not notify subscribers.
+Use `ui.For` for a list that can change. Give each row a stable, unique key — a database ID, not its index. `ui.KeyedFor` also gives the row an accessor to the current item.
 
 ```go
 type ListPerson struct {
@@ -66,11 +65,11 @@ func KeyedListExample() *ui.Element {
 }
 ```
 
+Pass a new slice when you edit data. Mutating the stored slice in place does not notify subscribers. For long lists, use [VirtualList](/docs/go/components/virtual-list) or [Table](/docs/go/components/table).
+
 ## Window lifecycle
 
-`WindowOptions.Component` creates one reactive root per window. Closing the window disposes its nodes and effects. Register resource cleanup with `ui.OnCleanup`. For background work, `ui.Async` delivers its result back to the UI goroutine and cancels when its component is disposed.
-
-Start background work while its component is mounting. The `load` function runs away from the UI goroutine and must respect its context; the completion callback can safely write signals. Removing this component’s owning branch or closing its window cancels the context and suppresses late completion. This example uses the standard `context` package.
+Each window has its own component root. Closing the window disposes its UI and effects. Register cleanup with `ui.OnCleanup`. `ui.Async` runs work off the UI goroutine, delivers the result back, and cancels if the component is gone.
 
 ```go
 func LoadingPanel(load func(context.Context) (string, error)) *ui.Element {
@@ -91,7 +90,7 @@ func LoadingPanel(load func(context.Context) (string, error)) *ui.Element {
 
 ## Current window
 
-Capture `native.CurrentWindow()` while the component is mounting, then use the captured window in callbacks. Do not look it up from an unrelated goroutine. Window events and native requests expose asynchronous callbacks.
+Capture `native.CurrentWindow()` while the component is mounting, then use that handle in callbacks.
 
 ```go
 func CloseButton() *ui.Element {
@@ -100,6 +99,6 @@ func CloseButton() *ui.Element {
 }
 ```
 
-## Checking, testing, and debugging
+## Testing
 
-Run `quickgui test` from the app module to test the same compiled views used by development builds. Use `quickgui fmt --check` to check source formatting. The application is a native Go executable, so ordinary Go diagnostics and debugging tools use the original source files.
+Run `quickgui test` from the app module. `quickgui fmt --check` checks formatting. The app is a Go executable, so the usual Go debugger and stack traces use your source files.

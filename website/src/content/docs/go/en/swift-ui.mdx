@@ -1,14 +1,14 @@
-The `ui.SwiftUI` family embeds real macOS controls in a Go application. Ordinary QuickGUI components work without it.
+`ui.SwiftUI` embeds real macOS controls in a Go application. Ordinary QuickGUI components work without it.
 
 ## Host
 
-Create controls inside `ui.SwiftUI.Host`. The host defines the native view boundary and can size itself from its content.
+Create controls inside `ui.SwiftUI.Host`. The host is the native view boundary and can size itself from its content.
 
 ```go
-func SwiftUiHostExample() *native.Node {
+func SwiftUiHostExample() *ui.Element {
 	return ui.SwiftUI.Host(
 		ui.SwiftUIHostProps{MatchContents: true},
-		func() *native.Node {
+		func() *ui.Element {
 			return ui.SwiftUI.Button(ui.SwiftUIButtonProps{Label: "Continue"})
 		},
 	)
@@ -17,18 +17,18 @@ func SwiftUiHostExample() *native.Node {
 
 ## Native controls
 
-Available controls include Button, Slider, Toggle, ProgressView, Stepper, TextField, SecureField, Picker, SegmentedControl, DatePicker, ColorPicker, and Gauge. Their platform appearance comes from macOS.
+Button, Slider, Toggle, ProgressView, Stepper, TextField, SecureField, Picker, SegmentedControl, DatePicker, ColorPicker, and Gauge. They look and behave like the system controls.
 
 ## Controlled values
 
-Bind an accessor and store the value returned by the native callback. A SwiftUI control and a QuickGUI node can share the same signal. DatePicker uses Unix timestamps in milliseconds.
+Bind a signal and store the value from the native callback. A SwiftUI control and a QuickGUI view can share the same signal. DatePicker uses Unix timestamps in milliseconds.
 
 ```go
-func SwiftUiToggleExample() *native.Node {
+func SwiftUiToggleExample() *ui.Element {
 	on, setOn := ui.CreateSignal(true)
 	return ui.SwiftUI.Host(
 		ui.SwiftUIHostProps{MatchContents: true},
-		func() *native.Node {
+		func() *ui.Element {
 			return ui.SwiftUI.Toggle(ui.SwiftUIToggleProps{
 				IsOn:         on,
 				Label:        "Notifications",
@@ -41,7 +41,7 @@ func SwiftUiToggleExample() *native.Node {
 
 ## Sizing
 
-`MatchContents: true` sizes both axes intrinsically. Use `ui.SwiftUIMatchContents{Vertical: true}` for an intrinsic height with an application-defined width in `PartProps.Style`.
+`MatchContents: true` sizes both axes from the control. Use `ui.SwiftUIMatchContents{Vertical: true}` for an intrinsic height and set the width yourself.
 
 ```go
 ui.SwiftUIHostProps{
@@ -52,4 +52,4 @@ ui.SwiftUIHostProps{
 
 ## Platform support
 
-SwiftUI hosting requires macOS. The prebuilt native host includes the bridge; your Go application still builds without CGO. Native styles can vary with the operating-system version.
+SwiftUI hosting requires macOS. Appearance can vary with the operating-system version.

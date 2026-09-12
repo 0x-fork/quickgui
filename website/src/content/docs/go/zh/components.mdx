@@ -1,8 +1,8 @@
-QuickGUI 将无样式基础组件与具备无障碍行为的复合控件组合在一起。两者都可以通过普通 Go 函数进行组合。
+编写一个返回 `*ui.Element` 的函数。从 `View`、`Text` 和 `Button` 开始，其余控件也用同样的方式组合。
 
 ## 定义组件
 
-Go 组件返回 `*ui.Element` 或 `*native.Node`。参数使用普通类型，子节点直接组合。编译器根据返回类型识别组件，因此 `CounterLabel(count())` 无需注解或 `ui.View().Child(func() *ui.Element { ... })` 包装即可保持响应式。窗口根组件可直接传入函数。
+传入普通的 Go 值。如果参数读取了信号，函数返回后绑定仍然有效，不需要额外标注。
 
 ```go
 func CounterLabel(count int) *ui.Element {
@@ -18,7 +18,7 @@ func ComponentExample() *ui.Element {
 }
 ```
 
-结构体参数也使用普通 Go 类型。更新 `quantity` 只改变绑定的文本，`LineItem` 和它的节点会保持挂载。
+结构体也一样。更新 `quantity` 会改变文本；`LineItem` 保持挂载。
 
 ```go
 type Product struct {
@@ -40,27 +40,20 @@ func Cart() *ui.Element {
 }
 ```
 
-容器可以直接接收子节点，如下所示。子节点回调是可选的，仅在挂载时执行一次；需要延迟构建或继承复合控件上下文时再使用。事件处理器仍使用回调。
+用 `ui.View()` 创建容器，再用 `.Child(...)` 或 `.Children(...)` 追加内容。
 
 ```go
 func CardComponent(title string, children ...any) *ui.Element {
-	return ui.View().Children(
+	return ui.View().FlexCol().Padding(20).Gap(12).Children(
 		ui.Text(title).FontWeight(600),
 		children,
-	).Padding(20).Gap(12).FlexCol()
-}
-
-func CardComposition() *ui.Element {
-	return CardComponent("Account",
-		ui.Text("Manage your account settings."),
-		ui.Button().Child("Save").OnClick(func() { log.Print("Saved") }),
 	)
 }
 ```
 
 ## 基础组件
 
-从 `ui.View`、`ui.Text`、`ui.Button` 和 `ui.Input` 开始。使用 `ui.View()` 创建容器，通过 `.Child(...)` 或 `.Children(...)` 追加子节点，并链式设置样式、属性和事件。组件与延迟构建回调均返回节点。
+`View`、`Text`、`Button` 和 `Input` 覆盖大多数布局和文本。在同一个元素上链式调用样式、属性和事件。
 
 ```go
 func ButtonExample(save func()) *ui.Element {
@@ -73,48 +66,49 @@ func ButtonExample(save func()) *ui.Element {
 		BorderRadius(8).
 		Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor("#3b82f6") }).
 		OnClick(save)
-
 }
 ```
 
 ## 复合组件
 
-使用 `tabs := ui.NewTabs()` 创建组件实例，再通过 `tabs.Root()`、`tabs.List()` 和 `tabs.Panel(...)` 组合部件。核心负责角色、键盘导航、焦点与控件状态；部件在插入根节点时获得对应的上下文。
+先创建实例，再组合它的具名部件。字符串可以直接作为子节点。
 
 ```go
 func TabsExample() *ui.Element {
-    tabs := ui.NewTabs().DefaultValue("account")
-    return tabs.Root().Children(
-        tabs.List().Children(
-            tabs.Tab("account").Child("Account"),
-            tabs.Tab("security").Child("Security"),
-        ),
-        tabs.Panel("account").Child("Account settings"),
-        tabs.Panel("security").Child("Security settings"),
-    )
+	tabs := ui.NewTabs().DefaultValue("account")
+	return tabs.Root().Children(
+		tabs.List().Children(
+			tabs.Tab("account").Child("Account"),
+			tabs.Tab("security").Child("Security"),
+		),
+		tabs.Panel("account").Child("Account settings"),
+		tabs.Panel("security").Child("Security settings"),
+	)
 }
 ```
 
+在实例上配置行为，在部件上设置样式。部件可以像普通子节点一样嵌套。
+
 ## 受控状态
 
-受控值使用访问器，其回调保存控件接受的新值。使用默认值可让组件自己管理状态。可选标量使用指针，多选值使用切片。
+传入当前值，并在变更回调里写入下一个值。在拥有它的组件内部创建实例。
 
 ```go
 func CheckboxExample() *ui.Element {
-    checked, setChecked := ui.CreateSignal(false)
-    checkbox := ui.NewCheckbox().Checked(checked()).OnCheckedChange(
-        func(next bool, _ *native.Event) { setChecked(next) },
-    )
-    return checkbox.Root().FlexRow().Gap(8).Children(
-        checkbox.Indicator().Child("✓"),
-        "Remember me",
-    )
+	checked, setChecked := ui.CreateSignal(false)
+	checkbox := ui.NewCheckbox().Checked(checked()).OnCheckedChange(
+		func(next bool, _ *native.Event) { setChecked(next) },
+	)
+	return checkbox.Root().FlexRow().Gap(8).Children(
+		checkbox.Indicator().Child("✓"),
+		"Remember me",
+	)
 }
 ```
 
 ## 组件类别
 
-参考文档覆盖表单、选择器、布局与数据、浮层、菜单和路由。`examples/components` 包含原始画廊的全部 42 个演示，包括 5,000 行表格和懒加载树。独立的 `examples/swift-ui` 画廊演示原生 SwiftUI 托管。
+[组件参考](/docs/go/components/button) 覆盖表单、浮层、菜单、表格、树等。可从本仓库运行示例：
 
 ```bash
 bun packages/cli/src/cli.ts dev --project examples/components
@@ -122,11 +116,11 @@ bun packages/cli/src/cli.ts dev --project examples/components
 
 ## 设置各部件的样式
 
-通过 `PartProps.Style` 设置部件样式。使用 `ui.Style()` 和链式方法构建样式，通过 `.Merge(...)` 合并共享构建器。部件也接受构建器切片及返回这些值的访问器。选中状态和主题信号会更新保留的部件，不必重建子节点。
+直接给部件设置样式，或共享一个 `ui.Style()` 值：
 
 ```go
 triggerStyle := ui.Style().Padding(12).RoundedLg().Bg("#2563eb")
 return popover.Trigger().Style(triggerStyle).TextColor("#ffffff").Child("Account")
 ```
 
-组件侧栏中每个原生控件都有独立页面。完整使用流程见[表单与输入](/docs/go/forms-and-input)和[浮层与对话框](/docs/go/overlays-and-dialogs)。
+添加 `OnClick` 仍会保留部件的默认动作。需要取消时，在 `OnClickEvent` 上调用 `PreventDefault()`。

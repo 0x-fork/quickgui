@@ -13,7 +13,7 @@ SwiftUiButton::new(1)
     .control_size(SwiftUiControlSize::Large)
 ```
 
-The operating system draws native glass where available. Layout and hit testing remain owned by the native hosting layer.
+macOS draws glass where it is available.
 
 ## Reverse hosting
 
@@ -21,12 +21,12 @@ The operating system draws native glass where available. Layout and hit testing 
 SwiftUiQuickGuiHost::pending(1)
 ```
 
-Embed a QuickGUI subtree back into the SwiftUI tree with `SwiftUiQuickGuiHost` and `MacSwiftUiHost::set_embedded_view`. The hosted surface is an ordinary QuickGUI renderer.
+Embed a QuickGUI subtree with `SwiftUiQuickGuiHost` and `MacSwiftUiHost::set_embedded_view`.
 
 ## SwiftUI popover
 
-`SwiftUiPopover` has explicit `trigger` and `content` element lists. A `SwiftUiQuickGuiHost` inside that content owns a separate ordinary QuickGUI renderer.
+`SwiftUiPopover` has `trigger` and `content` element lists. A `SwiftUiQuickGuiHost` inside that content hosts ordinary QuickGUI children.
 
 ## Lifetime
 
-Native and Rust ownership must agree: an embedded renderer is disposed with its host, and a presented panel is disposed with its owner. Dropping `MacSwiftUiHost` releases the NSHostingView.
+Dropping `MacSwiftUiHost` releases the native view. A presented panel closes with its owner.

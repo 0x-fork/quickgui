@@ -1,37 +1,38 @@
-The optional `github.com/egoist/quickgui/go/updater` package provides automatic application updates. Importing it includes `@quickgui/extension-updater`; apps without the import include neither that library nor Sparkle. Ordinary Go edits reuse the prebuilt native artifacts.
+Import `github.com/egoist/quickgui/go/updater` to include automatic updates. Apps that do not import it do not ship the updater.
 
 ## Configuration
 
-Generate an Ed25519 key pair with Bun tooling:
+Generate a signing key pair:
 
 ```sh
 quickgui keygen --sparkle --out-dir /secure/my-app-update-keys
 ```
 
-Keep the private `.key` outside version control and copy the contents of `.pub` into `quickgui.toml`:
+Keep the private `.key` out of version control. Copy the `.pub` contents into config:
 
 ```toml
 [updates]
 baseUrl = "https://downloads.example.com/my-app"
 publicKey = "BASE64_PUBLIC_KEY_FROM_THE_PUB_FILE"
 automaticChecks = true
-# Optional; {target} expands to darwin-arm64, windows-x64, etc.
 feedUrl = "https://downloads.example.com/my-app/appcast-{target}.xml"
-# Optional release notes, at most 16 KiB of plain text.
 notesFile = "RELEASE_NOTES.md"
 ```
 
-The CLI embeds the current version, identifier, target-specific feed URL, default preference, and public key in the Go executable. On macOS it also generates Sparkle's Info.plist settings and signs the nested Sparkle helpers with the app's identity. Secret keys are never embedded. Developer ID apps are supported; App Store and sandboxed builds must exclude the updater import using a Go build tag or platform file.
+`{target}` expands to values such as `darwin-arm64`. Release notes are optional plain text, up to 16 KiB.
+
+The CLI embeds the version, identifier, feed URL, and public key. Secret keys are never embedded. App Store and sandboxed builds should exclude the updater import with a Go build tag.
 
 ## Application usage
 
-Start after `native.Run` reports readiness, outside components. Share the handle between settings, menus, and any update banner. An updater belongs to the application, so closing a window must not close it.
+Start after `native.Run` is ready, outside components. Share one updater for the whole app.
 
 ```go
 import (
+	"log"
+
 	"github.com/egoist/quickgui/go/native"
 	"github.com/egoist/quickgui/go/updater"
-	"log"
 )
 
 var updates *updater.Updater
@@ -42,10 +43,8 @@ func startUpdater() {
 			log.Print(event.Error)
 		}
 		if event.QuitRequired {
-			// Runs the app's ordinary quit hooks; save or cancel there as usual.
 			native.App.Quit(false, nil)
 		}
-		// Feed event.Status and event.Version into UI signals for an update banner.
 	}, func(err error) {
 		if err != nil {
 			log.Print(err)
@@ -54,54 +53,44 @@ func startUpdater() {
 }
 ```
 
-Call `updates.Check(done)` from a Check for Updates menu item, `updates.Install(done)` from an available-update banner, and `updates.SetAutomaticChecks(enabled, done)` from settings. Callbacks always run on the Go UI goroutine. `State()` reads the latest cached event without calling native code or polling. Initialization and commands report errors through their completion callbacks.
+Call `updates.Check(done)` from a Check for Updates item, `updates.Install(done)` from an available-update banner, and `updates.SetAutomaticChecks(enabled, done)` from settings. Callbacks run on the UI goroutine. `State()` returns the latest event.
 
-`Options` can override the feed URL and public key. Windows/Linux also allow current version and identifier overrides; Sparkle reads those from the app bundle, and its public key must match the embedded `SUPublicEDKey`. Development builds are disabled by default, including when using a release-built native library. Use `AllowDevelopment: true` only with a deliberately configured test feed and disposable app bundle.
+`Options` can override the feed URL and public key. Development builds are disabled by default. Use `AllowDevelopment: true` only with a test feed and a disposable app bundle.
 
 ## Lifecycle
 
-`Event.Status` is `idle`, `checking`, `available`, `downloading`, `installing`, or `disabled`. Events include version, plain-text notes, progress byte counts, the automatic-check preference, and an optional error. An explicit check that finds no update reports `Kind == "up-to-date"` on the portable backend. macOS also uses Sparkle's standard result windows.
+`Event.Status` is `idle`, `checking`, `available`, `downloading`, `installing`, or `disabled`. Events include version, notes, progress, the automatic-check preference, and an optional error.
 
-On macOS, scheduled discoveries are retained for an in-app banner. Manual checks promote a retained result into Sparkle's standard UI. Sparkle owns download, verification, installation, scheduling, and relaunch. Its persisted preference takes precedence over the packaged default.
+On macOS, Sparkle handles download, verification, installation, and relaunch. Manual checks can show Sparkle’s standard UI; scheduled checks can feed an in-app banner.
 
-Windows and Linux perform one quiet check per launch when enabled, and another when automatic checking is enabled. There is no idle polling timer. Download progress is throttled to at most ten events per second plus completion. Checks and installation cannot overlap; an explicit check adopts an in-flight automatic check.
-
-The portable installer verifies the artifact before preparing a handoff. `QuitRequired` means the helper has validated its inputs and is waiting for the current process to exit. Call `native.App.Quit(false, nil)` after dealing with unsaved work. If quit is cancelled, the helper times out after two minutes and leaves the current application intact. Closing an updater cancels checks and pre-handoff downloads; an accepted installer handoff is already owned by the helper.
+Windows and Linux check once at launch when automatic checking is enabled. `QuitRequired` means a helper is waiting for the app to exit. Call `native.App.Quit(false, nil)` after saving work. If quit is cancelled, the helper times out and leaves the current app in place.
 
 ## Platforms
 
 | Platform | Update payload | Installation |
 | --- | --- | --- |
-| macOS | ZIP containing the signed `.app` | Sparkle 2.9.4, embedded only with the extension |
-| Windows | QuickGUI NSIS `.exe` installer | A helper waits for app exit, runs the verified installer with `/S` and the current install directory, then relaunches |
-| Linux | Type-2 `.AppImage` | A helper waits for app exit, replaces the user-owned AppImage atomically, and restores the old image if replacement or startup fails |
+| macOS | ZIP containing the signed `.app` | Sparkle, included only with the updater |
+| Windows | NSIS `.exe` installer | A helper waits for exit, runs the verified installer silently, then relaunches |
+| Linux | Type-2 `.AppImage` | A helper waits for exit and replaces the user-owned AppImage |
 
-Linux `.deb`, system binaries, unpacked AppDirs, and root-owned installations report `disabled`; use their package manager. A new AppImage must retain the updater import so the SDK can acknowledge startup to the helper. Linux backups are deleted only after that acknowledgement and a short startup grace period. Windows installer failures are reported; rollback remains the installer's responsibility.
+Linux `.deb` packages, system binaries, and root-owned installs report `disabled`. Use the platform package manager there.
 
-The portable backend supports HTTPS Sparkle RSS appcasts, raw Ed25519 enclosure signatures, semantic-version ordering, target-specific feeds, and Windows minimum-system requirements. It skips deltas and unsupported channel/rollout constraints. It does not implement every Sparkle feature. Feed reads are limited to 1 MiB, downloads to 512 MiB, and presentation notes to 16 KiB. Signatures and declared lengths are checked again by the installer helper before installation. No unsigned fallback is available.
+Feeds are HTTPS Sparkle RSS appcasts with Ed25519 signatures. There is no unsigned fallback.
 
 ## Publishing
 
-Place the private key in `QUICKGUI_UPDATER_PRIVATE_KEY` (or `SPARKLE_PRIVATE_KEY`), using your CI secret store. Alternatively, `updates.ed25519SecretKey` points to a local key file. Keys use Sparkle's current base64-encoded 32-byte Ed25519 seed format and also work with Sparkle's `sign_update` tool.
+Put the private key in `QUICKGUI_UPDATER_PRIVATE_KEY` (or `SPARKLE_PRIVATE_KEY`). Alternatively, `updates.ed25519SecretKey` points to a local key file.
 
 ```sh
 quickgui build --update-manifest
 ```
 
-The CLI signs the finished platform artifact and writes `appcast-<target>.xml`. Upload the versioned artifact first, then replace the feed at its configured HTTPS URL. Feeds are per target, so architectures cannot accidentally install each other's binaries. The generated feed contains the current release; it does not generate Sparkle delta archives or staged rollouts. `updates.manifest = true` enables generation for every production build.
+The CLI signs the artifact and writes `appcast-<target>.xml`. Upload the versioned artifact first, then replace the feed. Each architecture has its own feed. `updates.manifest = true` generates a feed on every production build.
 
-macOS archives preserve framework symlinks and should contain the Developer ID signed, notarized app. Windows requires `makensis`; sign the installer with the configured Authenticode identity. Linux requires `appimagetool` to produce an updateable AppImage. Public-key mismatches, missing signing keys, missing installers, and unsupported payloads fail the build.
-
-Existing Rust users can explicitly enable the legacy `updater` Cargo feature for the Minisign JSON `UpdateClient`. It is no longer a default feature or part of the Go native core. That legacy client and its CLI manifest path remain separate from this Sparkle-compatible extension; use `updater.Start`, not the removed `native.Updater` facade.
+macOS archives should contain a Developer ID signed, notarized app. Windows needs `makensis`. Linux needs `appimagetool`.
 
 ## Native artifacts
 
-```sh
-bun packages/native/build.ts --extension updater
-```
+From this repository, build the updater once with `bun packages/native/build.ts --extension updater`. Packaged apps include the updater automatically when the Go import is present.
 
-The builder stages the shared library plus Sparkle resources on macOS, or the installer helper on Windows/Linux. The CLI discovers the import transitively and fetches the exact-version extension package when necessary. End users need only the packaged application.
-
-The current npm release matrix ships macOS artifacts. Windows/Linux implementations can be built from source on their target hosts; publishing those prebuilt targets follows the framework's broader platform release support.
-
-See the [runnable example](https://github.com/egoist/quickgui/tree/main/examples/updater) and [native extension contract](https://github.com/egoist/quickgui/blob/main/docs/go/architecture/extensions.md). Sparkle configuration and appcast details are documented by [Sparkle](https://sparkle-project.org/documentation/).
+See the [updater example](https://github.com/egoist/quickgui/tree/main/examples/updater). Sparkle’s own docs cover appcast details: [Sparkle](https://sparkle-project.org/documentation/).

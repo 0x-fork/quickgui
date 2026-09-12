@@ -1,47 +1,48 @@
-这些指南使用 Go 前端。可在侧栏中选择使用 Solid 2 JSX 的 TypeScript 前端。
-
-QuickGUI 应用是普通的 Go 程序。用 Go 编写组件和细粒度响应式状态，并以 `CGO_ENABLED=0` 构建。purego 在同一进程中加载预编译原生库；Bun 仅运行开发与打包 CLI。
-
 ## 系统要求
 
 - macOS 14 或更新版本
 - Go 1.23 或更新版本
-- Bun 1.3 或更新版本
+- Bun 1.4 或更新版本
 - Xcode Command Line Tools（`xcode-select --install`）
 
-当前打包的 UI 应用面向 macOS。普通应用构建直接使用预编译原生宿主。
+当前支持的目标平台是 macOS。
 
 ## 创建项目
 
-CLI 尚未发布。请从 [QuickGUI 源码仓库](https://github.com/egoist/quickgui)运行 Go 计数器：
+最快的试用方式是运行本仓库中的计数器示例：
 
 ```bash
+git clone https://github.com/egoist/quickgui.git
+cd quickgui
 bun install
-bun packages/cli/src/cli.ts dev --project examples/counter
+bun run build:native
+cd examples/counter
+bun run dev
 ```
 
-若要创建独立应用，生成项目时跳过安装注册表依赖：
+要从同一份源码创建新应用：
 
 ```bash
-bun packages/cli/src/cli.ts init ../my-app --no-install
+bun packages/cli/src/cli.ts init ../my-app --language go --no-install
 cd ../my-app
 go mod edit -replace github.com/egoist/quickgui/go=../quickgui/go
 go mod tidy
 ```
 
-在语言选择提示中选择 **Go**。在生成的 `quickgui.config.ts` 中，将 `defineConfig` 导入路径改为 `../quickgui/packages/cli/src/index.ts` 以使用本地 CLI。然后在 QuickGUI 源码目录运行 `bun packages/cli/src/cli.ts dev --project ../my-app`。给 `init` 传入 `--language go` 可跳过语言选择。
+然后在 QuickGUI 源码目录运行 `bun packages/cli/src/cli.ts dev --project ../my-app`。软件包发布后，通常使用 `quickgui init my-app --language go`。
 
 ## 第一个窗口
 
-生成的 `main.go` 从 `native` 导入窗口 API，从 `ui` 导入组件。将组件函数直接传给 `WindowOptions.Component`。调用一次 `native.Run` 启动应用事件循环。
+`main.go` 通过 `native.Run` 启动应用并打开窗口。把组件函数传给 `WindowOptions.Component`。组件返回该窗口的界面。
 
 ```go
 package main
 
 import (
+	"log"
+
 	"github.com/egoist/quickgui/go/native"
 	"github.com/egoist/quickgui/go/ui"
-	"log"
 )
 
 func Counter() *ui.Element {
@@ -54,8 +55,7 @@ func Counter() *ui.Element {
 		Gap(20).
 		Bg("#090d16").
 		TextColor("#e2e8f0").
-		Child(ui.Text("Fine-grained native UI").FontSize(28).FontWeight(700)).
-		Child(ui.Text("Count: ", count())).
+		Child(ui.Text("Count: ", count()).FontSize(28).FontWeight(700)).
 		Child(ui.Button().
 			OnClick(func() { setCount(count() + 1) }).
 			Padding(12).
@@ -87,18 +87,22 @@ func main() {
 }
 ```
 
+当用户点击 Dock 图标且没有可见窗口时，`OnReopen` 会再次打开窗口。
+
 ## 运行与构建
 
-监视器会重新构建 Go 源码并重启开发应用。格式化命令为较长的组件调用添加一致的换行，输出仍是标准 Go 语法。生产构建输出到 `dist/darwin-*`。
-
 ```bash
-bun packages/cli/src/cli.ts dev --project ../my-app
-bun packages/cli/src/cli.ts fmt --project ../my-app
-bun packages/cli/src/cli.ts build --project ../my-app
+quickgui dev
+quickgui fmt
+quickgui build
 ```
+
+`dev` 会在你编辑时重新编译 Go 代码并重启应用。`fmt` 会为较长的 UI 调用换行。`build` 把打包后的应用写到 `dist/`。
+
+在本仓库中，在这些命令前加上 `bun packages/cli/src/cli.ts`；如果不在应用目录内，再传入 `--project`。
 
 ## 后续步骤
 
-- 了解[组件与信号](/docs/go/reactivity)。
-- 添加[样式与条件选项](/docs/go/styling)。
-- 浏览[组件参考](/docs/go/components)。
+- 编写[组件](/docs/go/components)。
+- 用[信号](/docs/go/reactivity)保持界面同步。
+- 添加[样式与布局](/docs/go/styling)。

@@ -1,6 +1,17 @@
+Modifiers style native SwiftUI controls. Reverse hosting puts QuickGUI content inside SwiftUI.
+
 ## Modifiers
 
-Apply typed modifier factories from `@quickgui/solid/swift-ui/modifiers` in declaration order. They include control size, tint, disabled state, label style, button border shape, and button style.
+Import factories from `@quickgui/solid/swift-ui/modifiers` and pass them in order.
+
+```tsx
+<Button
+  label="Create project"
+  modifiers={[buttonStyle("borderedProminent"), controlSize("large"), tint("#f97316")]}
+/>
+```
+
+They include control size, tint, disabled state, label style, button border shape, and button style.
 
 ## Liquid Glass
 
@@ -8,7 +19,7 @@ Apply typed modifier factories from `@quickgui/solid/swift-ui/modifiers` in decl
 <Button label="Continue" modifiers={[buttonStyle("glass"), controlSize("large")]} />
 ```
 
-The operating system draws native glass where available. Layout and hit testing remain owned by the native hosting layer.
+macOS draws glass where it is available.
 
 ## Reverse hosting
 
@@ -22,8 +33,8 @@ The operating system draws native glass where available. Layout and hit testing 
 
 ## SwiftUI popover
 
-Use `Popover.Trigger` with a rendered SwiftUI control and `Popover.Content` for the presented hierarchy. A `QuickGUIHostView` inside that content owns a separate ordinary QuickGUI renderer.
+Use `Popover.Trigger` with a SwiftUI control and `Popover.Content` for the presented UI. A `QuickGUIHostView` inside that content hosts ordinary QuickGUI children.
 
 ## Lifetime
 
-Native and Solid ownership must agree: an embedded renderer is disposed with its host, and a presented panel is disposed with its owner. Unmounting removes handlers and retained resources; never keep a detached host alive through a global subscription.
+An embedded host closes with its owner. Unmounting removes the native view; do not keep a detached host through a global subscription.

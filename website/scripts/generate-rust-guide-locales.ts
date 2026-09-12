@@ -3,6 +3,18 @@ import { resolve } from "node:path";
 import { DOCS_GUIDE_ORDER, docsOutline } from "../src/lib/docs-structure";
 import type { Locale } from "../src/i18n";
 
+/**
+ * Rust zh/ja guides are hand-translated.
+ * Running this script would replace those translations with English bodies
+ * and localized H2s. Refuse unless FORCE_RUST_GUIDE_LOCALES=1.
+ */
+if (process.env.FORCE_RUST_GUIDE_LOCALES !== "1") {
+  console.error(
+    "Rust zh/ja guides are maintained by hand. Refusing to overwrite. Set FORCE_RUST_GUIDE_LOCALES=1 only if you intend to replace them with English bodies.",
+  );
+  process.exit(1);
+}
+
 const root = resolve(import.meta.dir, "../src/content/docs/rust");
 const notes: Record<Exclude<Locale, "en">, string> = {
   ja: "Rust ガイド本文は現在英語です。コンポーネントの API リファレンスには日本語の説明があります。",

@@ -69,11 +69,11 @@ export const en = {
   },
   code: {
     title: "Go, TypeScript, and Rust examples",
-    lead: "One reactive counter, three familiar languages. Pick a language to explore the code. Each version updates just the bindings that change, keeping the rest of the tree mounted.",
+    lead: "One reactive counter, three familiar languages. Pick a language to explore the code.",
     frontends: {
       go: "Fluent native views and composable styles, with signals that keep your UI in sync.",
       typescript: "Solid 2 signals and familiar JSX, rendered as native components.",
-      rust: "Native views with Rust builders, linked directly into your app with Cargo.",
+      rust: "Native views with Rust builders, and state that stays on the view.",
     },
   },
   swiftUi: {

@@ -107,15 +107,23 @@ test('Go, TypeScript, and Rust share guide order, localized sections, and sideba
   }
 })
 
-test('the sidebar separates concepts from one complete component reference', async () => {
+test('the sidebar separates guides from one complete component reference', async () => {
   for (const frontend of DOCS_FRONTENDS) {
     for (const locale of SUPPORTED_LOCALES) {
       const groups = docsNavGroups(locale, frontend)
-      const concepts = groups.find((group) => group.id === 'concepts')!
-      expect(concepts.items.map((item) => item.path)).toEqual(
-        ['reactivity', 'rendering', 'components', 'routing', 'styling', 'animations'].map(
-          (slug) => `/docs/${frontend}/${slug}`,
-        ),
+      const guides = groups.find((group) => group.id === 'guides')!
+      expect(guides.items.map((item) => item.path)).toEqual(
+        [
+          'components',
+          'reactivity',
+          'rendering',
+          'styling',
+          'forms-and-input',
+          'overlays-and-dialogs',
+          'routing',
+          'animations',
+          'native-services',
+        ].map((slug) => `/docs/${frontend}/${slug}`),
       )
       const components = groups.filter((group) => group.id === 'components')
       expect(components).toHaveLength(1)
@@ -127,9 +135,10 @@ test('the sidebar separates concepts from one complete component reference', asy
       const paths = groups.flatMap((group) => group.items.map((item) => item.path))
       expect(new Set(paths).size).toBe(paths.length)
       if (locale === 'en') {
-        expect(concepts.title).toBe('Concepts')
+        expect(guides.title).toBe('Guides')
         expect(groups.map((group) => group.title)).not.toContain('Primitives')
         expect(groups.map((group) => group.title)).not.toContain('QuickGUI UI')
+        expect(groups.map((group) => group.title)).not.toContain('Concepts')
       }
       for (const component of UI_COMPONENTS) {
         const content = await readFile(
@@ -150,7 +159,7 @@ test('the sidebar separates concepts from one complete component reference', asy
   }
 })
 
-test('localized concepts and TypeScript guides keep matching outlines and examples', async () => {
+test('localized guides keep matching outlines and examples', async () => {
   for (const frontend of DOCS_FRONTENDS) {
     for (const source of docsPages(frontend)) {
       let englishExamples: string[] = []

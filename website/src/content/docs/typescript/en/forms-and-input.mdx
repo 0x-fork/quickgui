@@ -1,23 +1,58 @@
+Keep field values in signals and write accepted changes back from event handlers.
+
 ## Text input
 
 ```tsx
 const [value, setValue] = createSignal("");
+const [notes, setNotes] = createSignal("");
+
 <Input value={value()} onInput={event => setValue(event.value ?? "")} placeholder="Name" />
 <TextArea value={notes()} onInput={event => setNotes(event.value ?? "")} />
 ```
 
+`onSubmit` handles Return in a single-line input.
+
 ## Fields
 
-`Field`, `Fieldset`, labels, descriptions, controls, and error parts declare accessible relationships and validation. Field validity, touched/dirty state, validation triggers, and debounce deadlines are coordinated by Rust.
+`Field` connects a label, control, description, and error.
+
+```tsx
+<Field.Root required invalid={name().length === 0} validationMessage="Enter a name">
+  <Field.Label><Text>Name</Text></Field.Label>
+  <Field.Control value={name()} onInput={event => setName(event.value ?? "")} />
+  <Field.Description><Text>Shown on your profile.</Text></Field.Description>
+  <Field.Error><Text>Enter a name.</Text></Field.Error>
+</Field.Root>
+```
 
 ## Choices
 
-Compose `Checkbox`, `CheckboxGroup`, `RadioGroup`, `Radio`, and `Switch` with their indicators and labels. Controlled state is updated through each root’s change callback; disabled/read-only state belongs to the native control.
+Compose `Checkbox`, `CheckboxGroup`, `RadioGroup`, `Radio`, and `Switch` with their indicators and labels. Update state from each root’s change callback.
+
+```tsx
+<Checkbox.Root checked={checked()} onCheckedChange={setChecked}>
+  <Checkbox.Indicator><Text>✓</Text></Checkbox.Indicator>
+  <Text>Remember this device</Text>
+</Checkbox.Root>
+```
 
 ## Select
 
-`Select`, `Combobox`, and `Autocomplete` declare options ahead of native filtering and keyboard navigation. Their state hooks expose selection, query, highlight, and chips for custom parts. Keep option values stable.
+`Select` chooses from a list. `Combobox` mixes typing and selection. `Autocomplete` accepts free-form input.
+
+```tsx
+<Select.Root
+  ariaLabel="Theme"
+  items={[
+    { value: "system", label: "System" },
+    { value: "light", label: "Light" },
+    { value: "dark", label: "Dark" },
+  ]}
+  value={theme()}
+  onValueChange={setTheme}
+/>
+```
 
 ## Events
 
-Input events carry text in `event.value`. Structured key, pointer, gesture, drop, component-change, and commit payloads have dedicated decoder helpers. Use declared handlers so the core knows which events must cross the FFI boundary.
+Text events put the string in `event.value`. Buttons use `onClick`. Keep UI updates in those handlers; run slow work elsewhere and write signals when it finishes.

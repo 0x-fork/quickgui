@@ -1,15 +1,19 @@
-## Defining components
+Return JSX from ordinary functions. Put layout, typography, and color in `style`.
 
-Return native JSX from ordinary TypeScript functions. Children and reactive prop getters are evaluated under the component owner; do not manually invoke components as setup side effects.
+## Defining components
 
 ```tsx
 function Greeting(props: { name: string }) {
   return <Text>Hello, {props.name}</Text>;
 }
-<Greeting name={name()} />
+
+function Example() {
+  const [name] = createSignal("Ada");
+  return <Greeting name={name()} />;
+}
 ```
 
-`<View>some text</View>` accepts text directly. Use intrinsic `<div>` and `<span>` for `View` and `Text` without component imports. All visual declarations use camelCase keys inside `style`; direct style attributes, `class`, and `className` are unsupported.
+`<View>` accepts text directly. `<div>` and `<span>` are aliases for `View` and `Text`. There is no `class` or `className`; everything visual goes in `style`.
 
 ```tsx
 <div style={{ flexCol: true, gap2: true }}>
@@ -20,7 +24,7 @@ function Greeting(props: { name: string }) {
 
 ## Primitives
 
-`View`, `Text`, `Button`, `Input`, `TextArea`, `Markdown`, `Image`, `Svg`, `Shader`, `VirtualList`, and optional `Terminal` are native building blocks. `TextInput` is also available as the single-line input spelling.
+`View`, `Text`, `Button`, `Input`, `TextArea`, `Markdown`, `Image`, `Svg`, `Shader`, and `VirtualList` are the building blocks. `TextInput` is the same as `Input`. `Terminal` is available when you add the terminal package.
 
 ## Compound components
 
@@ -31,16 +35,21 @@ function Greeting(props: { name: string }) {
 </Checkbox.Root>
 ```
 
-Compound roots coordinate their named parts through Rust-owned state. Keep parts under the intended root so their scope, focus, and value relationships are explicit.
+Keep parts under the root they belong to so focus and values stay connected.
 
 ## Controlled state
 
-Use controlled values with the matching change callback, or `defaultValue`, `defaultChecked`, and `defaultOpen` where a component supports internal state. Native events describe the core decision; update the signal to accept that value.
+Pass the current value and a change callback, or use `defaultValue`, `defaultChecked`, and `defaultOpen` when the component can own its state.
+
+```tsx
+const [name, setName] = createSignal("");
+<Input value={name()} onInput={event => setName(event.value ?? "")} />
+```
 
 ## Component families
 
-The reference covers selection controls, tabs, disclosure, fields, menus, context menus, pickers, dialogs, popovers, preview cards, drawers, navigation menus, ranges, splitters, progress, meters, toggles, toolbars, toasts, calendars, date/time fields, scroll areas, tables, trees, and SwiftUI controls. Run `examples/components-typescript` for the complete gallery.
+The [component reference](/docs/typescript/components/button) covers forms, overlays, menus, tables, trees, and more. This repository includes `examples/components-typescript` as a gallery.
 
 ## Styling parts
 
-Apply `style` to each visual part. Parts intentionally remain unstyled so layout and colors belong to the application. State hooks such as `useSliderState`, `useTabsState`, `useSelectState`, `useMenuItemState`, and `useScrollAreaState` expose the current native state for custom presentation.
+Apply `style` on each visible part. Parts ship unstyled so colors and layout belong to your app. Hooks such as `useTabsState` and `useSelectState` expose the current state for custom presentation.

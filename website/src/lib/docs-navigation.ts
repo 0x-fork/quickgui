@@ -16,7 +16,7 @@ interface DocsNavItem {
 }
 
 export interface DocsNavGroup {
-  id: 'introduction' | 'concepts' | 'components' | 'swift-ui' | 'swift-ui-components'
+  id: 'introduction' | 'guides' | 'components' | 'swift-ui' | 'swift-ui-components' | 'advanced'
   title: string
   items: readonly DocsNavItem[]
 }
@@ -24,24 +24,27 @@ export interface DocsNavGroup {
 const labels = {
   en: {
     introduction: 'Introduction',
-    concepts: 'Concepts',
+    guides: 'Guides',
     components: 'Components',
     swiftUi: 'SwiftUI',
     swiftComponents: 'SwiftUI Components',
+    advanced: 'Advanced',
   },
   zh: {
     introduction: '简介',
-    concepts: '核心概念',
+    guides: '指南',
     components: '组件',
     swiftUi: 'SwiftUI',
     swiftComponents: 'SwiftUI 组件',
+    advanced: '进阶',
   },
   ja: {
     introduction: 'はじめに',
-    concepts: '基本概念',
+    guides: 'ガイド',
     components: 'コンポーネント',
     swiftUi: 'SwiftUI',
     swiftComponents: 'SwiftUI コンポーネント',
+    advanced: '応用',
   },
 } as const
 
@@ -71,24 +74,21 @@ export function docsNavGroups(locale: Locale, frontend: DocsFrontend): readonly 
     {
       id: 'introduction',
       title: text.introduction,
-      items: [
-        guide('getting-started'),
-        guide('project-structure'),
-        guide('updater'),
-        guide('extensions'),
-        guide('native-services'),
-      ],
+      items: [guide('getting-started'), guide('project-structure')],
     },
     {
-      id: 'concepts',
-      title: text.concepts,
+      id: 'guides',
+      title: text.guides,
       items: [
+        guide('components'),
         guide('reactivity'),
         guide('rendering'),
-        guide('components'),
-        guide('routing'),
         guide('styling'),
+        guide('forms-and-input'),
+        guide('overlays-and-dialogs'),
+        guide('routing'),
         guide('animations'),
+        guide('native-services'),
       ],
     },
     ...COMPONENT_NAV_GROUPS.map((group): DocsNavGroup => ({
@@ -105,6 +105,11 @@ export function docsNavGroups(locale: Locale, frontend: DocsFrontend): readonly 
       id: 'swift-ui-components',
       title: text.swiftComponents,
       items: SWIFT_UI_NAV_GROUP.items.map(component),
+    },
+    {
+      id: 'advanced',
+      title: text.advanced,
+      items: [guide('updater'), guide('extensions')],
     },
   ]
 }

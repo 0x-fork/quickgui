@@ -1,18 +1,37 @@
+Declare routes, render the match in the current window, and navigate with links or `useNavigate`.
+
 ## Routes
 
 ```tsx
-import { Router, Route, Outlet, Link } from "@quickgui/solid/router";
+import { Router, Route, Link } from "@quickgui/solid/router";
+
 <Router initialPath="/">
-  <Route path="/" component={() => <Text>Home</Text>} />
+  <Route path="/" component={() => <Link href="/settings">Settings</Link>} />
+  <Route path="/settings" component={() => <Text>Settings</Text>} />
   <Route path="/projects/:id" component={Project} />
 </Router>
 ```
 
-Rust owns route matching, normalized locations, and bounded memory history. Solid declares routes and renders the matched component chain.
-
 ## Nested layouts
 
-Nested routes are relative to their parent. Render `<Outlet />` or the layout component’s `children` where the next matched route belongs. A pathless route can provide a shared layout without adding a URL segment.
+Nested routes are relative to their parent. Render `<Outlet />` where the next matched route belongs. A pathless route can provide a shared layout without adding a URL segment.
+
+```tsx
+<Route path="/" component={Shell}>
+  <Route path="/" component={Home} />
+  <Route path="/settings" component={Settings} />
+</Route>
+
+function Shell() {
+  return (
+    <View style={{ flexCol: true, gap: 12 }}>
+      <Link href="/">Home</Link>
+      <Link href="/settings">Settings</Link>
+      <Outlet />
+    </View>
+  );
+}
+```
 
 ## Navigation
 
@@ -22,7 +41,7 @@ const navigate = useNavigate();
 <Link href="/">Home</Link>
 ```
 
-The controller supports push, replace, back, forward, and relative history movement. Navigation remains in the native application; it does not require a browser history object.
+The router supports push, replace, back, and forward. Navigation stays inside the app.
 
 ## Route parameters
 
@@ -33,4 +52,4 @@ function Project() {
 }
 ```
 
-`useLocation()` and `useSearchParams()` expose normalized reactive accessors. Repeated query keys are retained as arrays.
+`useLocation()` and `useSearchParams()` return the current path and query. Read them in JSX so the text stays current.

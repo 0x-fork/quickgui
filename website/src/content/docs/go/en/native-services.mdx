@@ -1,15 +1,19 @@
-Call `native.Run` once from `main`. Its startup callback creates windows and registers application services. Native completion callbacks and UI state changes run on the Go UI goroutine.
+Call `native.Run` once from `main`. Its startup callback creates windows and registers application handlers.
 
 ## Window lifetime
 
-`native.NewWindow(native.WindowOptions{Component: App})` creates a window with its own component owner and retained tree. Closing the window disposes its bindings, listeners, and component cleanup. Capture `native.CurrentWindow()` while constructing a component or handling an event when later work needs its window handle.
+`native.NewWindow` creates a window with its own component. Closing the window disposes that UI. Capture `native.CurrentWindow()` while constructing a component if a later callback needs the window handle.
+
+Handle the Dock icon with `native.App.OnReopen` so a new window opens when none are visible.
 
 ## Commands and services
 
-Use the typed `native` APIs for dialogs, clipboard, shell, appearance, menus, and other platform services. Operations with results use completion callbacks; handle their errors without blocking the UI goroutine. Independent extensions use `native.InvokeExtension` and `native.OpenExtension`.
+Use the typed `native` APIs for dialogs, clipboard, shell, appearance, menus, notifications, and other platform features. Operations that return a result use a completion callback — handle errors there instead of blocking.
 
-For application background work, use `ui.Async` with component cancellation or `native.Dispatch` to return results to the UI goroutine. Read and write signals only there. See [Authoring Extensions](/docs/go/extensions) for service and session ownership.
+For background work, `ui.Async` cancels when its component is disposed. `native.Dispatch` delivers a result back to the UI goroutine. Read and write signals only there.
+
+Independent native packages use `native.InvokeExtension` and `native.OpenExtension`. See [Authoring Extensions](/docs/go/extensions).
 
 ## Events and file watching
 
-`native.WatchFiles(paths, changed, ready)` uses operating-system file notifications and returns a stop function. Register component resources with `ui.OnCleanup`, and retain cancellation functions for application-scoped listeners. Avoid polling when a native event or watcher is available. Extension session events stop when their session closes.
+`native.WatchFiles(paths, changed, ready)` uses operating-system notifications and returns a stop function. Register the stop function with `ui.OnCleanup` for component-owned watchers. Prefer a native event or watcher over polling.

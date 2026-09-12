@@ -6,7 +6,7 @@ Enable the test-only API for downstream tests without adding it to production bu
 
 ```toml
 [dev-dependencies]
-quickgui = { version = "0.1", features = ["test-support"] }
+quickgui = { version = "...", features = ["test-support"] }
 ```
 
 `TestAppContext` consumes the ordinary `Application` configuration plus explicit root

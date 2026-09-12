@@ -1,47 +1,48 @@
-These guides use Go. Choose TypeScript in the sidebar for Solid 2 JSX.
-
-QuickGUI apps are ordinary Go programs. Write components and fine-grained reactive state in Go, then build with `CGO_ENABLED=0`. The prebuilt native library is loaded in the same process through purego. Bun runs the CLI for development and packaging.
-
 ## Requirements
 
-- macOS 14 or newer
-- Go 1.23 or newer
-- Bun 1.3 or newer
+- macOS 14 or later
+- Go 1.23 or later
+- Bun 1.4 or later
 - Xcode Command Line Tools (`xcode-select --install`)
 
-The packaged UI application currently targets macOS. Normal application builds use the prebuilt native host.
+macOS is the supported target today.
 
 ## Create a project
 
-The CLI is not published yet. Start from a [QuickGUI checkout](https://github.com/egoist/quickgui) and run the Go counter:
+The fastest way to try QuickGUI is the counter in this repository:
 
 ```bash
+git clone https://github.com/egoist/quickgui.git
+cd quickgui
 bun install
-bun packages/cli/src/cli.ts dev --project examples/counter
+bun run build:native
+cd examples/counter
+bun run dev
 ```
 
-To create a separate app, scaffold without installing registry packages and choose **Go** when prompted:
+To start a new app from the same checkout:
 
 ```bash
-bun packages/cli/src/cli.ts init ../my-app --no-install
+bun packages/cli/src/cli.ts init ../my-app --language go --no-install
 cd ../my-app
 go mod edit -replace github.com/egoist/quickgui/go=../quickgui/go
 go mod tidy
 ```
 
-In the generated `quickgui.config.ts`, change the `defineConfig` import to `../quickgui/packages/cli/src/index.ts` to use the local CLI. Then run `bun packages/cli/src/cli.ts dev --project ../my-app` from the QuickGUI checkout. Pass `--language go` to `init` to skip the language prompt.
+Then run the app with `bun packages/cli/src/cli.ts dev --project ../my-app` from the QuickGUI checkout. After packages are published, `quickgui init my-app --language go` will be the usual command.
 
 ## Your first window
 
-The generated `main.go` imports `native` for windows and `ui` for components. Pass the component function directly to `WindowOptions.Component`. Call `native.Run` once to start the application event loop.
+`main.go` starts the app with `native.Run` and opens a window. Pass a component function to `WindowOptions.Component`. The component returns the UI for that window.
 
 ```go
 package main
 
 import (
+	"log"
+
 	"github.com/egoist/quickgui/go/native"
 	"github.com/egoist/quickgui/go/ui"
-	"log"
 )
 
 func Counter() *ui.Element {
@@ -54,8 +55,7 @@ func Counter() *ui.Element {
 		Gap(20).
 		Bg("#090d16").
 		TextColor("#e2e8f0").
-		Child(ui.Text("Fine-grained native UI").FontSize(28).FontWeight(700)).
-		Child(ui.Text("Count: ", count())).
+		Child(ui.Text("Count: ", count()).FontSize(28).FontWeight(700)).
 		Child(ui.Button().
 			OnClick(func() { setCount(count() + 1) }).
 			Padding(12).
@@ -87,18 +87,22 @@ func main() {
 }
 ```
 
+`OnReopen` opens a window again when the user clicks the Dock icon and none are visible.
+
 ## Run and build
 
-The watcher rebuilds your Go source and restarts the development app. The formatter gives long component calls consistent line breaks while preserving ordinary Go syntax. Production bundles are written under `dist/darwin-*`.
-
 ```bash
-bun packages/cli/src/cli.ts dev --project ../my-app
-bun packages/cli/src/cli.ts fmt --project ../my-app
-bun packages/cli/src/cli.ts build --project ../my-app
+quickgui dev
+quickgui fmt
+quickgui build
 ```
+
+`dev` rebuilds your Go code and relaunches the app as you edit. `fmt` wraps long UI calls. `build` writes a packaged app under `dist/`.
+
+From this repository, prefix those commands with `bun packages/cli/src/cli.ts` and pass `--project` if you are not inside the app directory.
 
 ## Next steps
 
-- Understand [components and signals](/docs/go/reactivity).
-- Add [styles and conditional options](/docs/go/styling).
-- Explore the [component reference](/docs/go/components).
+- Write [components](/docs/go/components).
+- Keep them in sync with [signals](/docs/go/reactivity).
+- Add [styles and layout](/docs/go/styling).
