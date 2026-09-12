@@ -113,7 +113,9 @@ impl TextSystem {
                 };
                 let bounds = physical_text_bounds(clip, scale);
                 let left = run.bounds.x * scale;
-                let top = run.bounds.y * scale;
+                // Glyphon truncates Y when hinting. Round the origin first so a downward
+                // eased translation does not sit one pixel short until its exact endpoint.
+                let top = (run.bounds.y * scale).round();
                 let run_reshaped = if run.highlights.is_none()
                     && should_fragment_basic_text(&run.content, &run.style)
                 {

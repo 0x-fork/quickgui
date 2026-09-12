@@ -35,6 +35,8 @@
     "examples/quick-git-typescript/**/*.tsx",
     "packages/solid/test/**/*.tsx",
     "examples/counter-typescript/*.tsx",
+    "examples/code-morph-typescript/*.ts",
+    "examples/code-morph-typescript/*.tsx",
     "benchmarks/desktop/quickgui-typescript/*.ts",
     "benchmarks/desktop/quickgui-typescript/*.tsx",
     "examples/*/quickgui.config.ts",

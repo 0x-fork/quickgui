@@ -1756,6 +1756,46 @@ fn background_color_only_changes_reuse_the_shaped_highlight_key() {
 
 #[cfg(target_os = "macos")]
 #[test]
+fn translated_text_settles_without_a_final_pixel_step() {
+    let fonts = Rc::new(RefCell::new(fixture_font_system()));
+    let mut renderer =
+        pollster::block_on(OffscreenRenderer::new(PerformanceProfile::Balanced, fonts)).unwrap();
+    for scale in [1.0, 1.5, 2.0] {
+        let render = |renderer: &mut OffscreenRenderer, y: f32| {
+            let mut scene = Scene::new();
+            scene.clear(Color::BLACK);
+            scene.push_text(TextRun::new(
+                TextId::new(1),
+                Arc::from("View"),
+                Rect::new(8.0, y, 96.0, 28.0),
+                TextStyle::new(13.0, Color::WHITE).family(FontFamily::named("Inter")),
+            ));
+            scene.finish();
+            renderer
+                .render_to_snapshot(&scene, Size::new(112.0, 64.0), scale)
+                .unwrap()
+        };
+        let settled = render(&mut renderer, 20.0);
+        assert!(settled.rgba().chunks_exact(4).any(|pixel| pixel[0] > 0));
+        // An eased translation approaches its endpoint from either direction. A tiny
+        // remaining fraction must not leave downward-moving glyphs one pixel behind.
+        for offset in [-0.1, 0.1] {
+            let approaching = render(&mut renderer, 20.0 + offset / scale);
+            assert!(
+                approaching.rgba() == settled.rgba(),
+                "text jumped at its endpoint: scale={scale}, physical offset={offset}"
+            );
+        }
+        let moving = render(&mut renderer, 20.0 - 0.75 / scale);
+        assert!(
+            moving.rgba() != settled.rgba(),
+            "whole-pixel movement must remain visible"
+        );
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
 fn ui_text_edges_use_srgb_blending_and_preserve_opacity() {
     let fonts = Rc::new(RefCell::new(fixture_font_system()));
     let mut renderer = pollster::block_on(OffscreenRenderer::new(

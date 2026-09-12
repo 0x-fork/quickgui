@@ -13,8 +13,13 @@ import {
 } from "node:fs";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
 
-import { languageLabel, type ResolvedQuickGuiConfig } from "./config.ts";
+import {
+  languageLabel,
+  type MacOSNotarizationConfig,
+  type ResolvedQuickGuiConfig,
+} from "./config.ts";
 import { CliError, errorMessage } from "./error.ts";
+import { compileNativeApplication } from "./native-build.ts";
 import { requireRustManifest } from "./rust-build.ts";
 import {
   macDocumentTypesPlist,
