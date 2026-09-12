@@ -463,10 +463,10 @@ pointer, or share timing across a group of triggers.
 | --- | --- | --- |
 | Provider | `TooltipProvider` | shared `delay`, `close_delay`, and the `timeout` warm window |
 | Root | `TooltipState::new(trigger_id, popup_id)` | retained open state, hover deadlines, derived part identities |
-| Trigger | `trigger_part(cx, access, element)` | hover deadlines, `described_by` while open, close-on-press, cursor tracking |
-| Portal / Positioner | `portal_part(element)` / `positioner_part(element)` | anchoring, flip and shift, side offset, collision padding, placement reporting |
-| Popup | `popup_part(cx, access, element)` | the Tooltip role, Escape dismissal, hoverable grace, pointer passivity when not hoverable |
-| Arrow | `arrow_part(element)` | absolute placement on the edge the popup really landed on |
+| Trigger | `trigger_with(cx, access, element)` | hover deadlines, `described_by` while open, close-on-press, cursor tracking |
+| Portal / Positioner | `portal_with(element)` / `positioner_with(element)` | anchoring, flip and shift, side offset, collision padding, placement reporting |
+| Popup | `popup_with(cx, access, element)` | the Tooltip role, Escape dismissal, hoverable grace, pointer passivity when not hoverable |
+| Arrow | `arrow_with(element)` | absolute placement on the edge the popup really landed on |
 
 ```rust,ignore
 let hints = TooltipProvider::new()
@@ -495,7 +495,7 @@ rather than opening on the trigger and jumping on the next move. `disabled(true)
 and closes an open tooltip immediately.
 
 `side`, `align`, `side_offset`, and `collision_padding` are the same bounded positioner geometry the
-popover uses, and `arrow_part` follows the resolved placement rather than the declared preference
+popover uses, and `arrow_with` follows the resolved placement rather than the declared preference
 through the same `AnchorPlacementHandle` reporting. Escape dismissal is framework-owned: the popup
 carries a dismissal listener that closes the state directly.
 
@@ -643,36 +643,16 @@ because the core normalizes keys to a layout-independent command identity. See
 func SaveTooltip() *native.Node {
 	hoverable, closeOnClick := true, false
 	gap, margin := 7.0, 8.0
-	return ui.Tooltip.Provider(
-		ui.TooltipProviderProps{Delay: 600, CloseDelay: 200, Timeout: 400},
-		func() *native.Node {
-			return ui.Tooltip.Root(
-				ui.TooltipRootProps{TrackCursorAxis: "x", Hoverable: &hoverable},
-				func() *native.Node {
-					return ui.Fragment([]*native.Node{ui.Tooltip.Trigger(
-						ui.TooltipTriggerProps{Delay: 120, CloseOnClick: &closeOnClick},
-						"Save",
-					),
-						ui.Tooltip.Positioner(
-							ui.TooltipPositionerProps{
-								Side:             "top",
-								SideOffset:       &gap,
-								CollisionPadding: &margin,
-							},
-							func() *native.Node {
-								return ui.Tooltip.Popup(
-									ui.PartProps{},
-									func() *native.Node {
-										return ui.Fragment([]*native.Node{ui.Text("Save the current draft").Node,
-											ui.Tooltip.Arrow(ui.PartProps{})})
-									},
-								)
-							},
-						)})
-				},
-			)
-		},
-	)
+	return ui.NewTooltipProvider(ui.TooltipProviderProps{Delay: 600, CloseDelay: 200, Timeout: 400}).Root().Child(func() *native.Node {
+		tooltip1 := ui.NewTooltip(ui.TooltipRootProps{TrackCursorAxis: "x", Hoverable: &hoverable})
+		return tooltip1.Root().Children(func() *native.Node {
+			return ui.Fragment([]*native.Node{tooltip1.Trigger(ui.TooltipTriggerProps{Delay: 120, CloseOnClick: &closeOnClick}).Children("Save").NativeNode(), tooltip1.Positioner(ui.TooltipPositionerProps{Side: "top", SideOffset: &gap, CollisionPadding: &margin}).Children(func() *native.Node {
+				return tooltip1.Popup(ui.PartProps{}).Children(func() *native.Node {
+					return ui.Fragment([]*native.Node{ui.Text("Save the current draft").Node, tooltip1.Arrow(ui.PartProps{}).NativeNode()})
+				}).NativeNode()
+			}).NativeNode()})
+		}).NativeNode()
+	}).NativeNode()
 }
 ```
 

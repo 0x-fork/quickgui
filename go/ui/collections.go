@@ -58,8 +58,6 @@ type TableCellProps struct {
 }
 
 // Table is a virtual table whose visible rows the application declares.
-var Table = tableAPI{}
-
 type tableAPI struct{}
 
 func (tableAPI) Root(props TableRootProps, children ...any) *native.Node {
@@ -215,8 +213,6 @@ type TreeRowProps struct {
 }
 
 // Tree is a virtual tree whose expansion and selection the core owns.
-var Tree = treeAPI{}
-
 type treeAPI struct{}
 
 func (treeAPI) Root(props TreeRootProps, children ...any) *native.Node {

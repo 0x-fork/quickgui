@@ -1361,7 +1361,7 @@ pub(super) fn apply_base_ui_part(
     let key = component_key(id, node);
     let root = ElementId::new(key);
     Some(match part {
-        SEPARATOR_PART => Separator::new(declared_separator_orientation(node)).root_part(element),
+        SEPARATOR_PART => Separator::new(declared_separator_orientation(node)).root_with(element),
 
         // -------------------------------------------------------------------
         // Avatar
@@ -1376,7 +1376,7 @@ pub(super) fn apply_base_ui_part(
                 // instead of waiting out the fallback deadline the `Loading` status armed.
                 cx.request_repaint_at(Instant::now());
             }
-            Avatar::new(root, Arc::clone(&retained.label)).root_part(element)
+            Avatar::new(root, Arc::clone(&retained.label)).root_with(element)
         }
         AVATAR_IMAGE_PART => {
             let Some(retained) = components.base_ui.avatars.get(&key) else {
@@ -1385,7 +1385,7 @@ pub(super) fn apply_base_ui_part(
             if !retained.state.shows_image() {
                 return None;
             }
-            Avatar::new(root, Arc::clone(&retained.label)).image_part(element)
+            Avatar::new(root, Arc::clone(&retained.label)).image_with(element)
         }
         AVATAR_FALLBACK_PART => {
             let Some(retained) = components.base_ui.avatars.get(&key) else {
@@ -1394,14 +1394,14 @@ pub(super) fn apply_base_ui_part(
             if !retained.state.shows_fallback() {
                 return None;
             }
-            Avatar::new(root, Arc::clone(&retained.label)).fallback_part(element)
+            Avatar::new(root, Arc::clone(&retained.label)).fallback_with(element)
         }
 
         // -------------------------------------------------------------------
         // Checkbox group
         // -------------------------------------------------------------------
         CHECKBOX_GROUP_PART => match components.base_ui.checkbox_groups.get(&key) {
-            Some(retained) => CheckboxGroup::new(root, &retained.state).root_part(element),
+            Some(retained) => CheckboxGroup::new(root, &retained.state).root_with(element),
             None => element,
         },
         CHECKBOX_GROUP_ITEM_PART => {
@@ -1412,7 +1412,7 @@ pub(super) fn apply_base_ui_part(
                 return Some(element);
             };
             let group = CheckboxGroup::new(root, &retained.state);
-            let element = group.checkbox_part(value, element);
+            let element = group.checkbox_with(value, element);
             if !listeners_enabled {
                 return Some(element);
             }
@@ -1421,7 +1421,7 @@ pub(super) fn apply_base_ui_part(
             element.on_click(click)
         }
         CHECKBOX_GROUP_INDICATOR_PART => match components.base_ui.checkbox_groups.get(&key) {
-            Some(retained) => CheckboxGroup::new(root, &retained.state).indicator_part(element),
+            Some(retained) => CheckboxGroup::new(root, &retained.state).indicator_with(element),
             None => element,
         },
         CHECKBOX_GROUP_PARENT_PART => {
@@ -1429,7 +1429,7 @@ pub(super) fn apply_base_ui_part(
                 return Some(element);
             };
             let group = CheckboxGroup::new(root, &retained.state);
-            let element = group.parent_part(element);
+            let element = group.parent_with(element);
             if !listeners_enabled {
                 return Some(element);
             }
@@ -1445,14 +1445,14 @@ pub(super) fn apply_base_ui_part(
                 return Some(element);
             };
             PreviewCard::schedule(cx, &retained.state);
-            preview_card_descriptor(root, retained).root_part(element)
+            preview_card_descriptor(root, retained).root_with(element)
         }
         PREVIEW_CARD_TRIGGER_PART => {
             let Some(retained) = components.base_ui.preview_cards.get(&key) else {
                 return Some(element);
             };
             let card = preview_card_descriptor(root, retained);
-            let element = card.trigger_part(element);
+            let element = card.trigger_with(element);
             if !listeners_enabled {
                 return Some(element);
             }
@@ -1466,7 +1466,7 @@ pub(super) fn apply_base_ui_part(
             if !retained.state.is_open() {
                 return None;
             }
-            preview_card_descriptor(root, retained).positioner_part(element)
+            preview_card_descriptor(root, retained).positioner_with(element)
         }
         PREVIEW_CARD_POPUP_PART => {
             let Some(retained) = components.base_ui.preview_cards.get(&key) else {
@@ -1476,7 +1476,7 @@ pub(super) fn apply_base_ui_part(
                 return None;
             }
             let card = preview_card_descriptor(root, retained);
-            let element = card.popup_part(element);
+            let element = card.popup_with(element);
             if !listeners_enabled {
                 return Some(element);
             }
@@ -1491,7 +1491,7 @@ pub(super) fn apply_base_ui_part(
             if !retained.state.is_open() {
                 return None;
             }
-            preview_card_descriptor(root, retained).arrow_part(element)
+            preview_card_descriptor(root, retained).arrow_with(element)
         }
         PREVIEW_CARD_BACKDROP_PART => {
             let Some(retained) = components.base_ui.preview_cards.get(&key) else {
@@ -1500,7 +1500,7 @@ pub(super) fn apply_base_ui_part(
             if !retained.state.is_open() {
                 return None;
             }
-            preview_card_descriptor(root, retained).backdrop_part(element)
+            preview_card_descriptor(root, retained).backdrop_with(element)
         }
 
         // -------------------------------------------------------------------
@@ -1512,7 +1512,7 @@ pub(super) fn apply_base_ui_part(
             };
             let element = ScrollArea::new(root)
                 .keep_mounted(retained.keep_mounted)
-                .root_part(element);
+                .root_with(element);
             if !listeners_enabled {
                 return Some(element);
             }
@@ -1528,7 +1528,7 @@ pub(super) fn apply_base_ui_part(
         }
         SCROLL_AREA_VIEWPORT_PART => {
             let area = ScrollArea::new(root);
-            let element = area.viewport_part(element);
+            let element = area.viewport_with(element);
             let Some(retained) = components.base_ui.scroll_areas.get(&key) else {
                 return Some(element);
             };
@@ -1546,7 +1546,7 @@ pub(super) fn apply_base_ui_part(
             element.on_scroll_wheel(wheel)
         }
         SCROLL_AREA_CONTENT_PART => {
-            let element = ScrollArea::new(root).content_part(element);
+            let element = ScrollArea::new(root).content_with(element);
             match components.base_ui.scroll_areas.get(&key) {
                 Some(retained) => element.report_bounds(retained.content_bounds.clone()),
                 None => element,
@@ -1562,7 +1562,7 @@ pub(super) fn apply_base_ui_part(
                 return None;
             }
             let element = area
-                .scrollbar_part(&retained.state, orientation, element)
+                .scrollbar_with(&retained.state, orientation, element)
                 .report_bounds(retained.scrollbar_bounds[axis_index(orientation)].clone());
             if !listeners_enabled {
                 return Some(element);
@@ -1598,7 +1598,7 @@ pub(super) fn apply_base_ui_part(
             if !area.shows_scrollbar(&retained.state, orientation) {
                 return None;
             }
-            let element = area.positioned_thumb_part(
+            let element = area.positioned_thumb_with(
                 &retained.state,
                 orientation,
                 retained.track_length(orientation),
@@ -1629,14 +1629,14 @@ pub(super) fn apply_base_ui_part(
             if !area.shows_corner(&retained.state) {
                 return None;
             }
-            area.corner_part(element)
+            area.corner_with(element)
         }
 
         // -------------------------------------------------------------------
         // OTP field
         // -------------------------------------------------------------------
         OTP_FIELD_PART => match components.base_ui.otp_fields.get(&key) {
-            Some(retained) => OtpField::new(root).root_part(&retained.state, element),
+            Some(retained) => OtpField::new(root).root_with(&retained.state, element),
             None => element,
         },
         OTP_FIELD_INPUT_PART => {
@@ -1652,9 +1652,9 @@ pub(super) fn apply_base_ui_part(
                 field = field.auto_submit(form);
             }
             if !listeners_enabled {
-                return Some(field.input_part(&retained.state, index, element));
+                return Some(field.input_with(&retained.state, index, element));
             }
-            field.slot_part_with(
+            field.slot_with_accessor(
                 cx,
                 &retained.state,
                 index,
@@ -1665,18 +1665,18 @@ pub(super) fn apply_base_ui_part(
             )
         }
         OTP_FIELD_SEPARATOR_PART => {
-            OtpField::new(root).separator_part(declared_index(node), element)
+            OtpField::new(root).separator_with(declared_index(node), element)
         }
 
         // -------------------------------------------------------------------
         // Drawer
         // -------------------------------------------------------------------
         DRAWER_PART => match components.base_ui.drawers.get(&key) {
-            Some(retained) => drawer_descriptor(root, retained).root_part(element),
+            Some(retained) => drawer_descriptor(root, retained).root_with(element),
             None => element,
         },
         DRAWER_TRIGGER_PART => match components.base_ui.drawers.get(&key) {
-            Some(retained) => drawer_descriptor(root, retained).trigger_part(element),
+            Some(retained) => drawer_descriptor(root, retained).trigger_with(element),
             None => element,
         },
         DRAWER_PORTAL_PART
@@ -1698,19 +1698,19 @@ pub(super) fn apply_base_ui_part(
             }
             let drawer = drawer_descriptor(root, retained);
             match part {
-                DRAWER_PORTAL_PART => drawer.portal_part(element),
-                DRAWER_BACKDROP_PART => drawer.backdrop_part(element),
-                DRAWER_VIEWPORT_PART => drawer.viewport_part(element),
-                DRAWER_CONTENT_PART => drawer.content_part(element),
-                DRAWER_TITLE_PART => drawer.title_part(element),
-                DRAWER_DESCRIPTION_PART => drawer.description_part(element),
-                DRAWER_CLOSE_PART => drawer.close_part(
+                DRAWER_PORTAL_PART => drawer.portal_with(element),
+                DRAWER_BACKDROP_PART => drawer.backdrop_with(element),
+                DRAWER_VIEWPORT_PART => drawer.viewport_with(element),
+                DRAWER_CONTENT_PART => drawer.content_with(element),
+                DRAWER_TITLE_PART => drawer.title_with(element),
+                DRAWER_DESCRIPTION_PART => drawer.description_with(element),
+                DRAWER_CLOSE_PART => drawer.close_with(
                     node.string(property::ACCESSIBILITY_LABEL)
                         .unwrap_or("Close"),
                     element,
                 ),
                 DRAWER_SWIPE_AREA_PART => {
-                    let element = drawer.swipe_area_part(element);
+                    let element = drawer.swipe_area_with(element);
                     if !listeners_enabled {
                         return Some(element);
                     }
@@ -1725,7 +1725,7 @@ pub(super) fn apply_base_ui_part(
                     element.on_pointer(swipe)
                 }
                 _ => {
-                    let element = drawer.popup_part(element);
+                    let element = drawer.popup_with(element);
                     if !listeners_enabled {
                         return Some(element);
                     }
@@ -1743,10 +1743,10 @@ pub(super) fn apply_base_ui_part(
                 return Some(element);
             };
             NavigationMenu::schedule(cx, &retained.state);
-            navigation_menu_descriptor(root, retained).root_part(element)
+            navigation_menu_descriptor(root, retained).root_with(element)
         }
         NAVIGATION_MENU_LIST_PART => match components.base_ui.navigation_menus.get(&key) {
-            Some(retained) => navigation_menu_descriptor(root, retained).list_part(element),
+            Some(retained) => navigation_menu_descriptor(root, retained).list_with(element),
             None => element,
         },
         NAVIGATION_MENU_LINK_PART => {
@@ -1756,7 +1756,7 @@ pub(super) fn apply_base_ui_part(
             let Some(value) = native_part_value(node, property::PART_VALUE) else {
                 return Some(element);
             };
-            navigation_menu_descriptor(root, retained).link_part(
+            navigation_menu_descriptor(root, retained).link_with(
                 value,
                 node.boolean(property::CHECKED).unwrap_or(false),
                 element,
@@ -1774,10 +1774,10 @@ pub(super) fn apply_base_ui_part(
                 return Some(element);
             };
             match part {
-                NAVIGATION_MENU_ITEM_PART => entry.item_part(element),
-                NAVIGATION_MENU_ICON_PART => entry.icon_part(element),
+                NAVIGATION_MENU_ITEM_PART => entry.item_with(element),
+                NAVIGATION_MENU_ICON_PART => entry.icon_with(element),
                 NAVIGATION_MENU_TRIGGER_PART => {
-                    let element = entry.trigger_part(element);
+                    let element = entry.trigger_with(element);
                     if !listeners_enabled {
                         return Some(element);
                     }
@@ -1785,7 +1785,7 @@ pub(super) fn apply_base_ui_part(
                     let click = entry.on_trigger_click_with(cx, access.clone(), |_, _, _| {});
                     let hover = entry.on_trigger_hover_with(cx, access.clone(), |_, _, _| {});
                     entry
-                        .key_part_with(cx, element, access)
+                        .key_with_accessor(cx, element, access)
                         .on_click(click)
                         .on_hover(hover)
                 }
@@ -1793,13 +1793,13 @@ pub(super) fn apply_base_ui_part(
                     if !entry.is_open() {
                         return None;
                     }
-                    entry.positioner_part(element)
+                    entry.positioner_with(element)
                 }
                 NAVIGATION_MENU_POPUP_PART => {
                     if !entry.is_open() {
                         return None;
                     }
-                    let element = entry.popup_part(element);
+                    let element = entry.popup_with(element);
                     if !listeners_enabled {
                         return Some(element);
                     }
@@ -1812,25 +1812,25 @@ pub(super) fn apply_base_ui_part(
                     if !entry.is_open() {
                         return None;
                     }
-                    entry.viewport_part(element)
+                    entry.viewport_with(element)
                 }
                 NAVIGATION_MENU_CONTENT_PART => {
                     if !entry.is_open() {
                         return None;
                     }
-                    entry.content_part(element)
+                    entry.content_with(element)
                 }
                 NAVIGATION_MENU_ARROW_PART => {
                     if !entry.is_open() {
                         return None;
                     }
-                    entry.arrow_part(element)
+                    entry.arrow_with(element)
                 }
                 NAVIGATION_MENU_BACKDROP_PART => {
                     if !entry.is_open() {
                         return None;
                     }
-                    entry.backdrop_part(element)
+                    entry.backdrop_with(element)
                 }
                 _ => element,
             }

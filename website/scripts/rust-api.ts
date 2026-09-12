@@ -328,8 +328,8 @@ function typeSections(
 ): ApiSection[] {
   const fns = extractImplFns(file, typeName);
   const ctor = constructorFn(fns, preferred);
-  const parts = fns.filter((fn) => fn.name.endsWith("_part"));
-  const rest = fns.filter((fn) => fn !== ctor && !fn.name.endsWith("_part"));
+  const parts = fns.filter((fn) => fn !== ctor && /-> (?:Element|Option<Element>)(?:\s|$)/.test(fn.signature));
+  const rest = fns.filter((fn) => fn !== ctor && !parts.includes(fn));
   const primary = toSection(typeName, ctor, uniqueEntries([...rest.map(toEntry), ...extra]));
   const partSections = parts.map((fn) => toSection(`${typeName}::${fn.name}`, fn, []));
   return [primary, ...partSections];

@@ -16,23 +16,19 @@ import (
 ```go
 func SwitchExample() *native.Node {
 	on, setOn := ui.CreateSignal(false)
-	return ui.Switch.Root(
-		ui.SwitchProps{
-			Checked:         on,
-			OnCheckedChange: func(next bool, _ *native.Event) { setOn(next) },
-		},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.Switch.Thumb(ui.PartProps{}), ui.Text("Notifications").
-				Node})
-		},
-	)
+	switch1 := ui.NewSwitch(ui.SwitchProps{Checked: on, OnCheckedChange: func(next bool, _ *native.Event) {
+		setOn(next)
+	}})
+	return switch1.Root().Children(func() *native.Node {
+		return ui.Fragment([]*native.Node{switch1.Thumb(ui.PartProps{}).NativeNode(), ui.Text("Notifications").Node})
+	}).NativeNode()
 }
 ```
 
 ## Anatomy
 
-- `ui.Switch.Root`
-- `ui.Switch.Thumb`
+- `switch.Root`
+- `switch.Thumb`
 
 ## Key props
 

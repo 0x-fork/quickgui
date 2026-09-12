@@ -135,7 +135,7 @@ pub struct SelectListState {
 /// Base UI's `Select.ScrollUpArrow` and `Select.ScrollDownArrow` scroll the option list while the
 /// pointer rests on them. The list lives inside QuickGUI's separate native option surface, so the
 /// behavior cannot be attached from the owner window; these decorators carry it instead. Reach
-/// them through [`SelectState::element_with_parts`]; every other part is decorated directly from
+/// them through [`SelectState::element_with_trigger`]; every other part is decorated directly from
 /// [`SelectState`].
 pub struct SelectPopupParts<'a> {
     control: ElementId,
@@ -156,13 +156,21 @@ impl SelectPopupParts<'_> {
     /// previous one. Leaving the arrow, or reaching the end of the list, cancels it, so a settled
     /// select owns no timer. The arrow is hidden from assistive technology: the list it scrolls
     /// already reports its own position.
-    pub fn scroll_up_arrow_part(&self, arrow: Element) -> Element {
+    pub fn scroll_up_arrow_with(&self, arrow: Element) -> Element {
         (self.scroll_up)(arrow)
+    }
+    /// Create the unstyled scroll up arrow part. Use [`Self::scroll_up_arrow_with`] to supply an existing element.
+    pub fn scroll_up_arrow(&self) -> Element {
+        self.scroll_up_arrow_with(crate::div())
     }
 
     /// Decorate a caller-owned downward scroll affordance, Base UI's `Select.ScrollDownArrow`.
-    pub fn scroll_down_arrow_part(&self, arrow: Element) -> Element {
+    pub fn scroll_down_arrow_with(&self, arrow: Element) -> Element {
         (self.scroll_down)(arrow)
+    }
+    /// Create the unstyled scroll down arrow part. Use [`Self::scroll_down_arrow_with`] to supply an existing element.
+    pub fn scroll_down_arrow(&self) -> Element {
+        self.scroll_down_arrow_with(crate::div())
     }
 }
 
@@ -759,20 +767,28 @@ impl<T> SelectState<T> {
     }
 
     /// Decorate the optional application-owned structural wrapper, Base UI's `Select.Root`.
-    pub fn root_part(root: Element) -> Element {
+    pub fn root_with(root: Element) -> Element {
         root.app_region_no_drag()
+    }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root() -> Element {
+        Self::root_with(crate::div())
     }
 
     /// Decorate the caller-owned visible label, Base UI's `Select.Label`.
     ///
-    /// [`Self::trigger_part`] points at this identity, so the label names the control without its
+    /// [`Self::trigger_with`] points at this identity, so the label names the control without its
     /// text being copied into a second accessible string.
-    pub fn label_part(id: impl Into<ElementId>, label: Element) -> Element {
+    pub fn label_with(id: impl Into<ElementId>, label: Element) -> Element {
         label
             .id(Self::label_id(id))
             .accessibility_role(AccessibilityRole::Label)
             .app_region_no_drag()
             .user_select_none()
+    }
+    /// Create the unstyled label part. Use [`Self::label_with`] to supply an existing element.
+    pub fn label(id: impl Into<ElementId>) -> Element {
+        Self::label_with(id, crate::div())
     }
 
     /// Decorate the caller-owned value text inside the trigger, Base UI's `Select.Value`.
@@ -780,19 +796,27 @@ impl<T> SelectState<T> {
     /// The trigger already exposes the selected value, so this part is hidden from assistive
     /// technology and would otherwise be announced twice. Render
     /// [`Self::value_text`] inside it, or the placeholder when it returns `None`.
-    pub fn value_part(id: impl Into<ElementId>, value: Element) -> Element {
+    pub fn value_with(id: impl Into<ElementId>, value: Element) -> Element {
         value
             .id(Self::value_id(id))
             .accessibility_hidden(true)
             .app_region_no_drag()
             .user_select_none()
     }
+    /// Create the unstyled value part. Use [`Self::value_with`] to supply an existing element.
+    pub fn value(id: impl Into<ElementId>) -> Element {
+        Self::value_with(id, crate::div())
+    }
 
     /// Decorate the caller-owned trigger affordance, Base UI's `Select.Icon`.
-    pub fn icon_part(id: impl Into<ElementId>, icon: Element) -> Element {
+    pub fn icon_with(id: impl Into<ElementId>, icon: Element) -> Element {
         icon.id(Self::icon_id(id))
             .accessibility_hidden(true)
             .app_region_no_drag()
+    }
+    /// Create the unstyled icon part. Use [`Self::icon_with`] to supply an existing element.
+    pub fn icon(id: impl Into<ElementId>) -> Element {
+        Self::icon_with(id, crate::div())
     }
 
     /// Decorate an optional caller-painted owner-window backdrop, Base UI's `Select.Backdrop`.
@@ -800,7 +824,7 @@ impl<T> SelectState<T> {
     /// The option surface is a separate native child window that already takes the pointer grab,
     /// so this layer exists only for a caller-painted dimming pass. Mount it while
     /// [`Self::is_open`] is true, and declare [`Self::modal`] so the intent is inspectable.
-    pub fn backdrop_part(id: impl Into<ElementId>, backdrop: Element) -> Element {
+    pub fn backdrop_with(id: impl Into<ElementId>, backdrop: Element) -> Element {
         backdrop
             .id(Self::backdrop_id(id))
             .overlay()
@@ -810,38 +834,60 @@ impl<T> SelectState<T> {
             .cursor_default()
             .accessibility_hidden(true)
     }
+    /// Create the unstyled backdrop part. Use [`Self::backdrop_with`] to supply an existing element.
+    pub fn backdrop(id: impl Into<ElementId>) -> Element {
+        Self::backdrop_with(id, crate::div())
+    }
 
     /// Decorate the popup boundary, Base UI's `Select.Portal` and `Select.Positioner`.
     ///
     /// QuickGUI's option surface is its own native window, so the portal, the positioner, and the
     /// popup are one element: all three names decorate it identically and QuickGUI resolves its
     /// placement against the display work area rather than a parent stacking context.
-    pub fn portal_part(
+    pub fn portal_with(
         id: impl Into<ElementId>,
         label: impl Into<Arc<str>>,
         option_count: usize,
         multiple: bool,
         portal: Element,
     ) -> Element {
-        Self::popup_part(id, label, option_count, multiple, portal)
+        Self::popup_with(id, label, option_count, multiple, portal)
+    }
+    /// Create the unstyled portal part. Use [`Self::portal_with`] to supply an existing element.
+    pub fn portal(
+        id: impl Into<ElementId>,
+        label: impl Into<Arc<str>>,
+        option_count: usize,
+        multiple: bool,
+    ) -> Element {
+        Self::portal_with(id, label, option_count, multiple, crate::div())
     }
 
     /// Decorate the popup boundary, Base UI's `Select.Positioner`.
-    pub fn positioner_part(
+    pub fn positioner_with(
         id: impl Into<ElementId>,
         label: impl Into<Arc<str>>,
         option_count: usize,
         multiple: bool,
         positioner: Element,
     ) -> Element {
-        Self::popup_part(id, label, option_count, multiple, positioner)
+        Self::popup_with(id, label, option_count, multiple, positioner)
+    }
+    /// Create the unstyled positioner part. Use [`Self::positioner_with`] to supply an existing element.
+    pub fn positioner(
+        id: impl Into<ElementId>,
+        label: impl Into<Arc<str>>,
+        option_count: usize,
+        multiple: bool,
+    ) -> Element {
+        Self::positioner_with(id, label, option_count, multiple, crate::div())
     }
 
     /// Decorate the caller-owned option surface, Base UI's `Select.Popup`.
     ///
     /// QuickGUI applies this to whatever the surface renderer returns, so an application that
     /// composes its own in-window list can reuse exactly the semantics the native surface gets.
-    pub fn popup_part(
+    pub fn popup_with(
         id: impl Into<ElementId>,
         label: impl Into<Arc<str>>,
         option_count: usize,
@@ -858,31 +904,48 @@ impl<T> SelectState<T> {
             .user_select_none()
             .cursor_default()
     }
+    /// Create the unstyled popup part. Use [`Self::popup_with`] to supply an existing element.
+    pub fn popup(
+        id: impl Into<ElementId>,
+        label: impl Into<Arc<str>>,
+        option_count: usize,
+        multiple: bool,
+    ) -> Element {
+        Self::popup_with(id, label, option_count, multiple, crate::div())
+    }
 
     /// Position a caller-owned decorative arrow, Base UI's `Select.Arrow`.
-    pub fn arrow_part(id: impl Into<ElementId>, arrow: Element) -> Element {
+    pub fn arrow_with(id: impl Into<ElementId>, arrow: Element) -> Element {
         arrow
             .id(Self::arrow_id(id))
             .absolute()
             .accessibility_hidden(true)
             .app_region_no_drag()
     }
+    /// Create the unstyled arrow part. Use [`Self::arrow_with`] to supply an existing element.
+    pub fn arrow(id: impl Into<ElementId>) -> Element {
+        Self::arrow_with(id, crate::div())
+    }
 
     /// Decorate the caller-owned scrolling option list, Base UI's `Select.List`.
     ///
     /// The popup already carries the list-box role, so the inner list is a structural container:
     /// it keeps a stable identity and the declared set size without announcing a second list.
-    pub fn list_part(id: impl Into<ElementId>, option_count: usize, list: Element) -> Element {
+    pub fn list_with(id: impl Into<ElementId>, option_count: usize, list: Element) -> Element {
         list.id(Self::list_id(id))
             .accessibility_hidden(option_count == 0)
             .app_region_no_drag()
+    }
+    /// Create the unstyled list part. Use [`Self::list_with`] to supply an existing element.
+    pub fn list(id: impl Into<ElementId>, option_count: usize) -> Element {
+        Self::list_with(id, option_count, crate::div())
     }
 
     /// Decorate one caller-owned option row, Base UI's `Select.Item`.
     ///
     /// `row_id` comes from [`Self::option_id_for_source`], so the row keeps the identity the
     /// popup's active-descendant relationship points at.
-    pub fn item_part(
+    pub fn item_with(
         row_id: impl Into<ElementId>,
         label: impl Into<Arc<str>>,
         state: SelectOptionState,
@@ -899,46 +962,74 @@ impl<T> SelectState<T> {
             .user_select_none()
             .cursor_default()
     }
+    /// Create the unstyled item part. Use [`Self::item_with`] to supply an existing element.
+    pub fn item(
+        row_id: impl Into<ElementId>,
+        label: impl Into<Arc<str>>,
+        state: SelectOptionState,
+    ) -> Element {
+        Self::item_with(row_id, label, state, crate::div())
+    }
 
     /// Decorate one option's visible text, Base UI's `Select.ItemText`.
     ///
     /// The row already carries the accessible name, so the text is decoration.
-    pub fn item_text_part(text: Element) -> Element {
+    pub fn item_text_with(text: Element) -> Element {
         text.accessibility_hidden(true).app_region_no_drag()
+    }
+    /// Create the unstyled item text part. Use [`Self::item_text_with`] to supply an existing element.
+    pub fn item_text() -> Element {
+        Self::item_text_with(crate::div())
     }
 
     /// Decorate one option's selected mark, Base UI's `Select.ItemIndicator`.
     ///
     /// The row already reports selection, so the indicator is hidden from assistive technology.
     /// Mount it only while the row is selected, exactly as Base UI does.
-    pub fn item_indicator_part(indicator: Element) -> Element {
+    pub fn item_indicator_with(indicator: Element) -> Element {
         indicator.accessibility_hidden(true).app_region_no_drag()
+    }
+    /// Create the unstyled item indicator part. Use [`Self::item_indicator_with`] to supply an existing element.
+    pub fn item_indicator() -> Element {
+        Self::item_indicator_with(crate::div())
     }
 
     /// Decorate a caller-composed option group, Base UI's `Select.Group`.
-    pub fn group_part(group: Element) -> Element {
+    pub fn group_with(group: Element) -> Element {
         group
             .accessibility_role(AccessibilityRole::Group)
             .app_region_no_drag()
+    }
+    /// Create the unstyled group part. Use [`Self::group_with`] to supply an existing element.
+    pub fn group() -> Element {
+        Self::group_with(crate::div())
     }
 
     /// Decorate a group's visible label, Base UI's `Select.GroupLabel`.
     ///
     /// Pass the same `label_id` to [`Element::accessibility_labelled_by`] on the group so the two
     /// are related without the text being copied.
-    pub fn group_label_part(label_id: impl Into<ElementId>, label: Element) -> Element {
+    pub fn group_label_with(label_id: impl Into<ElementId>, label: Element) -> Element {
         label
             .id(label_id)
             .accessibility_role(AccessibilityRole::Label)
             .app_region_no_drag()
             .user_select_none()
     }
+    /// Create the unstyled group label part. Use [`Self::group_label_with`] to supply an existing element.
+    pub fn group_label(label_id: impl Into<ElementId>) -> Element {
+        Self::group_label_with(label_id, crate::div())
+    }
 
     /// Decorate a caller-owned divider between option groups, Base UI's `Select.Separator`.
-    pub fn separator_part(separator: Element) -> Element {
+    pub fn separator_with(separator: Element) -> Element {
         separator
             .accessibility_role(AccessibilityRole::Separator)
             .app_region_no_drag()
+    }
+    /// Create the unstyled separator part. Use [`Self::separator_with`] to supply an existing element.
+    pub fn separator() -> Element {
+        Self::separator_with(crate::div())
     }
 
     fn scroll_arrow_part(id: ElementId, arrow: Element) -> Element {
@@ -951,7 +1042,7 @@ impl<T> SelectState<T> {
     }
 
     /// Decorate an application-owned trigger without adding appearance, Base UI's `Select.Trigger`.
-    pub fn trigger_part(
+    pub fn trigger_with(
         &self,
         id: impl Into<ElementId>,
         label: impl Into<Arc<str>>,
@@ -982,6 +1073,10 @@ impl<T> SelectState<T> {
                 trigger.validation_message_retained(message, self.validation_message_truncated);
         }
         trigger
+    }
+    /// Create the unstyled trigger part. Use [`Self::trigger_with`] to supply an existing element.
+    pub fn trigger(&self, id: impl Into<ElementId>, label: impl Into<Arc<str>>) -> Element {
+        self.trigger_with(id, label, crate::button())
     }
 
     /// Build the complete unstyled select interaction from caller-owned trigger, popover, and rows.
@@ -1043,7 +1138,7 @@ impl<T> SelectState<T> {
         RenderOption: Fn(&PickerItem<T>, SelectOptionState) -> Element + Clone + 'static,
         Change: Fn(&mut V, T, &mut EventContext) + Clone + 'static,
     {
-        self.element_with_parts_with(
+        self.element_with_trigger_accessor(
             cx,
             id,
             label,
@@ -1058,10 +1153,10 @@ impl<T> SelectState<T> {
     /// Build the select interaction with access to the framework-owned popup parts.
     ///
     /// The surface renderer additionally receives [`SelectPopupParts`], whose
-    /// `scroll_up_arrow_part` and `scroll_down_arrow_part` decorators carry Base UI's hovered
+    /// `scroll_up_arrow_with` and `scroll_down_arrow_with` decorators carry Base UI's hovered
     /// scrolling behavior. Every other entry point is this one with a renderer that ignores them.
     #[allow(clippy::too_many_arguments)]
-    pub fn element_with_parts<V, PopoverRoot, RenderOption, Change>(
+    pub fn element_with_trigger<V, PopoverRoot, RenderOption, Change>(
         &self,
         cx: &mut ViewContext<'_, V>,
         id: impl Into<ElementId>,
@@ -1079,7 +1174,7 @@ impl<T> SelectState<T> {
         RenderOption: Fn(&PickerItem<T>, SelectOptionState) -> Element + Clone + 'static,
         Change: Fn(&mut V, T, &mut EventContext) + Clone + 'static,
     {
-        self.element_with_parts_with(
+        self.element_with_trigger_accessor(
             cx,
             id,
             label,
@@ -1093,7 +1188,7 @@ impl<T> SelectState<T> {
 
     /// Build the popup-parts select interaction against a per-instance retained-state accessor.
     #[allow(clippy::too_many_arguments)]
-    pub fn element_with_parts_with<V, PopoverRoot, RenderOption, Change>(
+    pub fn element_with_trigger_accessor<V, PopoverRoot, RenderOption, Change>(
         &self,
         cx: &mut ViewContext<'_, V>,
         id: impl Into<ElementId>,
@@ -1270,7 +1365,7 @@ impl<T> SelectState<T> {
             );
         });
 
-        self.trigger_part(id, label, trigger)
+        self.trigger_with(id, label, trigger)
             .on_click(click)
             .key_context(SELECT_KEY_CONTEXT)
             .on_action(commit)
@@ -1735,7 +1830,7 @@ where
                 disabled: item.is_disabled(),
             };
             let row_id = self.option_id(source_index);
-            let mut row = SelectState::<T>::item_part(
+            let mut row = SelectState::<T>::item_with(
                 row_id,
                 item.label().clone(),
                 option_state,
@@ -1774,7 +1869,7 @@ where
             can_scroll_up: self.can_scroll_up(),
             can_scroll_down: self.can_scroll_down(),
         };
-        let options = SelectState::<T>::list_part(
+        let options = SelectState::<T>::list_with(
             self.control,
             self.items.len(),
             div()
@@ -1805,7 +1900,7 @@ where
             scroll_down: &scroll_down,
         };
 
-        let mut root = SelectState::<T>::popup_part(
+        let mut root = SelectState::<T>::popup_with(
             self.control,
             self.label.clone(),
             self.items.len(),
@@ -1932,12 +2027,12 @@ mod tests {
         let mut root = div().bg(Color::BLACK).relative();
         if state.can_scroll_up {
             root = root.child(
-                parts.scroll_up_arrow_part(div().overlay().top(0.0).left(0.0).w(220.0).h(8.0)),
+                parts.scroll_up_arrow_with(div().overlay().top(0.0).left(0.0).w(220.0).h(8.0)),
             );
         }
         if state.can_scroll_down {
             root = root.child(
-                parts.scroll_down_arrow_part(div().overlay().top(56.0).left(0.0).w(220.0).h(8.0)),
+                parts.scroll_down_arrow_with(div().overlay().top(56.0).left(0.0).w(220.0).h(8.0)),
             );
         }
         root
@@ -1984,7 +2079,7 @@ mod tests {
     #[test]
     fn trigger_part_adds_behavior_without_appearance() {
         let state = SelectState::new(options()).unwrap();
-        let trigger = state.trigger_part("select", "Theme", div());
+        let trigger = state.trigger_with("select", "Theme", div());
         assert_eq!(trigger.accessibility.role, AccessibilityRole::ComboBox);
         assert_eq!(
             trigger.accessibility.has_popover,
@@ -2033,7 +2128,7 @@ mod tests {
 
     impl View for SelectOwner {
         fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl crate::IntoElement {
-            self.select.element_with_parts(
+            self.select.element_with_trigger(
                 cx,
                 "select",
                 "Theme",
@@ -2225,7 +2320,7 @@ mod tests {
         let locked_state = locked.state();
         assert!(locked_state.read_only && locked_state.required && locked_state.valid);
 
-        let trigger = locked.trigger_part("select", "Theme", div());
+        let trigger = locked.trigger_with("select", "Theme", div());
         assert!(trigger.accessibility.read_only);
         assert!(trigger.accessibility.required);
         assert_eq!(
@@ -2242,60 +2337,60 @@ mod tests {
         assert_eq!(state.items()[1].label().as_ref(), "Dark");
 
         assert_eq!(
-            SelectState::<&str>::root_part(div().bg(Color::BLACK))
+            SelectState::<&str>::root_with(div().bg(Color::BLACK))
                 .visual
                 .background,
             Some(Color::BLACK)
         );
-        let label = SelectState::<&str>::label_part("select", div());
+        let label = SelectState::<&str>::label_with("select", div());
         assert_eq!(
             label.explicit_id,
             Some(SelectState::<&str>::label_id("select"))
         );
         assert_eq!(label.accessibility.role, AccessibilityRole::Label);
 
-        let value = SelectState::<&str>::value_part("select", div());
+        let value = SelectState::<&str>::value_with("select", div());
         assert!(value.accessibility.hidden);
         assert!(
-            SelectState::<&str>::icon_part("select", div())
+            SelectState::<&str>::icon_with("select", div())
                 .accessibility
                 .hidden
         );
         assert!(
-            SelectState::<&str>::arrow_part("select", div())
+            SelectState::<&str>::arrow_with("select", div())
                 .accessibility
                 .hidden
         );
         assert!(
-            SelectState::<&str>::backdrop_part("select", div())
+            SelectState::<&str>::backdrop_with("select", div())
                 .accessibility
                 .hidden
         );
         assert!(
-            SelectState::<&str>::item_text_part(div())
+            SelectState::<&str>::item_text_with(div())
                 .accessibility
                 .hidden
         );
         assert!(
-            SelectState::<&str>::item_indicator_part(div())
+            SelectState::<&str>::item_indicator_with(div())
                 .accessibility
                 .hidden
         );
 
-        let popup = SelectState::<&str>::popup_part("select", "Theme", 4, true, div());
+        let popup = SelectState::<&str>::popup_with("select", "Theme", 4, true, div());
         assert_eq!(popup.accessibility.role, AccessibilityRole::ListBox);
         assert!(popup.accessibility.multiselectable);
         assert_eq!(popup.visual.background, None);
         assert_eq!(
-            SelectState::<&str>::portal_part("select", "Theme", 4, false, div()).explicit_id,
+            SelectState::<&str>::portal_with("select", "Theme", 4, false, div()).explicit_id,
             popup.explicit_id
         );
         assert_eq!(
-            SelectState::<&str>::positioner_part("select", "Theme", 4, false, div()).explicit_id,
+            SelectState::<&str>::positioner_with("select", "Theme", 4, false, div()).explicit_id,
             popup.explicit_id
         );
 
-        let item = SelectState::<&str>::item_part(
+        let item = SelectState::<&str>::item_with(
             "row",
             "Alpha",
             SelectOptionState {
@@ -2311,17 +2406,17 @@ mod tests {
         assert_eq!(item.visual.background, None);
 
         assert_eq!(
-            SelectState::<&str>::group_part(div()).accessibility.role,
+            SelectState::<&str>::group_with(div()).accessibility.role,
             AccessibilityRole::Group
         );
         assert_eq!(
-            SelectState::<&str>::group_label_part("group-label", div())
+            SelectState::<&str>::group_label_with("group-label", div())
                 .accessibility
                 .role,
             AccessibilityRole::Label
         );
         assert_eq!(
-            SelectState::<&str>::separator_part(div())
+            SelectState::<&str>::separator_with(div())
                 .accessibility
                 .role,
             AccessibilityRole::Separator

@@ -81,7 +81,14 @@ func (element *Element) refreshFields(fields []elementBinding) {
 			binding = native.NewPropertyBinding(element.Node)
 			element.bindings[field] = binding
 		}
-		binding.Set(func() { applyElementBinding(element.Node, element.props, field) })
+		binding.Set(func() {
+			var previous []*native.Listener
+			if len(element.componentListeners) != 0 {
+				previous = append(previous, element.Node.Listeners...)
+			}
+			applyElementBinding(element.Node, element.props, field)
+			element.restoreComponentListeners(previous)
+		})
 	}
 }
 
@@ -103,6 +110,17 @@ func overlappingStyle(style styleData) bool {
 }
 
 func (element *Element) reconcile() {
+	if element.compound != nil {
+		element.compound.reconcile = true
+		return
+	}
+	if element.content != nil {
+		element.content.declaration.reconcile = true
+		if element.content.current != nil {
+			element.content.current.reconcile()
+		}
+		return
+	}
 	if element.update != nil {
 		return
 	}
@@ -123,6 +141,7 @@ func (element *Element) reconcile() {
 		props := resolveProps(element.arguments)
 		clearOmittedListeners(element.Node, props)
 		applyPropValues(element.Node, props)
+		element.restoreComponentListeners(nil)
 	})
 }
 

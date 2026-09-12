@@ -17,30 +17,26 @@ import (
 ```go
 func OtpFieldExample() *native.Node {
 	code, setCode := ui.CreateSignal("")
-	return ui.OtpField.Root(
-		ui.OtpFieldRootProps{
-			Value:          code,
-			Length:         6,
-			ValidationType: "numeric",
-			OnValueChange:  func(next string, _ *native.Event) { setCode(next) },
-			OnComplete:     func(value string, _ *native.Event) { fmt.Println("Complete:", value) },
-		},
-		func() *native.Node {
-			var children []*native.Node
-			for index := range 6 {
-				children = append(children, ui.OtpField.Input(ui.OtpFieldInputProps{Index: index}))
-			}
-			return ui.Fragment(children)
-		},
-	)
+	otpField1 := ui.NewOtpField(ui.OtpFieldRootProps{Value: code, Length: 6, ValidationType: "numeric", OnValueChange: func(next string, _ *native.Event) {
+		setCode(next)
+	}, OnComplete: func(value string, _ *native.Event) {
+		fmt.Println("Complete:", value)
+	}})
+	return otpField1.Root().Children(func() *native.Node {
+		var children []*native.Node
+		for index := range 6 {
+			children = append(children, otpField1.InputWith(ui.OtpFieldInputProps{Index: index}).NativeNode())
+		}
+		return ui.Fragment(children)
+	}).NativeNode()
 }
 ```
 
 ## 结构
 
-- `ui.OtpField.Root`
-- `ui.OtpField.Input`
-- `ui.OtpField.Separator`
+- `otpField.Root`
+- `otpField.Input`
+- `otpField.Separator`
 
 ## 主要属性
 

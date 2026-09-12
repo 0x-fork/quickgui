@@ -1371,7 +1371,7 @@ pub(super) fn apply_picker_part(
                 return Some(element);
             };
             if !listeners_enabled {
-                return Some(retained.state.trigger_part(root, label, element));
+                return Some(retained.state.trigger_with(root, label, element));
             }
             let arrows = retained.surface;
             // Base UI's `Select.ScrollUpArrow` and `Select.ScrollDownArrow` live inside the option
@@ -1379,11 +1379,11 @@ pub(super) fn apply_picker_part(
             let popup = move |list: SelectListState, parts: &quickgui::SelectPopupParts<'_>| {
                 let mut root = style.surface();
                 if arrows.scroll_up_arrow && list.can_scroll_up {
-                    root = root.child(parts.scroll_up_arrow_part(style.scroll_arrow("\u{25b2}")));
+                    root = root.child(parts.scroll_up_arrow_with(style.scroll_arrow("\u{25b2}")));
                 }
                 root = root.child(div().flex_col().flex_1().min_h(0.0));
                 if arrows.scroll_down_arrow && list.can_scroll_down {
-                    root = root.child(parts.scroll_down_arrow_part(style.scroll_arrow("\u{25bc}")));
+                    root = root.child(parts.scroll_down_arrow_with(style.scroll_arrow("\u{25bc}")));
                 }
                 root
             };
@@ -1408,7 +1408,7 @@ pub(super) fn apply_picker_part(
                 cx.invalidate();
             };
             let trigger = if arrows.scroll_up_arrow || arrows.scroll_down_arrow {
-                retained.state.element_with_parts_with(
+                retained.state.element_with_trigger_accessor(
                     cx,
                     root,
                     label,
@@ -1511,27 +1511,27 @@ pub(super) fn apply_picker_part(
         // -------------------------------------------------------------------
         // Owner-window select parts
         // -------------------------------------------------------------------
-        SELECT_LABEL_PART => Some(SelectState::<Arc<str>>::label_part(root, element)),
-        SELECT_VALUE_PART => Some(SelectState::<Arc<str>>::value_part(root, element)),
-        SELECT_ICON_PART => Some(SelectState::<Arc<str>>::icon_part(root, element)),
+        SELECT_LABEL_PART => Some(SelectState::<Arc<str>>::label_with(root, element)),
+        SELECT_VALUE_PART => Some(SelectState::<Arc<str>>::value_with(root, element)),
+        SELECT_ICON_PART => Some(SelectState::<Arc<str>>::icon_with(root, element)),
         SELECT_BACKDROP_PART => {
             let retained = components.selects.get(&key)?;
             if !retained.state.is_open() {
                 return None;
             }
-            Some(SelectState::<Arc<str>>::backdrop_part(root, element))
+            Some(SelectState::<Arc<str>>::backdrop_with(root, element))
         }
 
         // -------------------------------------------------------------------
         // Owner-window combobox and autocomplete parts
         // -------------------------------------------------------------------
-        COMBOBOX_LABEL_PART => Some(ComboboxState::<Arc<str>>::label_part(root, element)),
-        COMBOBOX_VALUE_PART => Some(ComboboxState::<Arc<str>>::value_part(root, element)),
-        COMBOBOX_ICON_PART => Some(ComboboxState::<Arc<str>>::icon_part(root, element)),
+        COMBOBOX_LABEL_PART => Some(ComboboxState::<Arc<str>>::label_with(root, element)),
+        COMBOBOX_VALUE_PART => Some(ComboboxState::<Arc<str>>::value_with(root, element)),
+        COMBOBOX_ICON_PART => Some(ComboboxState::<Arc<str>>::icon_with(root, element)),
         COMBOBOX_INPUT_GROUP_PART => {
-            Some(ComboboxState::<Arc<str>>::input_group_part(root, element))
+            Some(ComboboxState::<Arc<str>>::input_group_with(root, element))
         }
-        COMBOBOX_CHIPS_PART => Some(ComboboxState::<Arc<str>>::chips_part(root, element)),
+        COMBOBOX_CHIPS_PART => Some(ComboboxState::<Arc<str>>::chips_with(root, element)),
         COMBOBOX_CHIP_PART => {
             let retained = components.comboboxes.get(&key)?;
             let index = declared_index(node);
@@ -1542,7 +1542,7 @@ pub(super) fn apply_picker_part(
                 .cloned()
                 .or_else(|| declared_text(node, property::VALUE))
                 .unwrap_or_else(|| Arc::from(""));
-            Some(ComboboxState::<Arc<str>>::chip_part(
+            Some(ComboboxState::<Arc<str>>::chip_with(
                 root, index, chip_label, element,
             ))
         }
@@ -1552,7 +1552,7 @@ pub(super) fn apply_picker_part(
             if index >= retained.state.chip_count() {
                 return None;
             }
-            let remove = ComboboxState::<Arc<str>>::chip_remove_part(
+            let remove = ComboboxState::<Arc<str>>::chip_remove_with(
                 root,
                 index,
                 node.string(property::ACCESSIBILITY_LABEL)
@@ -1576,7 +1576,7 @@ pub(super) fn apply_picker_part(
         }
         COMBOBOX_CLEAR_PART => {
             let retained = components.comboboxes.get(&key)?;
-            let clear = ComboboxState::<Arc<str>>::clear_part(
+            let clear = ComboboxState::<Arc<str>>::clear_with(
                 root,
                 node.string(property::ACCESSIBILITY_LABEL)
                     .unwrap_or("Clear"),
@@ -1603,16 +1603,16 @@ pub(super) fn apply_picker_part(
         }
         COMBOBOX_TRIGGER_PART => {
             let retained = components.comboboxes.get(&key)?;
-            Some(retained.state.trigger_part(root, label, element))
+            Some(retained.state.trigger_with(root, label, element))
         }
         COMBOBOX_BACKDROP_PART => {
             let retained = components.comboboxes.get(&key)?;
             if !retained.state.is_open() {
                 return None;
             }
-            Some(ComboboxState::<Arc<str>>::backdrop_part(root, element))
+            Some(ComboboxState::<Arc<str>>::backdrop_with(root, element))
         }
-        COMBOBOX_STATUS_PART => Some(ComboboxState::<Arc<str>>::status_part(root, element)),
+        COMBOBOX_STATUS_PART => Some(ComboboxState::<Arc<str>>::status_with(root, element)),
         COMBOBOX_EMPTY_PART => {
             let retained = components.comboboxes.get(&key)?;
             // Base UI mounts `Combobox.Empty` only while the query really matched nothing, and the
@@ -1620,7 +1620,7 @@ pub(super) fn apply_picker_part(
             if !retained.state.is_empty_result() {
                 return None;
             }
-            Some(ComboboxState::<Arc<str>>::empty_part(root, element))
+            Some(ComboboxState::<Arc<str>>::empty_with(root, element))
         }
         _ => Some(element),
     }

@@ -16,36 +16,18 @@ import (
 ```go
 func CheckboxExample() *native.Node {
 	checked, setChecked := ui.CreateSignal(false)
-	return ui.Checkbox.Root(
-		ui.CheckboxProps{
-			Checked:         func() ui.CheckedState { return checked() },
-			OnCheckedChange: func(next bool, _ *native.Event) { setChecked(next) },
-		},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.Checkbox.Indicator(
-				ui.PartProps{Style: ui.Style().
-					Width(16).
-					Height(16).
-					BorderWidth(1).
-					BorderRadius(4).
-					BorderColor("#2563eb").
-					Display("flex").
-					AlignItems("center").
-					JustifyContent("center")},
-				func() *native.Node {
-					return ui.Show(
-						checked,
-						func() *ui.Element {
-							return ui.SVG().
-								Value(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12"><path d="M3 6l2 2 4-4" fill="none" stroke="#2563eb" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`).
-								Width(12).Height(12)
-						},
-					)
-				},
-			),
-				ui.Text("Remember me").Node})
-		},
-	)
+	checkbox1 := ui.NewCheckbox(ui.CheckboxProps{Checked: func() ui.CheckedState {
+		return checked()
+	}, OnCheckedChange: func(next bool, _ *native.Event) {
+		setChecked(next)
+	}})
+	return checkbox1.Root().Children(func() *native.Node {
+		return ui.Fragment([]*native.Node{checkbox1.Indicator(ui.PartProps{Style: ui.Style().Width(16).Height(16).BorderWidth(1).BorderRadius(4).BorderColor("#2563eb").Display("flex").AlignItems("center").JustifyContent("center")}).Children(func() *native.Node {
+			return ui.Show(checked, func() *ui.Element {
+				return ui.SVG().Value(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12"><path d="M3 6l2 2 4-4" fill="none" stroke="#2563eb" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`).Width(12).Height(12)
+			})
+		}).NativeNode(), ui.Text("Remember me").Node})
+	}).NativeNode()
 }
 ```
 
@@ -53,8 +35,8 @@ func CheckboxExample() *native.Node {
 
 ## 構成
 
-- `ui.Checkbox.Root`
-- `ui.Checkbox.Indicator`
+- `checkbox.Root`
+- `checkbox.Indicator`
 
 ## 主なプロパティ
 

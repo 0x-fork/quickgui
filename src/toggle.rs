@@ -27,7 +27,7 @@ pub struct ToggleGroupFirst;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct ToggleGroupLast;
 
-/// Contextual bindings used by [`ToggleGroupEntry::key_part`].
+/// Contextual bindings used by [`ToggleGroupEntry::key_with`].
 pub fn toggle_group_key_bindings() -> [KeyBinding; 8] {
     [
         KeyBinding::new(
@@ -96,7 +96,7 @@ impl Toggle {
     }
 
     /// Decorate an application-owned root without adding layout or appearance.
-    pub fn root_part(self, root: Element) -> Element {
+    pub fn root_with(self, root: Element) -> Element {
         root.accessibility_role(AccessibilityRole::ToggleButton)
             .toggle_state(if self.pressed {
                 ToggleState::On
@@ -108,18 +108,26 @@ impl Toggle {
             .app_region_no_drag()
             .user_select_none()
     }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(self) -> Element {
+        self.root_with(crate::div())
+    }
 
     /// Hide an application-owned decorative indicator from the accessible name.
-    pub fn indicator_part(self, indicator: Element) -> Element {
+    pub fn indicator_with(self, indicator: Element) -> Element {
         indicator.accessibility_hidden(true)
+    }
+    /// Create the unstyled indicator part. Use [`Self::indicator_with`] to supply an existing element.
+    pub fn indicator(self) -> Element {
+        self.indicator_with(crate::div())
     }
 }
 
 /// Create an unstyled controlled toggle-button root.
 ///
-/// This shorthand is equivalent to `Toggle::new(pressed).root_part(div())`.
+/// This shorthand is equivalent to `Toggle::new(pressed).root_with(div())`.
 pub fn toggle(pressed: bool) -> Element {
-    Toggle::new(pressed).root_part(div())
+    Toggle::new(pressed).root_with(div())
 }
 
 /// How many items of one toggle group can be pressed at once.
@@ -382,11 +390,15 @@ impl<'a> ToggleGroup<'a> {
     }
 
     /// Decorate an application-owned group root without adding layout or appearance.
-    pub fn root_part(self, root: Element) -> Element {
+    pub fn root_with(self, root: Element) -> Element {
         root.id(self.root_id)
             .accessibility_role(AccessibilityRole::Group)
             .accessibility_orientation(self.orientation)
             .app_region_no_drag()
+    }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(self) -> Element {
+        self.root_with(crate::div())
     }
 
     /// Describe one declared item.
@@ -438,10 +450,10 @@ impl<'a> ToggleGroupEntry<'a> {
     }
 
     /// Decorate an application-owned item as a pressed-state button.
-    pub fn item_part(self, item: Element) -> Element {
+    pub fn item_with(self, item: Element) -> Element {
         let disabled = self.item.disabled || item.accessibility.disabled;
         Toggle::new(self.pressed)
-            .root_part(item)
+            .root_with(item)
             .id(self.item_id())
             .focusable()
             .tab_index(if self.roving { 0 } else { -1 })
@@ -451,24 +463,36 @@ impl<'a> ToggleGroupEntry<'a> {
             })
             .disabled(disabled)
     }
+    /// Create the unstyled item part. Use [`Self::item_with`] to supply an existing element.
+    pub fn item(self) -> Element {
+        self.item_with(crate::div())
+    }
 
     /// Attach QuickGUI's typed toggle-group navigation to this item.
     ///
     /// Install [`toggle_group_key_bindings`] once on the application keymap.
-    pub fn key_part<V: 'static>(
+    pub fn key_with<V: 'static>(
         self,
         cx: &mut ViewContext<'_, V>,
         item: Element,
         access: fn(&mut V) -> &mut ToggleGroupState,
     ) -> Element {
-        self.key_part_with(cx, item, StateAccessor::from(access))
+        self.key_with_accessor(cx, item, StateAccessor::from(access))
+    }
+    /// Create the unstyled key part. Use [`Self::key_with`] to supply an existing element.
+    pub fn key<V: 'static>(
+        self,
+        cx: &mut ViewContext<'_, V>,
+        access: fn(&mut V) -> &mut ToggleGroupState,
+    ) -> Element {
+        self.key_with(cx, crate::div(), access)
     }
 
     /// Attach the typed toggle-group navigation against a per-instance state accessor.
     ///
     /// A host that renders many declared groups through one view passes an accessor that captures
     /// which [`ToggleGroupState`] this item belongs to.
-    pub fn key_part_with<V: 'static>(
+    pub fn key_with_accessor<V: 'static>(
         self,
         cx: &mut ViewContext<'_, V>,
         item: Element,
@@ -632,7 +656,7 @@ mod tests {
     fn toggle_is_a_pressed_button_not_a_checkbox() {
         let pressed = Toggle::new(true);
         assert!(pressed.is_pressed());
-        let root = pressed.root_part(div().px_2().bg(Color::rgb8(1, 2, 3)));
+        let root = pressed.root_with(div().px_2().bg(Color::rgb8(1, 2, 3)));
         assert_eq!(root.accessibility.role, AccessibilityRole::ToggleButton);
         assert_eq!(root.accessibility.toggled, Some(ToggleState::On));
         assert!(root.clickable);
@@ -642,9 +666,9 @@ mod tests {
         assert_eq!(root.user_select, UserSelect::None);
         assert_eq!(root.visual.background, Some(Color::rgb8(1, 2, 3)));
 
-        let released = Toggle::new(false).root_part(div());
+        let released = Toggle::new(false).root_with(div());
         assert_eq!(released.accessibility.toggled, Some(ToggleState::Off));
-        assert!(pressed.indicator_part(div()).accessibility.hidden);
+        assert!(pressed.indicator_with(div()).accessibility.hidden);
 
         let shorthand = toggle(true);
         assert_eq!(
@@ -723,7 +747,7 @@ mod tests {
         assert!(state.press("right"));
         let group = ToggleGroup::new("align", &state, &items);
 
-        let root = group.root_part(div().gap_1().bg(Color::rgb8(4, 5, 6)));
+        let root = group.root_with(div().gap_1().bg(Color::rgb8(4, 5, 6)));
         assert_eq!(root.explicit_id, Some("align".into()));
         assert_eq!(root.accessibility.role, AccessibilityRole::Group);
         assert_eq!(
@@ -736,7 +760,7 @@ mod tests {
         let right = group.item("right").expect("right entry");
         assert!(right.is_pressed());
         assert!(right.is_roving_stop());
-        let element = right.item_part(button().child("Right"));
+        let element = right.item_with(button().child("Right"));
         assert_eq!(element.explicit_id, Some(group.item_id("right")));
         assert_eq!(element.accessibility.role, AccessibilityRole::ToggleButton);
         assert_eq!(element.accessibility.toggled, Some(ToggleState::On));
@@ -744,20 +768,20 @@ mod tests {
 
         let left = group.item("left").expect("left entry");
         assert!(!left.is_pressed());
-        assert_eq!(left.item_part(div()).tab_index, -1);
+        assert_eq!(left.item_with(div()).tab_index, -1);
         assert_eq!(
-            left.item_part(div()).accessibility.toggled,
+            left.item_with(div()).accessibility.toggled,
             Some(ToggleState::Off)
         );
 
         let center = group.item("center").expect("center entry");
         assert!(center.is_disabled());
-        assert!(center.item_part(div()).accessibility.disabled);
+        assert!(center.item_with(div()).accessibility.disabled);
         assert!(group.item("absent").is_none());
 
         let vertical = ToggleGroup::new("align", &state, &items).vertical();
         assert_eq!(
-            vertical.root_part(div()).accessibility.orientation,
+            vertical.root_with(div()).accessibility.orientation,
             Some(AccessibilityOrientation::Vertical)
         );
 
@@ -796,7 +820,7 @@ mod tests {
         fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
             let items = items();
             let group = ToggleGroup::new("align", &self.align, &items);
-            let mut root = group.root_part(div());
+            let mut root = group.root_with(div());
             for item in items {
                 let entry = group.item(item.value()).expect("declared entry");
                 let value = item.value();
@@ -805,9 +829,9 @@ mod tests {
                     view.align.focus(value);
                     cx.invalidate();
                 });
-                root = root.child(entry.key_part(
+                root = root.child(entry.key_with(
                     cx,
-                    entry.item_part(div().child(text("Item")).on_click(clicked)),
+                    entry.item_with(div().child(text("Item")).on_click(clicked)),
                     Self::align,
                 ));
             }
@@ -822,7 +846,7 @@ mod tests {
                 .child(button().id("before").child("Before"))
                 .child(root)
                 .child(
-                    bold.root_part(div().child(text("Bold")))
+                    bold.root_with(div().child(text("Bold")))
                         .id("bold")
                         .on_click(bold_click),
                 )

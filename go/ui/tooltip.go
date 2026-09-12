@@ -175,8 +175,6 @@ func createTooltipPart(name, part string, props PartProps) *native.Node {
 }
 
 // Tooltip is a hover-opened surface whose deadlines belong to the core.
-var Tooltip = tooltipAPI{}
-
 type tooltipAPI struct{}
 
 func (tooltipAPI) Provider(props TooltipProviderProps, children ...any) *native.Node {
@@ -339,8 +337,6 @@ func createPreviewCardPart(name, part string, props PartProps) *native.Node {
 }
 
 // PreviewCard is a hover card whose two deadlines belong to the core.
-var PreviewCard = previewCardAPI{}
-
 type previewCardAPI struct{}
 
 func (previewCardAPI) Root(props PreviewCardRootProps, children ...any) *native.Node {

@@ -12,16 +12,16 @@ use quickgui::*;
 
 ```rust
 Fieldset::new()
-    .root_part(div().flex_col().gap(12.0))
+    .root().flex_col().gap(12.0)
     .child(text("Account"))
 ```
 
 ## 構成
 
-- `Fieldset::root_part`
-- `Fieldset::legend_part`
-- `Fieldset::description_part`
-- `Fieldset::control_part`
+- `Fieldset::root`
+- `Fieldset::legend`
+- `Fieldset::description`
+- `Fieldset::control`
 
 ## 主なプロパティ
 

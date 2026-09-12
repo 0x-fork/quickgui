@@ -185,8 +185,6 @@ func createToastPart(part string, props ToastPartProps, button bool) *native.Nod
 }
 
 // Toast is a toast viewport whose queue bound and swipe arithmetic belong to the core.
-var Toast = toastAPI{}
-
 type toastAPI struct{}
 
 func (toastAPI) Provider(props ToastProviderProps, children ...any) *native.Node {

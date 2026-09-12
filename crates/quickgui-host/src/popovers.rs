@@ -741,9 +741,9 @@ pub(super) fn apply_popover_part(
             };
             let popover = popover_descriptor(root, retained);
             if !listeners_enabled || !retained.open_on_hover {
-                return Some(popover.trigger_part(element));
+                return Some(popover.trigger_with(element));
             }
-            Some(retained.hover.trigger_part_with(
+            Some(retained.hover.trigger_with_accessor(
                 cx,
                 popover,
                 popover_hover_accessor(key),
@@ -757,7 +757,7 @@ pub(super) fn apply_popover_part(
             }
             Some(
                 popover_descriptor(root, retained)
-                    .tracked_positioner_part(element, &retained.placement),
+                    .tracked_positioner_with(element, &retained.placement),
             )
         }
         POPOVER_POPUP_PART => {
@@ -767,47 +767,48 @@ pub(super) fn apply_popover_part(
             }
             let popover = popover_descriptor(root, retained);
             if !listeners_enabled || !retained.open_on_hover {
-                return Some(popover.popover_part(element));
+                return Some(popover.popup_with(element));
             }
-            Some(
-                retained
-                    .hover
-                    .popup_part_with(cx, popover, popover_hover_accessor(key), element),
-            )
+            Some(retained.hover.popup_with_accessor(
+                cx,
+                popover,
+                popover_hover_accessor(key),
+                element,
+            ))
         }
         POPOVER_ARROW_PART => {
             let retained = components.popovers.popovers.get(&key)?;
             if !retained.is_open() {
                 return None;
             }
-            Some(popover_descriptor(root, retained).arrow_part(element))
+            Some(popover_descriptor(root, retained).arrow_with(element))
         }
         POPOVER_VIEWPORT_PART => {
             let retained = components.popovers.popovers.get(&key)?;
             if !retained.is_open() {
                 return None;
             }
-            Some(popover_descriptor(root, retained).viewport_part(element))
+            Some(popover_descriptor(root, retained).viewport_with(element))
         }
         POPOVER_BACKDROP_PART => {
             let retained = components.popovers.popovers.get(&key)?;
             if !retained.is_open() {
                 return None;
             }
-            Some(popover_descriptor(root, retained).backdrop_part(element))
+            Some(popover_descriptor(root, retained).backdrop_with(element))
         }
         POPOVER_TITLE_PART => {
             let retained = components.popovers.popovers.get(&key)?;
-            Some(popover_descriptor(root, retained).title_part(element))
+            Some(popover_descriptor(root, retained).title_with(element))
         }
         POPOVER_DESCRIPTION_PART => {
             let retained = components.popovers.popovers.get(&key)?;
-            Some(popover_descriptor(root, retained).description_part(element))
+            Some(popover_descriptor(root, retained).description_with(element))
         }
         POPOVER_CLOSE_PART => {
             let retained = components.popovers.popovers.get(&key)?;
             Some(
-                popover_descriptor(root, retained).close_part(
+                popover_descriptor(root, retained).close_with(
                     node.string(property::ACCESSIBILITY_LABEL)
                         .unwrap_or("Close"),
                     element,
@@ -829,7 +830,7 @@ pub(super) fn apply_popover_part(
             Some(
                 retained
                     .state
-                    .trigger_part_with(cx, tooltip_accessor(key), element),
+                    .trigger_with_accessor(cx, tooltip_accessor(key), element),
             )
         }
         TOOLTIP_PORTAL_PART | TOOLTIP_POSITIONER_PART => {
@@ -837,7 +838,7 @@ pub(super) fn apply_popover_part(
             if !retained.state.is_open() {
                 return None;
             }
-            Some(retained.state.positioner_part(element))
+            Some(retained.state.positioner_with(element))
         }
         TOOLTIP_POPUP_PART => {
             let retained = components.popovers.tooltips.get(&key)?;
@@ -850,7 +851,7 @@ pub(super) fn apply_popover_part(
             Some(
                 retained
                     .state
-                    .popup_part_with(cx, tooltip_accessor(key), element),
+                    .popup_with_accessor(cx, tooltip_accessor(key), element),
             )
         }
         TOOLTIP_ARROW_PART => {
@@ -858,7 +859,7 @@ pub(super) fn apply_popover_part(
             if !retained.state.is_open() {
                 return None;
             }
-            Some(retained.state.arrow_part(element))
+            Some(retained.state.arrow_with(element))
         }
         _ => Some(element),
     }

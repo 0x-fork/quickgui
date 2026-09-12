@@ -50,7 +50,7 @@ pub struct CalendarNextYear;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct CalendarSelect;
 
-/// Contextual bindings used by [`Calendar::key_part`].
+/// Contextual bindings used by [`Calendar::key_with`].
 pub fn calendar_key_bindings() -> [KeyBinding; 12] {
     [
         KeyBinding::new("left", CalendarPreviousDay, Some(CALENDAR_KEY_CONTEXT)),
@@ -415,7 +415,7 @@ impl Calendar {
     }
 
     /// Decorate an application-owned month grid without adding layout or appearance.
-    pub fn grid_part(self, state: CalendarState, grid: Element) -> Element {
+    pub fn grid_with(self, state: CalendarState, grid: Element) -> Element {
         let disabled = state.disabled || grid.accessibility.disabled;
         let grid = grid
             .id(self.root_id)
@@ -428,13 +428,21 @@ impl Calendar {
             .disabled(disabled);
         grid.accessibility_active_descendant(self.day_id(state.focused))
     }
+    /// Create the unstyled grid part. Use [`Self::grid_with`] to supply an existing element.
+    pub fn grid(self, state: CalendarState) -> Element {
+        self.grid_with(state, crate::div())
+    }
 
     /// Decorate an application-owned week row without adding layout or appearance.
-    pub fn week_part(self, index: usize, week: Element) -> Element {
+    pub fn week_with(self, index: usize, week: Element) -> Element {
         week.id(self.week_id(index))
             .accessibility_role(AccessibilityRole::Row)
             .accessibility_row_index(index)
             .app_region_no_drag()
+    }
+    /// Create the unstyled week part. Use [`Self::week_with`] to supply an existing element.
+    pub fn week(self, index: usize) -> Element {
+        self.week_with(index, crate::div())
     }
 
     /// Decorate an application-owned day cell without adding layout or appearance.
@@ -442,7 +450,7 @@ impl Calendar {
     /// Exactly one day carries the grid's Tab stop; the rest are reached with the arrow keys.
     /// QuickGUI sets the cell's accessible value to the ISO date; call `.accessibility_label(...)`
     /// afterwards to replace it with localized product text.
-    pub fn day_part(self, state: CalendarState, day: CivilDate, cell: Element) -> Element {
+    pub fn day_with(self, state: CalendarState, day: CivilDate, cell: Element) -> Element {
         let focused = state.focused == day;
         let selectable = state.is_selectable(day);
         let disabled = !selectable || cell.accessibility.disabled;
@@ -465,25 +473,38 @@ impl Calendar {
         }
         cell
     }
+    /// Create the unstyled day part. Use [`Self::day_with`] to supply an existing element.
+    pub fn day(self, state: CalendarState, day: CivilDate) -> Element {
+        self.day_with(state, day, crate::button())
+    }
 
     /// Attach QuickGUI's typed calendar actions and click selection to one day cell.
     ///
     /// Install [`calendar_key_bindings`] once on the application keymap.
-    pub fn key_part<V: 'static>(
+    pub fn key_with<V: 'static>(
         self,
         cx: &mut ViewContext<'_, V>,
         day: CivilDate,
         cell: Element,
         access: fn(&mut V) -> &mut CalendarState,
     ) -> Element {
-        self.key_part_with(cx, day, cell, StateAccessor::from(access))
+        self.key_with_accessor(cx, day, cell, StateAccessor::from(access))
+    }
+    /// Create the unstyled key part. Use [`Self::key_with`] to supply an existing element.
+    pub fn key<V: 'static>(
+        self,
+        cx: &mut ViewContext<'_, V>,
+        day: CivilDate,
+        access: fn(&mut V) -> &mut CalendarState,
+    ) -> Element {
+        self.key_with(cx, day, crate::div(), access)
     }
 
     /// Attach the typed calendar actions against a per-instance state accessor.
     ///
     /// A host that renders many declared calendars through one view passes an accessor that
     /// captures which [`CalendarState`] this day cell belongs to.
-    pub fn key_part_with<V: 'static>(
+    pub fn key_with_accessor<V: 'static>(
         self,
         cx: &mut ViewContext<'_, V>,
         day: CivilDate,
@@ -603,9 +624,9 @@ fn move_calendar_focus<V: 'static>(
 
 /// Create an unstyled semantic month-grid root.
 ///
-/// This shorthand is equivalent to `Calendar::new(id).grid_part(state, div())`.
+/// This shorthand is equivalent to `Calendar::new(id).grid_with(state, div())`.
 pub fn calendar(id: impl Into<ElementId>, state: CalendarState) -> Element {
-    Calendar::new(id).grid_part(state, div())
+    Calendar::new(id).grid_with(state, div())
 }
 
 fn derived_calendar_id(parent: ElementId, tag: u64, value: u64) -> ElementId {
@@ -724,7 +745,7 @@ mod tests {
         let state = CalendarState::selected(september_2026());
         let calendar_bar = Calendar::new("calendar");
 
-        let grid = calendar_bar.grid_part(
+        let grid = calendar_bar.grid_with(
             state,
             div().w(280.0).bg(Color::rgb8(1, 2, 3)).child("Caption"),
         );
@@ -736,10 +757,10 @@ mod tests {
             Some(calendar_bar.day_id(september_2026()))
         );
 
-        let week = calendar_bar.week_part(1, div().flex_row());
+        let week = calendar_bar.week_with(1, div().flex_row());
         assert_eq!(week.accessibility.role, AccessibilityRole::Row);
 
-        let focused = calendar_bar.day_part(state, september_2026(), div().child(text("3")));
+        let focused = calendar_bar.day_with(state, september_2026(), div().child(text("3")));
         assert_eq!(focused.accessibility.role, AccessibilityRole::GridCell);
         assert_eq!(focused.accessibility.value.as_deref(), Some("2026-09-03"));
         assert!(focused.accessibility.selected);
@@ -748,14 +769,14 @@ mod tests {
         assert_eq!(focused.visual.background, None);
         assert_eq!(focused.children.len(), 1);
 
-        let other = calendar_bar.day_part(state, CivilDate::new(2026, 9, 4).unwrap(), div());
+        let other = calendar_bar.day_with(state, CivilDate::new(2026, 9, 4).unwrap(), div());
         assert_eq!(other.tab_index, -1);
         assert!(!other.accessibility.selected);
 
         let bounded =
             CalendarState::new(september_2026()).maximum(CivilDate::new(2026, 9, 3).unwrap());
         let unavailable =
-            Calendar::new("calendar").day_part(bounded, CivilDate::new(2026, 9, 4).unwrap(), div());
+            Calendar::new("calendar").day_with(bounded, CivilDate::new(2026, 9, 4).unwrap(), div());
         assert!(
             unavailable.accessibility.disabled,
             "a day outside the declared range is not selectable"
@@ -794,18 +815,18 @@ mod tests {
         fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
             let grid = Calendar::new("calendar");
             let mut root = grid
-                .grid_part(self.calendar, div().flex_col())
+                .grid_with(self.calendar, div().flex_col())
                 .accessibility_label("Choose a day");
             for index in 0..self.calendar.week_count() {
                 let days = self.calendar.week(index).expect("a mounted week row");
-                let mut row = grid.week_part(index, div().flex_row());
+                let mut row = grid.week_with(index, div().flex_row());
                 for day in days {
-                    let cell = grid.day_part(
+                    let cell = grid.day_with(
                         self.calendar,
                         day,
                         div().w(28.0).h(24.0).child(text(day.day.to_string())),
                     );
-                    row = row.child(grid.key_part(cx, day, cell, Self::calendar));
+                    row = row.child(grid.key_with(cx, day, cell, Self::calendar));
                 }
                 root = root.child(row);
             }

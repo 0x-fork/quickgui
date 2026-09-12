@@ -24,27 +24,27 @@ let toggle = cx.listener(disclosure.trigger_id(), |view, cx| {
 });
 
 disclosure
-    .root_part(
+    .root_with(
         div().child(
             disclosure
-                .trigger_part(div().child("Recovery keys"))
+                .trigger().child("Recovery keys")
                 .on_click(toggle),
         ),
     )
     .children(
-        disclosure.panel_part(
+        disclosure.panel_with(
             div().child("alien-bean-pasta · wild-irish-burrito"),
         ),
     )
 ```
 
-`trigger_part` contributes button, focus, Enter/Space activation, `expanded`, and the mounted
+`trigger_with` contributes button, focus, Enter/Space activation, `expanded`, and the mounted
 panel relationship. It explicitly uses the desktop arrow cursor and opts out of hidden-inset
 window dragging. The trigger references the panel only while open, matching Base UI and avoiding
 a dangling native accessibility relation.
 
 Closed panels are unmounted by default. `.keep_mounted(true)` instead returns the closed panel as
-`display: none`. Because `panel_part` returns `Option<Element>`, pass it to `.children(...)`; the
+`display: none`. Because `panel_with` returns `Option<Element>`, pass it to `.children(...)`; the
 same composition works for both policies. A retained closed panel contributes no layout, paint,
 input, focus, or accessibility node.
 
@@ -67,18 +67,18 @@ let toggle_account = cx.listener(account.trigger_id(), |view, cx| {
     cx.invalidate();
 });
 
-accordion.root_part(
+accordion.root_with(
     div().child(
-        account.root_part(
+        account.root_with(
             div()
-                .child(account.header_part(
+                .child(account.header_with(
                     div().child(
                         account
-                            .trigger_part(div().child("Account"))
+                            .trigger().child("Account")
                             .on_click(toggle_account),
                     ),
                 ))
-                .children(account.panel_part(div().child("Account settings"))),
+                .children(account.panel_with(div().child("Account settings"))),
         ),
     ),
 )
@@ -117,35 +117,23 @@ retained closed panels, a disabled heading, and application-owned visuals.
 
 ## Go components
 
-The `ui` package exposes `ui.Collapsible.Root`, `Trigger`, and `Panel`, plus
-`ui.Accordion.Root`, `Item`, `Header`, `Trigger`, and `Panel`. Components declare
-their children in callbacks so each part receives its enclosing component context.
+Create instances with `ui.NewCollapsible()` and `ui.NewAccordion()`. Compose their
+`Root`, `Trigger`, and `Panel` parts directly; accordions also expose `Item` and
+`Header`. Parts receive their component context when inserted into the root.
 
 ```go
 func ShippingDetails() *native.Node {
 	open, setOpen := ui.CreateSignal([]string{"shipping"})
-	return ui.Accordion.Root(
-		ui.AccordionRootProps{
-			Value:         open,
-			OnValueChange: func(value []string, _ *native.Event) { setOpen(value) },
-			Multiple:      true,
-			HeadingLevel:  4,
-		},
-		func() *native.Node {
-			return ui.Accordion.Item(
-				ui.AccordionItemProps{Value: "shipping"},
-				func() *native.Node {
-					return ui.Fragment([]*native.Node{ui.Accordion.Header(
-						ui.PartProps{},
-						func() *native.Node {
-							return ui.Accordion.Trigger(ui.PartProps{}, "Shipping")
-						},
-					),
-						ui.Accordion.Panel(ui.PartProps{}, "Orders ship within two business days.")})
-				},
-			)
-		},
-	)
+	accordion1 := ui.NewAccordion(ui.AccordionRootProps{Value: open, OnValueChange: func(value []string, _ *native.Event) {
+		setOpen(value)
+	}, Multiple: true, HeadingLevel: 4})
+	return accordion1.Root().Children(func() *native.Node {
+		return accordion1.ItemWith(ui.AccordionItemProps{Value: "shipping"}).Children(func() *native.Node {
+			return ui.Fragment([]*native.Node{accordion1.Header(ui.PartProps{}).Children(func() *native.Node {
+				return accordion1.Trigger(ui.PartProps{}).Children("Shipping").NativeNode()
+			}).NativeNode(), accordion1.Panel(ui.PartProps{}).Children("Orders ship within two business days.").NativeNode()})
+		}).NativeNode()
+	}).NativeNode()
 }
 ```
 

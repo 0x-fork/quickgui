@@ -75,9 +75,12 @@ import { updater } from "./updates";
 
 export function CheckForUpdatesButton() {
   return (
-    <Button p-3 rounded-lg onClick={() => {
-      void updater.check().catch(console.error);
-    }}>
+    <Button
+      style={{ p3: true, roundedLg: true }}
+      onClick={() => {
+        void updater.check().catch(console.error);
+      }}
+    >
       Check for Updates
     </Button>
   );

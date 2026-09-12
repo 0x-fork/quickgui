@@ -1,13 +1,13 @@
 import {
-  styleAttributeNames,
+  directStyleNames,
   styleHelpers,
   type HelperDeclaration,
 } from "./style-helpers.generated.ts";
 
 export { helperProperties, type StyleHelpers } from "./style-helpers.generated.ts";
 
-export function stylePropertyName(name: string): string {
-  return Object.hasOwn(styleAttributeNames, name) ? styleAttributeNames[name]! : name;
+export function isDirectStyleName(name: string): boolean {
+  return directStyleNames.has(name);
 }
 
 /** Expand a Rust convenience into ordinary native properties before retained diffing. */
@@ -15,6 +15,7 @@ export function expandStyleHelper(name: string, value: unknown): HelperDeclarati
   // Grid's existing shorthand writes the same fields as col-span/row-span and needs the same
   // ownership, so withdrawing a helper can restore the declared start/end lines.
   if (name === "gridColumn" || name === "gridRow") return gridPlacement(name, value);
+  if (name === "flexWrap" && typeof value === "string") return undefined;
   if (!Object.hasOwn(styleHelpers, name)) return undefined;
   if (value === undefined || value === null || value === false) return {};
   const helper = styleHelpers[name]!;
@@ -22,7 +23,7 @@ export function expandStyleHelper(name: string, value: unknown): HelperDeclarati
   return helper.resolve();
 }
 
-/** CSS flex shorthand belongs to a reusable style, while the JSX flex helper is a flag. */
+/** CSS flex shorthand inside a reusable style. */
 export function flexDeclaration(value: unknown): HelperDeclaration {
   if (typeof value === "number") return { flexGrow: value, flexShrink: 1, flexBasis: 0 };
   const parts = String(value).trim().split(/\s+/);

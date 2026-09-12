@@ -12,14 +12,14 @@ use quickgui::*;
 
 ```rust
 let menu = PopoverMenu::new("edit", &state);
-menu.root_part(div()).child(menu.trigger_part(button().child("Edit")))
+menu.root().child(menu.trigger().child("Edit"))
 ```
 
 ## 结构
 
-- `PopoverMenu::root_part`
-- `PopoverMenu::trigger_part`
-- `PopoverMenu::popup_part`
+- `PopoverMenu::root`
+- `PopoverMenu::trigger`
+- `PopoverMenu::popup`
 
 ## 主要属性
 

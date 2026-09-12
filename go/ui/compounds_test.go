@@ -14,14 +14,14 @@ func TestCheckboxDeclaresTheCorePart(t *testing.T) {
 	reactive.CreateRoot(func(dispose func()) struct{} {
 		defer dispose()
 		checked, setChecked := CreateSignal(false)
-		node := Checkbox.Root(CheckboxProps{
+		node := (checkboxAPI{}).Root(CheckboxProps{
 			Checked: func() CheckedState { return checked() },
 			OnCheckedChange: func(next bool, _ *native.Event) {
 				setChecked(next)
 			},
 			PartProps: PartProps{
 				Children: func() *native.Node {
-					return Checkbox.Indicator(PartProps{})
+					return (checkboxAPI{}).Indicator(PartProps{})
 				},
 			},
 		})
@@ -40,14 +40,14 @@ func TestDialogAndTableDeclareCoreParts(t *testing.T) {
 	reactive.CreateRoot(func(dispose func()) struct{} {
 		defer dispose()
 		open := func() bool { return true }
-		dialog := Dialog.Root(DialogRootProps{
+		dialog := (dialogAPI{}).Root(DialogRootProps{
 			Open: open,
 			Children: func() *native.Node {
-				return Dialog.Portal(PartProps{
+				return (dialogAPI{}).Portal(PartProps{
 					Children: func() *native.Node {
-						return Dialog.Popup(DialogPopupProps{
+						return (dialogAPI{}).Popup(DialogPopupProps{
 							PartProps: PartProps{Children: func() *native.Node {
-								return Dialog.Title(PartProps{Children: func() *Element {
+								return (dialogAPI{}).Title(PartProps{Children: func() *Element {
 									return Text(Props{Children: "Title"})
 								}})
 							}},
@@ -59,7 +59,7 @@ func TestDialogAndTableDeclareCoreParts(t *testing.T) {
 		if dialog == nil {
 			t.Fatal("dialog")
 		}
-		table := Table.Root(TableRootProps{
+		table := (tableAPI{}).Root(TableRootProps{
 			Columns: func() []TableColumnDeclaration {
 				return []TableColumnDeclaration{{ID: "name", Track: "1fr"}}
 			},
@@ -68,10 +68,10 @@ func TestDialogAndTableDeclareCoreParts(t *testing.T) {
 			HeaderHeight: 0,
 			PartProps: PartProps{
 				Children: func() *native.Node {
-					return Table.Row(TableRowProps{
+					return (tableAPI{}).Row(TableRowProps{
 						Index: 0,
 						PartProps: PartProps{Children: func() *native.Node {
-							return Table.Cell(TableCellProps{Column: "name", PartProps: PartProps{
+							return (tableAPI{}).Cell(TableCellProps{Column: "name", PartProps: PartProps{
 								Children: func() *Element { return Text(Props{Children: "a"}) },
 							}})
 						}},
@@ -91,7 +91,7 @@ func TestToastManagerOwnsTheQueue(t *testing.T) {
 	reactive.CreateRoot(func(dispose func()) struct{} {
 		defer dispose()
 		var manager *ToastManager
-		Toast.Provider(ToastProviderProps{
+		(toastAPI{}).Provider(ToastProviderProps{
 			Timeout: 1000,
 			Limit:   2,
 			Children: func() *Element {

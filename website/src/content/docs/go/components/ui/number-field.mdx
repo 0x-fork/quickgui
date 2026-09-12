@@ -16,36 +16,29 @@ import (
 ```go
 func NumberFieldExample() *native.Node {
 	value, setValue := ui.CreateSignal(8.0)
-	return ui.NumberField.Root(
-		ui.NumberFieldRootProps{
-			Value: func() *float64 { current := value(); return &current },
-			Min:   0,
-			Max:   100,
-			Step:  1,
-			OnValueChange: func(next *float64, valid bool, _ *native.Event) {
-				if valid && next != nil {
-					setValue(*next)
-				}
-			},
-		},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.NumberField.Decrement(ui.PartProps{}, "−"),
-				ui.NumberField.Input(ui.NumberFieldInputProps{}),
-				ui.NumberField.Increment(ui.PartProps{}, "+")})
-		},
-	)
+	numberField1 := ui.NewNumberField(ui.NumberFieldRootProps{Value: func() *float64 {
+		current := value()
+		return &current
+	}, Min: 0, Max: 100, Step: 1, OnValueChange: func(next *float64, valid bool, _ *native.Event) {
+		if valid && next != nil {
+			setValue(*next)
+		}
+	}})
+	return numberField1.Root().Children(func() *native.Node {
+		return ui.Fragment([]*native.Node{numberField1.Decrement(ui.PartProps{}).Children("−").NativeNode(), numberField1.Input(ui.NumberFieldInputProps{}).NativeNode(), numberField1.Increment(ui.PartProps{}).Children("+").NativeNode()})
+	}).NativeNode()
 }
 ```
 
 ## Anatomy
 
-- `ui.NumberField.Root`
-- `ui.NumberField.Group`
-- `ui.NumberField.Input`
-- `ui.NumberField.Increment`
-- `ui.NumberField.Decrement`
-- `ui.NumberField.ScrubArea`
-- `ui.NumberField.ScrubAreaCursor`
+- `numberField.Root`
+- `numberField.Group`
+- `numberField.Input`
+- `numberField.Increment`
+- `numberField.Decrement`
+- `numberField.ScrubArea`
+- `numberField.ScrubAreaCursor`
 
 ## Key props
 

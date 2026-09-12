@@ -14,34 +14,22 @@ import (
 
 ```go
 func MeterExample(value func() *float64) *native.Node {
-	return ui.Meter.Root(
-		ui.MeterProps{
-			Value:   value,
-			Min:     0,
-			Max:     100,
-			Low:     25,
-			High:    80,
-			Optimum: 50,
-		},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.Meter.Label(ui.PartProps{}, "Disk used"),
-				ui.Meter.Track(
-					ui.PartProps{},
-					func() *native.Node { return ui.Meter.Indicator(ui.PartProps{}) },
-				),
-				ui.Meter.Value(ui.PartProps{})})
-		},
-	)
+	meter1 := ui.NewMeter(ui.MeterProps{Value: value, Min: 0, Max: 100, Low: 25, High: 80, Optimum: 50})
+	return meter1.Root().Children(func() *native.Node {
+		return ui.Fragment([]*native.Node{meter1.Label(ui.PartProps{}).Children("Disk used").NativeNode(), meter1.Track(ui.PartProps{}).Children(func() *native.Node {
+			return meter1.Indicator(ui.PartProps{}).NativeNode()
+		}).NativeNode(), meter1.Value(ui.PartProps{}).NativeNode()})
+	}).NativeNode()
 }
 ```
 
 ## Anatomy
 
-- `ui.Meter.Root`
-- `ui.Meter.Track`
-- `ui.Meter.Indicator`
-- `ui.Meter.Label`
-- `ui.Meter.Value`
+- `meter.Root`
+- `meter.Track`
+- `meter.Indicator`
+- `meter.Label`
+- `meter.Value`
 
 ## Key props
 

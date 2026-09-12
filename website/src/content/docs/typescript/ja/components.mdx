@@ -11,6 +11,15 @@ function Greeting(props: { name: string }) {
 <Greeting name={name()} />
 ```
 
+`<View>some text</View>` にはテキストを直接渡せます。`<div>` と `<span>` はそれぞれ `View` と `Text` の別名で、コンポーネントのインポートは不要です。見た目の指定はすべて `style` 内の camelCase キーを使います。直接のスタイル属性、`class`、`className` はサポートしません。
+
+```tsx
+<div style={{ flexCol: true, gap2: true }}>
+  some text
+  <span style={{ textLg: true, fontSemibold: true }}>Styled text</span>
+</div>
+```
+
 ## プリミティブ
 
 `View`, `Text`, `Button`, `Input`, `TextArea`, `Markdown`, `Image`, `Svg`, `Shader`, `VirtualList`, and optional `Terminal` are native building blocks. `TextInput` is also available as the single-line input spelling.

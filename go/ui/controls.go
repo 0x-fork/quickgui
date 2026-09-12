@@ -37,8 +37,6 @@ type checkboxGroupState struct {
 var checkboxGroupContext = createPartContext[checkboxGroupState]()
 
 // Checkbox is a controlled, unstyled checkbox whose toggle state belongs to the core.
-var Checkbox = checkboxAPI{}
-
 type checkboxAPI struct{}
 
 func (checkboxAPI) Root(props CheckboxProps, children ...any) *native.Node {
@@ -114,8 +112,6 @@ func defaultCheckedState(value CheckedState) CheckedState {
 }
 
 // CheckboxGroup keeps checked values in the declared order.
-var CheckboxGroup = checkboxGroupAPI{}
-
 type checkboxGroupAPI struct{}
 
 func (checkboxGroupAPI) Root(props CheckboxGroupProps, children ...any) *native.Node {
@@ -200,8 +196,6 @@ func (state *radioGroupState) selectValue(next string, event *native.Event) {
 var radioGroupContext = createPartContext[radioGroupState]()
 
 // RadioGroup supplies roving Tab and arrow behavior from the core.
-var RadioGroup = radioGroupAPI{}
-
 type radioGroupAPI struct{}
 
 func (radioGroupAPI) Root(props RadioGroupProps, children ...any) *native.Node {
@@ -227,8 +221,6 @@ func (radioGroupAPI) Root(props RadioGroupProps, children ...any) *native.Node {
 }
 
 // Radio is a controlled radio button.
-var Radio = radioAPI{}
-
 type radioAPI struct{}
 
 func (radioAPI) Root(props RadioProps, children ...any) *native.Node {
@@ -291,8 +283,6 @@ type SwitchProps struct {
 }
 
 // Switch is a controlled switch.
-var Switch = switchAPI{}
-
 type switchAPI struct{}
 
 func (switchAPI) Root(props SwitchProps, children ...any) *native.Node {
@@ -344,8 +334,6 @@ type ToggleProps struct {
 }
 
 // Toggle is a button that stays pressed, not a checkbox.
-var Toggle = toggleAPI{}
-
 type toggleAPI struct{}
 
 func (toggleAPI) Root(props ToggleProps, children ...any) *native.Node {
@@ -400,8 +388,6 @@ type ToggleGroupItemProps struct {
 var toggleGroupContext = createPartContext[string]()
 
 // ToggleGroup is a single- or multiple-selection toggle set.
-var ToggleGroup = toggleGroupAPI{}
-
 type toggleGroupAPI struct{}
 
 func (toggleGroupAPI) Root(props ToggleGroupProps, children ...any) *native.Node {

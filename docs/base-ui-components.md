@@ -28,7 +28,7 @@ colour, no inset. It is never focusable and never contributes to a neighbouring 
 ```rust
 use quickgui::{Color, Separator, SeparatorOrientation, div, separator};
 
-let rule = Separator::horizontal().root_part(div().h(1.0).bg(Color::rgb8(220, 220, 220)));
+let rule = Separator::horizontal().root().h(1.0).bg(Color::rgb8(220, 220, 220));
 let inline = separator(SeparatorOrientation::Vertical);
 ```
 
@@ -51,12 +51,12 @@ let mut state = AvatarState::new().delay(Duration::from_millis(200));
 state.set_loading_status(AvatarLoadingStatus::Loading, Instant::now());
 
 let avatar = Avatar::new("member", "Ada Lovelace");
-let mut root = avatar.root_part(div().size(48.0, 48.0).rounded_full());
+let mut root = avatar.root().size(48.0, 48.0).rounded_full();
 if state.shows_image() {
-    root = root.child(avatar.image_part(img(source).size_full()));
+    root = root.child(avatar.image_with(img(source).size_full()));
 }
 if state.shows_fallback() {
-    root = root.child(avatar.fallback_part(text("AL")));
+    root = root.child(avatar.fallback_with(text("AL")));
 }
 ```
 
@@ -87,11 +87,11 @@ let parent = group.on_parent_click(cx, |view: &mut Form| &mut view.colors, |view
     view.summary = format!("{} checked", values.len());
 });
 let mut root = group
-    .root_part(div())
-    .child(group.parent_part(div()).on_click(parent));
+    .root()
+    .child(group.parent_with(div()).on_click(parent));
 for value in ["red", "green", "blue"] {
     let click = group.on_checkbox_click(cx, value, |view: &mut Form| &mut view.colors, |_, _, _| {});
-    root = root.child(group.checkbox_part(value, div()).on_click(click));
+    root = root.child(group.checkbox_with(value, div()).on_click(click));
 }
 ```
 
@@ -116,14 +116,14 @@ let hover = card.on_trigger_hover(cx, |view: &mut Page| &mut view.card, |_, _, _
 let dismiss = card.on_dismiss(cx, |view: &mut Page| &mut view.card, |_, _, _| {});
 
 let mut root = card
-    .root_part(div().relative())
-    .child(card.trigger_part(text("@ada")).on_hover(hover));
+    .root().relative()
+    .child(card.trigger_with(text("@ada")).on_hover(hover));
 if card.is_open() {
     root = root.child(
-        card.positioner_part(div()).child(
-            card.popup_part(div())
+        card.positioner().child(
+            card.popup()
                 .on_dismiss(dismiss)
-                .child(card.arrow_part(div())),
+                .child(card.arrow()),
         ),
     );
 }
@@ -133,7 +133,7 @@ The trigger projects the **Link** role rather than Button: a preview card previe
 rather than opening a menu. The parts compose the existing in-window
 [`Popover`](popovers.md), so side/align placement, collision handling, Escape and outside-press
 dismissal, and focus restoration are the popover's. QuickGUI's retained overlay node is itself the
-portal, so `portal_part` and `positioner_part` decorate the same boundary — mount exactly one.
+portal, so `portal_with` and `positioner_with` decorate the same boundary — mount exactly one.
 
 Escape clears the retained hover flags as well as the open value, so a card dismissed under the
 pointer does not immediately schedule itself open again.
@@ -154,14 +154,14 @@ self.log.set_geometry(Size::new(260.0, 160.0), Size::new(260.0, 900.0));
 let area = ScrollArea::new("log");
 let style = self.log.style_state();
 
-area.root_part(div())
+area.root()
     .child(
-        area.viewport_part(div().on_scroll_wheel(wheel))
-            .child(area.content_part(div()).translate(0.0, -self.log.offset().y)),
+        area.viewport().on_scroll_wheel(wheel)
+            .child(area.content().translate(0.0, -self.log.offset().y)),
     )
     .child(
-        area.scrollbar_part(&self.log, ScrollAreaOrientation::Vertical, div().on_pointer(track))
-            .child(area.positioned_thumb_part(
+        area.scrollbar_with(&self.log, ScrollAreaOrientation::Vertical, div().on_pointer(track))
+            .child(area.positioned_thumb_with(
                 &self.log,
                 ScrollAreaOrientation::Vertical,
                 160.0,
@@ -170,10 +170,10 @@ area.root_part(div())
     )
 ```
 
-`positioned_thumb_part` places the thumb absolutely inside the scrollbar at
+`positioned_thumb_with` places the thumb absolutely inside the scrollbar at
 `ScrollAreaState::thumb_offset` with `ScrollAreaState::thumb_length` for the track length the
 caller laid out, so it follows the offset without the application re-deriving either value; the
-cross-axis size and every visual property stay caller-owned. `thumb_part` is the bare decorator for
+cross-axis size and every visual property stay caller-owned. `thumb_with` is the bare decorator for
 an application that positions the thumb itself. A thumb drag is measured in window coordinates
 from the capture origin, so a thumb that re-lays out under the pointer keeps tracking it exactly.
 To size a scroll area from real layout instead of declared extents, bind `LayoutBoundsHandle`s
@@ -206,9 +206,9 @@ unchanged.
 use quickgui::{OtpField, OtpFieldState, OtpValidationType, div, text_input};
 
 let field = OtpField::new("code").auto_submit("verify");
-let mut root = field.root_part(&self.code, div().flex_row());
+let mut root = field.root_with(&self.code, div().flex_row());
 for index in 0..self.code.length() {
-    root = root.child(field.slot_part(
+    root = root.child(field.slot_with(
         cx,
         &self.code,
         index,
@@ -220,7 +220,7 @@ for index in 0..self.code.length() {
 }
 ```
 
-`slot_part` decorates the slot and attaches its whole behavior: accepted characters fill the slot
+`slot_with` decorates the slot and attaches its whole behavior: accepted characters fill the slot
 and advance, typing over a filled slot replaces it, a paste distributes across consecutive slots
 from the focused index, Backspace clears in place and then walks back, Delete clears without moving,
 and the arrows plus Home/End move between slots. Install `otp_field_key_bindings()` once on the
@@ -231,7 +231,7 @@ editing, so the OTP field owns those keys while every other key still reaches th
 presents the code the way a password input is presented; `required` drives the field's validity,
 which projects on the root group and on every slot. `auto_submit(form)` routes through
 `EventContext::submit_form`, so completing the code validates and submits the named form exactly as
-a Return press would. `separator_part` is decorative and hidden, so it never interrupts the
+a Return press would. `separator_with` is decorative and hidden, so it never interrupts the
 announced code.
 
 ## Drawer
@@ -251,17 +251,17 @@ let drawer = Drawer::from_state("filters", &state)
     .initial_focus("sheet-first");
 
 drawer
-    .portal_part(div())
-    .child(drawer.backdrop_part(div()))
-    .child(drawer.viewport_part(div().flex_col().justify_end()).child(
+    .portal()
+    .child(drawer.backdrop())
+    .child(drawer.viewport().flex_col().justify_end().child(
         drawer
-            .popup_part(div())
+            .popup()
             .translate(0.0, state.swipe_offset())
-            .child(drawer.swipe_area_part(div().on_pointer(swipe)))
-            .child(drawer.title_part(text("Filters")))
-            .child(drawer.description_part(text("Narrow the results")))
-            .child(drawer.content_part(div()))
-            .child(drawer.close_part("Close filters", div())),
+            .child(drawer.swipe_area_with(div().on_pointer(swipe)))
+            .child(drawer.title_with(text("Filters")))
+            .child(drawer.description_with(text("Narrow the results")))
+            .child(drawer.content())
+            .child(drawer.close_with("Close filters", div())),
     ))
 ```
 
@@ -300,27 +300,27 @@ let items = [
     NavigationMenuItem::new("support").disabled(true),
 ];
 let menu = NavigationMenu::new("main-nav", &self.nav, &items);
-let mut list = menu.list_part(div());
+let mut list = menu.list();
 for item in items.iter() {
     let entry = menu.entry(item.value()).expect("declared item");
     let click = entry.on_trigger_click(cx, |view: &mut Site| &mut view.nav, |_, _, _| {});
     let hover = entry.on_trigger_hover(cx, |view: &mut Site| &mut view.nav, |_, _, _| {});
-    let trigger = entry.key_part(
+    let trigger = entry.key_with(
         cx,
-        entry.trigger_part(div()).on_click(click).on_hover(hover),
+        entry.trigger().on_click(click).on_hover(hover),
         |view: &mut Site| &mut view.nav,
     );
-    list = list.child(entry.item_part(div()).child(trigger).child(entry.icon_part(div())));
+    list = list.child(entry.item_with(div()).child(trigger).child(entry.icon_with(div())));
 }
-menu.root_part(div()).child(list)
+menu.root().child(list)
 ```
 
 The root is a Navigation landmark, the list carries the List role and the menu's orientation, each
 item is a ListItem with its position in the set, and each trigger is a Button with `has-popup`,
 expanded state, and a controls relationship to its open panel. Each panel mounts through the
-existing [`Popover`](popovers.md) parts — `portal_part` / `positioner_part` are the same merged
-boundary, then `popup_part`, `viewport_part`, `content_part`, `arrow_part`, and `backdrop_part`.
-`link_part(id, active, element)` decorates a navigation link and projects `active` as the native
+existing [`Popover`](popovers.md) parts — `portal_with` / `positioner_with` are the same merged
+boundary, then `popup_with`, `viewport_with`, `content_with`, `arrow_with`, and `backdrop_with`.
+`link_with(id, active, element)` decorates a navigation link and projects `active` as the native
 selected state.
 
 Hovering a trigger opens after `delay` when every panel is closed and switches **immediately** when
@@ -349,27 +349,28 @@ allocates one bounded scope; child callbacks run inside that scope.
 func ProfileControls() *native.Node {
 	var children []*native.Node
 	colors, setColors := ui.CreateSignal([]string{"red"})
-	children = append(children, ui.Avatar.Root(
-		ui.AvatarRootProps{
-			PartProps:             ui.PartProps{AriaLabel: "Ada Lovelace"},
-			OnLoadingStatusChange: func(status string, _ *native.Event) { log.Print(status) },
-		},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.Avatar.Image(ui.AvatarImageProps{Src: "./ada.png"}),
-				ui.Avatar.Fallback(ui.AvatarFallbackProps{Delay: 120}, "AL")})
-		},
-	))
-	children = append(children, ui.CheckboxGroup.Root(
-		ui.CheckboxGroupProps{
-			AllValues:     []string{"red", "green", "blue"},
-			Value:         colors,
-			OnValueChange: func(value []string, _ *native.Event) { setColors(value) },
-		},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.Checkbox.Root(ui.CheckboxProps{Parent: true}, "All colours"),
-				ui.Checkbox.Root(ui.CheckboxProps{Value: "red"}, "Red")})
-		},
-	))
+	children = append(children, func() *native.Node {
+		avatar1 := ui.NewAvatar(ui.AvatarRootProps{PartProps: ui.PartProps{AriaLabel: "Ada Lovelace"}, OnLoadingStatusChange: func(status string, _ *native.Event) {
+			log.Print(status)
+		}})
+		return avatar1.Root().Children(func() *native.Node {
+			return ui.Fragment([]*native.Node{avatar1.Image(ui.AvatarImageProps{Src: "./ada.png"}).NativeNode(), avatar1.Fallback(ui.AvatarFallbackProps{Delay: 120}).Children("AL").NativeNode()})
+		}).NativeNode()
+	}())
+	children = append(children, func() *native.Node {
+		checkboxGroup2 := ui.NewCheckboxGroup(ui.CheckboxGroupProps{AllValues: []string{"red", "green", "blue"}, Value: colors, OnValueChange: func(value []string, _ *native.Event) {
+			setColors(value)
+		}})
+		return checkboxGroup2.Root().Children(func() *native.Node {
+			return ui.Fragment([]*native.Node{func() *native.Node {
+				checkbox3 := ui.NewCheckbox(ui.CheckboxProps{Parent: true})
+				return checkbox3.Root().Children("All colours").NativeNode()
+			}(), func() *native.Node {
+				checkbox4 := ui.NewCheckbox(ui.CheckboxProps{Value: "red"})
+				return checkbox4.Root().Children("Red").NativeNode()
+			}()})
+		}).NativeNode()
+	}())
 	return ui.Fragment(children)
 }
 ```

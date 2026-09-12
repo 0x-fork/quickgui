@@ -14,23 +14,21 @@ import (
 
 ```go
 func MenubarExample() *native.Node {
-	return ui.Menubar.Root(
-		ui.MenubarRootProps{Count: 2},
-		func() *native.Node {
-			var children []*native.Node
-			for index, label := range []string{"File", "Edit"} {
-				children = append(children, ui.Menubar.Item(ui.MenubarItemProps{Index: &index}, label))
-			}
-			return ui.Fragment(children)
-		},
-	)
+	menubar1 := ui.NewMenubar(ui.MenubarRootProps{Count: 2})
+	return menubar1.Root().Children(func() *native.Node {
+		var children []*native.Node
+		for index, label := range []string{"File", "Edit"} {
+			children = append(children, menubar1.Item(ui.MenubarItemProps{Index: &index}).Children(label).NativeNode())
+		}
+		return ui.Fragment(children)
+	}).NativeNode()
 }
 ```
 
 ## Anatomy
 
-- `ui.Menubar.Root`
-- `ui.Menubar.Item`
+- `menubar.Root`
+- `menubar.Item`
 
 ## Key props
 

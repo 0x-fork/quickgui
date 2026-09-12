@@ -14,36 +14,24 @@ import (
 
 ```go
 func AccordionExample() *native.Node {
-	return ui.Accordion.Root(
-		ui.AccordionRootProps{Multiple: true},
-		func() *native.Node {
-			return ui.Accordion.Item(
-				ui.AccordionItemProps{Value: "details"},
-				func() *native.Node {
-					return ui.Fragment([]*native.Node{ui.Accordion.Header(
-						ui.PartProps{},
-						func() *native.Node {
-							return ui.Accordion.Trigger(
-								ui.PartProps{},
-								"Details",
-							)
-						},
-					),
-						ui.Accordion.Panel(ui.PartProps{}, "Mounted when opened")})
-				},
-			)
-		},
-	)
+	accordion1 := ui.NewAccordion(ui.AccordionRootProps{Multiple: true})
+	return accordion1.Root().Children(func() *native.Node {
+		return accordion1.ItemWith(ui.AccordionItemProps{Value: "details"}).Children(func() *native.Node {
+			return ui.Fragment([]*native.Node{accordion1.Header(ui.PartProps{}).Children(func() *native.Node {
+				return accordion1.Trigger(ui.PartProps{}).Children("Details").NativeNode()
+			}).NativeNode(), accordion1.Panel(ui.PartProps{}).Children("Mounted when opened").NativeNode()})
+		}).NativeNode()
+	}).NativeNode()
 }
 ```
 
 ## 構成
 
-- `ui.Accordion.Root`
-- `ui.Accordion.Item`
-- `ui.Accordion.Header`
-- `ui.Accordion.Trigger`
-- `ui.Accordion.Panel`
+- `accordion.Root`
+- `accordion.Item`
+- `accordion.Header`
+- `accordion.Trigger`
+- `accordion.Panel`
 
 ## 主なプロパティ
 

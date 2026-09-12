@@ -31,23 +31,25 @@ function keyOf(value: KeyedTokensInfo, content: string) {
 }
 
 test("exact matches take priority over equivalent identifiers and repeated names stay distinct", () => {
-  const from = step("TextColor TextColor text-color Color BackgroundColor");
-  const { to } = syncSimilarTokenKeys(from, step("text_color color text-color Color Bg"));
-  expect(keyOf(to, "text-color")).toBe(keyOf(from, "text-color"));
-  expect(keyOf(to, "text_color")).toBe(from.tokens[0]!.key);
-  expect(keyOf(to, "color")).toBe(from.tokens[2]!.key);
-  expect(keyOf(to, "Color")).toBe(keyOf(from, "Color"));
-  expect(keyOf(to, "Bg")).toBe(keyOf(from, "BackgroundColor"));
+  const from = step("formatTemperature formatTemperature format-temperature Forecast city");
+  const { to } = syncSimilarTokenKeys(
+    from,
+    step("format_temperature FormatTemperature format-temperature Forecast City"),
+  );
+  expect(keyOf(to, "format-temperature")).toBe(keyOf(from, "format-temperature"));
+  expect(keyOf(to, "format_temperature")).toBe(from.tokens[0]!.key);
+  expect(keyOf(to, "FormatTemperature")).toBe(from.tokens[2]!.key);
+  expect(keyOf(to, "Forecast")).toBe(keyOf(from, "Forecast"));
+  expect(keyOf(to, "City")).toBe(keyOf(from, "city"));
   expect(new Set(to.tokens.map((token) => token.key)).size).toBe(to.tokens.length);
 });
 
-test("real highlighted Counter snippets retain cross-language identities", () => {
-  const counter = snippets;
-  const ts = syncSimilarTokenKeys(counter.go, counter.typescript).to;
-  const rust = syncSimilarTokenKeys(ts, counter.rust).to;
-  expect(keyOf(ts, "color")).toBe(keyOf(counter.go, "TextColor"));
-  expect(keyOf(rust, "text_color")).toBe(keyOf(ts, "color"));
-  expect(keyOf(rust, "flex_col")).toBe(keyOf(counter.go, "FlexCol"));
+test("real highlighted forecast snippets retain cross-language identities", () => {
+  const ts = syncSimilarTokenKeys(snippets.go, snippets.typescript).to;
+  const rust = syncSimilarTokenKeys(ts, snippets.rust).to;
+  expect(keyOf(ts, "formatTemperature")).toBe(keyOf(snippets.go, "FormatTemperature"));
+  expect(keyOf(rust, "format_temperature")).toBe(keyOf(ts, "formatTemperature"));
+  expect(keyOf(rust, "fahrenheit")).toBe(keyOf(ts, "fahrenheit"));
 });
 
 test("whitespace and blank lines advance the code grid without creating nodes", () => {

@@ -15,25 +15,19 @@ import (
 ```go
 func TreeExample() *native.Node {
 	nodes := []ui.TreeNodeDeclaration{{ID: "src", Label: "src", Children: []ui.TreeNodeDeclaration{{ID: "src/main.go", Label: "main.go"}}}}
-	return ui.Tree.Root(
-		ui.TreeRootProps{
-			Nodes:           func() []ui.TreeNodeDeclaration { return nodes },
-			DefaultExpanded: []string{"src"},
-			RowHeight:       26,
-			PartProps:       ui.PartProps{Style: ui.Style().Height(200)},
-		},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.Tree.Row(ui.TreeRowProps{NodeID: "src"}, "src"),
-				ui.Tree.Row(ui.TreeRowProps{NodeID: "src/main.go"}, "main.go")})
-		},
-	)
+	tree1 := ui.NewTree(ui.TreeRootProps{Nodes: func() []ui.TreeNodeDeclaration {
+		return nodes
+	}, DefaultExpanded: []string{"src"}, RowHeight: 26, PartProps: ui.PartProps{Style: ui.Style().Height(200)}})
+	return tree1.Root().Children(func() *native.Node {
+		return ui.Fragment([]*native.Node{tree1.Row(ui.TreeRowProps{NodeID: "src"}).Children("src").NativeNode(), tree1.Row(ui.TreeRowProps{NodeID: "src/main.go"}).Children("main.go").NativeNode()})
+	}).NativeNode()
 }
 ```
 
 ## 構成
 
-- `ui.Tree.Root`
-- `ui.Tree.Row`
+- `tree.Root`
+- `tree.Row`
 
 ## 主なプロパティ
 

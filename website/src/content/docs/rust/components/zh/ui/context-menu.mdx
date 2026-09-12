@@ -12,13 +12,13 @@ use quickgui::*;
 
 ```rust
 ContextMenuState::new()
-    .trigger_part(div().child(text("Right-click me")))
+    .trigger().child(text("Right-click me"))
 ```
 
 ## 结构
 
-- `ContextMenuState::root_part`
-- `ContextMenuState::trigger_part`
+- `ContextMenuState::root`
+- `ContextMenuState::trigger`
 
 ## 主要属性
 

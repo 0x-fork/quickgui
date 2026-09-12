@@ -168,30 +168,30 @@ impl View for FocusDemo {
                     .flex_none()
                     .gap_3()
                     .child(
-                        profile_fields.root_part(
+                        profile_fields.root_with(
                             div()
                                 .flex_col()
                                 .gap_3()
                                 .child(
-                                    profile_fields.legend_part(
+                                    profile_fields.legend_with(
                                         text("Profile details").text_lg().font_semibold(),
                                     ),
                                 )
-                                .child(profile_fields.description_part(
+                                .child(profile_fields.description_with(
                                     text("These labels focus their controls just like web labels.")
                                         .text_xs()
                                         .text_color(Color::rgb8(165, 170, 181)),
                                 ))
-                                .child(name_field.root_part(
+                                .child(name_field.root_with(
                                     div()
                                         .flex_col()
                                         .gap_1()
                                         .child(
-                                            name_field.label_part(
+                                            name_field.label_with(
                                                 text("Name").text_sm().font_medium(),
                                             ),
                                         )
-                                        .child(name_field.control_part(
+                                        .child(name_field.control_with(
                                             text_input(self.name.clone())
                                                 .on_input(edit_name)
                                                 .max_length(32)
@@ -205,27 +205,27 @@ impl View for FocusDemo {
                                                 .max_w(480.0)
                                                 .auto_focus(),
                                         ))
-                                        .child(name_field.description_part(
+                                        .child(name_field.description_with(
                                             text("Shown on your public profile.")
                                                 .text_xs()
                                                 .text_color(Color::rgb8(165, 170, 181)),
                                         ))
-                                        .child(name_field.error_part(
+                                        .child(name_field.error_with(
                                             text("Name is required")
                                                 .text_xs()
                                                 .text_color(Color::rgb8(248, 113, 113)),
                                         )),
                                 ))
-                                .child(email_field.root_part(
+                                .child(email_field.root_with(
                                     div()
                                         .flex_col()
                                         .gap_1()
                                         .child(
-                                            email_field.label_part(
+                                            email_field.label_with(
                                                 text("Email").text_sm().font_medium(),
                                             ),
                                         )
-                                        .child(email_field.control_part(
+                                        .child(email_field.control_with(
                                             text_input(self.email.clone())
                                                 .on_input(edit_email)
                                                 .max_length(254)
@@ -233,12 +233,12 @@ impl View for FocusDemo {
                                                 .w_full()
                                                 .max_w(480.0),
                                         ))
-                                        .child(email_field.description_part(
+                                        .child(email_field.description_with(
                                             text("Used only for account notifications.")
                                                 .text_xs()
                                                 .text_color(Color::rgb8(165, 170, 181)),
                                         ))
-                                        .child(email_field.error_part(
+                                        .child(email_field.error_with(
                                             text("Enter a complete email address")
                                                 .text_xs()
                                                 .text_color(Color::rgb8(248, 113, 113)),

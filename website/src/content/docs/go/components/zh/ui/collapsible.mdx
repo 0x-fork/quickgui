@@ -14,21 +14,18 @@ import (
 
 ```go
 func CollapsibleExample() *native.Node {
-	return ui.Collapsible.Root(
-		ui.CollapsibleRootProps{},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.Collapsible.Trigger(ui.PartProps{}, "Show details"),
-				ui.Collapsible.Panel(ui.PartProps{}, "Mounted when opened")})
-		},
-	)
+	collapsible1 := ui.NewCollapsible(ui.CollapsibleRootProps{})
+	return collapsible1.Root().Children(func() *native.Node {
+		return ui.Fragment([]*native.Node{collapsible1.Trigger(ui.PartProps{}).Children("Show details").NativeNode(), collapsible1.Panel(ui.PartProps{}).Children("Mounted when opened").NativeNode()})
+	}).NativeNode()
 }
 ```
 
 ## 结构
 
-- `ui.Collapsible.Root`
-- `ui.Collapsible.Trigger`
-- `ui.Collapsible.Panel`
+- `collapsible.Root`
+- `collapsible.Trigger`
+- `collapsible.Panel`
 
 ## 主要属性
 

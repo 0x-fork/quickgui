@@ -12,18 +12,18 @@ use quickgui::*;
 
 ```rust
 let field = NumberField::new("amount", &state);
-field.root_part(div()).child(field.input_part(text_input(state.text())))
+field.root().child(field.input_with(text_input(state.text())))
 ```
 
 ## Anatomy
 
-- `NumberField::root_part`
-- `NumberField::group_part`
-- `NumberField::input_part`
-- `NumberField::increment_part`
-- `NumberField::decrement_part`
-- `NumberField::scrub_area_part`
-- `NumberField::scrub_area_cursor_part`
+- `NumberField::root`
+- `NumberField::group`
+- `NumberField::input`
+- `NumberField::increment`
+- `NumberField::decrement`
+- `NumberField::scrub_area`
+- `NumberField::scrub_area_cursor`
 
 ## Key props
 

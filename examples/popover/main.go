@@ -11,15 +11,18 @@ func main() {
 	if err := native.Run(func() {
 		open := func() {
 			native.NewWindow(native.WindowOptions{
-				Title:                "QuickGUI Popovers",
-				Width:                760,
-				Height:               540,
-				MinimumWidth:         620,
-				MinimumHeight:        480,
-				Background:           "#0b0f17",
-				TitleBarStyle:        "hiddenInset",
-				TrafficLightPosition: &native.Point{X: 16, Y: 14},
-				Component:            Popovers,
+				Title:         "QuickGUI Popovers",
+				Width:         760,
+				Height:        540,
+				MinimumWidth:  620,
+				MinimumHeight: 480,
+				Background:    "#0b0f17",
+				TitleBarStyle: "hiddenInset",
+				TrafficLightPosition: &native.Point{
+					X: 16,
+					Y: 14,
+				},
+				Component: Popovers,
 			})
 		}
 		native.App.OnReopen(func(event native.ReopenEvent) {
@@ -37,22 +40,22 @@ func Popovers() *ui.Element {
 	status, setStatus := ui.CreateSignal("Open either surface to compare its native behavior.")
 	systemOpen, setSystemOpen := ui.CreateSignal(false)
 	inWindowOpen, setInWindowOpen := ui.CreateSignal(false)
-	changeSystem := func(open bool) {
+	system := ui.NewSystemPopover().Open(systemOpen).OnOpenChange(func(open bool, _ ui.PopoverOpenChangeDetails) {
 		setSystemOpen(open)
 		if open {
 			setStatus("System popover opened.")
 		} else {
 			setStatus("System popover closed.")
 		}
-	}
-	changeInWindow := func(open bool) {
+	})
+	popover := ui.NewPopover().Open(inWindowOpen).OnOpenChange(func(open bool, _ ui.PopoverOpenChangeDetails) {
 		setInWindowOpen(open)
 		if open {
 			setStatus("In-window popover opened.")
 		} else {
 			setStatus("In-window popover closed.")
 		}
-	}
+	})
 	gap, margin := 8.0, 12.0
 	placement := ui.PopoverContentProps{
 		Width:          340,
@@ -60,93 +63,46 @@ func Popovers() *ui.Element {
 		Placement:      "bottom-start",
 		Gap:            &gap,
 		ViewportMargin: &margin,
-		PartProps:      ui.PartProps{Style: ui.Style().Width("100%").Height("100%")},
+		PartProps:      ui.PartProps{Style: ui.Style().SizeFull()},
 	}
-	return ui.View().Children(
-
-		ui.View().Child(
-
-			ui.Text(
-				"Native popover surfaces",
-			).FontSize(14).FontWeight(600),
-		).Display("flex").Height(52).FlexShrink(0).AlignItems("center").JustifyContent("center").AppRegion("drag").BorderColor("#202838").BorderBottomWidth(1),
-		ui.View().Child(
-
-			ui.View().Children(
-
-				ui.View().Children(
-
-					ui.Text(
-						"System and in-window popovers",
-					).FontSize(28).LineHeight(34).FontWeight(700),
-					ui.Text(
-						"Both use the same controlled Go API. SystemPopover opens a native child window; Popover stays in this window's retained overlay plane.",
-					).TextColor("#9ba8bc").FontSize(14).LineHeight(21),
-				).Display("flex").FlexDirection("column").Gap(8),
-				ui.View().Children(
-
-					card("SystemPopover", "A child window that may cross the owner's edge and stays within the display.", func() *native.Node {
-						return ui.SystemPopover.Root(
-							ui.PopoverRootProps{
-								Open:         systemOpen,
-								OnOpenChange: func(open bool, _ ui.PopoverOpenChangeDetails) { changeSystem(open) },
-							},
-							func() *native.Node {
-								return ui.Fragment([]*native.Node{ui.SystemPopover.Trigger(
-									ui.PopoverTriggerProps{PartProps: ui.PartProps{Style: buttonStyle}},
-									func() *ui.Element {
-										return ui.Text(func() string {
-											if systemOpen() {
-												return "Close system"
-											}
-											return "Open system"
-										})
-									},
-								),
-									ui.SystemPopover.Content(
-										placement,
-										func() *ui.Element {
-											return content("System popover", "It has its own retained tree on a native child surface and may cross the owner window's edge.", func() { changeSystem(false) })
-										},
-									)})
-							},
+	return ui.View().FlexCol().SizeFull().Bg("#0b0f17").TextColor("#f5f7fb").Children(
+		ui.View().Flex().Height(52).FlexShrink(0).ItemsCenter().JustifyCenter().AppRegion("drag").BorderColor("#202838").BorderBottomWidth(1).FontSize(14).FontWeight(600).Child("Native popover surfaces"),
+		ui.View().Flex().Flex1().MinHeight(0).ItemsCenter().JustifyCenter().Padding(36).Child(
+			ui.View().FlexCol().Width("100%").MaxWidth(680).Gap(20).Children(
+				ui.View().FlexCol().Gap(8).Children(
+					ui.Text("System and in-window popovers").FontSize(28).LineHeight(34).FontWeight(700),
+					ui.Text("Both use the same controlled Go API. SystemPopover opens a native child window; Popover stays in this window's retained overlay plane.").TextColor("#9ba8bc").FontSize(14).LineHeight(21),
+				),
+				ui.View().Flex().Gap(14).Children(
+					card("SystemPopover", "A child window that may cross the owner's edge and stays within the display.", func() *ui.Element {
+						return system.Root().Children(
+							system.Trigger().Style(buttonStyle).Child(func() string {
+								if systemOpen() {
+									return "Close system"
+								}
+								return "Open system"
+							}),
+							system.Content(placement).Child(func() *ui.Element {
+								return content("System popover", "It has its own retained tree on a native child surface and may cross the owner window's edge.", func() { setSystemOpen(false) })
+							}),
 						)
 					}),
-					card("In-window popover", "A retained overlay that flips and shifts but remains inside this window.", func() *native.Node {
-						return ui.Popover.Root(
-							ui.PopoverRootProps{
-								Open:         inWindowOpen,
-								OnOpenChange: func(open bool, _ ui.PopoverOpenChangeDetails) { changeInWindow(open) },
-							},
-							func() *native.Node {
-								return ui.Fragment([]*native.Node{ui.Popover.Trigger(
-									ui.PopoverTriggerProps{PartProps: ui.PartProps{Style: buttonStyle}},
-									func() *ui.Element {
-										return ui.Text(func() string {
-											if inWindowOpen() {
-												return "Close in-window"
-											}
-											return "Open in-window"
-										})
-									},
-								),
-									ui.Popover.Content(
-										placement,
-										func() *ui.Element {
-											return content("In-window popover", "It shares this window's tree and renders above ordinary content without creating another native window.", func() { changeInWindow(false) })
-										},
-									)})
-							},
+					card("In-window popover", "A retained overlay that flips and shifts but remains inside this window.", func() *ui.Element {
+						return popover.Root().Children(
+							popover.Trigger().Style(buttonStyle).Child(func() string {
+								if inWindowOpen() {
+									return "Close in-window"
+								}
+								return "Open in-window"
+							}),
+							popover.Content(placement).Child(func() *ui.Element {
+								return content("In-window popover", "It shares this window's tree and renders above ordinary content without creating another native window.", func() { setInWindowOpen(false) })
+							}),
 						)
 					}),
-				).Display("flex").Gap(14),
-				ui.View().Child(
-
-					ui.Text(
-						status(),
-					).TextColor("#b8c4d6").FontSize(13),
-				).Display("flex").MinHeight(50).AlignItems("center").JustifyContent("center").PaddingLeft(16).PaddingRight(16).BackgroundColor("#10151e").BorderColor("#293244").BorderWidth(1).BorderRadius(9),
-			).Display("flex").FlexDirection("column").Width("100%").MaxWidth(680).Gap(20),
-		).Display("flex").Flex(1).MinHeight(0).AlignItems("center").JustifyContent("center").Padding(36),
-	).Display("flex").FlexDirection("column").Width("100%").Height("100%").BackgroundColor("#0b0f17").TextColor("#f5f7fb")
+				),
+				ui.View().Flex().MinHeight(50).ItemsCenter().JustifyCenter().Px4().Bg("#10151e").BorderColor("#293244").BorderWidth(1).RoundedLg().TextColor("#b8c4d6").FontSize(13).Child(status),
+			),
+		),
+	)
 }

@@ -957,9 +957,13 @@ impl NumberField {
     }
 
     /// Decorate an application-owned root without adding layout or appearance.
-    pub fn root_part(self, root: Element) -> Element {
+    pub fn root_with(self, root: Element) -> Element {
         root.id(self.root_id)
             .accessibility_role(AccessibilityRole::Group)
+    }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(self) -> Element {
+        self.root_with(crate::div())
     }
 
     /// Decorate the application-owned controlled input.
@@ -967,7 +971,7 @@ impl NumberField {
     /// Pass a [`crate::text_input`] built from [`NumberFieldState::text`] with the caller's own
     /// [`crate::Element::on_input`] listener. QuickGUI adds the spin-button semantics: the
     /// committed numeric value, the field's bounds and step, and invalid state.
-    pub fn input_part(self, state: &NumberFieldState, input: Element) -> Element {
+    pub fn input_with(self, state: &NumberFieldState, input: Element) -> Element {
         let mut range = AccessibilityValueRange {
             value: state.value,
             min: state.minimum.is_finite().then_some(state.minimum),
@@ -985,18 +989,30 @@ impl NumberField {
             .required(state.required)
             .app_region_no_drag()
     }
+    /// Create the unstyled input part. Use [`Self::input_with`] to supply an existing element.
+    pub fn input(self, state: &NumberFieldState) -> Element {
+        self.input_with(state, crate::text_input(""))
+    }
 
     /// Decorate the application-owned increment button.
     ///
     /// Steppers stay out of the Tab sequence because the input already answers arrow keys, which
     /// matches native desktop spin buttons.
-    pub fn increment_part(self, state: &NumberFieldState, increment: Element) -> Element {
+    pub fn increment_with(self, state: &NumberFieldState, increment: Element) -> Element {
         stepper(increment, self.increment_id(), state.disabled)
+    }
+    /// Create the unstyled increment part. Use [`Self::increment_with`] to supply an existing element.
+    pub fn increment(self, state: &NumberFieldState) -> Element {
+        self.increment_with(state, crate::button())
     }
 
     /// Decorate the application-owned decrement button.
-    pub fn decrement_part(self, state: &NumberFieldState, decrement: Element) -> Element {
+    pub fn decrement_with(self, state: &NumberFieldState, decrement: Element) -> Element {
         stepper(decrement, self.decrement_id(), state.disabled)
+    }
+    /// Create the unstyled decrement part. Use [`Self::decrement_with`] to supply an existing element.
+    pub fn decrement(self, state: &NumberFieldState) -> Element {
+        self.decrement_with(state, crate::button())
     }
 
     /// Decorate the caller-owned group that wraps the decrement, input, and increment parts.
@@ -1004,10 +1020,14 @@ impl NumberField {
     /// Base UI's Group keeps the three controls one addressable unit; QuickGUI supplies the stable
     /// identity and the Group role and adds no layout, so the application still chooses the row,
     /// the order, and the spacing.
-    pub fn group_part(self, group: Element) -> Element {
+    pub fn group_with(self, group: Element) -> Element {
         group
             .id(self.group_id())
             .accessibility_role(AccessibilityRole::Group)
+    }
+    /// Create the unstyled group part. Use [`Self::group_with`] to supply an existing element.
+    pub fn group(self) -> Element {
+        self.group_with(crate::div())
     }
 
     /// Decorate the caller-owned area a pointer drag scrubs the value over.
@@ -1017,7 +1037,7 @@ impl NumberField {
     /// axis-appropriate resize cursor, drag exclusion, and text-selection suppression; the area is
     /// hidden from assistive technology because the input already carries the spin-button
     /// semantics.
-    pub fn scrub_area_part(self, state: &NumberFieldState, scrub_area: Element) -> Element {
+    pub fn scrub_area_with(self, state: &NumberFieldState, scrub_area: Element) -> Element {
         let scrub_area = scrub_area
             .id(self.scrub_area_id())
             .accessibility_hidden(true)
@@ -1033,18 +1053,26 @@ impl NumberField {
             }
         }
     }
+    /// Create the unstyled scrub area part. Use [`Self::scrub_area_with`] to supply an existing element.
+    pub fn scrub_area(self, state: &NumberFieldState) -> Element {
+        self.scrub_area_with(state, crate::div())
+    }
 
     /// Decorate the caller-owned cursor a scrub area shows while it is being dragged.
     ///
     /// Mount it only while [`NumberFieldState::is_scrubbing`] is true and place it from
     /// [`NumberFieldState::scrub_position`]; QuickGUI supplies the identity and keeps the
     /// decoration out of the accessible name and out of hit testing.
-    pub fn scrub_area_cursor_part(self, cursor: Element) -> Element {
+    pub fn scrub_area_cursor_with(self, cursor: Element) -> Element {
         cursor
             .id(self.scrub_area_cursor_id())
             .accessibility_hidden(true)
             .app_region_no_drag()
             .user_select_none()
+    }
+    /// Create the unstyled scrub area cursor part. Use [`Self::scrub_area_cursor_with`] to supply an existing element.
+    pub fn scrub_area_cursor(self) -> Element {
+        self.scrub_area_cursor_with(crate::div())
     }
 }
 
@@ -1063,14 +1091,14 @@ fn stepper(element: Element, id: ElementId, disabled: bool) -> Element {
 /// Create an unstyled controlled number-field input.
 ///
 /// This shorthand is equivalent to
-/// `NumberField::new(id).input_part(state, text_input(state.text().clone()))`.
+/// `NumberField::new(id).input_with(state, text_input(state.text().clone()))`.
 pub fn number_field(id: impl Into<ElementId>, state: &NumberFieldState) -> Element {
-    NumberField::new(id).input_part(state, text_input(state.text().clone()))
+    NumberField::new(id).input_with(state, text_input(state.text().clone()))
 }
 
 /// Create an unstyled number-field root.
 pub fn number_field_root(id: impl Into<ElementId>) -> Element {
-    NumberField::new(id).root_part(div())
+    NumberField::new(id).root_with(div())
 }
 
 fn derived_number_field_id(scope: ElementId, tag: u64) -> ElementId {
@@ -1288,12 +1316,12 @@ mod tests {
     fn parts_add_exact_semantics_without_appearance() {
         let state = NumberFieldState::new(5.0).range(0.0, 10.0).step(2.0);
         let field = NumberField::new("quantity");
-        let root = field.root_part(div().bg(Color::rgb8(1, 2, 3)));
+        let root = field.root_with(div().bg(Color::rgb8(1, 2, 3)));
         assert_eq!(root.explicit_id, Some("quantity".into()));
         assert_eq!(root.accessibility.role, AccessibilityRole::Group);
         assert_eq!(root.visual.background, Some(Color::rgb8(1, 2, 3)));
 
-        let input = field.input_part(&state, text_input(state.text().clone()).w(80.0));
+        let input = field.input_with(&state, text_input(state.text().clone()).w(80.0));
         assert_eq!(input.explicit_id, Some(field.input_id()));
         assert_eq!(input.accessibility.role, AccessibilityRole::SpinButton);
         assert_eq!(
@@ -1304,11 +1332,11 @@ mod tests {
 
         let mut invalid = state.clone();
         assert!(invalid.set_text("99"));
-        let invalid_input = field.input_part(&invalid, text_input(invalid.text().clone()));
+        let invalid_input = field.input_with(&invalid, text_input(invalid.text().clone()));
         assert!(invalid_input.accessibility.invalid);
 
         let unbounded = NumberFieldState::new(3.0);
-        let unbounded_input = field.input_part(&unbounded, text_input(unbounded.text().clone()));
+        let unbounded_input = field.input_with(&unbounded, text_input(unbounded.text().clone()));
         let range = unbounded_input
             .accessibility
             .value_range
@@ -1318,18 +1346,18 @@ mod tests {
         assert_eq!(range.min, None);
         assert_eq!(range.max, None);
 
-        let increment = field.increment_part(&state, div().child("+"));
+        let increment = field.increment_with(&state, div().child("+"));
         assert_eq!(increment.explicit_id, Some(field.increment_id()));
         assert_eq!(increment.accessibility.role, AccessibilityRole::Button);
         assert!(increment.clickable);
         assert_eq!(increment.tab_index, -1);
-        let decrement = field.decrement_part(&state, div().child("-"));
+        let decrement = field.decrement_with(&state, div().child("-"));
         assert_eq!(decrement.explicit_id, Some(field.decrement_id()));
 
         let disabled = NumberFieldState::new(1.0).disabled(true);
         assert!(
             field
-                .increment_part(&disabled, div())
+                .increment_with(&disabled, div())
                 .accessibility
                 .disabled
         );
@@ -1383,10 +1411,10 @@ mod tests {
                 }
             });
 
-            field.root_part(
+            field.root_with(
                 div()
                     .child(
-                        field.input_part(
+                        field.input_with(
                             &self.quantity,
                             text_input(self.quantity.text().clone())
                                 .w(120.0)
@@ -1396,10 +1424,10 @@ mod tests {
                     )
                     .child(
                         field
-                            .increment_part(&self.quantity, button().child(text("+")).on_click(up)),
+                            .increment_with(&self.quantity, button().child(text("+")).on_click(up)),
                     )
                     .child(
-                        field.decrement_part(
+                        field.decrement_with(
                             &self.quantity,
                             button().child(text("-")).on_click(down),
                         ),
@@ -1585,13 +1613,13 @@ mod tests {
         assert_eq!(field.value(), Some(4.0));
 
         let number_field = NumberField::new("quantity");
-        let input = number_field.input_part(&field, text_input(field.text().clone()));
+        let input = number_field.input_with(&field, text_input(field.text().clone()));
         assert!(input.accessibility.read_only);
         assert!(input.accessibility.required);
         assert!(!input.accessibility.disabled);
         // A read-only scrub area shows no drag affordance.
         assert_eq!(
-            number_field.scrub_area_part(&field, div()).cursor_style,
+            number_field.scrub_area_with(&field, div()).cursor_style,
             Some(crate::CursorStyle::Arrow)
         );
 
@@ -1740,19 +1768,19 @@ mod tests {
             assert!(!ids[..index].contains(id));
         }
 
-        let group = number_field.group_part(div().bg(crate::Color::rgb8(1, 2, 3)));
+        let group = number_field.group_with(div().bg(crate::Color::rgb8(1, 2, 3)));
         assert_eq!(group.explicit_id, Some(number_field.group_id()));
         assert_eq!(group.accessibility.role, AccessibilityRole::Group);
         assert_eq!(group.visual.background, Some(crate::Color::rgb8(1, 2, 3)));
 
-        let scrub = number_field.scrub_area_part(&field, div());
+        let scrub = number_field.scrub_area_with(&field, div());
         assert_eq!(scrub.explicit_id, Some(number_field.scrub_area_id()));
         assert!(scrub.accessibility.hidden);
         assert_eq!(scrub.cursor_style, Some(crate::CursorStyle::ResizeUpDown));
         assert_eq!(scrub.visual.background, None);
         assert_eq!(
             number_field
-                .scrub_area_part(
+                .scrub_area_with(
                     &field.scrub_direction(NumberFieldScrubDirection::Horizontal),
                     div()
                 )
@@ -1760,7 +1788,7 @@ mod tests {
             Some(crate::CursorStyle::ResizeLeftRight)
         );
 
-        let cursor = number_field.scrub_area_cursor_part(div());
+        let cursor = number_field.scrub_area_cursor_with(div());
         assert_eq!(
             cursor.explicit_id,
             Some(number_field.scrub_area_cursor_id())
@@ -1797,27 +1825,27 @@ mod tests {
                     }
                 });
             let mut scrub_area =
-                amount.scrub_area_part(&self.amount, div().w(40.0).h(20.0).on_pointer(scrub));
+                amount.scrub_area_with(&self.amount, div().w(40.0).h(20.0).on_pointer(scrub));
             if self.amount.is_scrubbing() {
-                scrub_area = scrub_area.child(amount.scrub_area_cursor_part(div().size(8.0, 8.0)));
+                scrub_area = scrub_area.child(amount.scrub_area_cursor_with(div().size(8.0, 8.0)));
             }
             div()
                 .child(
-                    amount.root_part(div()).child(
+                    amount.root_with(div()).child(
                         amount
-                            .group_part(div().flex_row())
-                            .child(amount.decrement_part(&self.amount, button().child(text("-"))))
-                            .child(amount.input_part(
+                            .group_with(div().flex_row())
+                            .child(amount.decrement_with(&self.amount, button().child(text("-"))))
+                            .child(amount.input_with(
                                 &self.amount,
                                 text_input(self.amount.text().clone()).w(80.0),
                             ))
-                            .child(amount.increment_part(&self.amount, button().child(text("+"))))
+                            .child(amount.increment_with(&self.amount, button().child(text("+"))))
                             .child(scrub_area),
                     ),
                 )
                 .child(
-                    locked.root_part(div()).child(
-                        locked.input_part(
+                    locked.root_with(div()).child(
+                        locked.input_with(
                             &self.locked,
                             text_input(self.locked.text().clone())
                                 .w(80.0)

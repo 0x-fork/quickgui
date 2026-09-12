@@ -14,28 +14,24 @@ import (
 
 ```go
 func FieldsetExample(saving func() bool) *native.Node {
-	return ui.Fieldset.Root(
-		ui.PartProps{Disabled: saving},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.Fieldset.Legend(ui.PartProps{}, "Profile"),
-				ui.Field.Root(
-					ui.FieldRootProps{},
-					func() *native.Node {
-						return ui.Fragment([]*native.Node{ui.Field.Label(ui.FieldLabelProps{}, "Name"),
-							ui.Field.Control(ui.FieldControlProps{InputPartProps: ui.InputPartProps{Placeholder: "Ada"}})})
-					},
-				)})
-		},
-	)
+	fieldset1 := ui.NewFieldset(ui.PartProps{Disabled: saving})
+	return fieldset1.Root().Children(func() *native.Node {
+		return ui.Fragment([]*native.Node{fieldset1.Legend(ui.PartProps{}).Children("Profile").NativeNode(), func() *native.Node {
+			field2 := ui.NewField(ui.FieldRootProps{})
+			return field2.Root().Children(func() *native.Node {
+				return ui.Fragment([]*native.Node{field2.Label(ui.FieldLabelProps{}).Children("Name").NativeNode(), field2.Control(ui.FieldControlProps{InputPartProps: ui.InputPartProps{Placeholder: "Ada"}}).NativeNode()})
+			}).NativeNode()
+		}()})
+	}).NativeNode()
 }
 ```
 
 ## 结构
 
-- `ui.Fieldset.Root`
-- `ui.Fieldset.Legend`
-- `ui.Fieldset.Description`
-- `ui.Fieldset.Control`
+- `fieldset.Root`
+- `fieldset.Legend`
+- `fieldset.Description`
+- `fieldset.Control`
 
 ## 主要属性
 

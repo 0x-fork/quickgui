@@ -16,20 +16,21 @@ import (
 
 ```go
 func ContextMenuExample() *native.Node {
-	return ui.ContextMenu.Root(
-		ui.ContextMenuRootProps{
-			Items:    func() []ui.MenuItemDeclaration { return []ui.MenuItemDeclaration{{ID: "copy", Label: "Copy"}} },
-			OnSelect: func(item ui.MenuSelectDetails, _ *native.Event) { fmt.Println(item.ID) },
-		},
-		func() *native.Node { return ui.ContextMenu.Trigger(ui.ContextMenuTriggerProps{}, "Right-click here") },
-	)
+	contextMenu1 := ui.NewContextMenu(ui.ContextMenuRootProps{Items: func() []ui.MenuItemDeclaration {
+		return []ui.MenuItemDeclaration{{ID: "copy", Label: "Copy"}}
+	}, OnSelect: func(item ui.MenuSelectDetails, _ *native.Event) {
+		fmt.Println(item.ID)
+	}})
+	return contextMenu1.Root().Children(func() *native.Node {
+		return contextMenu1.Trigger(ui.ContextMenuTriggerProps{}).Children("Right-click here").NativeNode()
+	}).NativeNode()
 }
 ```
 
 ## 構成
 
-- `ui.ContextMenu.Root`
-- `ui.ContextMenu.Trigger`
+- `contextMenu.Root`
+- `contextMenu.Trigger`
 
 ## 主なプロパティ
 

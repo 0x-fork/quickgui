@@ -16,34 +16,26 @@ import (
 ```go
 func FieldExample() *native.Node {
 	email, setEmail := ui.CreateSignal("")
-	return ui.Field.Root(
-		ui.FieldRootProps{
-			Required: true,
-			Filled:   func() bool { return email() != "" },
-		},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.Field.Label(ui.FieldLabelProps{}, "Email"),
-				ui.Field.Control(ui.FieldControlProps{InputPartProps: ui.InputPartProps{
-					Value:       email,
-					Placeholder: "you@example.com",
-					OnInput:     func(event *native.Event) { setEmail(event.Value) },
-				}}),
-				ui.Field.Description(ui.PartProps{}, "Used for receipts"),
-				ui.Field.Error(ui.PartProps{}, "Enter a valid email address")})
-		},
-	)
+	field1 := ui.NewField(ui.FieldRootProps{Required: true, Filled: func() bool {
+		return email() != ""
+	}})
+	return field1.Root().Children(func() *native.Node {
+		return ui.Fragment([]*native.Node{field1.Label(ui.FieldLabelProps{}).Children("Email").NativeNode(), field1.Control(ui.FieldControlProps{InputPartProps: ui.InputPartProps{Value: email, Placeholder: "you@example.com", OnInput: func(event *native.Event) {
+			setEmail(event.Value)
+		}}}).NativeNode(), field1.Description(ui.PartProps{}).Children("Used for receipts").NativeNode(), field1.Error(ui.PartProps{}).Children("Enter a valid email address").NativeNode()})
+	}).NativeNode()
 }
 ```
 
 ## 结构
 
-- `ui.Field.Root`
-- `ui.Field.Item`
-- `ui.Field.Label`
-- `ui.Field.Control`
-- `ui.Field.Validity`
-- `ui.Field.Description`
-- `ui.Field.Error`
+- `field.Root`
+- `field.Item`
+- `field.Label`
+- `field.Control`
+- `field.Validity`
+- `field.Description`
+- `field.Error`
 
 ## 主要属性
 

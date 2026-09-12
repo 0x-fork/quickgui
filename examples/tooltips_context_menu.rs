@@ -134,7 +134,7 @@ impl TooltipContextDemo {
                 // Base UI mounts the indicator only while the row is checked, and keeps it hidden
                 // from assistive technology because the row already reports its state.
                 let indicator = if state.checked == Some(true) {
-                    PopoverMenu::radio_item_indicator_part(text("●").text_xs())
+                    PopoverMenu::radio_item_indicator_with(text("●").text_xs())
                 } else {
                     div().w(8.0)
                 };
@@ -435,7 +435,7 @@ fn hint_row(
     body: &'static str,
 ) -> (Element, Option<Element>) {
     let trigger = state
-        .trigger_part(
+        .trigger_with(
             cx,
             access,
             button()
@@ -454,7 +454,7 @@ fn hint_row(
         return (trigger, None);
     }
     let popup = state
-        .popup_part(
+        .popup_with(
             cx,
             access,
             div()
@@ -475,13 +475,13 @@ fn hint_row(
         )
         .child(
             state
-                .arrow_part(div())
+                .arrow()
                 .w(10.0)
                 .h(10.0)
                 .rotate_degrees(45.0)
                 .bg(Color::rgb8(31, 38, 49)),
         );
-    (trigger, Some(state.positioner_part(div().child(popup))))
+    (trigger, Some(state.positioner().child(popup)))
 }
 
 #[cfg(test)]

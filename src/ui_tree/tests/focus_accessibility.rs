@@ -298,24 +298,24 @@ fn selection_controls_project_exact_roles_toggle_states_and_actions() {
     let switch = crate::Switch::new(false);
     let root = div().children([
         checkbox
-            .root_part(
+            .root_with(
                 div()
-                    .child(checkbox.indicator_part(div().child("decorative mixed mark")))
+                    .child(checkbox.indicator_with(div().child("decorative mixed mark")))
                     .child("Partial selection"),
             )
             .id(checkbox_id)
             .accessibility_description("Some files are selected"),
         radio
-            .root_part(
+            .root_with(
                 div()
-                    .child(radio.indicator_part(div().child("decorative radio dot")))
+                    .child(radio.indicator_with(div().child("decorative radio dot")))
                     .child("Selected radio"),
             )
             .id(radio_id),
         switch
-            .root_part(
+            .root_with(
                 div()
-                    .child(switch.thumb_part(div().child("decorative switch thumb")))
+                    .child(switch.thumb_with(div().child("decorative switch thumb")))
                     .child("Inactive switch"),
             )
             .id(switch_id),
@@ -419,9 +419,9 @@ fn popover_trigger_projects_expansion_popover_kind_and_mounted_control_relation(
     let root = div()
         .child(popover.trigger().child("Open details"))
         .child(
-            popover.positioner_part(div().child(popover.popover_part(div()).children([
-                popover.title_part(text("Details")),
-                popover.description_part(text("More information about this item.")),
+            popover.positioner_with(div().child(popover.popup_with(div()).children([
+                popover.title_with(text("Details")),
+                popover.description_with(text("More information about this item.")),
             ]))),
         );
     let mut tree = UiTree::new();
@@ -460,11 +460,11 @@ fn popover_trigger_projects_expansion_popover_kind_and_mounted_control_relation(
 #[test]
 fn alert_dialog_projects_modal_role_and_mounted_title_description_relations() {
     let dialog = crate::Dialog::alert("delete-dialog", true);
-    let root = dialog.root_part(div()).children([
-        dialog.backdrop_part(div()),
-        dialog.popover_part(div()).children([
-            dialog.title_part(text("Delete file?")),
-            dialog.description_part(text("This cannot be undone.")),
+    let root = dialog.root_with(div()).children([
+        dialog.backdrop_with(div()),
+        dialog.popup_with(div()).children([
+            dialog.title_with(text("Delete file?")),
+            dialog.description_with(text("This cannot be undone.")),
         ]),
     ]);
     let mut tree = UiTree::new();

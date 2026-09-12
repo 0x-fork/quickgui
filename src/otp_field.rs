@@ -35,7 +35,7 @@ pub struct OtpFieldBackspace;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct OtpFieldDelete;
 
-/// Contextual bindings used by [`OtpField::slot_part`].
+/// Contextual bindings used by [`OtpField::slot_with`].
 ///
 /// QuickGUI matches contextual bindings before an ordinary text input's own editing, so the OTP
 /// field owns Backspace, Delete, the arrows, and Home/End inside its slots while every other key
@@ -412,7 +412,7 @@ impl OtpField {
     ///
     /// The root is the group that names the whole code and carries its validity, so assistive
     /// technology announces one field rather than a row of unrelated one-character inputs.
-    pub fn root_part(self, state: &OtpFieldState, root: Element) -> Element {
+    pub fn root_with(self, state: &OtpFieldState, root: Element) -> Element {
         root.id(self.root_id)
             .accessibility_role(AccessibilityRole::Group)
             .accessibility_orientation(AccessibilityOrientation::Horizontal)
@@ -420,13 +420,17 @@ impl OtpField {
             .disabled(state.is_disabled())
             .app_region_no_drag()
     }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(self, state: &OtpFieldState) -> Element {
+        self.root_with(state, crate::div())
+    }
 
     /// Decorate one application-owned slot input without adding appearance.
     ///
     /// Pass a [`crate::text_input`] built from [`OtpFieldState::slot_text`]. QuickGUI adds the
     /// stable identity, the slot's position in the code, the masked presentation, and the required
-    /// and disabled policy. Use [`Self::slot_part`] to attach the behavior as well.
-    pub fn input_part(self, state: &OtpFieldState, index: usize, input: Element) -> Element {
+    /// and disabled policy. Use [`Self::slot_with`] to attach the behavior as well.
+    pub fn input_with(self, state: &OtpFieldState, index: usize, input: Element) -> Element {
         input
             .id(self.input_id(index))
             .max_length(MAX_OTP_LENGTH)
@@ -439,17 +443,25 @@ impl OtpField {
             .key_context(OTP_FIELD_KEY_CONTEXT)
             .app_region_no_drag()
     }
+    /// Create the unstyled input part. Use [`Self::input_with`] to supply an existing element.
+    pub fn input(self, state: &OtpFieldState, index: usize) -> Element {
+        self.input_with(state, index, crate::text_input(""))
+    }
 
     /// Decorate an application-owned separator between two slots.
     ///
     /// The separator is decorative: it carries a stable identity and the Separator role, and is
     /// hidden from assistive technology so it never interrupts the announced code.
-    pub fn separator_part(self, index: usize, separator: Element) -> Element {
+    pub fn separator_with(self, index: usize, separator: Element) -> Element {
         separator
             .id(self.separator_id(index))
             .accessibility_role(AccessibilityRole::Separator)
             .accessibility_hidden(true)
             .user_select_none()
+    }
+    /// Create the unstyled separator part. Use [`Self::separator_with`] to supply an existing element.
+    pub fn separator(self, index: usize) -> Element {
+        self.separator_with(index, crate::div())
     }
 
     /// Decorate one slot and attach its complete behavior.
@@ -459,7 +471,7 @@ impl OtpField {
     /// change with the whole code; `on_complete` runs only on the transition into a full code, and
     /// is followed by [`Self::auto_submit`] when one is declared.
     #[allow(clippy::too_many_arguments)]
-    pub fn slot_part<V: 'static, Change, Complete>(
+    pub fn slot_with<V: 'static, Change, Complete>(
         self,
         cx: &mut ViewContext<'_, V>,
         state: &OtpFieldState,
@@ -473,7 +485,7 @@ impl OtpField {
         Change: Fn(&mut V, &str, &mut EventContext) + Clone + 'static,
         Complete: Fn(&mut V, &str, &mut EventContext) + Clone + 'static,
     {
-        self.slot_part_with(
+        self.slot_with_accessor(
             cx,
             state,
             index,
@@ -483,10 +495,34 @@ impl OtpField {
             on_complete,
         )
     }
+    /// Create the unstyled slot part. Use [`Self::slot_with`] to supply an existing element.
+    pub fn slot<V: 'static, Change, Complete>(
+        self,
+        cx: &mut ViewContext<'_, V>,
+        state: &OtpFieldState,
+        index: usize,
+        access: fn(&mut V) -> &mut OtpFieldState,
+        on_value_change: Change,
+        on_complete: Complete,
+    ) -> Element
+    where
+        Change: Fn(&mut V, &str, &mut EventContext) + Clone + 'static,
+        Complete: Fn(&mut V, &str, &mut EventContext) + Clone + 'static,
+    {
+        self.slot_with(
+            cx,
+            state,
+            index,
+            crate::text_input(""),
+            access,
+            on_value_change,
+            on_complete,
+        )
+    }
 
     /// Decorate one slot and attach its behavior against a per-instance state accessor.
     #[allow(clippy::too_many_arguments)]
-    pub fn slot_part_with<V: 'static, Change, Complete>(
+    pub fn slot_with_accessor<V: 'static, Change, Complete>(
         self,
         cx: &mut ViewContext<'_, V>,
         state: &OtpFieldState,
@@ -590,7 +626,7 @@ impl OtpField {
             );
         });
 
-        self.input_part(state, index, input)
+        self.input_with(state, index, input)
             .on_input(input_listener)
             .on_action(previous)
             .on_action(next)
@@ -649,9 +685,9 @@ impl OtpField {
 
 /// Create an unstyled OTP-field root.
 ///
-/// This shorthand is equivalent to `OtpField::new(id).root_part(state, div())`.
+/// This shorthand is equivalent to `OtpField::new(id).root_with(state, div())`.
 pub fn otp_field(id: impl Into<ElementId>, state: &OtpFieldState) -> Element {
-    OtpField::new(id).root_part(state, div())
+    OtpField::new(id).root_with(state, div())
 }
 
 fn derived_otp_id(scope: ElementId, tag: u64, index: u64) -> ElementId {
@@ -779,7 +815,7 @@ mod tests {
     fn parts_add_exact_semantics_without_appearance() {
         let state = OtpFieldState::new(4).required(true).value("12");
         let field = OtpField::new("code").auto_submit("verify");
-        let root = field.root_part(&state, div().bg(Color::rgb8(1, 2, 3)));
+        let root = field.root_with(&state, div().bg(Color::rgb8(1, 2, 3)));
         assert_eq!(root.explicit_id, Some("code".into()));
         assert_eq!(root.accessibility.role, AccessibilityRole::Group);
         assert_eq!(
@@ -790,7 +826,7 @@ mod tests {
         assert_eq!(root.visual.background, Some(Color::rgb8(1, 2, 3)));
         assert_eq!(field.submitted_form(), Some("verify".into()));
 
-        let input = field.input_part(&state, 1, text_input(state.slot_text(1)));
+        let input = field.input_with(&state, 1, text_input(state.slot_text(1)));
         assert_eq!(input.explicit_id, Some(field.input_id(1)));
         assert_eq!(input.accessibility.collection.position_in_set, 1);
         assert_eq!(input.accessibility.collection.size_of_set, 4);
@@ -798,10 +834,10 @@ mod tests {
         assert!(input.accessibility.invalid);
 
         let masked =
-            OtpField::new("code").input_part(&OtpFieldState::new(4).mask(true), 0, text_input(""));
+            OtpField::new("code").input_with(&OtpFieldState::new(4).mask(true), 0, text_input(""));
         assert_eq!(masked.accessibility.role, AccessibilityRole::PasswordInput);
 
-        let separator = field.separator_part(0, div());
+        let separator = field.separator_with(0, div());
         assert_eq!(separator.explicit_id, Some(field.separator_id(0)));
         assert_eq!(separator.accessibility.role, AccessibilityRole::Separator);
         assert!(separator.accessibility.hidden);
@@ -856,12 +892,12 @@ mod tests {
             let submit = cx.form_submit_listener("verify", |view, _, _| {
                 view.submitted += 1;
             });
-            let mut root = field.root_part(&self.code, div().flex_row());
+            let mut root = field.root_with(&self.code, div().flex_row());
             for index in 0..self.code.length() {
                 if index > 0 {
-                    root = root.child(field.separator_part(index - 1, text("-")));
+                    root = root.child(field.separator_with(index - 1, text("-")));
                 }
-                root = root.child(field.slot_part(
+                root = root.child(field.slot_with(
                     cx,
                     &self.code,
                     index,

@@ -14,33 +14,28 @@ import (
 
 ```go
 func CalendarExample(weeks [][]string) *native.Node {
-	return ui.Calendar.Root(
-		ui.CalendarRootProps{DefaultValue: "2026-09-03"},
-		func() *native.Node {
-			var children []*native.Node
-			for index, week := range weeks {
-				children = append(children, ui.Calendar.Week(
-					ui.CalendarWeekProps{Index: &index},
-					func() *native.Node {
-						var children []*native.Node
-						for _, day := range week {
-							children = append(children, ui.Calendar.Day(ui.CalendarDayProps{Day: day}, day))
-						}
-						return ui.Fragment(children)
-					},
-				))
-			}
-			return ui.Fragment(children)
-		},
-	)
+	calendar1 := ui.NewCalendar(ui.CalendarRootProps{DefaultValue: "2026-09-03"})
+	return calendar1.Root().Children(func() *native.Node {
+		var children []*native.Node
+		for index, week := range weeks {
+			children = append(children, calendar1.WeekWith(ui.CalendarWeekProps{Index: &index}).Children(func() *native.Node {
+				var children []*native.Node
+				for _, day := range week {
+					children = append(children, calendar1.DayWith(ui.CalendarDayProps{Day: day}).Children(day).NativeNode())
+				}
+				return ui.Fragment(children)
+			}).NativeNode())
+		}
+		return ui.Fragment(children)
+	}).NativeNode()
 }
 ```
 
 ## Anatomy
 
-- `ui.Calendar.Root`
-- `ui.Calendar.Week`
-- `ui.Calendar.Day`
+- `calendar.Root`
+- `calendar.Week`
+- `calendar.Day`
 
 ## Key props
 

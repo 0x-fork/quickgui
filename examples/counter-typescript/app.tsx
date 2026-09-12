@@ -7,43 +7,38 @@ function Counter() {
   const [name, setName] = createSignal("Bun + Solid 2");
   return (
     <View
-      width="100%"
-      height="100%"
-      display="flex"
-      flexDirection="column"
-      alignItems="center"
-      justifyContent="center"
-      gap={18}
-      bg="#18181b"
-      textColor="#fafafa"
+      style={{
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 18,
+        bg: "#18181b",
+        textColor: "#fafafa",
+      }}
     >
-      <Text fontSize={28} fontWeight={600}>
-        {name()}
-      </Text>
+      <Text style={{ fontSize: 28, fontWeight: 600 }}>{name()}</Text>
       <TextInput
-        width={250}
-        padding={10}
-        borderRadius={8}
-        bg="#27272a"
         value={name()}
         onInput={(event) => setName(event.value ?? "")}
+        style={{ width: 250, padding: 10, borderRadius: 8, bg: "#27272a" }}
       />
-      <Text fontSize={20}>Count: {count()}</Text>
-      <View display="flex" gap={12}>
-        <Button padding={12} borderRadius={8} bg="#3f3f46" onClick={() => setCount(0)}>
+      <Text style={{ fontSize: 20 }}>Count: {count()}</Text>
+      <View style={{ display: "flex", gap: 12 }}>
+        <Button onClick={() => setCount(0)} style={{ padding: 12, borderRadius: 8, bg: "#3f3f46" }}>
           Reset
         </Button>
         <Button
-          padding={12}
-          borderRadius={8}
-          bg="#2563eb"
           onClick={() => setCount(count() + 1)}
+          style={{ padding: 12, borderRadius: 8, bg: "#2563eb" }}
         >
           Increment
         </Button>
       </View>
       <Show when={count() >= 5}>
-        <Text textColor="#86efac">Five clicks! This branch is reactive.</Text>
+        <Text style={{ textColor: "#86efac" }}>Five clicks! This branch is reactive.</Text>
       </Show>
     </View>
   );

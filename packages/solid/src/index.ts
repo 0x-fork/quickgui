@@ -56,10 +56,9 @@ import {
   expandStyleHelper,
   flexDeclaration,
   helperProperties,
-  stylePropertyName,
-  type StyleHelpers,
+  isDirectStyleName,
 } from "./style-helpers.ts";
-import type { StyleAttributes } from "./style-helpers.generated.ts";
+import type { StyleHelpers } from "./style-helpers.generated.ts";
 export type { StyleHelpers } from "./style-helpers.generated.ts";
 
 type PropertyInput = unknown;
@@ -586,35 +585,29 @@ const colorProperties = new Set([
   PropertyCode.TerminalCursorColor,
 ]);
 
-type HelperPropertyState = {
+type StylePropertyState = {
   style: Record<string, unknown>;
-  direct: Map<string, Record<string, unknown>>;
 };
 
-// Own declarations by prop, so withdrawing a multi-property helper reveals earlier declarations
-// without clearing a sibling binding. Weak ownership follows the retained native node's lifetime.
-const helperPropertyStates = new WeakMap<NativeNode, HelperPropertyState>();
+// One flattened declaration owns every visual field. Weak ownership follows the retained node.
+const stylePropertyStates = new WeakMap<NativeNode, StylePropertyState>();
 
-function helperPropertyState(node: NativeNode): HelperPropertyState {
-  let state = helperPropertyStates.get(node);
+function stylePropertyState(node: NativeNode): StylePropertyState {
+  let state = stylePropertyStates.get(node);
   if (!state) {
-    state = { style: {}, direct: new Map() };
-    helperPropertyStates.set(node, state);
+    state = { style: {} };
+    stylePropertyStates.set(node, state);
   }
   return state;
 }
 
-function applyHelperProperties(
+function applyStyleProperties(
   node: NativeNode,
-  state: HelperPropertyState,
+  state: StylePropertyState,
   fields: Set<string>,
 ): void {
   for (const field of fields) {
-    let value = state.style[field];
-    for (const declaration of state.direct.values()) {
-      if (Object.hasOwn(declaration, field)) value = declaration[field];
-    }
-    applyProperty(node, field, value ?? null);
+    applyProperty(node, field, state.style[field] ?? null);
   }
 }
 
@@ -628,22 +621,8 @@ function setProperty(
     setStyle(node, value);
     return;
   }
-  name = stylePropertyName(name);
-  const helper = expandStyleHelper(name, value);
-  if (helper !== undefined || helperProperties.has(name)) {
-    const state = helperPropertyState(node);
-    const declaration =
-      helper ?? (value === undefined || value === null || value === false ? {} : { [name]: value });
-    const old = state.direct.get(name);
-    // Keep the prop's original position when a reactive boolean switches off and back on.
-    state.direct.set(name, declaration);
-    applyHelperProperties(
-      node,
-      state,
-      new Set([...Object.keys(old ?? {}), ...Object.keys(declaration)]),
-    );
-    return;
-  }
+  if (isDirectStyleName(name))
+    throw new TypeError(`QuickGUI style property ${name} must be declared inside style`);
   applyProperty(node, name, value, previous);
 }
 
@@ -721,7 +700,6 @@ function applyProperty(
     );
     return;
   }
-  if (name === "class" || name === "className") return;
   if (name === "aria-label") name = "ariaLabel";
   if (name === "aria-modal") name = "ariaModal";
   if (name === "arguments" || name === "args") {
@@ -829,6 +807,7 @@ function mergeStyleInto(target: Record<string, unknown>, style: unknown): void {
   // `false`, `null`, and `undefined` entries are skipped, as is anything that is not a style.
   if (!isRecord(style)) return;
   for (const [name, value] of Object.entries(style)) {
+    if (name.includes("-")) throw new TypeError(`QuickGUI style keys must use camelCase: ${name}`);
     const helper =
       name === "flex" && (typeof value === "number" || typeof value === "string")
         ? flexDeclaration(value)
@@ -879,7 +858,7 @@ function groupStateEntries(value: unknown): Record<string, unknown>[] {
 
 function setStyle(node: NativeNode, value: PropertyInput): void {
   const next = flattenStyle(value as JSX.StyleProp) as Record<string, unknown>;
-  const state = helperPropertyState(node);
+  const state = stylePropertyState(node);
   const old = state.style;
   state.style = next;
   const fields = new Set<string>();
@@ -893,7 +872,7 @@ function setStyle(node: NativeNode, value: PropertyInput): void {
       if (!Object.is(nextValue, old[name])) fields.add(name);
     } else if (!Object.is(nextValue, old[name])) applyProperty(node, name, nextValue, old[name]);
   }
-  applyHelperProperties(node, state, fields);
+  applyStyleProperties(node, state, fields);
 }
 
 /**
@@ -1954,7 +1933,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 const universal = createUniversalRenderer<NativeNode>({
   createElement(tag, staticProps) {
-    const name = tag as NativeElementName;
+    // Intrinsic span uses the same native text container as Text.
+    const name = (tag === "span" ? "text" : tag) as NativeElementName;
     if (
       ![
         "view",
@@ -2522,7 +2502,14 @@ function createInWindowPopoverContent(
   context: PopoverContextValue,
   anchor: NativeNode,
 ): NativeNode {
-  const surface = omit(props, "placement", "gap", "viewportMargin") as JSX.NativeProps;
+  const surface = universal.mergeProps(
+    omit(props, "width", "height", "placement", "gap", "viewportMargin"),
+    {
+      get style() {
+        return [props.style, { width: props.width, height: props.height }] as JSX.StyleProp;
+      },
+    },
+  ) as JSX.NativeProps;
   const node = universal.createElement("view");
   const forwarded = universal.mergeProps(surface, {
     anchor,
@@ -2568,7 +2555,14 @@ function createSystemPopoverContent(
 ): NativeNode {
   const owner = getOwner();
   const placeholder = createNativeSentinel();
-  const surface = omit(props, "placement", "gap", "viewportMargin") as JSX.NativeProps;
+  const surface = universal.mergeProps(
+    omit(props, "width", "height", "placement", "gap", "viewportMargin"),
+    {
+      get style() {
+        return [props.style, { width: props.width, height: props.height }] as JSX.StyleProp;
+      },
+    },
+  ) as JSX.NativeProps;
   let systemWindow: Window | undefined;
   let disposing = false;
 
@@ -4987,14 +4981,17 @@ export function PopoverMenuPopup(props: JSX.PopoverMenuPopupProps): NativeNode {
       return context.open() ? context.trigger() : undefined;
     },
     children: (anchor: NativeNode) => {
-      const node = createPartNode("view", omit(props, "onDismiss", "onSelect"), {
+      const node = createPartNode("view", omit(props, "style", "width", "onDismiss", "onSelect"), {
         part: NativePart.PopoverMenuPopup,
         anchor,
         get menu() {
           return encodeMenu(context.items(), context.appearance());
         },
-        get width() {
-          return props.width ?? context.appearance().width ?? 224;
+        get style() {
+          return [
+            props.style,
+            { width: props.width ?? context.appearance().width ?? 224 },
+          ] as JSX.StyleProp;
         },
         get anchorPlacement() {
           return context.placement();
@@ -8809,13 +8806,13 @@ export namespace JSX {
     key?: string | number;
   }
 
-  export interface Style extends Omit<StyleHelpers, "flex"> {
+  export interface Style extends Omit<StyleHelpers, "flex" | "flexWrap"> {
     /** CSS flex shorthand, or the boolean display helper. */
     flex?: number | string | boolean | null | undefined;
     textColor?: ColorValue;
     display?: "none" | "block" | "flex" | "grid";
     flexDirection?: "row" | "row-reverse" | "column" | "column-reverse";
-    flexWrap?: "nowrap" | "wrap" | "wrap-reverse";
+    flexWrap?: "nowrap" | "wrap" | "wrap-reverse" | boolean | null | undefined;
     flexGrow?: number;
     flexShrink?: number;
     flexBasis?: number | string;
@@ -9166,13 +9163,10 @@ export namespace JSX {
    */
   export type StyleProp = Style | false | null | undefined | ReadonlyArray<StyleProp>;
 
-  export interface NativeProps extends Omit<Style, StateName | "flex">, StyleAttributes {
-    flex?: StyleHelpers["flex"];
+  export interface NativeProps {
     accessibilityLabel?: string;
     children?: unknown;
     style?: StyleProp;
-    class?: string;
-    className?: string;
     disabled?: boolean;
     /** Expose web-style invalid state; the `style.invalid` variant paints while it is set. */
     invalid?: boolean;
@@ -10368,8 +10362,11 @@ export namespace JSX {
 
   export interface IntrinsicElements {
     view: NativeProps;
+    /** Native View alias; no component import is required. */
     div: NativeProps;
     text: NativeProps;
+    /** Native Text alias; no component import is required. */
+    span: NativeProps;
     button: NativeProps;
     input: InputProps;
     textarea: InputProps;

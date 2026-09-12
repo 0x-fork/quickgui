@@ -210,7 +210,7 @@ func TestWhenDisposesConditionalBindingsAndHandlers(t *testing.T) {
 		enabled, setEnabled := CreateSignal(true)
 		value := reactive.NewSignal("initial")
 		clicks := 0
-		node := Input(When(enabled, Value(value.Read), OnClick(func() { clicks++ })))
+		node := Input().When(enabled, Value(value.Read), OnClick(func() { clicks++ }))
 		if len(value.Observers) != 1 || len(node.Listeners) != 1 {
 			t.Fatal("conditional value or click handler was not installed")
 		}
@@ -259,7 +259,7 @@ func TestNestedWhenTracksOnlyTheActiveBranch(t *testing.T) {
 }
 
 func TestEventAwareClickOptionPreservesEventControls(t *testing.T) {
-	node := Button(OnClickEvent(func(event *native.Event) { event.PreventDefault() }), "Click")
+	node := Button().OnClickEvent(func(event *native.Event) { event.PreventDefault() }).Child("Click")
 	event := &native.Event{}
 	node.Listeners[0].Listener(event)
 	if !event.DefaultPrevented {

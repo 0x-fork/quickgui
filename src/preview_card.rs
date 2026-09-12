@@ -207,7 +207,7 @@ impl PreviewCardState {
 /// accessibility relationship; the application owns every visual declaration and the content.
 ///
 /// The parts compose the existing in-window [`Popover`]. QuickGUI's retained overlay node is
-/// itself the portal, so [`Self::portal_part`] and [`Self::positioner_part`] decorate the same
+/// itself the portal, so [`Self::portal_with`] and [`Self::positioner_with`] decorate the same
 /// boundary: mount exactly one of them.
 ///
 /// The descriptor retains no allocation, task, timer, observer, or idle scheduler source.
@@ -294,8 +294,12 @@ impl PreviewCard {
     ///
     /// A preview card needs no wrapper of its own; this part exists so a composition that wants
     /// one keeps the trigger out of the window's native drag region without inventing appearance.
-    pub fn root_part(self, root: Element) -> Element {
+    pub fn root_with(self, root: Element) -> Element {
         root.app_region_no_drag()
+    }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(self) -> Element {
+        self.root_with(crate::div())
     }
 
     /// Decorate the application-owned link-like trigger without adding appearance.
@@ -303,7 +307,7 @@ impl PreviewCard {
     /// Unlike a popover trigger, this projects the Link role: a preview card previews a
     /// destination rather than opening a menu, so the trigger stays an ordinary link for the
     /// keyboard and for assistive technology.
-    pub fn trigger_part(self, trigger: Element) -> Element {
+    pub fn trigger_with(self, trigger: Element) -> Element {
         let trigger = trigger
             .id(self.trigger_id())
             .focusable()
@@ -319,39 +323,63 @@ impl PreviewCard {
             trigger
         }
     }
+    /// Create the unstyled trigger part. Use [`Self::trigger_with`] to supply an existing element.
+    pub fn trigger(self) -> Element {
+        self.trigger_with(crate::button())
+    }
 
     /// Decorate the caller-owned portal boundary.
     ///
     /// QuickGUI's retained overlay node is itself the portal, so this is the same boundary as
-    /// [`Self::positioner_part`]; mount exactly one of them.
-    pub fn portal_part(self, portal: Element) -> Element {
-        self.popover.positioner_part(portal)
+    /// [`Self::positioner_with`]; mount exactly one of them.
+    pub fn portal_with(self, portal: Element) -> Element {
+        self.popover.positioner_with(portal)
+    }
+    /// Create the unstyled portal part. Use [`Self::portal_with`] to supply an existing element.
+    pub fn portal(self) -> Element {
+        self.portal_with(crate::div())
     }
 
     /// Decorate the caller-owned positioner without adding appearance.
-    pub fn positioner_part(self, positioner: Element) -> Element {
-        self.popover.positioner_part(positioner)
+    pub fn positioner_with(self, positioner: Element) -> Element {
+        self.popover.positioner_with(positioner)
+    }
+    /// Create the unstyled positioner part. Use [`Self::positioner_with`] to supply an existing element.
+    pub fn positioner(self) -> Element {
+        self.positioner_with(crate::div())
     }
 
     /// Decorate the application-owned popup without adding layout or appearance.
     ///
     /// The popup emits [`crate::Event::Dismiss`] under [`Self::popup_id`] for Escape and for an
     /// outside pointer press, and restores focus to the trigger.
-    pub fn popup_part(self, popup: Element) -> Element {
-        self.popover.popover_part(popup)
+    pub fn popup_with(self, popup: Element) -> Element {
+        self.popover.popup_with(popup)
+    }
+    /// Create the unstyled popup part. Use [`Self::popup_with`] to supply an existing element.
+    pub fn popup(self) -> Element {
+        self.popup_with(crate::div())
     }
 
     /// Decorate the application-owned arrow.
     ///
     /// The arrow is decorative: it carries a stable identity so the application can position and
     /// animate it, and is hidden from assistive technology.
-    pub fn arrow_part(self, arrow: Element) -> Element {
+    pub fn arrow_with(self, arrow: Element) -> Element {
         arrow.id(self.arrow_id()).accessibility_hidden(true)
+    }
+    /// Create the unstyled arrow part. Use [`Self::arrow_with`] to supply an existing element.
+    pub fn arrow(self) -> Element {
+        self.arrow_with(crate::div())
     }
 
     /// Decorate an optional caller-painted viewport backdrop.
-    pub fn backdrop_part(self, backdrop: Element) -> Element {
-        self.popover.backdrop_part(backdrop)
+    pub fn backdrop_with(self, backdrop: Element) -> Element {
+        self.popover.backdrop_with(backdrop)
+    }
+    /// Create the unstyled backdrop part. Use [`Self::backdrop_with`] to supply an existing element.
+    pub fn backdrop(self) -> Element {
+        self.backdrop_with(crate::div())
     }
 
     /// Build the trigger's hover behavior.
@@ -476,13 +504,13 @@ impl PreviewCard {
 /// Create an unstyled preview-card trigger root.
 ///
 /// This shorthand is equivalent to
-/// `PreviewCard::from_state(trigger_id, popup_id, state).trigger_part(div())`.
+/// `PreviewCard::from_state(trigger_id, popup_id, state).trigger_with(div())`.
 pub fn preview_card_trigger(
     trigger_id: impl Into<ElementId>,
     popup_id: impl Into<ElementId>,
     state: &PreviewCardState,
 ) -> Element {
-    PreviewCard::from_state(trigger_id, popup_id, state).trigger_part(div())
+    PreviewCard::from_state(trigger_id, popup_id, state).trigger_with(div())
 }
 
 fn derived_preview_card_id(scope: ElementId, tag: u64) -> ElementId {
@@ -590,7 +618,7 @@ mod tests {
             .placement(AnchorPlacement::TopStart)
             .anchor_gap(10.0)
             .viewport_margin(12.0);
-        let trigger = card.trigger_part(div().bg(Color::rgb8(1, 2, 3)));
+        let trigger = card.trigger_with(div().bg(Color::rgb8(1, 2, 3)));
         assert_eq!(trigger.explicit_id, Some("profile-link".into()));
         assert_eq!(trigger.accessibility.role, AccessibilityRole::Link);
         assert_eq!(trigger.accessibility.expanded, Some(true));
@@ -605,31 +633,31 @@ mod tests {
         assert!(trigger.focusable);
         assert_eq!(trigger.visual.background, Some(Color::rgb8(1, 2, 3)));
 
-        let closed = PreviewCard::new("profile-link", "profile-card", false).trigger_part(div());
+        let closed = PreviewCard::new("profile-link", "profile-card", false).trigger_with(div());
         assert_eq!(closed.accessibility.expanded, Some(false));
         assert_eq!(closed.accessibility.relations.controls(), None);
 
-        let positioner = card.positioner_part(div());
+        let positioner = card.positioner_with(div());
         assert_eq!(positioner.explicit_id, Some(card.positioner_id()));
-        let portal = card.portal_part(div());
+        let portal = card.portal_with(div());
         assert_eq!(portal.explicit_id, Some(card.positioner_id()));
 
-        let popup = card.popup_part(div().w(280.0));
+        let popup = card.popup_with(div().w(280.0));
         assert_eq!(popup.explicit_id, Some(card.popup_id()));
         assert_eq!(popup.accessibility.role, AccessibilityRole::Dialog);
         assert!(popup.dismiss_policy.on_escape());
         assert!(popup.dismiss_policy.on_pointer_outside());
         assert_eq!(popup.visual.background, None);
 
-        let arrow = card.arrow_part(div().size(8.0, 8.0));
+        let arrow = card.arrow_with(div().size(8.0, 8.0));
         assert_eq!(arrow.explicit_id, Some(card.arrow_id()));
         assert!(arrow.accessibility.hidden);
 
-        let backdrop = card.backdrop_part(div());
+        let backdrop = card.backdrop_with(div());
         assert_eq!(backdrop.explicit_id, Some(card.backdrop_id()));
         assert!(backdrop.accessibility.hidden);
 
-        assert_eq!(card.root_part(div()).visual.background, None);
+        assert_eq!(card.root_with(div()).visual.background, None);
         assert_eq!(card.popover().popover_id(), card.popup_id());
         assert!(card.is_open());
 
@@ -685,20 +713,20 @@ mod tests {
             });
 
             let mut root = card
-                .root_part(div().size_full().relative())
+                .root_with(div().size_full().relative())
                 .child(
-                    card.trigger_part(div().child(text("Ada Lovelace")))
+                    card.trigger_with(div().child(text("Ada Lovelace")))
                         .on_hover(trigger_hover),
                 )
                 .child(crate::button().id("open").child("Open").on_click(open));
             if card.is_open() {
                 root = root.child(
-                    card.positioner_part(div()).child(
-                        card.popup_part(div().w(240.0).h(120.0))
+                    card.positioner_with(div()).child(
+                        card.popup_with(div().w(240.0).h(120.0))
                             .on_hover(popup_hover)
                             .on_dismiss(dismiss)
                             .child(text("Mathematician"))
-                            .child(card.arrow_part(div().size(8.0, 8.0))),
+                            .child(card.arrow_with(div().size(8.0, 8.0))),
                     ),
                 );
             }

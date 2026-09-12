@@ -61,7 +61,7 @@ Implemented now:
   `SliderThumb::offset`, an `onValueCommitted` commit boundary and dragging flag on
   `apply_pointer_change`, a `ValueFormat` hook for the value and per-thumb value text, and a
   copyable `SliderThumbState` carrying the thumb index and dragging state;
-- Base UI-shaped progress and meter parts: `track_part`, `label_part`, and `value_part` join the
+- Base UI-shaped progress and meter parts: `track_with`, `label_with`, and `value_with` join the
   root and indicator decorators, a declared identity relates the root to its mounted label and value,
   `ProgressStatus` and `ProgressPartState` expose the three Base UI states, and the bounded
   `ValueFormat` hook supplies the visible value text while `value_text` keeps precedence for
@@ -74,7 +74,7 @@ Implemented now:
   working unchanged;
 - Base UI-shaped popover parts and props: `Popover` adds `side`, `align`, `side_offset`,
   `align_offset`, `collision_padding`, `sticky`, `anchor_element`/`anchor_point`, and `modal`
-  alongside the existing names, the `portal_part`, `arrow_part`, and `viewport_part` decorators, and
+  alongside the existing names, the `portal_with`, `arrow_with`, and `viewport_with` decorators, and
   a copyable `PopoverPartState` snapshot. The arrow follows the placement QuickGUI actually
   resolved: `Element::report_anchor_placement` publishes it into an application-owned
   `AnchorPlacementHandle` during the paint already being performed and requests exactly one

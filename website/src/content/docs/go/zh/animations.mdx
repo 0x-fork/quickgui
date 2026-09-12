@@ -6,9 +6,7 @@
 
 ```go
 func HoverAction() *ui.Element {
-	return ui.Button(
-		"Continue",
-	).
+	return ui.Button().Child("Continue").
 		Padding(12).
 		BorderRadius(8).
 		BackgroundColor("#334155").
@@ -28,7 +26,7 @@ func AnimatedSelection() *ui.Element {
 	selected, setSelected := ui.CreateSignal(false)
 	return ui.View().Children(
 
-		ui.Button("Toggle emphasis").OnClick(func() { setSelected(!selected()) }),
+		ui.Button().Child("Toggle emphasis").OnClick(func() { setSelected(!selected()) }),
 		ui.View().Child(
 			"Your selection",
 		).
@@ -53,9 +51,7 @@ func AnimatedSelection() *ui.Element {
 
 ```go
 func CappedTransition() *ui.Element {
-	return ui.Button(
-		"Hover me",
-	).Padding(12).BackgroundColor("#334155").TextColor("white").Opacity(0.8).
+	return ui.Button().Child("Hover me").Padding(12).BackgroundColor("#334155").TextColor("white").Opacity(0.8).
 		Transition(ui.TransitionDeclaration{
 			Properties: []string{"background-color", "opacity"},
 			Duration:   180 * time.Millisecond,

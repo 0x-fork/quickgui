@@ -175,11 +175,11 @@ impl SelectionControlsDemo {
                 indicator.child(div().size(8.0, 2.0).rounded(1.0).bg(colors.mark))
             }
         };
-        control.indicator_part(indicator)
+        control.indicator_with(indicator)
     }
 
     fn radio_indicator(control: Radio, colors: GalleryColors) -> Element {
-        control.indicator_part(
+        control.indicator_with(
             div()
                 .size(16.0, 16.0)
                 .flex_none()
@@ -228,7 +228,7 @@ impl SelectionControlsDemo {
             })
             .transition(CONTROL_TRANSITION)
             .child(
-                control.thumb_part(
+                control.thumb_with(
                     div()
                         .absolute()
                         .top(2.0)
@@ -365,7 +365,7 @@ impl View for SelectionControlsDemo {
             .gap_2()
             .child(
                 save_control
-                    .root_part(
+                    .root_with(
                         Self::control_root(div(), colors)
                             .child(Self::checkbox_indicator(save_control, colors))
                             .child(Self::copy(
@@ -379,7 +379,7 @@ impl View for SelectionControlsDemo {
             )
             .child(
                 index_control
-                    .root_part(
+                    .root_with(
                         Self::control_root(div(), colors)
                             .child(Self::checkbox_indicator(index_control, colors))
                             .child(Self::copy(
@@ -400,7 +400,7 @@ impl View for SelectionControlsDemo {
         ];
         let mut exports = div().flex_col().gap_2().child(
             parent_control
-                .root_part(
+                .root_with(
                     Self::control_root(div(), colors)
                         .child(Self::checkbox_indicator(parent_control, colors))
                         .child(Self::copy(
@@ -416,7 +416,7 @@ impl View for SelectionControlsDemo {
             let child = Checkbox::new(self.exports[index]);
             exports = exports.child(
                 child
-                    .root_part(
+                    .root_with(
                         Self::control_root(div(), colors)
                             .ml(24.0)
                             .child(Self::checkbox_indicator(child, colors))
@@ -431,14 +431,14 @@ impl View for SelectionControlsDemo {
         let compact_control = Radio::new(self.density == Density::Compact);
         let comfortable_control = Radio::new(self.density == Density::Comfortable);
         let spacious_control = Radio::new(self.density == Density::Spacious);
-        let densities = RadioGroup::new().root_part(
+        let densities = RadioGroup::new().root_with(
             div()
                 .accessibility_label("Editor density")
                 .flex_col()
                 .gap_2()
                 .children([
                     compact_control
-                        .root_part(
+                        .root_with(
                             Self::control_root(div(), colors)
                                 .child(Self::radio_indicator(compact_control, colors))
                                 .child(Self::copy(
@@ -450,7 +450,7 @@ impl View for SelectionControlsDemo {
                         .id("density-compact")
                         .on_click(compact),
                     comfortable_control
-                        .root_part(
+                        .root_with(
                             Self::control_root(div(), colors)
                                 .child(Self::radio_indicator(comfortable_control, colors))
                                 .child(Self::copy(
@@ -462,7 +462,7 @@ impl View for SelectionControlsDemo {
                         .id("density-comfortable")
                         .on_click(comfortable),
                     spacious_control
-                        .root_part(
+                        .root_with(
                             Self::control_root(div(), colors)
                                 .child(Self::radio_indicator(spacious_control, colors))
                                 .child(Self::copy(
@@ -484,7 +484,7 @@ impl View for SelectionControlsDemo {
             .gap_2()
             .child(
                 sync_control
-                    .root_part(
+                    .root_with(
                         Self::control_root(div(), colors)
                             .child(Self::switch_track(sync_control, colors))
                             .child(Self::copy(
@@ -498,7 +498,7 @@ impl View for SelectionControlsDemo {
             )
             .child(
                 managed_control
-                    .root_part(
+                    .root_with(
                         Self::control_root(div(), colors)
                             .child(Self::switch_track(managed_control, colors))
                             .child(Self::copy(
@@ -512,7 +512,7 @@ impl View for SelectionControlsDemo {
             )
             .child(
                 audit_control
-                    .root_part(
+                    .root_with(
                         Self::control_root(div(), colors)
                             .child(Self::switch_track(audit_control, colors))
                             .child(Self::copy(

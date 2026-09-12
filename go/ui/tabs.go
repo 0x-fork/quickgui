@@ -112,8 +112,6 @@ func UseTabsState() func() TabsState {
 }
 
 // Tabs is a controlled tab set.
-var Tabs = tabsAPI{}
-
 type tabsAPI struct{}
 
 func (tabsAPI) Root(props TabsRootProps, children ...any) *native.Node {

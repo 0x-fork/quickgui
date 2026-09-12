@@ -13,44 +13,35 @@ import (
 ## 用法
 
 ```go
-func PopoverExample() *native.Node {
-	return ui.Popover.Root(
-		ui.PopoverRootProps{},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.Popover.Trigger(ui.PopoverTriggerProps{}, "Account"),
-				ui.Popover.Positioner(
-					ui.PopoverPositionerProps{},
-					func() *native.Node {
-						return ui.Popover.Popup(
-							ui.PopoverPopupProps{PartProps: ui.PartProps{Style: ui.Style().
-								Width(240).
-								Padding(16)}},
-							func() *native.Node {
-								return ui.Fragment([]*native.Node{ui.Popover.Title(ui.PartProps{}, "Account"),
-									ui.Popover.Close(ui.PartProps{}, "Done")})
-							},
-						)
-					},
-				)})
-		},
-	)
+func PopoverExample() *ui.Element {
+    popover := ui.NewPopover().Side("bottom").SideOffset(8)
+    return popover.Root().Children(
+        popover.Trigger().Child("Account"),
+        popover.Positioner().Child(
+            popover.Popup().Width(240).Padding(16).Children(
+                popover.Title().Child("Account"),
+                popover.Description().Child("Manage your account settings."),
+                popover.Close().Child("Done"),
+            ),
+        ),
+    )
 }
 ```
 
 ## 结构
 
-- `ui.Popover.Root`
-- `ui.Popover.Trigger`
-- `ui.Popover.Content`
-- `ui.Popover.Portal`
-- `ui.Popover.Backdrop`
-- `ui.Popover.Positioner`
-- `ui.Popover.Popup`
-- `ui.Popover.Arrow`
-- `ui.Popover.Viewport`
-- `ui.Popover.Title`
-- `ui.Popover.Description`
-- `ui.Popover.Close`
+- `popover.Root`
+- `popover.Trigger`
+- `popover.Content`
+- `popover.Portal`
+- `popover.Backdrop`
+- `popover.Positioner`
+- `popover.Popup`
+- `popover.Arrow`
+- `popover.Viewport`
+- `popover.Title`
+- `popover.Description`
+- `popover.Close`
 
 ## 主要属性
 

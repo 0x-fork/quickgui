@@ -23,3 +23,16 @@ func RawNodeLabel(value int) *native.Node {
 }
 
 func ordinaryValue(value int) int { return value }
+
+func CompoundPopover(open bool, change func(bool), mounted func(), ref func(*native.Node)) *ui.Element {
+	mounted()
+	popover := ui.NewPopover().Open(open).OnOpenChange(func(value bool, _ ui.PopoverOpenChangeDetails) { change(value) })
+	return popover.Root().Child(popover.Trigger().Ref(ref).Child("some text"))
+}
+
+func CreatePopoverOnClick(open bool, change func(bool), mount func(*ui.Element)) *ui.Element {
+	return ui.Button().Child("Create popover").OnClick(func() {
+		popover := ui.NewPopover().Open(open).OnOpenChange(func(value bool, _ ui.PopoverOpenChangeDetails) { change(value) })
+		mount(popover.Root().Child(popover.Trigger().Child("Open")))
+	})
+}

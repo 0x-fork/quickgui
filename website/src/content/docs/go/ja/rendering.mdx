@@ -9,7 +9,7 @@ func ViewExample() *ui.Element {
 	return ui.View().Children(
 
 		ui.Text("Hello from Go"),
-		ui.Button("Continue").OnClick(func() {}),
+		ui.Button().Child("Continue").OnClick(func() {}),
 	).Padding(20).Gap(12)
 }
 ```
@@ -22,7 +22,7 @@ func ViewExample() *ui.Element {
 func DisclosureExample() *ui.Element {
 	open, setOpen := ui.CreateSignal(false)
 	return ui.View().Children(
-		ui.Button("Toggle details").OnClick(func() { setOpen(!open()) }),
+		ui.Button().Child("Toggle details").OnClick(func() { setOpen(!open()) }),
 		ui.Show(
 			open,
 			func() *ui.Element { return ui.Text("Details") },
@@ -46,9 +46,7 @@ type ListPerson struct {
 func KeyedListExample() *ui.Element {
 	people, setPeople := ui.CreateSignal([]ListPerson{{1, "Ada"}, {2, "Grace"}})
 	return ui.View().Children(
-		ui.Button(
-			"Reorder and rename",
-		).OnClick(func() {
+		ui.Button().Child("Reorder and rename").OnClick(func() {
 			setPeople([]ListPerson{{2, "Grace"}, {1, "Ada Lovelace"}})
 		}),
 
@@ -98,7 +96,7 @@ func LoadingPanel(load func(context.Context) (string, error)) *ui.Element {
 ```go
 func CloseButton() *ui.Element {
 	window := native.CurrentWindow()
-	return ui.Button("Close window").OnClick(func() { window.Close() })
+	return ui.Button().Child("Close window").OnClick(func() { window.Close() })
 }
 ```
 

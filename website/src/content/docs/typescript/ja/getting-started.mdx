@@ -24,10 +24,12 @@ import { Button, Text, View, createRenderer } from "@quickgui/solid";
 import { createSignal } from "solid-js";
 function Counter() {
   const [count, setCount] = createSignal(0);
-  return <View padding={24} display="flex" flexDirection="column" gap={12}>
-    <Text>Count: {count()}</Text>
-    <Button onClick={() => setCount(count() + 1)}>Increment</Button>
-  </View>;
+  return (
+    <View style={{ padding: 24, display: "flex", flexDirection: "column", gap: 12 }}>
+      <Text>Count: {count()}</Text>
+      <Button onClick={() => setCount(count() + 1)}>Increment</Button>
+    </View>
+  );
 }
 function openWindow() {
   new Window({ title: "Counter", width: 720, height: 480, renderer: createRenderer(Counter) });

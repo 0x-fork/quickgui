@@ -51,8 +51,6 @@ func (state *collapsibleState) applyTo(node *native.Node, part string) {
 var collapsibleContext = createPartContext[collapsibleState]()
 
 // Collapsible is a controlled disclosure.
-var Collapsible = collapsibleAPI{}
-
 type collapsibleAPI struct{}
 
 func (collapsibleAPI) Root(props CollapsibleRootProps, children ...any) *native.Node {
@@ -195,8 +193,6 @@ var accordionContext = createPartContext[accordionState]()
 var accordionItemContext = createPartContext[accordionItemState]()
 
 // Accordion is a controlled accordion supporting single or multiple open items.
-var Accordion = accordionAPI{}
-
 type accordionAPI struct{}
 
 func (accordionAPI) Root(props AccordionRootProps, children ...any) *native.Node {

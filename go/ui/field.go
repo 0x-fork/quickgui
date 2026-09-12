@@ -97,8 +97,6 @@ func controlTag(element FieldControlElement) uint8 {
 }
 
 // Field is labelling and validation composition for one form control.
-var Field = fieldAPI{}
-
 type fieldAPI struct{}
 
 func (fieldAPI) Root(props FieldRootProps, children ...any) *native.Node {
@@ -201,8 +199,6 @@ func (fieldAPI) Error(props PartProps, children ...any) *native.Node {
 }
 
 // Fieldset is a semantic field group.
-var Fieldset = fieldsetAPI{}
-
 type fieldsetAPI struct{}
 
 func (fieldsetAPI) Root(props PartProps, children ...any) *native.Node {

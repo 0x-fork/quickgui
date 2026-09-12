@@ -57,9 +57,7 @@ func statusGlyph(m *model, status func() string, compact bool) *ui.Element {
 		}),
 	).Display("flex").Width(size).Height(size).FlexShrink(0).AlignItems("center").JustifyContent("center")
 }
-func iconButton(m *model, label, name string, size float64, click func(), options ...any) *ui.Element {
-	args := []any{ui.AriaLabel(label), ui.FocusOnPointer(ptr(false)), m.iconStyle(size), ui.OnClick(click)}
-	args = append(args, options...)
-	args = append(args, func() *ui.Element { return icon(name, 14, m.color(func(t theme) string { return t.TextTertiary })) })
-	return ui.Button(args...)
+func iconButton(m *model, label, name string, size float64, click func()) *ui.Element {
+	return ui.Button().AriaLabel(label).FocusOnPointer(false).Style(m.iconStyle(size)).OnClick(click).
+		Child(icon(name, 14, m.color(func(t theme) string { return t.TextTertiary })))
 }

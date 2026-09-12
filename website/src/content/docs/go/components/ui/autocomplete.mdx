@@ -16,41 +16,38 @@ import (
 
 ```go
 func AutocompleteExample() *native.Node {
-	return ui.Autocomplete.Root(ui.AutocompleteRootProps{
-		PickerInputProps: ui.PickerInputProps{
-			PickerSourceProps: ui.PickerSourceProps{Items: func() []ui.OptionDeclaration {
-				return []ui.OptionDeclaration{{Value: "go", Label: "Go"}, {Value: "swift", Label: "Swift"}}
-			}},
-			Placeholder:        "Find a language",
-			OnInputValueChange: func(query string, _ *native.Event) { fmt.Println(query) },
-		},
-	})
+	autocomplete1 := ui.NewAutocomplete(ui.AutocompleteRootProps{PickerInputProps: ui.PickerInputProps{PickerSourceProps: ui.PickerSourceProps{Items: func() []ui.OptionDeclaration {
+		return []ui.OptionDeclaration{{Value: "go", Label: "Go"}, {Value: "swift", Label: "Swift"}}
+	}}, Placeholder: "Find a language", OnInputValueChange: func(query string, _ *native.Event) {
+		fmt.Println(query)
+	}}})
+	return autocomplete1.Root().NativeNode()
 }
 ```
 
 ## Anatomy
 
-- `ui.Autocomplete.Root`
-- `ui.Autocomplete.Input`
-- `ui.Autocomplete.Option`
-- `ui.Autocomplete.Label`
-- `ui.Autocomplete.Value`
-- `ui.Autocomplete.Icon`
-- `ui.Autocomplete.InputGroup`
-- `ui.Autocomplete.Clear`
-- `ui.Autocomplete.Portal`
-- `ui.Autocomplete.Positioner`
-- `ui.Autocomplete.Popup`
-- `ui.Autocomplete.Arrow`
-- `ui.Autocomplete.Status`
-- `ui.Autocomplete.Empty`
-- `ui.Autocomplete.List`
-- `ui.Autocomplete.Item`
-- `ui.Autocomplete.ItemIndicator`
-- `ui.Autocomplete.Group`
-- `ui.Autocomplete.GroupLabel`
-- `ui.Autocomplete.Collection`
-- `ui.Autocomplete.Separator`
+- `autocomplete.Root`
+- `autocomplete.Input`
+- `autocomplete.Option`
+- `autocomplete.Label`
+- `autocomplete.Value`
+- `autocomplete.Icon`
+- `autocomplete.InputGroup`
+- `autocomplete.Clear`
+- `autocomplete.Portal`
+- `autocomplete.Positioner`
+- `autocomplete.Popup`
+- `autocomplete.Arrow`
+- `autocomplete.Status`
+- `autocomplete.Empty`
+- `autocomplete.List`
+- `autocomplete.Item`
+- `autocomplete.ItemIndicator`
+- `autocomplete.Group`
+- `autocomplete.GroupLabel`
+- `autocomplete.Collection`
+- `autocomplete.Separator`
 
 ## Key props
 

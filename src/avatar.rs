@@ -187,12 +187,16 @@ impl Avatar {
     ///
     /// The root carries the whole avatar's Image role and accessible name, so swapping between the
     /// image and the fallback never changes what is announced.
-    pub fn root_part(&self, root: Element) -> Element {
+    pub fn root_with(&self, root: Element) -> Element {
         root.id(self.root_id)
             .accessibility_role(AccessibilityRole::Image)
             .accessibility_label(Arc::clone(&self.label))
             .user_select_none()
             .app_region_no_drag()
+    }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(&self) -> Element {
+        self.root_with(crate::div())
     }
 
     /// Decorate the application-owned image without adding appearance.
@@ -200,21 +204,29 @@ impl Avatar {
     /// Pass a [`crate::img`] built from the caller's own source. Mount it only while
     /// [`AvatarState::shows_image`] is true; the part is hidden from assistive technology because
     /// the root already names the avatar.
-    pub fn image_part(&self, image: Element) -> Element {
+    pub fn image_with(&self, image: Element) -> Element {
         image
             .id(self.image_id())
             .accessibility_hidden(true)
             .user_select_none()
     }
+    /// Create the unstyled image part. Use [`Self::image_with`] to supply an existing element.
+    pub fn image(&self) -> Element {
+        self.image_with(crate::div())
+    }
 
     /// Decorate the application-owned fallback without adding appearance.
     ///
     /// Mount it only while [`AvatarState::shows_fallback`] is true.
-    pub fn fallback_part(&self, fallback: Element) -> Element {
+    pub fn fallback_with(&self, fallback: Element) -> Element {
         fallback
             .id(self.fallback_id())
             .accessibility_hidden(true)
             .user_select_none()
+    }
+    /// Create the unstyled fallback part. Use [`Self::fallback_with`] to supply an existing element.
+    pub fn fallback(&self) -> Element {
+        self.fallback_with(crate::div())
     }
 
     /// Apply a load status reported by the application and notify the owner exactly once.
@@ -253,9 +265,9 @@ impl Avatar {
 
 /// Create an unstyled avatar root.
 ///
-/// This shorthand is equivalent to `Avatar::new(id, label).root_part(div())`.
+/// This shorthand is equivalent to `Avatar::new(id, label).root_with(div())`.
 pub fn avatar(id: impl Into<ElementId>, label: impl Into<Arc<str>>) -> Element {
-    Avatar::new(id, label).root_part(div())
+    Avatar::new(id, label).root_with(div())
 }
 
 fn derived_avatar_id(scope: ElementId, tag: u64) -> ElementId {
@@ -324,7 +336,7 @@ mod tests {
     #[test]
     fn parts_add_exact_semantics_without_appearance() {
         let avatar = Avatar::new("member", "Ada Lovelace");
-        let root = avatar.root_part(div().size(32.0, 32.0).bg(Color::rgb8(9, 9, 9)));
+        let root = avatar.root_with(div().size(32.0, 32.0).bg(Color::rgb8(9, 9, 9)));
         assert_eq!(root.explicit_id, Some("member".into()));
         assert_eq!(root.accessibility.role, AccessibilityRole::Image);
         assert_eq!(
@@ -335,12 +347,12 @@ mod tests {
         assert_eq!(root.visual.background, Some(Color::rgb8(9, 9, 9)));
         assert!(!root.focusable);
 
-        let image = avatar.image_part(div());
+        let image = avatar.image_with(div());
         assert_eq!(image.explicit_id, Some(avatar.image_id()));
         assert!(image.accessibility.hidden);
         assert_eq!(image.visual.background, None);
 
-        let fallback = avatar.fallback_part(div().child(text("AL")));
+        let fallback = avatar.fallback_with(div().child(text("AL")));
         assert_eq!(fallback.explicit_id, Some(avatar.fallback_id()));
         assert!(fallback.accessibility.hidden);
 
@@ -390,12 +402,12 @@ mod tests {
                     );
                 }
             });
-            let mut root = avatar.root_part(div().size(32.0, 32.0));
+            let mut root = avatar.root_with(div().size(32.0, 32.0));
             if self.state.shows_image() {
-                root = root.child(avatar.image_part(div().size_full()));
+                root = root.child(avatar.image_with(div().size_full()));
             }
             if self.state.shows_fallback() {
-                root = root.child(avatar.fallback_part(div().child(text("AL"))));
+                root = root.child(avatar.fallback_with(div().child(text("AL"))));
             }
             div()
                 .child(root)

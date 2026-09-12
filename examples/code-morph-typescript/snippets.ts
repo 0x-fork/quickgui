@@ -4,73 +4,67 @@ import { createHighlighterCore } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 import go from "shiki/langs/go.mjs";
 import rust from "shiki/langs/rust.mjs";
-import tsx from "shiki/langs/tsx.mjs";
+import typescript from "shiki/langs/typescript.mjs";
 import githubDark from "shiki/themes/github-dark.mjs";
 
 export const languages = ["go", "typescript", "rust"] as const;
 export type Language = (typeof languages)[number];
 export const languageLabels = { go: "Go", typescript: "TypeScript", rust: "Rust" };
-export const filenames = { go: "counter.go", typescript: "counter.tsx", rust: "counter.rs" };
+export const filenames = { go: "forecast.go", typescript: "forecast.ts", rust: "forecast.rs" };
 
-// The website's Counter snippets, kept local so this app builds independently.
-const counter: Record<Language, string> = {
-  go: `func Counter() *ui.Element {
-  count, setCount := ui.CreateSignal(0)
-  return ui.View().
-    FlexCol().
-    SizeFull().
-    ItemsCenter().
-    JustifyCenter().
-    Gap(20).
-    Bg("#090d16").
-    TextColor("#e2e8f0").
-    Child(ui.Text("Count: ", count())).
-    Child(ui.Button().
-      OnClick(func() { setCount(count() + 1) }).
-      Padding(12).
-      RoundedLg().
-      Bg("#2563eb").
-      Child("Increment"))
-}`,
-  typescript: `function Counter() {
-  const [count, setCount] = createSignal(0);
-  return (
-    <View flex-col size-full items-center justify-center gap-5
-      bg="#090d16"
-      color="#e2e8f0">
-      <Text>Count: {count()}</Text>
-      <Button p-3 rounded-lg
-        bg="#2563eb"
-        onClick={() => setCount(count() + 1)}>
-        Increment
-      </Button>
-    </View>
-  );
-}`,
-  rust: `impl View for Counter {
-    fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
-        let increment = cx.listener("increment", |this, cx: &mut EventContext| {
-            this.count += 1;
-            cx.invalidate();
-        });
-        div()
-            .flex_col()
-            .size_full()
-            .items_center()
-            .justify_center()
-            .gap_5()
-            .bg(Color::rgb8(9, 13, 22))
-            .text_color(Color::rgb8(226, 232, 240))
-            .child(text(format!("Count: {}", self.count)))
-            .child(
-                button()
-                    .p(12.0)
-                    .rounded_lg()
-                    .bg(Color::rgb8(37, 99, 235))
-                    .on_click(increment)
-                    .child("Increment"),
-            )
+// One standalone data-processing example expressed in three languages.
+const forecastExample: Record<Language, string> = {
+  go: `type Forecast struct {
+  City      string
+  Celsius   float64
+}
+
+func FormatTemperature(value float64) string {
+  fahrenheit := value*9/5 + 32
+  return fmt.Sprintf("%.1f°C / %.1f°F", value, fahrenheit)
+}
+
+func Warmest(forecasts []Forecast) string {
+  warmest := forecasts[0]
+  for _, forecast := range forecasts[1:] {
+    if forecast.Celsius > warmest.Celsius {
+      warmest = forecast
     }
+  }
+  return warmest.City + ": " + FormatTemperature(warmest.Celsius)
+}`,
+  typescript: `type Forecast = {
+  city: string;
+  celsius: number;
+};
+
+function formatTemperature(value: number): string {
+  const fahrenheit = value * 9 / 5 + 32;
+  return value.toFixed(1) + "°C / " + fahrenheit.toFixed(1) + "°F";
+}
+
+function warmest(forecasts: Forecast[]): string {
+  const warmest = forecasts.reduce((best, forecast) =>
+    forecast.celsius > best.celsius ? forecast : best
+  );
+  return warmest.city + ": " + formatTemperature(warmest.celsius);
+}`,
+  rust: `struct Forecast {
+    city: String,
+    celsius: f64,
+}
+
+fn format_temperature(value: f64) -> String {
+    let fahrenheit = value * 9.0 / 5.0 + 32.0;
+    format!("{value:.1}°C / {fahrenheit:.1}°F")
+}
+
+fn warmest(forecasts: &[Forecast]) -> String {
+    let warmest = forecasts
+        .iter()
+        .max_by(|a, b| a.celsius.total_cmp(&b.celsius))
+        .expect("at least one forecast");
+    format!("{}: {}", warmest.city, format_temperature(warmest.celsius))
 }`,
 };
 
@@ -80,15 +74,15 @@ export type Snippets = Record<Language, KeyedTokensInfo>;
 export async function loadSnippets(): Promise<Snippets> {
   const highlighter = await createHighlighterCore({
     themes: [githubDark],
-    langs: [go, tsx, rust],
+    langs: [go, typescript, rust],
     engine: createJavaScriptRegexEngine({ forgiving: true }),
   });
   try {
     return Object.fromEntries(
       languages.map((language) => [
         language,
-        codeToKeyedTokens(highlighter, counter[language], {
-          lang: language === "typescript" ? "tsx" : language,
+        codeToKeyedTokens(highlighter, forecastExample[language], {
+          lang: language,
           theme: "github-dark",
         }),
       ]),

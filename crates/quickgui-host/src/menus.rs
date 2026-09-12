@@ -791,7 +791,7 @@ impl NativeComponentStates {
                     .submenu
                     .and_then(|child| open_levels.get(&child).copied())
                     .unwrap_or(false);
-                let Some(state) = instance.menu.item_part_state(index, submenu_open) else {
+                let Some(state) = instance.menu.item_render_state(index, submenu_open) else {
                     continue;
                 };
                 let value = serde_json::json!({
@@ -880,16 +880,16 @@ pub(super) fn apply_menu_part(
         // wrapper declared under either name is decorated but never unmounted.
         MENU_PART | MENU_SUBMENU_ROOT_PART => {
             Some(match components.menu_compound.menus.get(&key) {
-                Some(instance) => instance.state.root_part(element),
+                Some(instance) => instance.state.root_with(element),
                 None => element,
             })
         }
-        MENU_GROUP_PART => Some(PopoverMenu::group_part(element)),
-        MENU_RADIO_GROUP_PART => Some(PopoverMenu::radio_group_part(element)),
+        MENU_GROUP_PART => Some(PopoverMenu::group_with(element)),
+        MENU_RADIO_GROUP_PART => Some(PopoverMenu::radio_group_with(element)),
         MENU_CHECKBOX_ITEM_INDICATOR_PART => {
-            Some(PopoverMenu::checkbox_item_indicator_part(element))
+            Some(PopoverMenu::checkbox_item_indicator_with(element))
         }
-        MENU_RADIO_ITEM_INDICATOR_PART => Some(PopoverMenu::radio_item_indicator_part(element)),
+        MENU_RADIO_ITEM_INDICATOR_PART => Some(PopoverMenu::radio_item_indicator_with(element)),
         MENU_TRIGGER_PART => {
             let Some(instance) = components.menu_compound.menus.get(&key) else {
                 return Some(element);
@@ -897,7 +897,7 @@ pub(super) fn apply_menu_part(
             if !listeners_enabled {
                 return Some(element.id(instance.state.trigger_id()));
             }
-            Some(instance.state.trigger_part_with(
+            Some(instance.state.trigger_with_accessor(
                 cx,
                 menu_accessor(key),
                 open_change(Rc::clone(events), window, instance.trigger_node),
@@ -909,21 +909,21 @@ pub(super) fn apply_menu_part(
             if !instance.state.is_open() {
                 return None;
             }
-            Some(instance.state.positioner_part(element))
+            Some(instance.state.positioner_with(element))
         }
         MENU_BACKDROP_PART => {
             let instance = components.menu_compound.menus.get(&key)?;
             if !instance.state.is_open() {
                 return None;
             }
-            Some(instance.state.backdrop_part(element))
+            Some(instance.state.backdrop_with(element))
         }
         MENU_ARROW_PART => {
             let instance = components.menu_compound.menus.get(&key)?;
             if !instance.state.is_open() {
                 return None;
             }
-            Some(instance.state.arrow_part(element))
+            Some(instance.state.arrow_with(element))
         }
         MENU_POPUP_PART => {
             let instance = components.menu_compound.menus.get(&key)?;
@@ -931,7 +931,7 @@ pub(super) fn apply_menu_part(
                 return None;
             }
             let popup = if listeners_enabled {
-                instance.state.popup_part_with(
+                instance.state.popup_with_accessor(
                     cx,
                     menu_accessor(key),
                     open_change(Rc::clone(events), window, instance.trigger_node),
@@ -940,7 +940,7 @@ pub(super) fn apply_menu_part(
             } else {
                 element.id(instance.state.popup_id())
             };
-            let popup = instance.menu.root_part(instance.state.popup_id(), popup);
+            let popup = instance.menu.root_with(instance.state.popup_id(), popup);
             if !listeners_enabled {
                 return Some(popup);
             }
@@ -968,7 +968,7 @@ pub(super) fn apply_menu_part(
                 if !listeners_enabled {
                     return Some(element.id(child_instance.state.trigger_id()));
                 }
-                let decorated = child_instance.state.submenu_trigger_part_with(
+                let decorated = child_instance.state.submenu_trigger_with_accessor(
                     cx,
                     menu_accessor(child_key),
                     open_change(Rc::clone(events), window, id),
@@ -981,7 +981,7 @@ pub(super) fn apply_menu_part(
                     cx,
                 ));
             }
-            let decorated = instance.menu.item_part(popup, binding.index, element)?;
+            let decorated = instance.menu.item_with(popup, binding.index, element)?;
             if !listeners_enabled {
                 return Some(decorated);
             }
@@ -1078,7 +1078,7 @@ fn activate_menu_row(
         };
         let checked = instance
             .menu
-            .item_part_state(binding.index, false)
+            .item_render_state(binding.index, false)
             .and_then(|state| state.checked);
         let link = match &activation {
             PopoverMenuActivation::Command { action, .. } => action

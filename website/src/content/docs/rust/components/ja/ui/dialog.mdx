@@ -12,20 +12,20 @@ use quickgui::*;
 
 ```rust
 let dialog = Dialog::new("save", open);
-dialog.root_part(div()).child(dialog.title_part(text("Save changes")))
+dialog.root().child(dialog.title_with(text("Save changes")))
 ```
 
 ## 構成
 
-- `Dialog::root_part`
-- `Dialog::trigger_part`
-- `Dialog::portal_part`
-- `Dialog::backdrop_part`
-- `Dialog::viewport_part`
-- `Dialog::popup_part`
-- `Dialog::title_part`
-- `Dialog::description_part`
-- `Dialog::close_part`
+- `Dialog::root`
+- `Dialog::trigger`
+- `Dialog::portal`
+- `Dialog::backdrop`
+- `Dialog::viewport`
+- `Dialog::popup`
+- `Dialog::title`
+- `Dialog::description`
+- `Dialog::close`
 
 ## 主なプロパティ
 

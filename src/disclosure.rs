@@ -96,13 +96,21 @@ impl Collapsible {
     }
 
     /// Decorate an application-owned structural root without adding role or appearance.
-    pub fn root_part(self, root: Element) -> Element {
+    pub fn root_with(self, root: Element) -> Element {
         root.id(self.root_id)
+    }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(self) -> Element {
+        self.root_with(crate::div())
     }
 
     /// Decorate an application-owned trigger with disclosure-button behavior.
-    pub fn trigger_part(self, trigger: Element) -> Element {
+    pub fn trigger_with(self, trigger: Element) -> Element {
         disclosure_trigger(trigger, self.trigger_id(), self.panel_id(), self.state)
+    }
+    /// Create the unstyled trigger part. Use [`Self::trigger_with`] to supply an existing element.
+    pub fn trigger(self) -> Element {
+        self.trigger_with(crate::button())
     }
 
     /// Decorate the panel when it should be mounted.
@@ -111,12 +119,16 @@ impl Collapsible {
     /// `Option<Element>` composes directly. With [`Self::keep_mounted`], a closed panel remains in
     /// the retained tree as `display: none` and therefore contributes no layout, paint, input, or
     /// accessibility node.
-    pub fn panel_part(self, panel: Element) -> Option<Element> {
+    pub fn panel_with(self, panel: Element) -> Option<Element> {
         disclosure_panel(
             panel.id(self.panel_id()),
             self.state.open,
             self.keep_mounted,
         )
+    }
+    /// Create the unstyled panel part. Use [`Self::panel_with`] to supply an existing element.
+    pub fn panel(self) -> Option<Element> {
+        self.panel_with(crate::div())
     }
 }
 
@@ -313,8 +325,12 @@ impl Accordion {
         self.root_id
     }
 
-    pub fn root_part(self, root: Element) -> Element {
+    pub fn root_with(self, root: Element) -> Element {
         root.id(self.root_id)
+    }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(self) -> Element {
+        self.root_with(crate::div())
     }
 
     pub fn item(self, value: impl Into<ElementId>, index: usize, open: bool) -> AccordionItem {
@@ -410,19 +426,27 @@ impl AccordionItem {
         self.state.open || self.keep_mounted
     }
 
-    pub fn root_part(self, root: Element) -> Element {
+    pub fn root_with(self, root: Element) -> Element {
         root.id(self.root_id())
+    }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(self) -> Element {
+        self.root_with(crate::div())
     }
 
     /// Decorate the caller-owned heading that contains only this item's trigger.
-    pub fn header_part(self, header: Element) -> Element {
+    pub fn header_with(self, header: Element) -> Element {
         header
             .id(self.header_id())
             .accessibility_role(AccessibilityRole::Heading)
             .accessibility_level(self.heading_level)
     }
+    /// Create the unstyled header part. Use [`Self::header_with`] to supply an existing element.
+    pub fn header(self) -> Element {
+        self.header_with(crate::div())
+    }
 
-    pub fn trigger_part(self, trigger: Element) -> Element {
+    pub fn trigger_with(self, trigger: Element) -> Element {
         disclosure_trigger(
             trigger,
             self.trigger_id(),
@@ -433,14 +457,22 @@ impl AccordionItem {
             },
         )
     }
+    /// Create the unstyled trigger part. Use [`Self::trigger_with`] to supply an existing element.
+    pub fn trigger(self) -> Element {
+        self.trigger_with(crate::button())
+    }
 
     /// Decorate the item panel as a named accessibility region when mounted.
-    pub fn panel_part(self, panel: Element) -> Option<Element> {
+    pub fn panel_with(self, panel: Element) -> Option<Element> {
         let panel = panel
             .id(self.panel_id())
             .accessibility_role(AccessibilityRole::Region)
             .accessibility_labelled_by(self.trigger_id());
         disclosure_panel(panel, self.state.open, self.keep_mounted)
+    }
+    /// Create the unstyled panel part. Use [`Self::panel_with`] to supply an existing element.
+    pub fn panel(self) -> Option<Element> {
+        self.panel_with(crate::div())
     }
 }
 
@@ -511,11 +543,11 @@ mod tests {
                 disabled: false,
             }
         );
-        let root = disclosure.root_part(div().w(321.0).bg(Color::rgb8(1, 2, 3)));
+        let root = disclosure.root_with(div().w(321.0).bg(Color::rgb8(1, 2, 3)));
         assert_eq!(root.explicit_id, Some(disclosure.root_id()));
         assert_eq!(root.visual.background, Some(Color::rgb8(1, 2, 3)));
 
-        let trigger = disclosure.trigger_part(div().border(2.0, Color::rgb8(4, 5, 6)));
+        let trigger = disclosure.trigger_with(div().border(2.0, Color::rgb8(4, 5, 6)));
         assert_eq!(trigger.explicit_id, Some(disclosure.trigger_id()));
         assert_eq!(trigger.accessibility.role, AccessibilityRole::Button);
         assert_eq!(trigger.accessibility.expanded, Some(true));
@@ -532,29 +564,29 @@ mod tests {
         assert!(trigger.transition.is_none());
 
         let panel = disclosure
-            .panel_part(div().bg(Color::rgb8(7, 8, 9)))
+            .panel_with(div().bg(Color::rgb8(7, 8, 9)))
             .expect("open panel");
         assert_eq!(panel.explicit_id, Some(disclosure.panel_id()));
         assert_eq!(panel.visual.background, Some(Color::rgb8(7, 8, 9)));
 
         let closed = Collapsible::new("closed", false);
-        assert!(closed.panel_part(div()).is_none());
+        assert!(closed.panel_with(div()).is_none());
         let retained = closed
             .keep_mounted(true)
-            .panel_part(div())
+            .panel_with(div())
             .expect("retained closed panel");
         assert!(retained.is_display_none());
         assert_eq!(
             closed
                 .keep_mounted(true)
-                .trigger_part(div())
+                .trigger_with(div())
                 .accessibility
                 .relations
                 .controls(),
             None
         );
 
-        let disabled = closed.disabled(true).trigger_part(div());
+        let disabled = closed.disabled(true).trigger_with(div());
         assert!(disabled.accessibility.disabled);
         assert_eq!(disabled.accessibility.expanded, Some(false));
     }
@@ -625,11 +657,11 @@ mod tests {
             assert!(!ids[..index].contains(id));
         }
 
-        let header = item.header_part(div());
+        let header = item.header_with(div());
         assert_eq!(header.accessibility.role, AccessibilityRole::Heading);
         assert_eq!(header.accessibility.collection.level(), Some(2));
 
-        let trigger = item.trigger_part(div());
+        let trigger = item.trigger_with(div());
         assert_eq!(trigger.accessibility.role, AccessibilityRole::Button);
         assert_eq!(trigger.tab_index, 0);
         assert!(trigger.focusable);
@@ -640,7 +672,7 @@ mod tests {
             Some(item.panel_id())
         );
 
-        let panel = item.panel_part(div()).expect("open accordion panel");
+        let panel = item.panel_with(div()).expect("open accordion panel");
         assert_eq!(panel.accessibility.role, AccessibilityRole::Region);
         assert_eq!(
             panel.accessibility.relations.labelled_by(),
@@ -650,13 +682,13 @@ mod tests {
         let closed = accordion.item("closed", 1, false).keep_mounted(true);
         assert!(
             closed
-                .panel_part(div())
+                .panel_with(div())
                 .expect("retained panel")
                 .is_display_none()
         );
         assert_eq!(
             closed
-                .trigger_part(div())
+                .trigger_with(div())
                 .accessibility
                 .relations
                 .controls(),
@@ -666,7 +698,7 @@ mod tests {
         let disabled = Accordion::new("disabled")
             .disabled(true)
             .item("item", 0, true)
-            .trigger_part(div());
+            .trigger_with(div());
         assert!(disabled.accessibility.disabled);
     }
 
@@ -703,61 +735,61 @@ mod tests {
             div()
                 .child(
                     disclosure
-                        .root_part(
+                        .root_with(
                             div().child(
                                 disclosure
-                                    .trigger_part(div().child("Details"))
+                                    .trigger_with(div().child("Details"))
                                     .on_click(toggle_disclosure),
                             ),
                         )
-                        .children(disclosure.panel_part(text("Disclosure content"))),
+                        .children(disclosure.panel_with(text("Disclosure content"))),
                 )
                 .child(
-                    accordion.root_part(
+                    accordion.root_with(
                         div()
                             .child(
-                                first.root_part(
+                                first.root_with(
                                     div()
                                         .child(
-                                            first.header_part(
+                                            first.header_with(
                                                 div().child(
                                                     first
-                                                        .trigger_part(div().child("First"))
+                                                        .trigger_with(div().child("First"))
                                                         .on_click(toggle_first),
                                                 ),
                                             ),
                                         )
-                                        .children(first.panel_part(text("First panel"))),
+                                        .children(first.panel_with(text("First panel"))),
                                 ),
                             )
                             .child(
-                                second.root_part(
+                                second.root_with(
                                     div()
                                         .child(
-                                            second.header_part(
+                                            second.header_with(
                                                 div().child(
                                                     second
-                                                        .trigger_part(div().child("Second"))
+                                                        .trigger_with(div().child("Second"))
                                                         .on_click(toggle_second),
                                                 ),
                                             ),
                                         )
-                                        .children(second.panel_part(text("Second panel"))),
+                                        .children(second.panel_with(text("Second panel"))),
                                 ),
                             )
                             .child(
-                                disabled.root_part(
+                                disabled.root_with(
                                     div()
                                         .child(
-                                            disabled.header_part(
+                                            disabled.header_with(
                                                 div().child(
                                                     disabled
-                                                        .trigger_part(div().child("Disabled"))
+                                                        .trigger_with(div().child("Disabled"))
                                                         .on_click(toggle_disabled),
                                                 ),
                                             ),
                                         )
-                                        .children(disabled.panel_part(text("Disabled panel"))),
+                                        .children(disabled.panel_with(text("Disabled panel"))),
                                 ),
                             ),
                     ),

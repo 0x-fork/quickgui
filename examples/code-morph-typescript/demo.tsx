@@ -95,89 +95,110 @@ export function CodeMorphDemo(props: { snippets: Snippets; reduceMotion: boolean
   const lineNumbers = Array.from({ length: rowCount }, (_, index) => index + 1);
 
   return (
-    <View flex-col size-full padding={28} gap={22} bg="#0d1117" color="#e6edf3">
-      <View flex-col gap={7} flex-shrink-0>
-        <Text fontSize={11} fontWeight={600} color="#79b8ff">
-          QUICKGUI / TYPESCRIPT
+    <View
+      style={{
+        flexCol: true,
+        sizeFull: true,
+        padding: 28,
+        gap: 22,
+        bg: "#0d1117",
+        color: "#e6edf3",
+      }}
+    >
+      <View style={{ flexCol: true, gap: 7, flexShrink0: true }}>
+        <Text style={{ fontSize: 11, fontWeight: 600, color: "#79b8ff" }}>
+          CROSS-LANGUAGE FORECAST
         </Text>
-        <Text fontSize={30} fontWeight={600}>
-          Code, in motion.
-        </Text>
-        <Text fontSize={14} color="#8b98aa">
-          The same idea, in three languages. Follow the pieces as they move.
+        <Text style={{ fontSize: 30, fontWeight: 600 }}>Code, in motion.</Text>
+        <Text style={{ fontSize: 14, color: "#8b98aa" }}>
+          One small algorithm in three languages. Follow the pieces as they move.
         </Text>
       </View>
 
       <View
-        flex-col
-        flex-1
-        minHeight={0}
-        borderWidth={1}
-        borderColor="#293241"
-        borderRadius={12}
-        overflow="hidden"
-        bg="#101620"
+        style={{
+          flexCol: true,
+          flex1: true,
+          minHeight: 0,
+          borderWidth: 1,
+          borderColor: "#293241",
+          borderRadius: 12,
+          overflow: "hidden",
+          bg: "#101620",
+        }}
       >
         <View
-          flex-row
-          items-center
-          justify-between
-          padding={12}
-          borderBottomWidth={1}
-          borderColor="#293241"
-          flex-shrink-0
+          style={{
+            flexRow: true,
+            itemsCenter: true,
+            justifyBetween: true,
+            padding: 12,
+            borderBottomWidth: 1,
+            borderColor: "#293241",
+            flexShrink0: true,
+          }}
         >
-          <View flex-row gap={4}>
+          <View style={{ flexRow: true, gap: 4 }}>
             <For each={languages}>
               {(item) => (
                 <Button
                   ariaLabel={`Show ${languageLabels[item]}`}
                   selected={language() === item}
-                  style={control}
-                  bg={language() === item ? "#243249" : "transparent"}
-                  color={language() === item ? "#9dcbff" : "#9ca8b8"}
                   onClick={() => select(item)}
+                  style={[
+                    control,
+                    {
+                      bg: language() === item ? "#243249" : "transparent",
+                      color: language() === item ? "#9dcbff" : "#9ca8b8",
+                    },
+                  ]}
                 >
                   {languageLabels[item]}
                 </Button>
               )}
             </For>
           </View>
-          <Text fontFamily="Menlo" fontSize={12} color="#6d7c90" paddingRight={8}>
+          <Text style={{ fontFamily: "Menlo", fontSize: 12, color: "#6d7c90", paddingRight: 8 }}>
             {filenames[language()]}
           </Text>
         </View>
 
-        <View flex-1 minHeight={0} overflow="auto" padding={24}>
+        <View style={{ flex1: true, minHeight: 0, overflow: "auto", padding: 24 }}>
           <View
-            position="relative"
-            width={codeWidth + 56}
-            height={rowCount * LINE_HEIGHT + 8}
-            userSelect="none"
+            style={{
+              position: "relative",
+              width: codeWidth + 56,
+              height: rowCount * LINE_HEIGHT + 8,
+              userSelect: "none",
+            }}
           >
             <For each={lineNumbers}>
               {(line) => (
                 <Text
-                  position="absolute"
-                  left={0}
-                  top={(line - 1) * LINE_HEIGHT}
-                  width={26}
-                  fontFamily="Menlo"
-                  fontSize={FONT_SIZE}
-                  lineHeight={LINE_HEIGHT}
-                  textAlign="right"
-                  color="#48566a"
+                  style={{
+                    position: "absolute",
+                    left: 0,
+                    top: (line - 1) * LINE_HEIGHT,
+                    width: 26,
+                    fontFamily: "Menlo",
+                    fontSize: FONT_SIZE,
+                    lineHeight: LINE_HEIGHT,
+                    textAlign: "right",
+                    color: "#48566a",
+                  }}
                 >
                   {line}
                 </Text>
               )}
             </For>
             <View
-              position="absolute"
-              left={48}
-              top={0}
-              width={codeWidth + 8}
-              height={rowCount * LINE_HEIGHT}
+              style={{
+                position: "absolute",
+                left: 48,
+                top: 0,
+                width: codeWidth + 8,
+                height: rowCount * LINE_HEIGHT,
+              }}
             >
               <For each={keys()}>
                 {(key) => {
@@ -185,17 +206,19 @@ export function CodeMorphDemo(props: { snippets: Snippets; reduceMotion: boolean
                   const token = createMemo(() => tokens().get(key)!);
                   return (
                     <Text
-                      position="absolute"
-                      left={0}
-                      top={0}
-                      fontFamily="Menlo"
-                      fontSize={FONT_SIZE}
-                      lineHeight={LINE_HEIGHT}
-                      whiteSpace="nowrap"
-                      color={token().color}
-                      opacity={token().opacity}
-                      transform={`translate(${token().x}px, ${token().y}px)`}
-                      transition={{ property: "all", duration: duration(), easing: "ease-out" }}
+                      style={{
+                        position: "absolute",
+                        left: 0,
+                        top: 0,
+                        fontFamily: "Menlo",
+                        fontSize: FONT_SIZE,
+                        lineHeight: LINE_HEIGHT,
+                        whiteSpace: "nowrap",
+                        color: token().color,
+                        opacity: token().opacity,
+                        transform: `translate(${token().x}px, ${token().y}px)`,
+                        transition: { property: "all", duration: duration(), easing: "ease-out" },
+                      }}
                     >
                       {token().content}
                     </Text>
@@ -207,42 +230,50 @@ export function CodeMorphDemo(props: { snippets: Snippets; reduceMotion: boolean
         </View>
 
         <View
-          flex-row
-          items-center
-          justify-between
-          padding={14}
-          borderTopWidth={1}
-          borderColor="#293241"
-          flex-shrink-0
+          style={{
+            flexRow: true,
+            itemsCenter: true,
+            justifyBetween: true,
+            padding: 14,
+            borderTopWidth: 1,
+            borderColor: "#293241",
+            flexShrink0: true,
+          }}
         >
-          <Text fontSize={12} color="#8b98aa">
+          <Text style={{ fontSize: 12, color: "#8b98aa" }}>
             {reduceMotion()
               ? "Reduced motion follows your system setting."
               : "Switch languages to watch matching words find their place."}
           </Text>
-          <Text fontFamily="Menlo" fontSize={12} color="#6d7c90">
+          <Text style={{ fontFamily: "Menlo", fontSize: 12, color: "#6d7c90" }}>
             {props.snippets[language()].code.split("\n").length} lines
           </Text>
         </View>
       </View>
 
-      <View flex-row items-center justify-between flex-shrink-0>
+      <View
+        style={{
+          flexRow: true,
+          itemsCenter: true,
+          justifyBetween: true,
+          flexShrink0: true,
+        }}
+      >
         <Button
           ariaLabel="Toggle slow motion"
           selected={slow()}
-          style={control}
-          bg={slow() ? "#243249" : "#161d28"}
           onClick={() => setSlow(!slow())}
+          style={[control, { bg: slow() ? "#243249" : "#161d28" }]}
         >
           {slow() ? "Slow motion: on" : "Slow motion: off"}
         </Button>
         <Button
           ariaLabel="Next language"
-          style={{ ...control, hover: { bg: "#a5d0ff", color: "#0d1117" } }}
-          bg="#79b8ff"
-          color="#0d1117"
-          fontWeight={600}
           onClick={() => select(languages[(languages.indexOf(language()) + 1) % languages.length]!)}
+          style={[
+            { ...control, hover: { bg: "#a5d0ff", color: "#0d1117" } },
+            { bg: "#79b8ff", color: "#0d1117", fontWeight: 600 },
+          ]}
         >
           Next language →
         </Button>

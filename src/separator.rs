@@ -38,7 +38,7 @@ impl SeparatorOrientation {
 ///
 /// // The application declares the rule's extent and colour; the descriptor adds only semantics.
 /// let rule = Separator::new(SeparatorOrientation::Horizontal)
-///     .root_part(div().h(1.0).bg(Color::rgb8(220, 220, 220)));
+///     .root_with(div().h(1.0).bg(Color::rgb8(220, 220, 220)));
 /// let vertical = Separator::vertical();
 /// assert!(vertical.axis().is_vertical());
 /// let _ = rule;
@@ -70,22 +70,26 @@ impl Separator {
     }
 
     /// Decorate an application-owned root without adding layout or appearance.
-    pub fn root_part(self, root: Element) -> Element {
+    pub fn root_with(self, root: Element) -> Element {
         root.accessibility_role(AccessibilityRole::Separator)
             .accessibility_orientation(self.orientation.accessibility())
             .user_select_none()
             .app_region_no_drag()
             .cursor_default()
     }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(self) -> Element {
+        self.root_with(crate::div())
+    }
 }
 
 /// Create an unstyled semantic separator root.
 ///
-/// This shorthand is equivalent to `Separator::new(orientation).root_part(div())`. The caller
+/// This shorthand is equivalent to `Separator::new(orientation).root_with(div())`. The caller
 /// still declares the rule's extent, because a zero-sized divider is a layout decision rather
 /// than a framework default.
 pub fn separator(orientation: SeparatorOrientation) -> Element {
-    Separator::new(orientation).root_part(div())
+    Separator::new(orientation).root_with(div())
 }
 
 #[cfg(test)]
@@ -98,7 +102,7 @@ mod tests {
 
     #[test]
     fn parts_add_exact_semantics_without_appearance() {
-        let horizontal = Separator::horizontal().root_part(div());
+        let horizontal = Separator::horizontal().root_with(div());
         assert_eq!(horizontal.accessibility.role, AccessibilityRole::Separator);
         assert_eq!(
             horizontal.accessibility.orientation,
@@ -112,7 +116,7 @@ mod tests {
         assert_eq!(horizontal.user_select, UserSelect::None);
         assert!(horizontal.children.is_empty());
 
-        let vertical = Separator::vertical().root_part(div().w(1.0).bg(Color::BLACK));
+        let vertical = Separator::vertical().root_with(div().w(1.0).bg(Color::BLACK));
         assert_eq!(
             vertical.accessibility.orientation,
             Some(AccessibilityOrientation::Vertical)
@@ -126,7 +130,7 @@ mod tests {
     #[test]
     fn shorthand_matches_the_decorated_root() {
         let shorthand = separator(SeparatorOrientation::Vertical);
-        let decorated = Separator::vertical().root_part(div());
+        let decorated = Separator::vertical().root_with(div());
         assert_eq!(shorthand.accessibility.role, decorated.accessibility.role);
         assert_eq!(
             shorthand.accessibility.orientation,
@@ -153,11 +157,11 @@ mod tests {
                 .child(text("Above"))
                 .child(
                     Separator::horizontal()
-                        .root_part(div().id(Self::horizontal_id()).h(1.0).w(120.0)),
+                        .root_with(div().id(Self::horizontal_id()).h(1.0).w(120.0)),
                 )
                 .child(text("Below"))
                 .child(
-                    Separator::vertical().root_part(div().id(Self::vertical_id()).w(1.0).h(20.0)),
+                    Separator::vertical().root_with(div().id(Self::vertical_id()).w(1.0).h(20.0)),
                 )
         }
     }

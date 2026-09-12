@@ -16,42 +16,29 @@ import (
 ```go
 func SliderExample() *native.Node {
 	volume, setVolume := ui.CreateSignal([]float64{40})
-	return ui.Slider.Root(
-		ui.SliderRootProps{
-			Value:         volume,
-			Min:           0,
-			Max:           100,
-			Step:          1,
-			OnValueChange: func(next []float64, _ *native.Event) { setVolume(next) },
-		},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.Slider.Label(ui.PartProps{}, "Volume"),
-				ui.Slider.Control(
-					ui.PartProps{Style: ui.Style().Width(240).Height(24)},
-					func() *native.Node {
-						return ui.Fragment([]*native.Node{ui.Slider.Track(
-							ui.PartProps{},
-							func() *native.Node { return ui.Slider.Indicator(ui.PartProps{}) },
-						),
-							ui.Slider.Thumb(ui.SliderThumbProps{})})
-					},
-				),
-				ui.Slider.Value(ui.PartProps{})})
-		},
-	)
+	slider1 := ui.NewSlider(ui.SliderRootProps{Value: volume, Min: 0, Max: 100, Step: 1, OnValueChange: func(next []float64, _ *native.Event) {
+		setVolume(next)
+	}})
+	return slider1.Root().Children(func() *native.Node {
+		return ui.Fragment([]*native.Node{slider1.Label(ui.PartProps{}).Children("Volume").NativeNode(), slider1.Control(ui.PartProps{Style: ui.Style().Width(240).Height(24)}).Children(func() *native.Node {
+			return ui.Fragment([]*native.Node{slider1.Track(ui.PartProps{}).Children(func() *native.Node {
+				return slider1.Indicator(ui.PartProps{}).NativeNode()
+			}).NativeNode(), slider1.Thumb(ui.SliderThumbProps{}).NativeNode()})
+		}).NativeNode(), slider1.Value(ui.PartProps{}).NativeNode()})
+	}).NativeNode()
 }
 ```
 
 ## 構成
 
-- `ui.Slider.Root`
-- `ui.Slider.Label`
-- `ui.Slider.Value`
-- `ui.Slider.Control`
-- `ui.Slider.Track`
-- `ui.Slider.Range`
-- `ui.Slider.Indicator`
-- `ui.Slider.Thumb`
+- `slider.Root`
+- `slider.Label`
+- `slider.Value`
+- `slider.Control`
+- `slider.Track`
+- `slider.Range`
+- `slider.Indicator`
+- `slider.Thumb`
 
 ## 主なプロパティ
 

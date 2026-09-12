@@ -11,7 +11,7 @@ func App() *ui.Element {
 	return ui.View().Children(
 		ui.Text("{{NAME}}").FontSize(24).FontWeight(700),
 		ui.Text(message()).FontSize(16),
-		ui.Button("Call extension").OnClick(func() {
+		ui.Button().Child("Call extension").OnClick(func() {
 			extension.Echo("Hello from {{TYPE}} through purego", func(reply string, err error) {
 				if err != nil {
 					setMessage(err.Error())

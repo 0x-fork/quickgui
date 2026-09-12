@@ -12,13 +12,13 @@ use quickgui::*;
 
 ```rust
 let group = ToggleGroup::new("align", &state, &items);
-group.root_part(div().flex_row())
+group.root().flex_row()
 ```
 
 ## Anatomy
 
-- `ToggleGroup::root_part`
-- `ToggleGroup::item_part`
+- `ToggleGroup::root`
+- `ToggleGroup::item`
 
 ## Key props
 

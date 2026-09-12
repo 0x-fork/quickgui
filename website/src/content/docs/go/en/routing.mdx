@@ -68,7 +68,7 @@ Inside a route component, `ui.UseRouter()` exposes `Navigate`, `Replace`, `Back`
 ```go
 func BackButton() *ui.Element {
 	router := ui.UseRouter()
-	return ui.Button("Back").OnClick(router.Back)
+	return ui.Button().Child("Back").OnClick(router.Back)
 }
 ```
 

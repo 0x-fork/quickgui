@@ -45,7 +45,7 @@ impl DialogKind {
 /// that value. QuickGUI supplies stable part identities, a viewport overlay, nested topmost focus
 /// containment, independent Escape/backdrop dismissal, focus restoration, app-drag exclusion,
 /// native-view occlusion through the overlay plane, and exact dialog accessibility semantics.
-/// Mount [`Self::root_part`] only while [`Self::is_open`] is true.
+/// Mount [`Self::root_with`] only while [`Self::is_open`] is true.
 ///
 /// The descriptor retains no task, timer, observer, registry entry, or idle scheduler source.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -165,7 +165,7 @@ impl Dialog {
     }
 
     /// Decorate an application-owned trigger without adding appearance.
-    pub fn trigger_part(self, id: impl Into<ElementId>, trigger: Element) -> Element {
+    pub fn trigger_with(self, id: impl Into<ElementId>, trigger: Element) -> Element {
         let trigger = trigger
             .id(id)
             .focusable()
@@ -180,9 +180,13 @@ impl Dialog {
             trigger
         }
     }
+    /// Create the unstyled trigger part. Use [`Self::trigger_with`] to supply an existing element.
+    pub fn trigger(self, id: impl Into<ElementId>) -> Element {
+        self.trigger_with(id, crate::button())
+    }
 
     /// Decorate the full-window portal and active modal focus boundary.
-    pub fn root_part(self, root: Element) -> Element {
+    pub fn root_with(self, root: Element) -> Element {
         root.id(self.root_id())
             .overlay()
             .inset_0()
@@ -192,9 +196,13 @@ impl Dialog {
             .app_region_no_drag()
             .cursor_default()
     }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(self) -> Element {
+        self.root_with(crate::div())
+    }
 
     /// Decorate the caller-owned visual backdrop.
-    pub fn backdrop_part(self, backdrop: Element) -> Element {
+    pub fn backdrop_with(self, backdrop: Element) -> Element {
         backdrop
             .id(self.backdrop_id())
             .absolute()
@@ -203,6 +211,10 @@ impl Dialog {
             .app_region_no_drag()
             .cursor_default()
     }
+    /// Create the unstyled backdrop part. Use [`Self::backdrop_with`] to supply an existing element.
+    pub fn backdrop(self) -> Element {
+        self.backdrop_with(crate::div())
+    }
 
     /// Decorate the caller-owned modal popover.
     ///
@@ -210,7 +222,7 @@ impl Dialog {
     /// first when the enclosing trap mounts. Title and description relationships project only
     /// when the corresponding parts are mounted, so incomplete compositions never emit dangling
     /// native node references.
-    pub fn popover_part(self, popover: Element) -> Element {
+    pub fn popup_with(self, popover: Element) -> Element {
         let mut popover = popover
             .id(self.popover_id())
             .track_focus(self.popover_focus())
@@ -232,6 +244,10 @@ impl Dialog {
         }
         popover
     }
+    /// Create the unstyled popup part. Use [`Self::popup_with`] to supply an existing element.
+    pub fn popup(self) -> Element {
+        self.popup_with(crate::div())
+    }
 
     /// Decorate the caller-owned scrolling viewport the popup sits inside, Base UI's Viewport.
     ///
@@ -239,25 +255,37 @@ impl Dialog {
     /// content, and the scroll must live outside the popup so the popup keeps its own padding and
     /// shadow. QuickGUI supplies the stable identity and the scroll container; size, alignment, and
     /// padding stay application-owned.
-    pub fn viewport_part(self, viewport: Element) -> Element {
+    pub fn viewport_with(self, viewport: Element) -> Element {
         viewport
             .id(self.viewport_id())
             .overflow_y_scroll()
             .app_region_no_drag()
     }
+    /// Create the unstyled viewport part. Use [`Self::viewport_with`] to supply an existing element.
+    pub fn viewport(self) -> Element {
+        self.viewport_with(crate::div())
+    }
 
     /// Assign the stable visible label target used by the popover.
-    pub fn title_part(self, title: Element) -> Element {
+    pub fn title_with(self, title: Element) -> Element {
         title.id(self.title_id())
+    }
+    /// Create the unstyled title part. Use [`Self::title_with`] to supply an existing element.
+    pub fn title(self) -> Element {
+        self.title_with(crate::div())
     }
 
     /// Assign the stable visible description target used by the popover.
-    pub fn description_part(self, description: Element) -> Element {
+    pub fn description_with(self, description: Element) -> Element {
         description.id(self.description_id())
+    }
+    /// Create the unstyled description part. Use [`Self::description_with`] to supply an existing element.
+    pub fn description(self) -> Element {
+        self.description_with(crate::div())
     }
 
     /// Decorate a caller-owned close control with button behavior and no visual defaults.
-    pub fn close_part(self, label: impl Into<std::sync::Arc<str>>, close: Element) -> Element {
+    pub fn close_with(self, label: impl Into<std::sync::Arc<str>>, close: Element) -> Element {
         close
             .id(self.close_id())
             .clickable()
@@ -265,6 +293,10 @@ impl Dialog {
             .accessibility_label(label)
             .app_region_no_drag()
             .user_select_none()
+    }
+    /// Create the unstyled close part. Use [`Self::close_with`] to supply an existing element.
+    pub fn close(self, label: impl Into<std::sync::Arc<str>>) -> Element {
+        self.close_with(label, crate::button())
     }
 }
 
@@ -335,7 +367,7 @@ impl DialogState {
 
     /// Whether the dialog should still be declared in the tree.
     ///
-    /// This stays true through a closing transition, so mount [`Dialog::root_part`] against it
+    /// This stays true through a closing transition, so mount [`Dialog::root_with`] against it
     /// rather than against [`Self::is_open`].
     pub const fn is_mounted(&self) -> bool {
         self.mounted
@@ -453,7 +485,7 @@ mod tests {
     #[test]
     fn parts_add_exact_behavior_without_appearance() {
         let dialog = Dialog::new("settings", true).restore_focus_to("open-settings");
-        let trigger = dialog.trigger_part("open-settings", div());
+        let trigger = dialog.trigger_with("open-settings", div());
         assert_eq!(trigger.accessibility.role, AccessibilityRole::Button);
         assert_eq!(
             trigger.accessibility.has_popover,
@@ -465,7 +497,7 @@ mod tests {
             Some(dialog.popover_id())
         );
 
-        let root = dialog.root_part(div());
+        let root = dialog.root_with(div());
         assert!(root.focus_trap);
         assert!(root.restore_previous_focus);
         assert!(root.portal);
@@ -473,7 +505,7 @@ mod tests {
         assert_eq!(root.visual.background, None);
         assert_eq!(root.visual.border_color, None);
 
-        let popover = dialog.popover_part(div());
+        let popover = dialog.popup_with(div());
         assert_eq!(popover.accessibility.role, AccessibilityRole::Dialog);
         assert!(popover.accessibility.modal);
         assert_eq!(
@@ -489,7 +521,7 @@ mod tests {
         assert_eq!(popover.visual.background, None);
         assert_eq!(popover.visual.border_color, None);
 
-        let alert = Dialog::alert("delete", true).popover_part(div());
+        let alert = Dialog::alert("delete", true).popup_with(div());
         assert_eq!(alert.accessibility.role, AccessibilityRole::AlertDialog);
         assert!(alert.dismiss_policy.on_escape());
         assert!(!alert.dismiss_policy.on_pointer_outside());
@@ -547,28 +579,28 @@ mod tests {
                 .relative()
                 .child(
                     dialog
-                        .trigger_part("dialog-trigger", button().child("Open"))
+                        .trigger_with("dialog-trigger", button().child("Open"))
                         .on_click(open),
                 )
                 .child(button().id("outside").child("Outside"));
             if self.open {
                 let popover = dialog
-                    .popover_part(
+                    .popup_with(
                         div()
                             .w(240.0)
                             .h(160.0)
                             .bg(Color::BLACK)
-                            .child(dialog.title_part(text("Settings")))
-                            .child(dialog.description_part(text("Change settings")))
+                            .child(dialog.title_with(text("Settings")))
+                            .child(dialog.description_with(text("Change settings")))
                             .child(button().id("dialog-first").child("First"))
                             .child(button().id("dialog-second").child("Second"))
-                            .child(dialog.close_part("Close settings", div()).on_click(close)),
+                            .child(dialog.close_with("Close settings", div()).on_click(close)),
                     )
                     .on_dismiss(dismiss);
                 root = root.child(
                     dialog
-                        .root_part(div().flex_row().items_center().justify_center())
-                        .child(dialog.backdrop_part(div()))
+                        .root_with(div().flex_row().items_center().justify_center())
+                        .child(dialog.backdrop_with(div()))
                         .child(popover),
                 );
             }
@@ -607,7 +639,7 @@ mod tests {
     #[test]
     fn the_viewport_part_scrolls_the_dialog_without_adding_appearance() {
         let dialog = Dialog::new("confirm", true);
-        let viewport = dialog.viewport_part(crate::div().bg(crate::Color::rgb8(1, 2, 3)));
+        let viewport = dialog.viewport_with(crate::div().bg(crate::Color::rgb8(1, 2, 3)));
         assert_eq!(viewport.explicit_id, Some(dialog.viewport_id()));
         assert_eq!(
             viewport.visual.background,
@@ -656,12 +688,12 @@ mod tests {
                 .child(crate::button().id("open").child("Open").on_click(open));
             if self.dialog.is_mounted() {
                 root = root.child(
-                    dialog.root_part(crate::div()).child(
-                        dialog.viewport_part(crate::div()).child(
+                    dialog.root_with(crate::div()).child(
+                        dialog.viewport_with(crate::div()).child(
                             dialog
-                                .popover_part(crate::div())
-                                .child(dialog.title_part(crate::text("Confirm")))
-                                .child(dialog.close_part("Close", crate::div().on_click(close))),
+                                .popup_with(crate::div())
+                                .child(dialog.title_with(crate::text("Confirm")))
+                                .child(dialog.close_with("Close", crate::div().on_click(close))),
                         ),
                     ),
                 );

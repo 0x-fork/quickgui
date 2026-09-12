@@ -639,11 +639,15 @@ impl ToastViewport {
     ///
     /// The viewport itself is an ordinary group; each toast is its own live region, so an
     /// unchanged queue announces nothing.
-    pub fn viewport_part(self, viewport: Element) -> Element {
+    pub fn viewport_with(self, viewport: Element) -> Element {
         viewport
             .id(self.root_id)
             .accessibility_role(AccessibilityRole::Group)
             .app_region_no_drag()
+    }
+    /// Create the unstyled viewport part. Use [`Self::viewport_with`] to supply an existing element.
+    pub fn viewport(self) -> Element {
+        self.viewport_with(crate::div())
     }
 
     /// Stable identity of the portal the viewport is mounted inside.
@@ -657,7 +661,7 @@ impl ToastViewport {
     /// QuickGUI's overlay plane does the same, and this part deliberately does **not** block
     /// pointer input: a full-window toast layer that swallowed clicks would break every control
     /// underneath it. Placement, size, and stacking direction stay application-owned.
-    pub fn portal_part(self, portal: Element) -> Element {
+    pub fn portal_with(self, portal: Element) -> Element {
         let mut portal = portal
             .id(self.portal_id())
             .overlay()
@@ -667,6 +671,10 @@ impl ToastViewport {
         // everything it floats over stay clickable; only the toasts themselves take the pointer.
         portal.blocks_pointer = false;
         portal
+    }
+    /// Create the unstyled portal part. Use [`Self::portal_with`] to supply an existing element.
+    pub fn portal(self) -> Element {
+        self.portal_with(crate::div())
     }
 
     /// Describe the parts of one queued toast.
@@ -807,7 +815,7 @@ impl ToastParts {
     /// Informational toasts project a polite Status region; warnings and errors project an
     /// assertive Alert region. The root is focusable so keyboard users can reach the toast's
     /// action and close controls, and so Escape can dismiss the toast that has focus.
-    pub fn root_part(self, root: Element) -> Element {
+    pub fn root_with(self, root: Element) -> Element {
         let root = root
             .id(self.root_id())
             .accessibility_role(self.kind.role())
@@ -821,6 +829,10 @@ impl ToastParts {
             root
         }
     }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(self) -> Element {
+        self.root_with(crate::div())
+    }
 
     /// Decorate the caller-owned wrapper that places one toast inside the stack.
     ///
@@ -828,30 +840,46 @@ impl ToastParts {
     /// owns what it announces. QuickGUI supplies the stable identity and drag exclusion; the
     /// stacking transform, spacing, and motion stay application-owned — derive them from
     /// [`Self::index`], [`Self::offset`], and [`Self::is_expanded`].
-    pub fn positioner_part(self, positioner: Element) -> Element {
+    pub fn positioner_with(self, positioner: Element) -> Element {
         positioner.id(self.positioner_id()).app_region_no_drag()
+    }
+    /// Create the unstyled positioner part. Use [`Self::positioner_with`] to supply an existing element.
+    pub fn positioner(self) -> Element {
+        self.positioner_with(crate::div())
     }
 
     /// Decorate the caller-owned content wrapper inside the toast root.
     ///
     /// The root already carries the live region and the title and description relationships, so
     /// the content is an ordinary container with a stable identity.
-    pub fn content_part(self, content: Element) -> Element {
+    pub fn content_with(self, content: Element) -> Element {
         content.id(self.content_id())
+    }
+    /// Create the unstyled content part. Use [`Self::content_with`] to supply an existing element.
+    pub fn content(self) -> Element {
+        self.content_with(crate::div())
     }
 
     /// Decorate the application-owned title, which names the toast.
-    pub fn title_part(self, title: Element) -> Element {
+    pub fn title_with(self, title: Element) -> Element {
         title.id(self.title_id())
+    }
+    /// Create the unstyled title part. Use [`Self::title_with`] to supply an existing element.
+    pub fn title(self) -> Element {
+        self.title_with(crate::div())
     }
 
     /// Decorate the application-owned description, which describes the toast.
-    pub fn description_part(self, description: Element) -> Element {
+    pub fn description_with(self, description: Element) -> Element {
         description.id(self.description_id())
+    }
+    /// Create the unstyled description part. Use [`Self::description_with`] to supply an existing element.
+    pub fn description(self) -> Element {
+        self.description_with(crate::div())
     }
 
     /// Decorate the application-owned action control.
-    pub fn action_part(self, action: Element) -> Element {
+    pub fn action_with(self, action: Element) -> Element {
         action
             .id(self.action_id())
             .accessibility_role(AccessibilityRole::Button)
@@ -860,9 +888,13 @@ impl ToastParts {
             .app_region_no_drag()
             .user_select_none()
     }
+    /// Create the unstyled action part. Use [`Self::action_with`] to supply an existing element.
+    pub fn action(self) -> Element {
+        self.action_with(crate::button())
+    }
 
     /// Decorate the application-owned close control.
-    pub fn close_part(self, close: Element) -> Element {
+    pub fn close_with(self, close: Element) -> Element {
         close
             .id(self.close_id())
             .accessibility_role(AccessibilityRole::Button)
@@ -871,25 +903,37 @@ impl ToastParts {
             .app_region_no_drag()
             .user_select_none()
     }
+    /// Create the unstyled close part. Use [`Self::close_with`] to supply an existing element.
+    pub fn close(self) -> Element {
+        self.close_with(crate::button())
+    }
 
     /// Attach focused Escape dismissal to this toast's root.
     ///
     /// Escape is handled only while focus is inside this toast, so it never competes with a
     /// dialog, popover, or the application's own Escape handling.
-    pub fn key_part<V: 'static>(
+    pub fn key_with<V: 'static>(
         self,
         cx: &mut ViewContext<'_, V>,
         root: Element,
         access: fn(&mut V) -> &mut ToastManager,
     ) -> Element {
-        self.key_part_with(cx, root, StateAccessor::from(access))
+        self.key_with_accessor(cx, root, StateAccessor::from(access))
+    }
+    /// Create the unstyled key part. Use [`Self::key_with`] to supply an existing element.
+    pub fn key<V: 'static>(
+        self,
+        cx: &mut ViewContext<'_, V>,
+        access: fn(&mut V) -> &mut ToastManager,
+    ) -> Element {
+        self.key_with(cx, crate::div(), access)
     }
 
     /// Attach focused Escape dismissal against a per-instance [`ToastManager`] accessor.
     ///
     /// A host that owns one manager per declared viewport passes an accessor that captures which
     /// viewport this toast belongs to.
-    pub fn key_part_with<V: 'static>(
+    pub fn key_with_accessor<V: 'static>(
         self,
         cx: &mut ViewContext<'_, V>,
         root: Element,
@@ -923,9 +967,9 @@ fn bounded_text(text: Arc<str>) -> Arc<str> {
 
 /// Create an unstyled toast-viewport root.
 ///
-/// This shorthand is equivalent to `ToastViewport::new(id).viewport_part(div())`.
+/// This shorthand is equivalent to `ToastViewport::new(id).viewport_with(div())`.
 pub fn toast_viewport(id: impl Into<ElementId>) -> Element {
-    ToastViewport::new(id).viewport_part(div())
+    ToastViewport::new(id).viewport_with(div())
 }
 
 fn derived_toast_id(scope: ElementId, tag: u64, toast: u64) -> ElementId {
@@ -1053,7 +1097,7 @@ mod tests {
         let polite = viewport.toast(&manager.entries()[0]);
         let assertive = viewport.toast(&manager.entries()[1]);
 
-        let polite_root = polite.root_part(div().bg(Color::rgb8(1, 2, 3)));
+        let polite_root = polite.root_with(div().bg(Color::rgb8(1, 2, 3)));
         assert_eq!(polite_root.accessibility.role, AccessibilityRole::Status);
         assert_eq!(
             polite_root.accessibility.live,
@@ -1067,7 +1111,7 @@ mod tests {
         assert!(polite_root.focusable);
         assert_eq!(polite_root.visual.background, Some(Color::rgb8(1, 2, 3)));
 
-        let assertive_root = assertive.root_part(div());
+        let assertive_root = assertive.root_with(div());
         assert_eq!(assertive_root.accessibility.role, AccessibilityRole::Alert);
         assert_eq!(
             assertive_root.accessibility.live,
@@ -1078,7 +1122,7 @@ mod tests {
             Some(assertive.description_id())
         );
 
-        let viewport_element = viewport.viewport_part(div().gap_2());
+        let viewport_element = viewport.viewport_with(div().gap_2());
         assert_eq!(viewport_element.explicit_id, Some("toasts".into()));
         assert_eq!(
             viewport_element.accessibility.role,
@@ -1086,14 +1130,14 @@ mod tests {
         );
         assert!(viewport_element.accessibility.live.is_none());
 
-        let title = polite.title_part(text("Saved"));
+        let title = polite.title_with(text("Saved"));
         assert_eq!(title.explicit_id, Some(polite.title_id()));
-        let description = assertive.description_part(text("Retry when back online."));
+        let description = assertive.description_with(text("Retry when back online."));
         assert_eq!(description.explicit_id, Some(assertive.description_id()));
-        let action = assertive.action_part(div().child("Retry"));
+        let action = assertive.action_with(div().child("Retry"));
         assert_eq!(action.explicit_id, Some(assertive.action_id()));
         assert!(action.clickable);
-        let close = assertive.close_part(div().child("×"));
+        let close = assertive.close_with(div().child("×"));
         assert_eq!(close.explicit_id, Some(assertive.close_id()));
         assert!(close.clickable);
 
@@ -1139,7 +1183,7 @@ mod tests {
             });
 
             let viewport = ToastViewport::new("toasts");
-            let mut surface = viewport.viewport_part(div());
+            let mut surface = viewport.viewport_with(div());
             for entry in self.toasts.entries() {
                 let parts = viewport.toast(entry);
                 let id = entry.id();
@@ -1152,16 +1196,16 @@ mod tests {
                     view.toasts.dismiss(id);
                     cx.invalidate();
                 });
-                let mut root = div().child(parts.title_part(text(entry.toast().title().clone())));
+                let mut root = div().child(parts.title_with(text(entry.toast().title().clone())));
                 if let Some(description) = entry.toast().description_text() {
-                    root = root.child(parts.description_part(text(description.clone())));
+                    root = root.child(parts.description_with(text(description.clone())));
                 }
                 if let Some(label) = entry.toast().action_label() {
                     root = root
-                        .child(parts.action_part(div().child(text(label.clone())).on_click(undo)));
+                        .child(parts.action_with(div().child(text(label.clone())).on_click(undo)));
                 }
-                root = root.child(parts.close_part(div().child(text("Close")).on_click(close)));
-                surface = surface.child(parts.key_part(cx, parts.root_part(root), Self::toasts));
+                root = root.child(parts.close_with(div().child(text("Close")).on_click(close)));
+                surface = surface.child(parts.key_with(cx, parts.root_with(root), Self::toasts));
             }
 
             div()
@@ -1483,15 +1527,15 @@ mod tests {
             assert!(!ids[..index].contains(id));
         }
 
-        let positioner = toast.positioner_part(div().bg(Color::rgb8(1, 2, 3)));
+        let positioner = toast.positioner_with(div().bg(Color::rgb8(1, 2, 3)));
         assert_eq!(positioner.explicit_id, Some(toast.positioner_id()));
         assert_eq!(positioner.visual.background, Some(Color::rgb8(1, 2, 3)));
         assert!(!positioner.accessibility.hidden);
-        let content = toast.content_part(div());
+        let content = toast.content_with(div());
         assert_eq!(content.explicit_id, Some(toast.content_id()));
 
         // The toast layer floats over the window without swallowing its clicks.
-        let portal = viewport.portal_part(div());
+        let portal = viewport.portal_with(div());
         assert_eq!(portal.explicit_id, Some(viewport.portal_id()));
         assert!(portal.portal);
         assert!(!portal.blocks_pointer);
@@ -1535,7 +1579,7 @@ mod tests {
 
             let viewport = ToastViewport::new("toasts");
             let mut stack = viewport
-                .viewport_part(div().on_hover(expand))
+                .viewport_with(div().on_hover(expand))
                 .relative()
                 .w(280.0)
                 .h(200.0);
@@ -1549,10 +1593,10 @@ mod tests {
                     });
                 let pitch = if parts.is_expanded() { 68.0 } else { 12.0 };
                 let root = parts
-                    .root_part(div().w(260.0).h(60.0).on_pointer(swipe))
-                    .child(parts.content_part(div().child(parts.title_part(text("Toast")))));
+                    .root_with(div().w(260.0).h(60.0).on_pointer(swipe))
+                    .child(parts.content_with(div().child(parts.title_with(text("Toast")))));
                 stack = stack.child(
-                    parts.positioner_part(
+                    parts.positioner_with(
                         div()
                             .absolute()
                             .left(parts.swipe_movement())
@@ -1565,7 +1609,7 @@ mod tests {
 
             div()
                 .child(button().id("publish").child("Publish").on_click(publish))
-                .child(viewport.portal_part(div()).child(stack))
+                .child(viewport.portal_with(div()).child(stack))
         }
     }
 

@@ -56,7 +56,7 @@ pub struct ProgressPartState {
 /// A bounded value formatter shared by [`Progress`] and [`Meter`].
 ///
 /// This is QuickGUI's counterpart of Base UI's `format` prop. QuickGUI never renders the result
-/// itself: the application puts it inside its own `value_part`, and assistive technology reads it
+/// itself: the application puts it inside its own `value_with`, and assistive technology reads it
 /// unless an explicit [`Progress::value_text`] overrides it, which is Base UI's `getAriaValueText`
 /// precedence.
 #[derive(Clone)]
@@ -245,7 +245,7 @@ impl Progress {
             .map(|id| derived_progress_id(id, PROGRESS_INDICATOR_ID_TAG))
     }
 
-    pub const fn value(&self) -> Option<f64> {
+    pub const fn current_value(&self) -> Option<f64> {
         self.value
     }
 
@@ -269,7 +269,7 @@ impl Progress {
     }
 
     /// Decorate an application-owned root without adding layout or appearance.
-    pub fn root_part(&self, root: Element) -> Element {
+    pub fn root_with(&self, root: Element) -> Element {
         let range = match self.value {
             Some(value) => AccessibilityValueRange::new(value, 0.0, self.maximum),
             None => AccessibilityValueRange::indeterminate(0.0, self.maximum),
@@ -291,40 +291,61 @@ impl Progress {
             None => root,
         }
     }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(&self) -> Element {
+        self.root_with(crate::div())
+    }
 
     /// Decorate the caller-owned track that the fill is measured inside.
     ///
     /// The track is decoration: the root already carries the numeric value and bounds, so the track
     /// and everything under it stay out of the accessible name.
-    pub fn track_part(&self, track: Element) -> Element {
+    pub fn track_with(&self, track: Element) -> Element {
         let track = track.accessibility_hidden(true);
         match self.track_id() {
             Some(id) => track.id(id),
             None => track,
         }
     }
+    /// Create the unstyled track part. Use [`Self::track_with`] to supply an existing element.
+    pub fn track(&self) -> Element {
+        self.track_with(crate::div())
+    }
 
     /// Hide an application-owned fill or animation from the accessible name.
-    pub fn indicator_part(&self, indicator: Element) -> Element {
+    pub fn indicator_with(&self, indicator: Element) -> Element {
         let indicator = indicator.accessibility_hidden(true);
         match self.indicator_id() {
             Some(id) => indicator.id(id),
             None => indicator,
         }
     }
+    /// Create the unstyled indicator part. Use [`Self::indicator_with`] to supply an existing element.
+    pub fn indicator(&self) -> Element {
+        self.indicator_with(crate::div())
+    }
 
     /// Assign the stable mounted label target the root points at.
-    pub fn label_part(&self, label: Element) -> Element {
+    pub fn label_with(&self, label: Element) -> Element {
         match self.label_id() {
             Some(id) => label.id(id),
             None => label,
         }
     }
+    /// Create the unstyled label part. Use [`Self::label_with`] to supply an existing element.
+    pub fn label(&self) -> Element {
+        self.label_with(crate::div())
+    }
 
     /// Assign the stable mounted value target the root points at.
     ///
     /// Put [`Self::display_value`] inside it; QuickGUI never renders the text itself.
-    pub fn value_part(&self, value: Element) -> Element {
+    /// Create the unstyled value text part.
+    pub fn value(&self) -> Element {
+        self.value_with(crate::div())
+    }
+
+    pub fn value_with(&self, value: Element) -> Element {
         match self.value_id() {
             Some(id) => value.id(id),
             None => value,
@@ -455,7 +476,7 @@ impl Meter {
             .map(|id| derived_progress_id(id, PROGRESS_INDICATOR_ID_TAG))
     }
 
-    pub const fn value(&self) -> f64 {
+    pub const fn current_value(&self) -> f64 {
         self.value
     }
 
@@ -499,7 +520,7 @@ impl Meter {
     }
 
     /// Decorate an application-owned root without adding layout or appearance.
-    pub fn root_part(&self, root: Element) -> Element {
+    pub fn root_with(&self, root: Element) -> Element {
         let mut root = root
             .accessibility_role(AccessibilityRole::Meter)
             .accessibility_value_range(AccessibilityValueRange::new(
@@ -521,35 +542,56 @@ impl Meter {
             None => root,
         }
     }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(&self) -> Element {
+        self.root_with(crate::div())
+    }
 
     /// Decorate the caller-owned track that the fill is measured inside.
-    pub fn track_part(&self, track: Element) -> Element {
+    pub fn track_with(&self, track: Element) -> Element {
         let track = track.accessibility_hidden(true);
         match self.track_id() {
             Some(id) => track.id(id),
             None => track,
         }
     }
+    /// Create the unstyled track part. Use [`Self::track_with`] to supply an existing element.
+    pub fn track(&self) -> Element {
+        self.track_with(crate::div())
+    }
 
     /// Hide an application-owned fill from the accessible name.
-    pub fn indicator_part(&self, indicator: Element) -> Element {
+    pub fn indicator_with(&self, indicator: Element) -> Element {
         let indicator = indicator.accessibility_hidden(true);
         match self.indicator_id() {
             Some(id) => indicator.id(id),
             None => indicator,
         }
     }
+    /// Create the unstyled indicator part. Use [`Self::indicator_with`] to supply an existing element.
+    pub fn indicator(&self) -> Element {
+        self.indicator_with(crate::div())
+    }
 
     /// Assign the stable mounted label target the root points at.
-    pub fn label_part(&self, label: Element) -> Element {
+    pub fn label_with(&self, label: Element) -> Element {
         match self.label_id() {
             Some(id) => label.id(id),
             None => label,
         }
     }
+    /// Create the unstyled label part. Use [`Self::label_with`] to supply an existing element.
+    pub fn label(&self) -> Element {
+        self.label_with(crate::div())
+    }
 
     /// Assign the stable mounted value target the root points at.
-    pub fn value_part(&self, value: Element) -> Element {
+    /// Create the unstyled value text part.
+    pub fn value(&self) -> Element {
+        self.value_with(crate::div())
+    }
+
+    pub fn value_with(&self, value: Element) -> Element {
         match self.value_id() {
             Some(id) => value.id(id),
             None => value,
@@ -559,16 +601,16 @@ impl Meter {
 
 /// Create an unstyled determinate progress root.
 ///
-/// This shorthand is equivalent to `Progress::new(value, maximum).root_part(div())`.
+/// This shorthand is equivalent to `Progress::new(value, maximum).root_with(div())`.
 pub fn progress(value: f64, maximum: f64) -> Element {
-    Progress::new(value, maximum).root_part(div())
+    Progress::new(value, maximum).root_with(div())
 }
 
 /// Create an unstyled meter root.
 ///
-/// This shorthand is equivalent to `Meter::new(value, minimum, maximum).root_part(div())`.
+/// This shorthand is equivalent to `Meter::new(value, minimum, maximum).root_with(div())`.
 pub fn meter(value: f64, minimum: f64, maximum: f64) -> Element {
-    Meter::new(value, minimum, maximum).root_part(div())
+    Meter::new(value, minimum, maximum).root_with(div())
 }
 
 fn derived_progress_id(parent: ElementId, tag: u64) -> ElementId {
@@ -611,23 +653,26 @@ mod tests {
     #[test]
     fn progress_values_are_bounded_and_unstyled() {
         let determinate = Progress::new(3.0, 12.0).value_text("3 of 12 files");
-        assert_eq!(determinate.value(), Some(3.0));
+        assert_eq!(determinate.current_value(), Some(3.0));
         assert_eq!(determinate.maximum(), 12.0);
         assert_eq!(determinate.completion(), Some(0.25));
         assert!(!determinate.is_indeterminate());
 
-        assert_eq!(Progress::new(-5.0, 10.0).value(), Some(0.0));
-        assert_eq!(Progress::new(50.0, 10.0).value(), Some(10.0));
+        assert_eq!(Progress::new(-5.0, 10.0).current_value(), Some(0.0));
+        assert_eq!(Progress::new(50.0, 10.0).current_value(), Some(10.0));
         assert_eq!(Progress::new(1.0, f64::NAN).maximum(), 1.0);
         assert_eq!(Progress::new(1.0, -4.0).maximum(), 1.0);
-        assert_eq!(Progress::new(f64::INFINITY, 10.0).value(), Some(0.0));
+        assert_eq!(
+            Progress::new(f64::INFINITY, 10.0).current_value(),
+            Some(0.0)
+        );
         assert_eq!(Progress::fraction(0.5).completion(), Some(0.5));
 
         let indeterminate = Progress::indeterminate();
         assert!(indeterminate.is_indeterminate());
         assert_eq!(indeterminate.completion(), None);
 
-        let root = determinate.root_part(div().w(200.0).bg(Color::rgb8(1, 2, 3)));
+        let root = determinate.root_with(div().w(200.0).bg(Color::rgb8(1, 2, 3)));
         assert_eq!(
             root.accessibility.role,
             AccessibilityRole::ProgressIndicator
@@ -644,9 +689,9 @@ mod tests {
         assert!(root.animation.is_none());
 
         let empty_text = Progress::new(1.0, 2.0).value_text("");
-        assert!(empty_text.root_part(div()).accessibility.value.is_none());
+        assert!(empty_text.root_with(div()).accessibility.value.is_none());
 
-        let unknown = indeterminate.root_part(div());
+        let unknown = indeterminate.root_with(div());
         let range = unknown
             .accessibility
             .value_range
@@ -656,7 +701,7 @@ mod tests {
         assert_eq!(range.min, Some(0.0));
         assert_eq!(range.max, Some(1.0));
 
-        let indicator = determinate.indicator_part(div().bg(Color::rgb8(4, 5, 6)));
+        let indicator = determinate.indicator_with(div().bg(Color::rgb8(4, 5, 6)));
         assert!(indicator.accessibility.hidden);
         assert_eq!(indicator.visual.background, Some(Color::rgb8(4, 5, 6)));
     }
@@ -667,7 +712,7 @@ mod tests {
             .low(20.0)
             .high(80.0)
             .optimum(50.0);
-        assert_eq!(meter.value(), 72.0);
+        assert_eq!(meter.current_value(), 72.0);
         assert_eq!(meter.low_value(), Some(20.0));
         assert_eq!(meter.high_value(), Some(80.0));
         assert_eq!(meter.optimum_value(), Some(50.0));
@@ -676,7 +721,7 @@ mod tests {
         assert_eq!(meter.completion(), 0.72);
 
         let full = Meter::new(200.0, 0.0, 100.0).high(80.0);
-        assert_eq!(full.value(), 100.0);
+        assert_eq!(full.current_value(), 100.0);
         assert!(full.is_high());
         assert_eq!(Meter::new(0.0, 5.0, 5.0).completion(), 0.0);
         let inverted = Meter::new(1.0, 10.0, -10.0);
@@ -685,14 +730,14 @@ mod tests {
         assert_eq!((broken.minimum(), broken.maximum()), (0.0, 1.0));
         assert_eq!(Meter::new(0.0, 0.0, 10.0).low(-4.0).low_value(), Some(0.0));
 
-        let root = meter.root_part(div().bg(Color::rgb8(7, 8, 9)));
+        let root = meter.root_with(div().bg(Color::rgb8(7, 8, 9)));
         assert_eq!(root.accessibility.role, AccessibilityRole::Meter);
         assert_eq!(
             root.accessibility.value_range.as_deref(),
             Some(&AccessibilityValueRange::new(72.0, 0.0, 100.0))
         );
         assert_eq!(root.visual.background, Some(Color::rgb8(7, 8, 9)));
-        assert!(meter.indicator_part(div()).accessibility.hidden);
+        assert!(meter.indicator_with(div()).accessibility.hidden);
     }
 
     struct FeedbackView;
@@ -710,26 +755,26 @@ mod tests {
             div()
                 .child(
                     download
-                        .root_part(div().id("download").accessibility_label("Download"))
-                        .child(download.indicator_part(div().w(80.0))),
+                        .root_with(div().id("download").accessibility_label("Download"))
+                        .child(download.indicator_with(div().w(80.0))),
                 )
                 .child(
                     unknown
-                        .root_part(div().id("scanning").accessibility_label("Scanning"))
+                        .root_with(div().id("scanning").accessibility_label("Scanning"))
                         .child(text("Scanning")),
                 )
-                .child(disk.root_part(div().id("disk").accessibility_label("Disk usage")))
+                .child(disk.root_with(div().id("disk").accessibility_label("Disk usage")))
                 .child(
                     upload
-                        .root_part(div())
-                        .child(upload.label_part(text("Upload")))
-                        .child(upload.value_part(text(
+                        .root_with(div())
+                        .child(upload.label_with(text("Upload")))
+                        .child(upload.value_with(text(
                             upload.display_value().unwrap_or_else(|| Arc::from("")),
                         )))
                         .child(
                             upload
-                                .track_part(div().w(200.0))
-                                .child(upload.indicator_part(div().w(150.0))),
+                                .track_with(div().w(200.0))
+                                .child(upload.indicator_with(div().w(150.0))),
                         ),
                 )
         }
@@ -855,7 +900,7 @@ mod tests {
         assert_eq!(both.display_value().as_deref(), Some("25%"));
         assert_eq!(both.accessible_value().as_deref(), Some("3 of 12 files"));
         assert_eq!(
-            both.root_part(div()).accessibility.value.as_deref(),
+            both.root_with(div()).accessibility.value.as_deref(),
             Some("3 of 12 files")
         );
 
@@ -897,34 +942,34 @@ mod tests {
             assert!(![label, value, track, indicator][..index].contains(id));
         }
 
-        let root = progress.root_part(div());
+        let root = progress.root_with(div());
         assert_eq!(root.explicit_id, Some("download".into()));
         assert_eq!(root.accessibility.relations.labelled_by(), Some(label));
         assert_eq!(root.accessibility.relations.described_by(), Some(value));
         assert_eq!(root.accessibility.value.as_deref(), Some("40%"));
         assert_eq!(root.visual.background, None);
 
-        let track_part = progress.track_part(div().bg(Color::rgb8(1, 2, 3)));
-        assert_eq!(track_part.explicit_id, Some(track));
-        assert!(track_part.accessibility.hidden);
-        assert_eq!(track_part.visual.background, Some(Color::rgb8(1, 2, 3)));
-        let indicator_part = progress.indicator_part(div());
-        assert_eq!(indicator_part.explicit_id, Some(indicator));
-        assert!(indicator_part.accessibility.hidden);
+        let track_with = progress.track_with(div().bg(Color::rgb8(1, 2, 3)));
+        assert_eq!(track_with.explicit_id, Some(track));
+        assert!(track_with.accessibility.hidden);
+        assert_eq!(track_with.visual.background, Some(Color::rgb8(1, 2, 3)));
+        let indicator_with = progress.indicator_with(div());
+        assert_eq!(indicator_with.explicit_id, Some(indicator));
+        assert!(indicator_with.accessibility.hidden);
         assert_eq!(
-            progress.label_part(text("Download")).explicit_id,
+            progress.label_with(text("Download")).explicit_id,
             Some(label)
         );
-        assert_eq!(progress.value_part(text("40%")).explicit_id, Some(value));
+        assert_eq!(progress.value_with(text("40%")).explicit_id, Some(value));
 
         // An indicator that declares no identity keeps the original unrelated decoration.
         let plain = Progress::new(1.0, 2.0);
         assert_eq!(plain.label_id(), None);
-        let root = plain.root_part(div());
+        let root = plain.root_with(div());
         assert_eq!(root.explicit_id, None);
         assert_eq!(root.accessibility.relations.labelled_by(), None);
-        assert_eq!(plain.label_part(text("Loading")).explicit_id, None);
-        assert!(plain.track_part(div()).accessibility.hidden);
+        assert_eq!(plain.label_with(text("Loading")).explicit_id, None);
+        assert!(plain.track_with(div()).accessibility.hidden);
     }
 
     #[test]
@@ -948,7 +993,7 @@ mod tests {
             None
         );
 
-        let root = meter.root_part(div());
+        let root = meter.root_with(div());
         assert_eq!(root.explicit_id, Some("disk".into()));
         assert_eq!(root.accessibility.role, AccessibilityRole::Meter);
         assert_eq!(root.accessibility.relations.labelled_by(), meter.label_id());
@@ -957,13 +1002,13 @@ mod tests {
             meter.value_id()
         );
         assert_eq!(root.accessibility.value.as_deref(), Some("72%"));
-        assert!(meter.track_part(div()).accessibility.hidden);
-        assert!(meter.indicator_part(div()).accessibility.hidden);
+        assert!(meter.track_with(div()).accessibility.hidden);
+        assert!(meter.indicator_with(div()).accessibility.hidden);
         assert_eq!(
-            meter.label_part(text("Disk usage")).explicit_id,
+            meter.label_with(text("Disk usage")).explicit_id,
             meter.label_id()
         );
-        assert_eq!(meter.value_part(text("72%")).explicit_id, meter.value_id());
+        assert_eq!(meter.value_with(text("72%")).explicit_id, meter.value_id());
         assert_eq!(Meter::new(1.0, 0.0, 2.0).label_id(), None);
     }
 }

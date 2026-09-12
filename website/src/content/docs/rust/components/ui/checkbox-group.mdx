@@ -12,12 +12,12 @@ use quickgui::*;
 
 ```rust
 let group = CheckboxGroup::new("colors", &state);
-group.root_part(div().flex_col().gap(8.0))
+group.root().flex_col().gap(8.0)
 ```
 
 ## Anatomy
 
-- `CheckboxGroup::root_part`
+- `CheckboxGroup::root`
 
 ## Key props
 

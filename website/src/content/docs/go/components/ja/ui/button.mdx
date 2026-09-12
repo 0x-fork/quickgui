@@ -14,9 +14,7 @@ import (
 
 ```go
 func ButtonExample(save func()) *ui.Element {
-	return ui.Button(
-		"Save changes",
-	).
+	return ui.Button().Child("Save changes").
 		Height(40).
 		PaddingLeft(16).
 		PaddingRight(16).

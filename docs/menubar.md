@@ -36,17 +36,17 @@ struct Shell {
 
 let bar = Menubar::new("menubar");
 let mut row = bar
-    .root_part(self.menubar, div().flex_row())
+    .root_with(self.menubar, div().flex_row())
     .accessibility_label("Application menus");
 for index in 0..self.menubar.menu_count() {
     let item = bar.item(self.menubar, index).expect("a declared menu");
-    let element = item.item_part(div().px(10.0).child(text(TITLES[index])));
-    row = row.child(item.key_part(cx, element, |view: &mut Shell| &mut view.menubar));
+    let element = item.item_with(div().px(10.0).child(text(TITLES[index])));
+    row = row.child(item.key_with(cx, element, |view: &mut Shell| &mut view.menubar));
 }
 ```
 
-`root_part` and `item_part` are pure decorators; they add identity, roles, relationships, and
-interaction contracts and never add layout or paint. `key_part` attaches the typed keyboard actions,
+`root_with` and `item_with` are pure decorators; they add identity, roles, relationships, and
+interaction contracts and never add layout or paint. `key_with` attaches the typed keyboard actions,
 click opening, and hover switching to one trigger. `Menubar::item` returns `None` past
 `MenubarState::menu_count`, so a caller-driven loop stays bounded by the state instead of by its own
 arithmetic.

@@ -13,20 +13,20 @@ use quickgui::*;
 ```rust
 let field = Field::new("email");
 field
-    .root_part(div().flex_col().gap(6.0))
-    .child(field.label_part(text("Email")))
+    .root().flex_col().gap(6.0)
+    .child(field.label_with(text("Email")))
     .child(text_input(value))
 ```
 
 ## 構成
 
-- `Field::root_part`
-- `Field::item_part`
-- `Field::label_part`
-- `Field::control_part`
-- `Field::validity_part`
-- `Field::description_part`
-- `Field::error_part`
+- `Field::root`
+- `Field::item`
+- `Field::label`
+- `Field::control`
+- `Field::validity`
+- `Field::description`
+- `Field::error`
 
 ## 主なプロパティ
 

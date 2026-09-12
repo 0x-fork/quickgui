@@ -14,28 +14,22 @@ import (
 
 ```go
 func ToolbarExample() *native.Node {
-	return ui.Toolbar.Root(
-		ui.ToolbarRootProps{
-			Items:         []ui.ComponentItem{{Value: "select"}, {Value: "draw"}},
-			DefaultActive: "select",
-		},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.Toolbar.Item(ui.ToolbarItemProps{Value: "select"}, "Select"),
-				ui.Toolbar.Item(ui.ToolbarItemProps{Value: "draw"}, "Draw")})
-		},
-	)
+	toolbar1 := ui.NewToolbar(ui.ToolbarRootProps{Items: []ui.ComponentItem{{Value: "select"}, {Value: "draw"}}, DefaultActive: "select"})
+	return toolbar1.Root().Children(func() *native.Node {
+		return ui.Fragment([]*native.Node{toolbar1.Item(ui.ToolbarItemProps{Value: "select"}).Children("Select").NativeNode(), toolbar1.Item(ui.ToolbarItemProps{Value: "draw"}).Children("Draw").NativeNode()})
+	}).NativeNode()
 }
 ```
 
 ## 结构
 
-- `ui.Toolbar.Root`
-- `ui.Toolbar.Item`
-- `ui.Toolbar.Button`
-- `ui.Toolbar.Link`
-- `ui.Toolbar.Input`
-- `ui.Toolbar.Group`
-- `ui.Toolbar.Separator`
+- `toolbar.Root`
+- `toolbar.Item`
+- `toolbar.Button`
+- `toolbar.Link`
+- `toolbar.Input`
+- `toolbar.Group`
+- `toolbar.Separator`
 
 ## 主要属性
 

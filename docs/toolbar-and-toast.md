@@ -32,13 +32,13 @@ let items = [
 ];
 let toolbar = Toolbar::new("commands", &self.toolbar, &items);
 let mut root = toolbar
-    .root_part(div())
+    .root()
     .accessibility_label("Document commands");
 for item in items {
     let entry = toolbar.item(item.value()).expect("declared item");
-    root = root.child(entry.key_part(
+    root = root.child(entry.key_with(
         cx,
-        entry.item_part(div().child("Undo").on_click(clicked)),
+        entry.item_with(div().child("Undo").on_click(clicked)),
         |view: &mut Editor| &mut view.toolbar,
     ));
 }
@@ -73,12 +73,12 @@ Item values must be unique inside one toolbar.
 
 | Base UI part | QuickGUI decorator | What QuickGUI owns |
 | --- | --- | --- |
-| Root | `Toolbar::root_part(element)` | the Toolbar role, orientation, and the single roving Tab stop |
-| Button | `ToolbarEntry::button_part(element)` | the item contract plus the Button role |
-| Link | `ToolbarEntry::link_part(element)` | the item contract plus the Link role |
-| Input | `ToolbarEntry::input_part(element)` | the item contract, keeping whatever role the control already declares |
-| Group | `Toolbar::group_part(element)` | a labelling and structural unit that creates no second focus scope |
-| Separator | `Toolbar::separator_part(element)` | the Separator role across the toolbar's cross axis, never focusable |
+| Root | `Toolbar::root_with(element)` | the Toolbar role, orientation, and the single roving Tab stop |
+| Button | `ToolbarEntry::button_with(element)` | the item contract plus the Button role |
+| Link | `ToolbarEntry::link_with(element)` | the item contract plus the Link role |
+| Input | `ToolbarEntry::input_with(element)` | the item contract, keeping whatever role the control already declares |
+| Group | `Toolbar::group_with(element)` | a labelling and structural unit that creates no second focus scope |
+| Separator | `Toolbar::separator_with(element)` | the Separator role across the toolbar's cross axis, never focusable |
 
 `ToolbarItem::focusable_when_disabled(bool)` is Base UI's `focusableWhenDisabled`, and a toolbar
 defaults it to `true`: skipping an unavailable item entirely hides it from keyboard users, who then
@@ -94,7 +94,7 @@ form data. Use [`Checkbox`](selection-controls.md) when the value is submitted w
 
 ```rust
 let bold = Toggle::new(self.bold);
-bold.root_part(div().child("Bold").on_click(clicked)).id("bold")
+bold.root().child("Bold").on_click(clicked).id("bold")
 ```
 
 `ToggleGroup` composes those buttons with one roving Tab stop and a controlled pressed set.
@@ -141,13 +141,13 @@ described by its description when one is present.
 | Base UI part | QuickGUI decorator | What QuickGUI owns |
 | --- | --- | --- |
 | Provider | `ToastManager` itself | the shared `timeout`, `limit`, swipe direction and threshold |
-| Portal | `ToastViewport::portal_part(element)` | a window-level overlay that deliberately does not block pointer input |
-| Viewport | `ToastViewport::viewport_part(element)` | the group the stack lives in |
-| Positioner | `ToastParts::positioner_part(element)` | a stable identity for the wrapper that places one toast |
-| Root | `ToastParts::root_part(element)` | the live region, the role, focus, and the title/description relationships |
-| Content | `ToastParts::content_part(element)` | a stable identity for the inner content wrapper |
-| Title / Description | `title_part` / `description_part` | the targets the root points at |
-| Action / Close | `action_part` / `close_part` | button semantics with no visual defaults |
+| Portal | `ToastViewport::portal_with(element)` | a window-level overlay that deliberately does not block pointer input |
+| Viewport | `ToastViewport::viewport_with(element)` | the group the stack lives in |
+| Positioner | `ToastParts::positioner_with(element)` | a stable identity for the wrapper that places one toast |
+| Root | `ToastParts::root_with(element)` | the live region, the role, focus, and the title/description relationships |
+| Content | `ToastParts::content_with(element)` | a stable identity for the inner content wrapper |
+| Title / Description | `title_with` / `description_with` | the targets the root points at |
+| Action / Close | `action_with` / `close_with` | button semantics with no visual defaults |
 
 `ToastViewport::toast(entry)` still returns the parts for a single entry; it defaults to the top of
 the stack because it has no queue to count against.
@@ -211,7 +211,7 @@ sources. `pause(id, now)` and `resume(id, now)` implement pause-on-hover and pau
 converting the remaining time into a fresh deadline; a paused toast never expires. `Toast::persistent`
 opts one toast out of auto-dismissal entirely.
 
-`ToastParts::key_part` attaches focused Escape dismissal. Escape is handled only while focus is
+`ToastParts::key_with` attaches focused Escape dismissal. Escape is handled only while focus is
 inside that toast, so it never competes with a dialog, a popover, or the application's own Escape
 handling.
 
@@ -273,24 +273,12 @@ discover the command; arrow navigation still skips it and it still refuses point
 
 ```go
 func ActionToolbar() *native.Node {
-	return ui.Toolbar.Root(
-		ui.ToolbarRootProps{Items: []ui.ComponentItem{
-			{Value: "cut"},
-			{Value: "docs"},
-			{Value: "paste", Disabled: true},
-		}},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.Toolbar.Group(
-				ui.PartProps{},
-				func() *native.Node {
-					return ui.Fragment([]*native.Node{ui.Toolbar.Button(ui.ToolbarItemProps{Value: "cut"}, "Cut"),
-						ui.Toolbar.Link(ui.ToolbarItemProps{Value: "docs"}, "Docs")})
-				},
-			),
-				ui.Toolbar.Separator(ui.PartProps{}),
-				ui.Toolbar.Item(ui.ToolbarItemProps{Value: "paste"}, "Paste")})
-		},
-	)
+	toolbar1 := ui.NewToolbar(ui.ToolbarRootProps{Items: []ui.ComponentItem{{Value: "cut"}, {Value: "docs"}, {Value: "paste", Disabled: true}}})
+	return toolbar1.Root().Children(func() *native.Node {
+		return ui.Fragment([]*native.Node{toolbar1.Group(ui.PartProps{}).Children(func() *native.Node {
+			return ui.Fragment([]*native.Node{toolbar1.Button(ui.ToolbarItemProps{Value: "cut"}).Children("Cut").NativeNode(), toolbar1.Link(ui.ToolbarItemProps{Value: "docs"}).Children("Docs").NativeNode()})
+		}).NativeNode(), toolbar1.Separator(ui.PartProps{}).NativeNode(), toolbar1.Item(ui.ToolbarItemProps{Value: "paste"}).Children("Paste").NativeNode()})
+	}).NativeNode()
 }
 ```
 
@@ -301,66 +289,38 @@ each toast's own offset:
 
 ```go
 func Notices() *native.Node {
-	return ui.Toast.Provider(
-		ui.ToastProviderProps{Timeout: 4000, Limit: 3},
-		func() *native.Node {
-			var children []*native.Node
-			toasts := ui.UseToastManager()
-			children = append(children, ui.Button(
-				"Notify",
-			).OnClick(func() {
-				toasts.Add(ui.ToastRequest{Title: "Saved", Type: ui.ToastSuccess})
-			}).Node)
-			children = append(children, ui.Toast.Viewport(
-				ui.ToastViewportProps{},
-				func() *native.Node {
-					return ui.KeyedFor(
-						toasts.Stack,
-						func(entry ui.ToastStackEntry) any { return entry.ID },
-						func(entry func() ui.ToastStackEntry, _ func() int) *native.Node {
-							id := entry().ID
-							return ui.Toast.Positioner(
-								ui.ToastPartProps{
-									ToastID: id,
-									PartProps: ui.PartProps{Style: ui.Style().
-										Top(func() float64 { return entry().Offset })},
-								},
-								func() *native.Node {
-									return ui.Toast.Root(
-										ui.ToastPartProps{ToastID: id},
-										func() *native.Node {
-											return ui.Toast.Content(
-												ui.ToastPartProps{ToastID: id},
-												func() *native.Node {
-													return ui.Fragment([]*native.Node{ui.Toast.Title(
-														ui.ToastPartProps{ToastID: id},
-														func() string {
-															for _, toast := range toasts.Toasts() {
-																if toast.ID == id {
-																	return toast.Title
-																}
-															}
-															return ""
-														},
-													),
-														ui.Toast.Close(
-															ui.ToastPartProps{ToastID: id},
-															"Dismiss",
-														)})
-												},
-											)
-										},
-									)
-								},
-							)
-						},
-						nil,
-					)
-				},
-			))
-			return ui.Fragment(children)
-		},
-	)
+	toast1 := ui.NewToast(ui.ToastProviderProps{Timeout: 4000, Limit: 3})
+	return toast1.Provider().Children(func() *native.Node {
+		var children []*native.Node
+		toasts := ui.UseToastManager()
+		children = append(children, ui.Button().Child("Notify").OnClick(func() {
+			toasts.Add(ui.ToastRequest{Title: "Saved", Type: ui.ToastSuccess})
+		}).Node)
+		children = append(children, toast1.Viewport(ui.ToastViewportProps{}).Children(func() *native.Node {
+			return ui.KeyedFor(toasts.Stack, func(entry ui.ToastStackEntry) any {
+				return entry.ID
+			}, func(entry func() ui.ToastStackEntry, _ func() int) *native.Node {
+				id := entry().ID
+				return toast1.Positioner(ui.ToastPartProps{ToastID: id, PartProps: ui.PartProps{Style: ui.Style().Top(func() float64 {
+					return entry().Offset
+				})}}).Children(func() *native.Node {
+					return toast1.Root(ui.ToastPartProps{ToastID: id}).Children(func() *native.Node {
+						return toast1.Content(ui.ToastPartProps{ToastID: id}).Children(func() *native.Node {
+							return ui.Fragment([]*native.Node{toast1.Title(ui.ToastPartProps{ToastID: id}).Children(func() string {
+								for _, toast := range toasts.Toasts() {
+									if toast.ID == id {
+										return toast.Title
+									}
+								}
+								return ""
+							}).NativeNode(), toast1.Close(ui.ToastPartProps{ToastID: id}).Children("Dismiss").NativeNode()})
+						}).NativeNode()
+					}).NativeNode()
+				}).NativeNode()
+			}, nil)
+		}).NativeNode())
+		return ui.Fragment(children)
+	}).NativeNode()
 }
 ```
 

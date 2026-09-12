@@ -49,7 +49,7 @@ pub struct NavigationMenuLast;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct NavigationMenuClose;
 
-/// Contextual bindings used by [`NavigationMenuEntry::key_part`].
+/// Contextual bindings used by [`NavigationMenuEntry::key_with`].
 ///
 /// A horizontal menu answers Left and Right; a vertical menu answers Up and Down. Enter and Space
 /// stay ordinary button activation on the trigger, so they reach the caller's click listener
@@ -540,24 +540,32 @@ impl<'a> NavigationMenu<'a> {
     }
 
     /// Decorate an application-owned root without adding layout or appearance.
-    pub fn root_part(self, root: Element) -> Element {
+    pub fn root_with(self, root: Element) -> Element {
         root.id(self.root_id)
             .accessibility_role(AccessibilityRole::Navigation)
             .app_region_no_drag()
     }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(self) -> Element {
+        self.root_with(crate::div())
+    }
 
     /// Decorate the application-owned list of items.
-    pub fn list_part(self, list: Element) -> Element {
+    pub fn list_with(self, list: Element) -> Element {
         list.accessibility_role(AccessibilityRole::List)
             .accessibility_orientation(self.orientation.accessibility())
             .app_region_no_drag()
+    }
+    /// Create the unstyled list part. Use [`Self::list_with`] to supply an existing element.
+    pub fn list(self) -> Element {
+        self.list_with(crate::div())
     }
 
     /// Decorate an application-owned navigation link without adding appearance.
     ///
     /// `active` marks the link for the current destination; it projects as the native selected
     /// state rather than as a visual class.
-    pub fn link_part(self, id: impl Into<ElementId>, active: bool, link: Element) -> Element {
+    pub fn link_with(self, id: impl Into<ElementId>, active: bool, link: Element) -> Element {
         link.id(id)
             .accessibility_role(AccessibilityRole::Link)
             .selected(active)
@@ -565,6 +573,10 @@ impl<'a> NavigationMenu<'a> {
             .cursor_default()
             .app_region_no_drag()
             .user_select_none()
+    }
+    /// Create the unstyled link part. Use [`Self::link_with`] to supply an existing element.
+    pub fn link(self, id: impl Into<ElementId>, active: bool) -> Element {
+        self.link_with(id, active, crate::div())
     }
 
     /// Describe one declared item.
@@ -665,19 +677,23 @@ impl<'a> NavigationMenuEntry<'a> {
     }
 
     /// Decorate an application-owned item without adding layout or appearance.
-    pub fn item_part(self, item: Element) -> Element {
+    pub fn item_with(self, item: Element) -> Element {
         item.id(self.item_id())
             .accessibility_role(AccessibilityRole::ListItem)
             .accessibility_position_in_set(self.index)
             .accessibility_size_of_set(self.menu.items.len())
             .app_region_no_drag()
     }
+    /// Create the unstyled item part. Use [`Self::item_with`] to supply an existing element.
+    pub fn item(self) -> Element {
+        self.item_with(crate::div())
+    }
 
     /// Decorate an application-owned trigger without adding appearance.
     ///
     /// Exactly one enabled trigger is in the window's normal Tab sequence; the rest are reachable
     /// with the menu's arrow keys.
-    pub fn trigger_part(self, trigger: Element) -> Element {
+    pub fn trigger_with(self, trigger: Element) -> Element {
         let disabled = self.item.disabled || trigger.accessibility.disabled;
         let trigger = trigger
             .id(self.trigger_id())
@@ -697,56 +713,92 @@ impl<'a> NavigationMenuEntry<'a> {
             trigger
         }
     }
+    /// Create the unstyled trigger part. Use [`Self::trigger_with`] to supply an existing element.
+    pub fn trigger(self) -> Element {
+        self.trigger_with(crate::button())
+    }
 
     /// Hide an application-owned trigger icon from the accessible name.
-    pub fn icon_part(self, icon: Element) -> Element {
+    pub fn icon_with(self, icon: Element) -> Element {
         icon.id(self.icon_id()).accessibility_hidden(true)
+    }
+    /// Create the unstyled icon part. Use [`Self::icon_with`] to supply an existing element.
+    pub fn icon(self) -> Element {
+        self.icon_with(crate::div())
     }
 
     /// Decorate the caller-owned portal boundary.
     ///
     /// QuickGUI's retained overlay node is itself the portal, so this is the same boundary as
-    /// [`Self::positioner_part`]; mount exactly one of them.
-    pub fn portal_part(self, portal: Element) -> Element {
-        self.popover().positioner_part(portal)
+    /// [`Self::positioner_with`]; mount exactly one of them.
+    pub fn portal_with(self, portal: Element) -> Element {
+        self.popover().positioner_with(portal)
+    }
+    /// Create the unstyled portal part. Use [`Self::portal_with`] to supply an existing element.
+    pub fn portal(self) -> Element {
+        self.portal_with(crate::div())
     }
 
     /// Decorate the caller-owned positioner without adding appearance.
-    pub fn positioner_part(self, positioner: Element) -> Element {
-        self.popover().positioner_part(positioner)
+    pub fn positioner_with(self, positioner: Element) -> Element {
+        self.popover().positioner_with(positioner)
+    }
+    /// Create the unstyled positioner part. Use [`Self::positioner_with`] to supply an existing element.
+    pub fn positioner(self) -> Element {
+        self.positioner_with(crate::div())
     }
 
     /// Decorate the application-owned popup without adding layout or appearance.
     ///
     /// The popup emits [`crate::Event::Dismiss`] under [`Self::popup_id`] for Escape and for an
     /// outside pointer press, and restores focus to its trigger.
-    pub fn popup_part(self, popup: Element) -> Element {
-        self.popover().popover_part(popup)
+    pub fn popup_with(self, popup: Element) -> Element {
+        self.popover().popup_with(popup)
+    }
+    /// Create the unstyled popup part. Use [`Self::popup_with`] to supply an existing element.
+    pub fn popup(self) -> Element {
+        self.popup_with(crate::div())
     }
 
     /// Decorate the caller-owned viewport inside the popup.
     ///
     /// The viewport is where an application clips and animates a panel that changes size between
     /// items; QuickGUI adds no motion of its own.
-    pub fn viewport_part(self, viewport: Element) -> Element {
+    pub fn viewport_with(self, viewport: Element) -> Element {
         viewport.id(self.viewport_id())
+    }
+    /// Create the unstyled viewport part. Use [`Self::viewport_with`] to supply an existing element.
+    pub fn viewport(self) -> Element {
+        self.viewport_with(crate::div())
     }
 
     /// Decorate the caller-owned panel content.
-    pub fn content_part(self, content: Element) -> Element {
+    pub fn content_with(self, content: Element) -> Element {
         content
             .id(self.content_id())
             .accessibility_labelled_by(self.trigger_id())
     }
+    /// Create the unstyled content part. Use [`Self::content_with`] to supply an existing element.
+    pub fn content(self) -> Element {
+        self.content_with(crate::div())
+    }
 
     /// Decorate the application-owned arrow, which is decorative and hidden.
-    pub fn arrow_part(self, arrow: Element) -> Element {
+    pub fn arrow_with(self, arrow: Element) -> Element {
         arrow.id(self.arrow_id()).accessibility_hidden(true)
+    }
+    /// Create the unstyled arrow part. Use [`Self::arrow_with`] to supply an existing element.
+    pub fn arrow(self) -> Element {
+        self.arrow_with(crate::div())
     }
 
     /// Decorate an optional caller-painted viewport backdrop.
-    pub fn backdrop_part(self, backdrop: Element) -> Element {
-        self.popover().backdrop_part(backdrop)
+    pub fn backdrop_with(self, backdrop: Element) -> Element {
+        self.popover().backdrop_with(backdrop)
+    }
+    /// Create the unstyled backdrop part. Use [`Self::backdrop_with`] to supply an existing element.
+    pub fn backdrop(self) -> Element {
+        self.backdrop_with(crate::div())
     }
 
     /// Attach QuickGUI's typed navigation-menu keyboard actions to this trigger.
@@ -760,17 +812,25 @@ impl<'a> NavigationMenuEntry<'a> {
     /// closes the open panel without leaving the bar. Keyboard movement deliberately does not swap
     /// panels: unmounting the previous panel restores focus to its own trigger, which would undo
     /// the move the user just made.
-    pub fn key_part<V: 'static>(
+    pub fn key_with<V: 'static>(
         self,
         cx: &mut ViewContext<'_, V>,
         trigger: Element,
         access: fn(&mut V) -> &mut NavigationMenuState,
     ) -> Element {
-        self.key_part_with(cx, trigger, StateAccessor::from(access))
+        self.key_with_accessor(cx, trigger, StateAccessor::from(access))
+    }
+    /// Create the unstyled key part. Use [`Self::key_with`] to supply an existing element.
+    pub fn key<V: 'static>(
+        self,
+        cx: &mut ViewContext<'_, V>,
+        access: fn(&mut V) -> &mut NavigationMenuState,
+    ) -> Element {
+        self.key_with(cx, crate::div(), access)
     }
 
     /// Attach the typed keyboard actions against a per-instance state accessor.
-    pub fn key_part_with<V: 'static>(
+    pub fn key_with_accessor<V: 'static>(
         self,
         cx: &mut ViewContext<'_, V>,
         trigger: Element,
@@ -1042,13 +1102,13 @@ fn edge(items: &[NavigationMenuItem], last: bool) -> Option<ElementId> {
 
 /// Create an unstyled navigation-menu landmark root.
 ///
-/// This shorthand is equivalent to `NavigationMenu::new(id, state, items).root_part(div())`.
+/// This shorthand is equivalent to `NavigationMenu::new(id, state, items).root_with(div())`.
 pub fn navigation_menu(
     id: impl Into<ElementId>,
     state: &NavigationMenuState,
     items: &[NavigationMenuItem],
 ) -> Element {
-    NavigationMenu::new(id, state, items).root_part(div())
+    NavigationMenu::new(id, state, items).root_with(div())
 }
 
 fn derived_navigation_menu_id(scope: ElementId, tag: u64, value: ElementId) -> ElementId {
@@ -1183,12 +1243,12 @@ mod tests {
         state.open("products", 0);
         let menu = NavigationMenu::new("main", &state, &items);
 
-        let root = menu.root_part(div().bg(Color::rgb8(1, 2, 3)));
+        let root = menu.root_with(div().bg(Color::rgb8(1, 2, 3)));
         assert_eq!(root.explicit_id, Some("main".into()));
         assert_eq!(root.accessibility.role, AccessibilityRole::Navigation);
         assert_eq!(root.visual.background, Some(Color::rgb8(1, 2, 3)));
 
-        let list = menu.list_part(div());
+        let list = menu.list_with(div());
         assert_eq!(list.accessibility.role, AccessibilityRole::List);
         assert_eq!(
             list.accessibility.orientation,
@@ -1199,13 +1259,13 @@ mod tests {
         assert!(entry.is_open());
         assert_eq!(entry.index(), 0);
         assert!(entry.is_roving_stop());
-        let item = entry.item_part(div());
+        let item = entry.item_with(div());
         assert_eq!(item.explicit_id, Some(entry.item_id()));
         assert_eq!(item.accessibility.role, AccessibilityRole::ListItem);
         assert_eq!(item.accessibility.collection.position_in_set, 0);
         assert_eq!(item.accessibility.collection.size_of_set, 3);
 
-        let trigger = entry.trigger_part(div());
+        let trigger = entry.trigger_with(div());
         assert_eq!(trigger.explicit_id, Some(entry.trigger_id()));
         assert_eq!(trigger.accessibility.role, AccessibilityRole::Button);
         assert_eq!(
@@ -1220,45 +1280,45 @@ mod tests {
         assert_eq!(trigger.tab_index, 0);
         assert_eq!(trigger.visual.background, None);
 
-        let icon = entry.icon_part(div());
+        let icon = entry.icon_with(div());
         assert_eq!(icon.explicit_id, Some(entry.icon_id()));
         assert!(icon.accessibility.hidden);
 
-        let popup = entry.popup_part(div());
+        let popup = entry.popup_with(div());
         assert_eq!(popup.explicit_id, Some(entry.popup_id()));
         assert_eq!(popup.accessibility.role, AccessibilityRole::Menu);
         assert!(popup.dismiss_policy.on_escape());
-        let positioner = entry.positioner_part(div());
+        let positioner = entry.positioner_with(div());
         assert_eq!(positioner.explicit_id, Some(entry.positioner_id()));
         assert_eq!(
-            entry.portal_part(div()).explicit_id,
+            entry.portal_with(div()).explicit_id,
             Some(entry.positioner_id())
         );
         assert_eq!(
-            entry.viewport_part(div()).explicit_id,
+            entry.viewport_with(div()).explicit_id,
             Some(entry.viewport_id())
         );
-        let content = entry.content_part(div());
+        let content = entry.content_with(div());
         assert_eq!(content.explicit_id, Some(entry.content_id()));
         assert_eq!(
             content.accessibility.relations.labelled_by(),
             Some(entry.trigger_id())
         );
-        assert!(entry.arrow_part(div()).accessibility.hidden);
+        assert!(entry.arrow_with(div()).accessibility.hidden);
         assert_eq!(
-            entry.backdrop_part(div()).explicit_id,
+            entry.backdrop_with(div()).explicit_id,
             Some(entry.backdrop_id())
         );
 
         let other = menu.entry("solutions").expect("declared item");
         assert!(!other.is_open());
-        assert_eq!(other.trigger_part(div()).tab_index, -1);
+        assert_eq!(other.trigger_with(div()).tab_index, -1);
         let disabled = menu.entry("company").expect("declared item");
         assert!(disabled.is_disabled());
-        assert!(disabled.trigger_part(div()).accessibility.disabled);
+        assert!(disabled.trigger_with(div()).accessibility.disabled);
         assert!(menu.entry("missing").is_none());
 
-        let link = menu.link_part("pricing", true, div());
+        let link = menu.link_with("pricing", true, div());
         assert_eq!(link.explicit_id, Some("pricing".into()));
         assert_eq!(link.accessibility.role, AccessibilityRole::Link);
         assert!(link.accessibility.selected);
@@ -1338,7 +1398,7 @@ mod tests {
             NavigationMenu::schedule(cx, &self.menu);
             let items = items();
             let menu = NavigationMenu::new("main", &self.menu, &items);
-            let mut list = menu.list_part(div().flex_row());
+            let mut list = menu.list_with(div().flex_row());
             let mut panels = div();
             for item in items.iter() {
                 let entry = menu.entry(item.value()).expect("declared item");
@@ -1354,40 +1414,40 @@ mod tests {
                 let popup_hover = entry.on_popup_hover(cx, Self::menu, |view, value, _| {
                     view.changes.push(value);
                 });
-                let trigger = entry.key_part(
+                let trigger = entry.key_with(
                     cx,
                     entry
-                        .trigger_part(button().child(text("Menu")))
+                        .trigger_with(button().child(text("Menu")))
                         .on_click(click)
                         .on_hover(hover),
                     Self::menu,
                 );
                 list = list.child(
                     entry
-                        .item_part(div())
+                        .item_with(div())
                         .child(trigger)
-                        .child(entry.icon_part(div())),
+                        .child(entry.icon_with(div())),
                 );
                 if entry.is_open() {
                     panels = panels.child(
-                        entry.positioner_part(div()).child(
+                        entry.positioner_with(div()).child(
                             entry
-                                .popup_part(div().w(240.0).h(120.0))
+                                .popup_with(div().w(240.0).h(120.0))
                                 .on_hover(popup_hover)
                                 .on_dismiss(dismiss)
-                                .child(entry.viewport_part(div()).child(
-                                    entry.content_part(div()).child(menu.link_part(
+                                .child(entry.viewport_with(div()).child(
+                                    entry.content_with(div()).child(menu.link_with(
                                         "pricing",
                                         false,
                                         div(),
                                     )),
                                 ))
-                                .child(entry.arrow_part(div())),
+                                .child(entry.arrow_with(div())),
                         ),
                     );
                 }
             }
-            menu.root_part(div().size_full().relative())
+            menu.root_with(div().size_full().relative())
                 .child(list)
                 .child(panels)
         }

@@ -4,6 +4,7 @@ QuickGUI's documentation is split by concern so public API guidance stays separa
 
 ## Guides
 
+- [Component API](component-api.md) — Rust part constructors, Go component instances, fluent composition, and direct text children.
 - [View API and layout](view-api.md) — declarative views, Tailwind-style helpers, Flexbox, CSS Grid, and parent-size container queries.
 - [Go components and reactivity](go.md) — ordinary Go components, typed styles, fine-grained signals, window ownership, and the in-process purego boundary.
 - [TypeScript with Bun and Solid 2](typescript.md) — native JSX, fine-grained retained updates, Bun workers, and in-process FFI.

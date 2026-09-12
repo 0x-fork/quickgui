@@ -26,8 +26,8 @@ Child views can also be functions that return `Element` when they have no retain
 ```rust
 let checkbox = Checkbox::new(self.checked);
 checkbox
-    .root_part(div().flex_row().gap(8.0).on_click(toggle))
-    .child(checkbox.indicator_part(div().size(16.0, 16.0)))
+    .root().flex_row().gap(8.0).on_click(toggle)
+    .child(checkbox.indicator_with(div().size(16.0, 16.0)))
     .child(text("Remember this device"))
 ```
 

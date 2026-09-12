@@ -122,7 +122,7 @@ func Project() *ui.Element {
 
 				button("Overview", func() { navigate("?tab=overview") }),
 				button("Activity", func() { navigate("?tab=activity") }),
-				button("Replace", func() { navigate("?tab=activity", ui.NavigateOptions{Replace: true}) }, ui.Style().BackgroundColor("#322847")),
+				button("Replace", func() { navigate("?tab=activity", ui.NavigateOptions{Replace: true}) }).Style(ui.Style().BackgroundColor("#322847")),
 			).Display("flex").Gap(8).MarginTop(8),
 		).Display("flex").FlexDirection("column").Width(440).MaxWidth("100%").Padding(18).Gap(12).BackgroundColor(panel).BorderWidth(1).BorderColor(border).BorderRadius(12)
 	})
@@ -154,7 +154,7 @@ func AppearanceSettings() *ui.Element {
 func NotFound() *ui.Element {
 	wildcard, navigate := ui.UseParam("*"), ui.UseNavigate()
 	return page("Route not found", []any{"The core wildcard captured: ", wildcard}, func() *ui.Element {
-		return button("Back home", func() { navigate("/", ui.NavigateOptions{Replace: true}) }, ui.Style().
+		return button("Back home", func() { navigate("/", ui.NavigateOptions{Replace: true}) }).Style(ui.Style().
 			Width(140).
 			Height(38).
 			BackgroundColor(blueSurface))

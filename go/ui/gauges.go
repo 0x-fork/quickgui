@@ -109,8 +109,6 @@ func bindGaugeValue(node *native.Node, value func() *float64) {
 }
 
 // Progress is a determinate or indeterminate progress indicator.
-var Progress = progressAPI{}
-
 type progressAPI struct{}
 
 func (progressAPI) Root(props ProgressProps, children ...any) *native.Node {
@@ -166,8 +164,6 @@ func (progressAPI) Value(props PartProps, children ...any) *native.Node {
 }
 
 // Meter is a static measurement gauge.
-var Meter = meterAPI{}
-
 type meterAPI struct{}
 
 func (meterAPI) Root(props MeterProps, children ...any) *native.Node {

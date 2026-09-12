@@ -1,11 +1,10 @@
 package main
 
 import (
-	"strconv"
-	"strings"
-
 	"github.com/egoist/quickgui/go/native"
 	"github.com/egoist/quickgui/go/ui"
+	"strconv"
+	"strings"
 )
 
 func pickerAppearance() *ui.PickerAppearance {
@@ -27,12 +26,11 @@ func pickerSource(label string, items []ui.OptionDeclaration) ui.PickerSourcePro
 	s := inputStyle()
 	s = s.Width(280)
 	return ui.PickerSourceProps{
-		Items:      func() []ui.OptionDeclaration { return items },
-		Appearance: pickerAppearance(),
-		PartProps: ui.PartProps{
-			AriaLabel: label,
-			Style:     s,
+		Items: func() []ui.OptionDeclaration {
+			return items
 		},
+		Appearance: pickerAppearance(),
+		PartProps:  ui.PartProps{AriaLabel: label, Style: s},
 	}
 }
 func AutocompleteDemo() *ui.Element {
@@ -45,12 +43,17 @@ func AutocompleteDemo() *ui.Element {
 		source := pickerSource("Search components", items)
 		source.FilterMode = "fuzzy"
 		source.OnOpenChange = change(setOpen)
-		source.OnCommit = func(d ui.CommitDetails, _ *native.Event) { setCommitted(choose(d.Value != "", d.Value, d.InputValue)) }
-		children = append(children, ui.Autocomplete.Root(ui.AutocompleteRootProps{PickerInputProps: ui.PickerInputProps{
-			PickerSourceProps:  source,
-			Placeholder:        "Type win, tab, or tool",
-			OnInputValueChange: change(setQuery),
-		}}))
+		source.OnCommit = func(d ui.CommitDetails, _ *native.Event) {
+			setCommitted(choose(d.Value != "", d.Value, d.InputValue))
+		}
+		children = append(children, func() *native.Node {
+			autocomplete26 := ui.NewAutocomplete(ui.AutocompleteRootProps{PickerInputProps: ui.PickerInputProps{
+				PickerSourceProps:  source,
+				Placeholder:        "Type win, tab, or tool",
+				OnInputValueChange: change(setQuery),
+			}})
+			return autocomplete26.Root().NativeNode()
+		}())
 		children = append(children, note(func() string {
 			return "query " + strconv.Quote(query()) + " · popup " + strconv.FormatBool(open()) + " · committed " + committed()
 		}).Node)
@@ -66,19 +69,22 @@ func ComboboxDemo() *ui.Element {
 		var children []*native.Node
 		source := pickerSource("Fruit", fruits)
 		source.FilterMode = "contains"
-		children = append(children, ui.Combobox.Root(ui.ComboboxRootProps{
-			Value:         fruit,
-			OnValueChange: change(setFruit),
-			AutoHighlight: ptr(true),
-			PickerInputProps: ui.PickerInputProps{
-				PickerSourceProps: source,
-				Placeholder:       "Pick a fruit",
-			},
-		}))
+		children = append(children, func() *native.Node {
+			combobox27 := ui.NewCombobox(ui.ComboboxRootProps{
+				Value:         fruit,
+				OnValueChange: change(setFruit),
+				AutoHighlight: ptr(true),
+				PickerInputProps: ui.PickerInputProps{
+					PickerSourceProps: source,
+					Placeholder:       "Pick a fruit",
+				},
+			})
+			return combobox27.Root().NativeNode()
+		}())
 		source = pickerSource("Tags", languages)
 		source.FilterMode = "startsWith"
-		children = append(children, ui.Combobox.Root(
-			ui.ComboboxRootProps{
+		children = append(children, func() *native.Node {
+			combobox28 := ui.NewCombobox(ui.ComboboxRootProps{
 				Multiple:       true,
 				Values:         tags,
 				OnValuesChange: change(setTags),
@@ -87,54 +93,42 @@ func ComboboxDemo() *ui.Element {
 					PickerSourceProps: source,
 					Placeholder:       "Add tags",
 				},
-			},
-			func() *native.Node {
+			})
+			return combobox28.Root().Children(func() *native.Node {
 				var children []*native.Node
 				chips := ui.UseComboboxChips()
 				state := ui.UseComboboxState()
-				children = append(children, ui.Combobox.Chips(
-					rowPart(),
-					func() *native.Node {
-						return ui.For(
-							chips,
-							func(chip ui.ComboboxChip, index func() int) *native.Node {
-								return ui.Combobox.Chip(
-									ui.ComboboxChipProps{
-										Index: ptr(index()),
-										PartProps: ui.PartProps{Style: ui.Style().
-											Display("flex").
-											AlignItems("center").
-											Gap(4).
-											PaddingLeft(8).
-											PaddingRight(6).
-											Height(22).
-											BorderRadius(11).
-											BackgroundColor(color(func(p palette) string { return p.Selection }))},
-									},
-									func() *native.Node {
-										return ui.Fragment([]*native.Node{label(chip.Label).Node,
-											ui.Combobox.ChipRemove(
-												ui.ComboboxChipProps{
-													Index:     ptr(index()),
-													PartProps: ui.PartProps{AriaLabel: "Remove " + chip.Label},
-												},
-												"×",
-											)})
-									},
-								)
-							},
-							func(chip ui.ComboboxChip) any { return chip.Value },
-							nil,
-						)
-					},
-				))
+				children = append(children, combobox28.Chips(rowPart()).Children(func() *native.Node {
+					return ui.For(
+						chips,
+						func(chip ui.ComboboxChip, index func() int) *native.Node {
+							return combobox28.Chip(ui.ComboboxChipProps{
+								Index: ptr(index()),
+								PartProps: ui.PartProps{Style: ui.Style().Display("flex").AlignItems("center").Gap(4).PaddingLeft(8).PaddingRight(6).Height(22).BorderRadius(11).BackgroundColor(color(func(p palette) string {
+									return p.Selection
+								}))},
+							}).Children(func() *native.Node {
+								return ui.Fragment([]*native.Node{label(chip.Label).Node, combobox28.ChipRemove(ui.ComboboxChipProps{
+									Index:     ptr(index()),
+									PartProps: ui.PartProps{AriaLabel: "Remove " + chip.Label},
+								}).Children("×").NativeNode()})
+							}).NativeNode()
+						},
+						func(chip ui.ComboboxChip) any {
+							return chip.Value
+						},
+						nil,
+					)
+				}).NativeNode())
 				children = append(children, note(func() string {
 					return "open " + strconv.FormatBool(state().PopupOpen) + " · results " + strconv.Itoa(state().ResultCount)
 				}).Node)
 				return ui.Fragment(children)
-			},
-		))
-		children = append(children, note(func() string { return "fruit " + textValue(fruit()) + " · tags [" + strings.Join(tags(), ", ") + "]" }).Node)
+			}).NativeNode()
+		}())
+		children = append(children, note(func() string {
+			return "fruit " + textValue(fruit()) + " · tags [" + strings.Join(tags(), ", ") + "]"
+		}).Node)
 		return ui.Fragment(children)
 	})
 }
@@ -147,60 +141,53 @@ func SelectDemo() *ui.Element {
 		var children []*native.Node
 		source := pickerSource("Theme", themes)
 		source.Style = controlStyle()
-		children = append(children, ui.Select.Root(
-			ui.SelectRootProps{
+		children = append(children, func() *native.Node {
+			select29 := ui.NewSelect(ui.SelectRootProps{
 				Value:             theme,
 				OnValueChange:     change(setTheme),
 				PickerSourceProps: source,
-			},
-			func() *native.Node {
-				return ui.Fragment([]*native.Node{ui.Select.Value(
-					ui.PartProps{},
-					func() *ui.Element {
-						text := ui.UseSelectValueText()
-						return label(func() string { return textValue(text()) })
-					},
-				),
-					ui.Select.Icon(ui.PartProps{}, "▾")})
-			},
-		))
+			})
+			return select29.Root().Children(func() *native.Node {
+				return ui.Fragment([]*native.Node{select29.Value(ui.PartProps{}).Children(func() *ui.Element {
+					text := ui.UseSelectValueText()
+					return label(func() string {
+						return textValue(text())
+					})
+				}).NativeNode(), select29.Icon(ui.PartProps{}).Children("▾").NativeNode()})
+			}).NativeNode()
+		}())
 		source = pickerSource("Sizes", options)
 		source.Style = controlStyle()
-		children = append(children, ui.Select.Root(
-			ui.SelectRootProps{
+		children = append(children, func() *native.Node {
+			select30 := ui.NewSelect(ui.SelectRootProps{
 				Multiple:             true,
 				Values:               sizes,
 				OnValuesChange:       change(setSizes),
 				AlignItemWithTrigger: ptr(true),
 				PickerSourceProps:    source,
-			},
-			func() *native.Node {
+			})
+			return select30.Root().Children(func() *native.Node {
 				var children []*native.Node
-				children = append(children, ui.Select.Value(
-					ui.PartProps{},
-					func() *ui.Element {
-						return label(func() string { return choose(len(sizes()) == 0, "Pick sizes", strings.Join(sizes(), ", ")) })
-					},
-				))
-				children = append(children, ui.Select.Icon(ui.PartProps{}, "▾"))
-				children = append(children, ui.Select.Positioner(
-					ui.PickerPositionerProps{
-						Side:       "bottom",
-						Align:      "start",
-						SideOffset: 6,
-					},
-					func() *native.Node {
-						return ui.Fragment([]*native.Node{ui.Select.ScrollUpArrow(ui.PartProps{}),
-							ui.Select.ScrollDownArrow(ui.PartProps{})})
-					},
-				))
+				children = append(children, select30.Value(ui.PartProps{}).Children(func() *ui.Element {
+					return label(func() string {
+						return choose(len(sizes()) == 0, "Pick sizes", strings.Join(sizes(), ", "))
+					})
+				}).NativeNode())
+				children = append(children, select30.Icon(ui.PartProps{}).Children("▾").NativeNode())
+				children = append(children, select30.Positioner(ui.PickerPositionerProps{
+					Side:       "bottom",
+					Align:      "start",
+					SideOffset: 6,
+				}).Children(func() *native.Node {
+					return ui.Fragment([]*native.Node{select30.ScrollUpArrow(ui.PartProps{}).NativeNode(), select30.ScrollDownArrow(ui.PartProps{}).NativeNode()})
+				}).NativeNode())
 				state := ui.UseSelectState()
 				children = append(children, note(func() string {
 					return "popup " + strconv.FormatBool(state().PopupOpen) + " · side " + state().PopupSide + " · filled " + strconv.FormatBool(state().Filled) + " · touched " + strconv.FormatBool(state().Touched)
 				}).Node)
 				return ui.Fragment(children)
-			},
-		))
+			}).NativeNode()
+		}())
 		children = append(children, note(func() string {
 			return "theme " + textValue(theme()) + " · sizes [" + strings.Join(sizes(), ", ") + "]"
 		}).Node)

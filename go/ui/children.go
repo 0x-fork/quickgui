@@ -77,8 +77,8 @@ func childNodes(children any) []*native.Node {
 	case nil, bool:
 		return nil
 	case *Element:
-		if child != nil && child.Node != nil {
-			return []*native.Node{child.Node}
+		if child != nil {
+			return []*native.Node{child.NativeNode()}
 		}
 	case *native.Node:
 		if child != nil {

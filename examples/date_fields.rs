@@ -123,7 +123,7 @@ impl View for DateGallery {
 
         let date = DateField::new("due");
         let mut date_row = date
-            .root_part(&self.due, div())
+            .root_with(&self.due, div())
             .accessibility_label("Due date")
             .flex_row()
             .items_center()
@@ -146,7 +146,7 @@ impl View for DateGallery {
             let part = date.segment(segment);
             let filled = self.due.is_filled(segment);
             let element = part
-                .segment_part(
+                .segment_with(
                     &self.due,
                     div()
                         .px(4.0)
@@ -169,12 +169,12 @@ impl View for DateGallery {
                     DateSegment::Month => "Due month",
                     DateSegment::Day => "Due day",
                 });
-            date_row = date_row.child(part.key_part(cx, element, Self::due));
+            date_row = date_row.child(part.key_with(cx, element, Self::due));
         }
 
         let time = TimeField::new("start");
         let mut time_row = time
-            .root_part(&self.start, div())
+            .root_with(&self.start, div())
             .accessibility_label("Start time")
             .flex_row()
             .items_center()
@@ -195,7 +195,7 @@ impl View for DateGallery {
             }
             let part = time.segment(segment);
             let filled = self.start.is_filled(segment);
-            let element = part.segment_part(
+            let element = part.segment_with(
                 &self.start,
                 div()
                     .px(4.0)
@@ -213,12 +213,12 @@ impl View for DateGallery {
                     .focus(move |focus| focus.border(1.0, palette.focus_ring))
                     .child(text(self.start.segment_text(segment)).no_wrap()),
             );
-            time_row = time_row.child(part.key_part(cx, element, Self::start));
+            time_row = time_row.child(part.key_with(cx, element, Self::start));
         }
 
         let grid = Calendar::new("month");
         let mut month = grid
-            .grid_part(self.month, div())
+            .grid_with(self.month, div())
             .accessibility_label("Choose a due date")
             .flex_col()
             .gap_1()
@@ -228,11 +228,11 @@ impl View for DateGallery {
             .bg(palette.panel);
         for index in 0..self.month.week_count() {
             let days = self.month.week(index).expect("a mounted week row");
-            let mut row = grid.week_part(index, div().flex_row().gap_1());
+            let mut row = grid.week_with(index, div().flex_row().gap_1());
             for day in days {
                 let inside = self.month.is_in_displayed_month(day);
                 let selected = self.month.selected_day() == Some(day);
-                let cell = grid.day_part(
+                let cell = grid.day_with(
                     self.month,
                     day,
                     div()
@@ -257,7 +257,7 @@ impl View for DateGallery {
                         .disabled_style(|disabled| disabled.opacity(0.4))
                         .child(text(day.day.to_string()).text_xs()),
                 );
-                row = row.child(grid.key_part(cx, day, cell, Self::month));
+                row = row.child(grid.key_with(cx, day, cell, Self::month));
             }
             month = month.child(row);
         }

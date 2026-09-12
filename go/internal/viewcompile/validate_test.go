@@ -15,7 +15,7 @@ func TestConstructionRequiresExplicitNodeUse(t *testing.T) {
 type Element struct{}
 func View() *Element { return nil }
 func Text(children ...any) *Element { return nil }
-func Button(children ...any) *Element { return nil }
+func Button() *Element { return nil }
 func (e *Element) Child(child any) *Element { return e }
 func (e *Element) Children(children ...any) *Element { return e }
 func (e *Element) Width(value any) *Element { return e }
@@ -34,7 +34,7 @@ func (e *Element) OnClick(handler func()) *Element { return e }
 	}{
 		{"view", `func App() { gui.View() }`, true},
 		{"text", `func App() { gui.Text("lost") }`, true},
-		{"button chain", `func App() { gui.Button("lost").Width(20) }`, true},
+		{"button chain", `func App() { gui.Button().Child("lost").Width(20) }`, true},
 		{"custom component", `func Child() *gui.Element { return gui.Text("child") }; func App() { Child() }`, true},
 		{"blank assignment", `func App() { _ = gui.View() }`, true},
 		{"void children", `func App() *gui.Element { return gui.Text(func() {}) }`, true},
@@ -50,7 +50,7 @@ func (e *Element) OnClick(handler func()) *Element { return e }
 		{"fluent returning factory", `func App() *gui.Element { return gui.View().Child(func() *gui.Element { return gui.Text("child") }) }`, false},
 		{"append to assigned node", `func App() *gui.Element { view := gui.View(); view.Child(gui.Text("child")); return view }`, false},
 		{"assigned node and mutation", `func App() *gui.Element { view := gui.View(); view.Width(20); return view }`, false},
-		{"event callback", `func App() *gui.Element { view := gui.View(); return gui.Button("change").OnClick(func() { view.Width(20) }) }`, false},
+		{"event callback", `func App() *gui.Element { view := gui.View(); return gui.Button().Child("change").OnClick(func() { view.Width(20) }) }`, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			file, err := parser.ParseFile(fs, "app.go", "package app\nimport gui \""+uiPath+"\"\n"+test.body, 0)

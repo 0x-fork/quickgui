@@ -38,7 +38,7 @@ pub struct SplitterMaximum;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct SplitterCollapse;
 
-/// Contextual bindings used by [`SplitterHandle::key_part`].
+/// Contextual bindings used by [`SplitterHandle::key_with`].
 pub fn splitter_key_bindings() -> [KeyBinding; 7] {
     [
         KeyBinding::new("right", SplitterIncrease, Some(SPLITTER_KEY_CONTEXT)),
@@ -478,7 +478,7 @@ impl Splitter {
     ///
     /// The root becomes a flex container on the split axis because pane order along that axis is
     /// the behavior itself. Colors, gaps, borders, and padding stay caller-owned.
-    pub fn root_part(self, root: Element) -> Element {
+    pub fn root_with(self, root: Element) -> Element {
         let root = root
             .id(self.root_id)
             .accessibility_role(AccessibilityRole::Group)
@@ -490,6 +490,10 @@ impl Splitter {
             SplitterOrientation::Horizontal => root.flex_row(),
             SplitterOrientation::Vertical => root.flex_col(),
         }
+    }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(self) -> Element {
+        self.root_with(crate::div())
     }
 
     /// Describe one pane.
@@ -545,12 +549,16 @@ impl SplitterPane {
     ///
     /// The size along the split axis is framework-owned structural geometry: without it the
     /// resize behavior would not exist. Every other layout and paint declaration is caller-owned.
-    pub fn pane_part(self, pane: Element) -> Element {
+    pub fn pane_with(self, pane: Element) -> Element {
         let pane = pane.id(self.pane_id()).flex_none().overflow_hidden();
         match self.splitter.state.orientation {
             SplitterOrientation::Horizontal => pane.w(self.size).min_w(0.0),
             SplitterOrientation::Vertical => pane.h(self.size).min_h(0.0),
         }
+    }
+    /// Create the unstyled pane part. Use [`Self::pane_with`] to supply an existing element.
+    pub fn pane(self) -> Element {
+        self.pane_with(crate::div())
     }
 }
 
@@ -597,7 +605,7 @@ impl SplitterHandle {
     /// The handle is a focusable Splitter with a numeric value, its bounds, the split axis, and a
     /// relationship to the pane it resizes. The caller owns its thickness, hit area, and paint;
     /// an explicit `.cursor(...)` overrides the default resize cursor.
-    pub fn handle_part(self, handle: Element) -> Element {
+    pub fn handle_with(self, handle: Element) -> Element {
         let cursor = handle.cursor_style_explicit;
         let handle = handle
             .id(self.handle_id())
@@ -621,24 +629,36 @@ impl SplitterHandle {
             handle.cursor(self.splitter.state.orientation.handle_cursor())
         }
     }
+    /// Create the unstyled handle part. Use [`Self::handle_with`] to supply an existing element.
+    pub fn handle(self) -> Element {
+        self.handle_with(crate::div())
+    }
 
     /// Attach QuickGUI's typed splitter keyboard actions to this handle.
     ///
     /// Install [`splitter_key_bindings`] once on the application keymap.
-    pub fn key_part<V: 'static>(
+    pub fn key_with<V: 'static>(
         self,
         cx: &mut ViewContext<'_, V>,
         handle: Element,
         access: fn(&mut V) -> &mut SplitterState,
     ) -> Element {
-        self.key_part_with(cx, handle, StateAccessor::from(access))
+        self.key_with_accessor(cx, handle, StateAccessor::from(access))
+    }
+    /// Create the unstyled key part. Use [`Self::key_with`] to supply an existing element.
+    pub fn key<V: 'static>(
+        self,
+        cx: &mut ViewContext<'_, V>,
+        access: fn(&mut V) -> &mut SplitterState,
+    ) -> Element {
+        self.key_with(cx, crate::div(), access)
     }
 
     /// Attach the typed splitter keyboard actions against a per-instance state accessor.
     ///
     /// A host that renders many declared splitters through one view passes an accessor that
     /// captures which [`SplitterState`] this handle belongs to.
-    pub fn key_part_with<V: 'static>(
+    pub fn key_with_accessor<V: 'static>(
         self,
         cx: &mut ViewContext<'_, V>,
         handle: Element,
@@ -802,7 +822,7 @@ mod tests {
             .min_size(0, 120.0)
             .min_size(1, 80.0);
         let splitter = Splitter::new("workspace", &state);
-        let root = splitter.root_part(div().bg(Color::rgb8(1, 2, 3)));
+        let root = splitter.root_with(div().bg(Color::rgb8(1, 2, 3)));
         assert_eq!(root.explicit_id, Some("workspace".into()));
         assert_eq!(root.accessibility.role, AccessibilityRole::Group);
         assert_eq!(
@@ -814,7 +834,7 @@ mod tests {
         let pane = splitter.pane(0).expect("first pane");
         assert_eq!(pane.size(), 200.0);
         assert!(!pane.is_collapsed());
-        let pane_element = pane.pane_part(div().bg(Color::rgb8(4, 5, 6)));
+        let pane_element = pane.pane_with(div().bg(Color::rgb8(4, 5, 6)));
         assert_eq!(pane_element.explicit_id, Some(splitter.pane_id(0)));
         assert_eq!(pane_element.visual.background, Some(Color::rgb8(4, 5, 6)));
         assert!(splitter.pane(2).is_none());
@@ -823,7 +843,7 @@ mod tests {
         assert_eq!(handle.value(), 200.0);
         assert_eq!(handle.bounds(), (120.0, 420.0));
         assert!(!handle.is_collapsible());
-        let handle_element = handle.handle_part(div().w(6.0).bg(Color::rgb8(7, 8, 9)));
+        let handle_element = handle.handle_with(div().w(6.0).bg(Color::rgb8(7, 8, 9)));
         assert_eq!(handle_element.explicit_id, Some(splitter.handle_id(0)));
         assert_eq!(
             handle_element.accessibility.role,
@@ -849,7 +869,7 @@ mod tests {
         assert_eq!(handle_element.visual.background, Some(Color::rgb8(7, 8, 9)));
         assert!(splitter.handle(1).is_none());
 
-        let overridden = handle.handle_part(div().cursor(CursorStyle::PointingHand));
+        let overridden = handle.handle_with(div().cursor(CursorStyle::PointingHand));
         assert_eq!(overridden.cursor_style, Some(CursorStyle::PointingHand));
 
         let vertical_state = SplitterState::new(SplitterOrientation::Vertical, &[100.0, 100.0]);
@@ -857,7 +877,7 @@ mod tests {
         let vertical_handle = vertical
             .handle(0)
             .expect("vertical handle")
-            .handle_part(div());
+            .handle_with(div());
         assert_eq!(
             vertical_handle.accessibility.orientation,
             Some(AccessibilityOrientation::Horizontal)
@@ -907,15 +927,15 @@ mod tests {
                     cx.invalidate();
                 }
             });
-            splitter.root_part(
+            splitter.root_with(
                 div()
-                    .child(sidebar.pane_part(div().child(text("Sidebar"))))
-                    .child(handle.key_part(
+                    .child(sidebar.pane_with(div().child(text("Sidebar"))))
+                    .child(handle.key_with(
                         cx,
-                        handle.handle_part(div().w(6.0).on_pointer(drag)),
+                        handle.handle_with(div().w(6.0).on_pointer(drag)),
                         Self::panes,
                     ))
-                    .child(content.pane_part(div().child(text("Content")))),
+                    .child(content.pane_with(div().child(text("Content")))),
             )
         }
     }

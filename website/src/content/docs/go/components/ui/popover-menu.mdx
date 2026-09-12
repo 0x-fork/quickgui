@@ -16,26 +16,22 @@ import (
 
 ```go
 func PopoverMenuExample() *native.Node {
-	return ui.PopoverMenu.Root(
-		ui.PopoverMenuRootProps{
-			Items: func() []ui.MenuItemDeclaration {
-				return []ui.MenuItemDeclaration{{ID: "copy", Label: "Copy"}, {ID: "paste", Label: "Paste"}}
-			},
-			OnSelect: func(item ui.MenuSelectDetails, _ *native.Event) { fmt.Println(item.ID) },
-		},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.PopoverMenu.Trigger(ui.PartProps{}, "Edit"),
-				ui.PopoverMenu.Popup(ui.PopoverMenuPopupProps{})})
-		},
-	)
+	popoverMenu1 := ui.NewPopoverMenu(ui.PopoverMenuRootProps{Items: func() []ui.MenuItemDeclaration {
+		return []ui.MenuItemDeclaration{{ID: "copy", Label: "Copy"}, {ID: "paste", Label: "Paste"}}
+	}, OnSelect: func(item ui.MenuSelectDetails, _ *native.Event) {
+		fmt.Println(item.ID)
+	}})
+	return popoverMenu1.Root().Children(func() *native.Node {
+		return ui.Fragment([]*native.Node{popoverMenu1.Trigger(ui.PartProps{}).Children("Edit").NativeNode(), popoverMenu1.Popup(ui.PopoverMenuPopupProps{}).NativeNode()})
+	}).NativeNode()
 }
 ```
 
 ## Anatomy
 
-- `ui.PopoverMenu.Root`
-- `ui.PopoverMenu.Trigger`
-- `ui.PopoverMenu.Popup`
+- `popoverMenu.Root`
+- `popoverMenu.Trigger`
+- `popoverMenu.Popup`
 
 ## Key props
 

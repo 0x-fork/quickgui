@@ -34,11 +34,11 @@ test("Go application compilation rejects implicit construction at the authored l
     const path = join(project, "view.go");
     writeFileSync(
       path,
-      `package example\nimport "github.com/egoist/quickgui/go/ui"\nfunc View() *ui.Element {\n  return ui.Button("returned")\n}\n`,
+      `package example\nimport "github.com/egoist/quickgui/go/ui"\nfunc View() *ui.Element {\n  return ui.Button().Child("returned")\n}\n`,
     );
     await prepareGoWorkspace(project, ["."]);
     for (const body of [
-      `ui.Button("discarded")`,
+      `ui.Button().Child("discarded")`,
       `ui.View().Child(func() { ui.Text("implicit") })`,
       `ui.View().Children(ui.Text("first"), func() {})`,
       `ui.Show(false, func() {})`,

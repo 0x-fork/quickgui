@@ -761,45 +761,65 @@ where
     }
 
     /// Decorate the optional application-owned structural wrapper, Base UI's `Combobox.Root`.
-    pub fn root_part(root: Element) -> Element {
+    pub fn root_with(root: Element) -> Element {
         root.app_region_no_drag()
+    }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root() -> Element {
+        Self::root_with(crate::div())
     }
 
     /// Decorate the caller-owned visible label, Base UI's `Combobox.Label`.
-    pub fn label_part(id: impl Into<ElementId>, label: Element) -> Element {
+    pub fn label_with(id: impl Into<ElementId>, label: Element) -> Element {
         label
             .id(Self::label_id(id))
             .accessibility_role(AccessibilityRole::Label)
             .app_region_no_drag()
             .user_select_none()
     }
+    /// Create the unstyled label part. Use [`Self::label_with`] to supply an existing element.
+    pub fn label(id: impl Into<ElementId>) -> Element {
+        Self::label_with(id, crate::div())
+    }
 
     /// Decorate the caller-owned committed-value text, Base UI's `Combobox.Value`.
     ///
     /// The input already exposes the value, so this part is decoration.
-    pub fn value_part(id: impl Into<ElementId>, value: Element) -> Element {
+    pub fn value_with(id: impl Into<ElementId>, value: Element) -> Element {
         value
             .id(Self::value_id(id))
             .accessibility_hidden(true)
             .app_region_no_drag()
     }
+    /// Create the unstyled value part. Use [`Self::value_with`] to supply an existing element.
+    pub fn value(id: impl Into<ElementId>) -> Element {
+        Self::value_with(id, crate::div())
+    }
 
     /// Decorate the caller-owned affordance glyph, Base UI's `Combobox.Icon`.
-    pub fn icon_part(id: impl Into<ElementId>, icon: Element) -> Element {
+    pub fn icon_with(id: impl Into<ElementId>, icon: Element) -> Element {
         icon.id(Self::icon_id(id))
             .accessibility_hidden(true)
             .app_region_no_drag()
     }
+    /// Create the unstyled icon part. Use [`Self::icon_with`] to supply an existing element.
+    pub fn icon(id: impl Into<ElementId>) -> Element {
+        Self::icon_with(id, crate::div())
+    }
 
     /// Decorate the wrapper holding the input, chips, and affordances, Base UI's
     /// `Combobox.InputGroup`.
-    pub fn input_group_part(id: impl Into<ElementId>, group: Element) -> Element {
+    pub fn input_group_with(id: impl Into<ElementId>, group: Element) -> Element {
         let id = id.into();
         group
             .id(Self::input_group_id(id))
             .accessibility_role(AccessibilityRole::Group)
             .accessibility_labelled_by(Self::label_id(id))
             .app_region_no_drag()
+    }
+    /// Create the unstyled input group part. Use [`Self::input_group_with`] to supply an existing element.
+    pub fn input_group(id: impl Into<ElementId>) -> Element {
+        Self::input_group_with(id, crate::div())
     }
 
     /// Decorate the caller-owned editable input, Base UI's `Combobox.Input`.
@@ -808,7 +828,7 @@ where
     /// attached by [`Self::element`]; this part adds the form-state projection Base UI publishes
     /// alongside it, so a composition that already owns the interaction still reports the same
     /// required, read-only, and label relationships.
-    pub fn input_part(&self, id: impl Into<ElementId>, input: Element) -> Element {
+    pub fn input_with(&self, id: impl Into<ElementId>, input: Element) -> Element {
         let id = id.into();
         input
             .accessibility_labelled_by(Self::label_id(id))
@@ -817,9 +837,13 @@ where
             .invalid(self.is_invalid())
             .app_region_no_drag()
     }
+    /// Create the unstyled input part. Use [`Self::input_with`] to supply an existing element.
+    pub fn input(&self, id: impl Into<ElementId>) -> Element {
+        self.input_with(id, crate::text_input(""))
+    }
 
     /// Decorate the caller-owned chip container, Base UI's `Combobox.Chips`.
-    pub fn chips_part(id: impl Into<ElementId>, chips: Element) -> Element {
+    pub fn chips_with(id: impl Into<ElementId>, chips: Element) -> Element {
         let id = id.into();
         chips
             .id(Self::chips_id(id))
@@ -827,9 +851,13 @@ where
             .accessibility_labelled_by(Self::label_id(id))
             .app_region_no_drag()
     }
+    /// Create the unstyled chips part. Use [`Self::chips_with`] to supply an existing element.
+    pub fn chips(id: impl Into<ElementId>) -> Element {
+        Self::chips_with(id, crate::div())
+    }
 
     /// Decorate one caller-owned chip, Base UI's `Combobox.Chip`.
-    pub fn chip_part(
+    pub fn chip_with(
         id: impl Into<ElementId>,
         chip_index: usize,
         label: impl Into<Arc<str>>,
@@ -843,12 +871,20 @@ where
             .app_region_no_drag()
             .user_select_none()
     }
+    /// Create the unstyled chip part. Use [`Self::chip_with`] to supply an existing element.
+    pub fn chip(
+        id: impl Into<ElementId>,
+        chip_index: usize,
+        label: impl Into<Arc<str>>,
+    ) -> Element {
+        Self::chip_with(id, chip_index, label, crate::div())
+    }
 
     /// Decorate one chip's remove control, Base UI's `Combobox.ChipRemove`.
     ///
     /// The control is a real button with an accessible name, so a keyboard user can reach and
     /// remove a chip without the pointer.
-    pub fn chip_remove_part(
+    pub fn chip_remove_with(
         id: impl Into<ElementId>,
         chip_index: usize,
         label: impl Into<Arc<str>>,
@@ -865,11 +901,19 @@ where
             .user_select_none()
             .cursor_default()
     }
+    /// Create the unstyled chip remove part. Use [`Self::chip_remove_with`] to supply an existing element.
+    pub fn chip_remove(
+        id: impl Into<ElementId>,
+        chip_index: usize,
+        label: impl Into<Arc<str>>,
+    ) -> Element {
+        Self::chip_remove_with(id, chip_index, label, crate::button())
+    }
 
     /// Decorate the caller-owned clear control, Base UI's `Combobox.Clear`.
     ///
     /// Mount it only while the control holds a value; Base UI hides it otherwise.
-    pub fn clear_part(
+    pub fn clear_with(
         id: impl Into<ElementId>,
         label: impl Into<Arc<str>>,
         clear: Element,
@@ -884,9 +928,13 @@ where
             .user_select_none()
             .cursor_default()
     }
+    /// Create the unstyled clear part. Use [`Self::clear_with`] to supply an existing element.
+    pub fn clear(id: impl Into<ElementId>, label: impl Into<Arc<str>>) -> Element {
+        Self::clear_with(id, label, crate::button())
+    }
 
     /// Decorate the caller-owned surface trigger, Base UI's `Combobox.Trigger`.
-    pub fn trigger_part(
+    pub fn trigger_with(
         &self,
         id: impl Into<ElementId>,
         label: impl Into<Arc<str>>,
@@ -906,9 +954,13 @@ where
             .user_select_none()
             .cursor_default()
     }
+    /// Create the unstyled trigger part. Use [`Self::trigger_with`] to supply an existing element.
+    pub fn trigger(&self, id: impl Into<ElementId>, label: impl Into<Arc<str>>) -> Element {
+        self.trigger_with(id, label, crate::button())
+    }
 
     /// Decorate an optional caller-painted owner-window backdrop, Base UI's `Combobox.Backdrop`.
-    pub fn backdrop_part(id: impl Into<ElementId>, backdrop: Element) -> Element {
+    pub fn backdrop_with(id: impl Into<ElementId>, backdrop: Element) -> Element {
         backdrop
             .id(Self::backdrop_id(id))
             .overlay()
@@ -918,22 +970,34 @@ where
             .cursor_default()
             .accessibility_hidden(true)
     }
+    /// Create the unstyled backdrop part. Use [`Self::backdrop_with`] to supply an existing element.
+    pub fn backdrop(id: impl Into<ElementId>) -> Element {
+        Self::backdrop_with(id, crate::div())
+    }
 
     /// Decorate the suggestion-surface boundary, Base UI's `Combobox.Portal`.
     ///
     /// The suggestion surface is its own native window, so the portal, the positioner, and the
     /// popup are one element and all three names decorate it identically.
-    pub fn portal_part(&self, id: impl Into<ElementId>, portal: Element) -> Element {
-        self.popup_part(id, portal)
+    pub fn portal_with(&self, id: impl Into<ElementId>, portal: Element) -> Element {
+        self.popup_with(id, portal)
+    }
+    /// Create the unstyled portal part. Use [`Self::portal_with`] to supply an existing element.
+    pub fn portal(&self, id: impl Into<ElementId>) -> Element {
+        self.portal_with(id, crate::div())
     }
 
     /// Decorate the suggestion-surface boundary, Base UI's `Combobox.Positioner`.
-    pub fn positioner_part(&self, id: impl Into<ElementId>, positioner: Element) -> Element {
-        self.popup_part(id, positioner)
+    pub fn positioner_with(&self, id: impl Into<ElementId>, positioner: Element) -> Element {
+        self.popup_with(id, positioner)
+    }
+    /// Create the unstyled positioner part. Use [`Self::positioner_with`] to supply an existing element.
+    pub fn positioner(&self, id: impl Into<ElementId>) -> Element {
+        self.positioner_with(id, crate::div())
     }
 
     /// Decorate the caller-owned suggestion surface, Base UI's `Combobox.Popup`.
-    pub fn popup_part(&self, id: impl Into<ElementId>, popup: Element) -> Element {
+    pub fn popup_with(&self, id: impl Into<ElementId>, popup: Element) -> Element {
         popup
             .id(Self::surface_id(id))
             .accessibility_role(AccessibilityRole::ListBox)
@@ -942,59 +1006,87 @@ where
             .app_region_no_drag()
             .cursor_default()
     }
+    /// Create the unstyled popup part. Use [`Self::popup_with`] to supply an existing element.
+    pub fn popup(&self, id: impl Into<ElementId>) -> Element {
+        self.popup_with(id, crate::div())
+    }
 
     /// Position a caller-owned decorative arrow, Base UI's `Combobox.Arrow`.
-    pub fn arrow_part(id: impl Into<ElementId>, arrow: Element) -> Element {
+    pub fn arrow_with(id: impl Into<ElementId>, arrow: Element) -> Element {
         arrow
             .id(Self::arrow_id(id))
             .absolute()
             .accessibility_hidden(true)
             .app_region_no_drag()
     }
+    /// Create the unstyled arrow part. Use [`Self::arrow_with`] to supply an existing element.
+    pub fn arrow(id: impl Into<ElementId>) -> Element {
+        Self::arrow_with(id, crate::div())
+    }
 
     /// Decorate the caller-owned live region, Base UI's `Combobox.Status`.
     ///
     /// Render [`Self::status_text`] inside it. The region is polite and is rebuilt only when the
     /// application rebuilds the tree, so an unchanged count announces exactly once.
-    pub fn status_part(id: impl Into<ElementId>, status: Element) -> Element {
+    pub fn status_with(id: impl Into<ElementId>, status: Element) -> Element {
         status
             .id(Self::status_id(id))
             .accessibility_role(AccessibilityRole::Status)
             .accessibility_live(AccessibilityLive::Polite)
             .app_region_no_drag()
     }
+    /// Create the unstyled status part. Use [`Self::status_with`] to supply an existing element.
+    pub fn status(id: impl Into<ElementId>) -> Element {
+        Self::status_with(id, crate::div())
+    }
 
     /// Decorate the caller-owned no-results part, Base UI's `Combobox.Empty`.
     ///
     /// Mount it only while [`Self::is_empty_result`] is true. The `Status` region already
     /// announces the count, so this part is visual.
-    pub fn empty_part(id: impl Into<ElementId>, empty: Element) -> Element {
+    pub fn empty_with(id: impl Into<ElementId>, empty: Element) -> Element {
         empty
             .id(Self::empty_id(id))
             .accessibility_hidden(true)
             .app_region_no_drag()
     }
+    /// Create the unstyled empty part. Use [`Self::empty_with`] to supply an existing element.
+    pub fn empty(id: impl Into<ElementId>) -> Element {
+        Self::empty_with(id, crate::div())
+    }
 
     /// Decorate the caller-owned scrolling result list, Base UI's `Combobox.List`.
-    pub fn list_part(&self, id: impl Into<ElementId>, list: Element) -> Element {
+    pub fn list_with(&self, id: impl Into<ElementId>, list: Element) -> Element {
         list.id(Self::list_id(id))
             .accessibility_hidden(self.result_count() == 0)
             .app_region_no_drag()
     }
+    /// Create the unstyled list part. Use [`Self::list_with`] to supply an existing element.
+    pub fn list(&self, id: impl Into<ElementId>) -> Element {
+        self.list_with(id, crate::div())
+    }
 
     /// Decorate a caller-owned wrapper around the mounted rows, Base UI's `Combobox.Collection`.
-    pub fn collection_part(id: impl Into<ElementId>, collection: Element) -> Element {
+    pub fn collection_with(id: impl Into<ElementId>, collection: Element) -> Element {
         collection.id(Self::collection_id(id)).app_region_no_drag()
+    }
+    /// Create the unstyled collection part. Use [`Self::collection_with`] to supply an existing element.
+    pub fn collection(id: impl Into<ElementId>) -> Element {
+        Self::collection_with(id, crate::div())
     }
 
     /// Decorate a caller-owned row wrapper for a grid-shaped result, Base UI's `Combobox.Row`.
-    pub fn row_part(row: Element) -> Element {
+    pub fn row_with(row: Element) -> Element {
         row.accessibility_role(AccessibilityRole::Group)
             .app_region_no_drag()
     }
+    /// Create the unstyled row part. Use [`Self::row_with`] to supply an existing element.
+    pub fn row() -> Element {
+        Self::row_with(crate::div())
+    }
 
     /// Decorate one caller-owned result row, Base UI's `Combobox.Item`.
-    pub fn item_part(
+    pub fn item_with(
         &self,
         id: impl Into<ElementId>,
         source_index: usize,
@@ -1015,33 +1107,58 @@ where
                 .cursor_default(),
         )
     }
+    /// Create the unstyled item part. Use [`Self::item_with`] to supply an existing element.
+    pub fn item(
+        &self,
+        id: impl Into<ElementId>,
+        source_index: usize,
+        state: ComboboxItemPartState,
+    ) -> Option<Element> {
+        self.item_with(id, source_index, state, crate::div())
+    }
 
     /// Decorate one row's selected mark, Base UI's `Combobox.ItemIndicator`.
-    pub fn item_indicator_part(indicator: Element) -> Element {
+    pub fn item_indicator_with(indicator: Element) -> Element {
         indicator.accessibility_hidden(true).app_region_no_drag()
+    }
+    /// Create the unstyled item indicator part. Use [`Self::item_indicator_with`] to supply an existing element.
+    pub fn item_indicator() -> Element {
+        Self::item_indicator_with(crate::div())
     }
 
     /// Decorate a caller-composed result group, Base UI's `Combobox.Group`.
-    pub fn group_part(group: Element) -> Element {
+    pub fn group_with(group: Element) -> Element {
         group
             .accessibility_role(AccessibilityRole::Group)
             .app_region_no_drag()
     }
+    /// Create the unstyled group part. Use [`Self::group_with`] to supply an existing element.
+    pub fn group() -> Element {
+        Self::group_with(crate::div())
+    }
 
     /// Decorate a group's visible label, Base UI's `Combobox.GroupLabel`.
-    pub fn group_label_part(label_id: impl Into<ElementId>, label: Element) -> Element {
+    pub fn group_label_with(label_id: impl Into<ElementId>, label: Element) -> Element {
         label
             .id(label_id)
             .accessibility_role(AccessibilityRole::Label)
             .app_region_no_drag()
             .user_select_none()
     }
+    /// Create the unstyled group label part. Use [`Self::group_label_with`] to supply an existing element.
+    pub fn group_label(label_id: impl Into<ElementId>) -> Element {
+        Self::group_label_with(label_id, crate::div())
+    }
 
     /// Decorate a caller-owned divider between groups, Base UI's `Combobox.Separator`.
-    pub fn separator_part(separator: Element) -> Element {
+    pub fn separator_with(separator: Element) -> Element {
         separator
             .accessibility_role(AccessibilityRole::Separator)
             .app_region_no_drag()
+    }
+    /// Create the unstyled separator part. Use [`Self::separator_with`] to supply an existing element.
+    pub fn separator() -> Element {
+        Self::separator_with(crate::div())
     }
 
     pub fn option_id_for_source(
@@ -1489,27 +1606,27 @@ mod tests {
         type Combo = ComboboxState<&'static str>;
 
         assert_eq!(
-            Combo::root_part(div().bg(Color::BLACK)).visual.background,
+            Combo::root_with(div().bg(Color::BLACK)).visual.background,
             Some(Color::BLACK)
         );
-        let label = Combo::label_part("combo", div());
+        let label = Combo::label_with("combo", div());
         assert_eq!(label.explicit_id, Some(Combo::label_id("combo")));
         assert_eq!(label.accessibility.role, AccessibilityRole::Label);
 
-        assert!(Combo::value_part("combo", div()).accessibility.hidden);
-        assert!(Combo::icon_part("combo", div()).accessibility.hidden);
-        assert!(Combo::arrow_part("combo", div()).accessibility.hidden);
-        assert!(Combo::backdrop_part("combo", div()).accessibility.hidden);
-        assert!(Combo::item_indicator_part(div()).accessibility.hidden);
+        assert!(Combo::value_with("combo", div()).accessibility.hidden);
+        assert!(Combo::icon_with("combo", div()).accessibility.hidden);
+        assert!(Combo::arrow_with("combo", div()).accessibility.hidden);
+        assert!(Combo::backdrop_with("combo", div()).accessibility.hidden);
+        assert!(Combo::item_indicator_with(div()).accessibility.hidden);
 
-        let group = Combo::input_group_part("combo", div());
+        let group = Combo::input_group_with("combo", div());
         assert_eq!(group.accessibility.role, AccessibilityRole::Group);
         assert_eq!(
             group.accessibility.relations.labelled_by(),
             Some(Combo::label_id("combo"))
         );
 
-        let input = state.input_part("combo", text_input(""));
+        let input = state.input_with("combo", text_input(""));
         assert!(!input.accessibility.read_only);
         assert_eq!(
             input.accessibility.relations.labelled_by(),
@@ -1519,68 +1636,68 @@ mod tests {
             .unwrap()
             .read_only(true)
             .required(true)
-            .input_part("combo", text_input(""));
+            .input_with("combo", text_input(""));
         assert!(locked.accessibility.read_only);
         assert!(locked.accessibility.required);
 
-        let chips = Combo::chips_part("combo", div());
+        let chips = Combo::chips_with("combo", div());
         assert_eq!(chips.accessibility.role, AccessibilityRole::List);
-        let chip = Combo::chip_part("combo", 0, "Apple", div());
+        let chip = Combo::chip_with("combo", 0, "Apple", div());
         assert_eq!(chip.accessibility.role, AccessibilityRole::ListItem);
         assert_eq!(chip.accessibility.label.as_deref(), Some("Apple"));
-        let remove = Combo::chip_remove_part("combo", 0, "Remove Apple", div());
+        let remove = Combo::chip_remove_with("combo", 0, "Remove Apple", div());
         assert_eq!(remove.accessibility.role, AccessibilityRole::Button);
         assert!(remove.clickable);
         assert_eq!(remove.visual.background, None);
 
-        let clear = Combo::clear_part("combo", "Clear", div());
+        let clear = Combo::clear_with("combo", "Clear", div());
         assert_eq!(clear.accessibility.role, AccessibilityRole::Button);
-        let trigger = state.trigger_part("combo", "Fruit", div());
+        let trigger = state.trigger_with("combo", "Fruit", div());
         assert_eq!(trigger.accessibility.expanded, Some(false));
         assert_eq!(
             trigger.accessibility.has_popover,
             Some(crate::AccessibilityPopover::ListBox)
         );
 
-        let popup = state.popup_part("combo", div());
+        let popup = state.popup_with("combo", div());
         assert_eq!(popup.accessibility.role, AccessibilityRole::ListBox);
         assert!(popup.accessibility.multiselectable);
         assert_eq!(
-            state.portal_part("combo", div()).explicit_id,
+            state.portal_with("combo", div()).explicit_id,
             popup.explicit_id
         );
         assert_eq!(
-            state.positioner_part("combo", div()).explicit_id,
+            state.positioner_with("combo", div()).explicit_id,
             popup.explicit_id
         );
 
-        let status = Combo::status_part("combo", div());
+        let status = Combo::status_with("combo", div());
         assert_eq!(status.accessibility.role, AccessibilityRole::Status);
         assert_eq!(status.accessibility.live, Some(AccessibilityLive::Polite));
-        assert!(Combo::empty_part("combo", div()).accessibility.hidden);
+        assert!(Combo::empty_with("combo", div()).accessibility.hidden);
         assert_eq!(
-            Combo::collection_part("combo", div()).explicit_id,
+            Combo::collection_with("combo", div()).explicit_id,
             Some(Combo::collection_id("combo"))
         );
         assert_eq!(
-            Combo::row_part(div()).accessibility.role,
+            Combo::row_with(div()).accessibility.role,
             AccessibilityRole::Group
         );
         assert_eq!(
-            Combo::group_part(div()).accessibility.role,
+            Combo::group_with(div()).accessibility.role,
             AccessibilityRole::Group
         );
         assert_eq!(
-            Combo::group_label_part("group", div()).accessibility.role,
+            Combo::group_label_with("group", div()).accessibility.role,
             AccessibilityRole::Label
         );
         assert_eq!(
-            Combo::separator_part(div()).accessibility.role,
+            Combo::separator_with(div()).accessibility.role,
             AccessibilityRole::Separator
         );
 
         let item = state
-            .item_part(
+            .item_with(
                 "combo",
                 0,
                 ComboboxItemPartState {
@@ -1596,7 +1713,7 @@ mod tests {
         assert_eq!(item.visual.background, None);
         assert!(
             state
-                .item_part("combo", 99, ComboboxItemPartState::default(), div())
+                .item_with("combo", 99, ComboboxItemPartState::default(), div())
                 .is_none()
         );
     }
@@ -1941,7 +2058,7 @@ mod tests {
             let input = text_input(self.combobox.input_value().clone())
                 .w(220.0)
                 .h(36.0);
-            let input = self.combobox.input_part("fruit", input);
+            let input = self.combobox.input_with("fruit", input);
             let combobox = self.combobox.element(
                 cx,
                 "fruit",
@@ -1967,17 +2084,17 @@ mod tests {
                             }
                         },
                     );
-                    Combo::chip_part("fruit", index, label.clone(), div()).child(
-                        Combo::chip_remove_part("fruit", index, "Remove", div().h(12.0).w(12.0))
+                    Combo::chip_with("fruit", index, label.clone(), div()).child(
+                        Combo::chip_remove_with("fruit", index, "Remove", div().h(12.0).w(12.0))
                             .on_click(remove),
                     )
                 })
                 .collect::<Vec<_>>();
-            Combo::root_part(div()).children([
-                Combo::label_part("fruit", div().child(text("Fruit"))),
-                Combo::input_group_part("fruit", div()).child(combobox),
-                Combo::chips_part("fruit", div()).children(chips),
-                Combo::status_part("fruit", div().child(text(self.combobox.status_text()))),
+            Combo::root_with(div()).children([
+                Combo::label_with("fruit", div().child(text("Fruit"))),
+                Combo::input_group_with("fruit", div()).child(combobox),
+                Combo::chips_with("fruit", div()).children(chips),
+                Combo::status_with("fruit", div().child(text(self.combobox.status_text()))),
             ])
         }
     }

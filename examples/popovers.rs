@@ -260,7 +260,7 @@ impl View for PopoverGallery {
                             ),
                     )
                     .child(
-                        gallery_trigger(account.trigger_part(div()), "Account")
+                        gallery_trigger(account.trigger(), "Account")
                             .on_click(toggle_account)
                             .accessibility_label("Account options"),
                     ),
@@ -297,7 +297,7 @@ impl View for PopoverGallery {
                             ),
                     )
                     .child(
-                        gallery_trigger(actions.trigger_part(div()), "Actions")
+                        gallery_trigger(actions.trigger(), "Actions")
                             .absolute()
                             .right(24.0)
                             .bottom(24.0)
@@ -306,7 +306,7 @@ impl View for PopoverGallery {
                     )
                     .child(
                         gallery_trigger(
-                            self.preview.trigger_part_with(
+                            self.preview.trigger_with_accessor(
                                 cx,
                                 preview,
                                 preview_access(),
@@ -323,15 +323,15 @@ impl View for PopoverGallery {
 
         if preview.is_open() {
             let popup = gallery_popover(
-                self.preview.popup_part_with(cx, preview, preview_access(), div()),
+                self.preview.popup_with_accessor(cx, preview, preview_access(), div()),
                 240.0,
                 palette,
             )
             .relative()
             .gap_2()
-            .child(preview.title_part(text("Release 0.1").font_semibold()))
+            .child(preview.title_with(text("Release 0.1").font_semibold()))
             .child(
-                preview.description_part(
+                preview.description_with(
                     text("Hover opening, the grace interval back to this surface, and the arrow edge are all framework behavior.")
                         .wrap()
                         .text_sm()
@@ -347,15 +347,15 @@ impl View for PopoverGallery {
                 .text_color(palette.muted),
             )
             .child(
-                preview.arrow_part(div()).w(12.0).h(12.0).rotate_degrees(45.0).bg(palette.popover),
+                preview.arrow().w(12.0).h(12.0).rotate_degrees(45.0).bg(palette.popover),
             );
             root = root.child(
-                preview.tracked_positioner_part(div().child(popup), &self.preview_placement),
+                preview.tracked_positioner_with(div().child(popup), &self.preview_placement),
             );
         }
 
         if account.is_open() {
-            let mut popover = gallery_popover(account.popover_part(div()), 180.0, palette)
+            let mut popover = gallery_popover(account.popup(), 180.0, palette)
                 .w(306.0)
                 .gap_1()
                 .on_dismiss(dismiss_account)
@@ -365,10 +365,10 @@ impl View for PopoverGallery {
                         .items_center()
                         .justify_between()
                         .gap_2()
-                        .child(account.title_part(text("Account options").font_semibold()))
+                        .child(account.title_with(text("Account options").font_semibold()))
                         .child(
                             account
-                                .close_part("Close account options", div())
+                                .close_with("Close account options", div())
                                 .on_click(close_account)
                                 .px_2()
                                 .py_1()
@@ -379,7 +379,7 @@ impl View for PopoverGallery {
                         ),
                 )
                 .child(
-                    account.description_part(
+                    account.description_with(
                         text("Choose an account action or open the nested shortcut popover.")
                             .wrap()
                             .text_sm()
@@ -389,18 +389,18 @@ impl View for PopoverGallery {
                 .child(popover_item("profile", "Profile", profile))
                 .child(popover_item("preferences", "Preferences", preferences))
                 .child(
-                    gallery_trigger(nested.trigger_part(div()), "Keyboard shortcut…")
+                    gallery_trigger(nested.trigger(), "Keyboard shortcut…")
                         .w_full()
                         .on_click(toggle_nested)
                         .accessibility_label("Keyboard shortcut options"),
                 );
             if nested.is_open() {
-                let nested_popover = gallery_popover(nested.popover_part(div()), 210.0, palette)
+                let nested_popover = gallery_popover(nested.popup(), 210.0, palette)
                     .gap_2()
                     .on_dismiss(dismiss_nested)
-                    .child(nested.title_part(text("Keyboard shortcut").font_semibold()))
+                    .child(nested.title_with(text("Keyboard shortcut").font_semibold()))
                     .child(
-                        nested.description_part(
+                        nested.description_with(
                             text("Nested surfaces dismiss one level at a time.")
                                 .wrap()
                                 .text_sm()
@@ -411,13 +411,13 @@ impl View for PopoverGallery {
                         popover_item("shortcut", "Use ⌘⇧P", shortcut)
                             .accessibility_description("Set the keyboard shortcut"),
                     );
-                popover = popover.child(nested.positioner_part(div().child(nested_popover)));
+                popover = popover.child(nested.positioner().child(nested_popover));
             }
-            root = root.child(account.positioner_part(div().child(popover)));
+            root = root.child(account.positioner().child(popover));
         }
 
         if actions.is_open() {
-            let popover = gallery_popover(actions.popover_part(div()), 224.0, palette)
+            let popover = gallery_popover(actions.popup(), 224.0, palette)
                 .gap_1()
                 .on_dismiss(dismiss_actions)
                 .accessibility_label("Document actions")
@@ -429,7 +429,7 @@ impl View for PopoverGallery {
                     popover_item("archive", "Archive", archive)
                         .accessibility_role(AccessibilityRole::MenuItem),
                 );
-            root = root.child(actions.positioner_part(div().child(popover)));
+            root = root.child(actions.positioner().child(popover));
         }
 
         // Base UI's Menu.Root/Trigger/Positioner/Popup over the same in-window popover, opened on
@@ -439,7 +439,7 @@ impl View for PopoverGallery {
                 this.status = Some(Arc::from(command.0));
                 cx.invalidate();
             });
-        let menu_trigger = self.menu.trigger_part(
+        let menu_trigger = self.menu.trigger_with(
             cx,
             Self::menu,
             |_view: &mut Self, _open, _cx| {},
@@ -474,12 +474,12 @@ impl View for PopoverGallery {
             );
             let popup = gallery_popover(
                 self.menu
-                    .popup_part(cx, Self::menu, |_view: &mut Self, _open, _cx| {}, div()),
+                    .popup_with(cx, Self::menu, |_view: &mut Self, _open, _cx| {}, div()),
                 200.0,
                 palette,
             )
             .child(rows);
-            root = root.child(self.menu.positioner_part(div().child(popup)));
+            root = root.child(self.menu.positioner().child(popup));
         }
 
         root

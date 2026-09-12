@@ -45,31 +45,31 @@ let dismiss = cx.dismiss_listener(dialog.popover_id(), |view, cx| {
 });
 
 let trigger = dialog
-    .trigger_part("open-settings", button().child("Settings"))
+    .trigger_with("open-settings", button().child("Settings"))
     .on_click(open);
 
 if self.settings_open {
     let popover = dialog
-        .popover_part(
+        .popup_with(
             div()
-                .child(dialog.title_part(text("Settings")))
-                .child(dialog.description_part(text("Edit account settings")))
+                .child(dialog.title_with(text("Settings")))
+                .child(dialog.description_with(text("Edit account settings")))
                 .child(button().id("account-name").child("First action")),
         )
         .on_dismiss(dismiss);
 
     let portal = dialog
-        .root_part(div().flex_row().items_center().justify_center())
-        .child(dialog.backdrop_part(div()))
+        .root().flex_row().items_center().justify_center()
+        .child(dialog.backdrop())
         .child(popover);
 }
 ```
 
-Mount `root_part` only while the controlled value is open. `root_part` fills the viewport but does
+Mount `root_with` only while the controlled value is open. `root_with` fills the viewport but does
 not choose popover alignment; Flexbox, Grid, or absolute positioning on the caller root remains
 application presentation. The backdrop and popover likewise receive no authored color or size.
 
-`close_part(label, element)` decorates a caller element with a stable close-control ID and button
+`close_with(label, element)` decorates a caller element with a stable close-control ID and button
 semantics. Its listener still belongs to the application. Explicit close callbacks call
 `focus_restore(cx)` after changing the controlled state. Escape and backdrop dismissal use the same
 retained restore target automatically.
@@ -136,47 +136,20 @@ viewport overlay root. Give the popup its own size, colors, and spacing.
 ```go
 func DeleteProject() *native.Node {
 	open, setOpen := ui.CreateSignal(false)
-	return ui.AlertDialog.Root(
-		ui.DialogRootProps{
-			Open:         open,
-			OnOpenChange: func(value bool, _ ui.DialogOpenChangeDetails) { setOpen(value) },
-			ExitDuration: 160,
-			OnOpenChangeComplete: func(open bool, _ *native.Event) {
-				log.Print("Dialog transition finished; open: ", open)
-			},
-		},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.AlertDialog.Trigger(ui.PartProps{}, "Delete project"),
-				ui.AlertDialog.Portal(
-					ui.PartProps{},
-					func() *native.Node {
-						return ui.Fragment([]*native.Node{ui.AlertDialog.Backdrop(ui.PartProps{Style: ui.Style().
-							BackgroundColor("#0f172a80")}),
-							ui.AlertDialog.Popup(
-								ui.DialogPopupProps{PartProps: ui.PartProps{
-									Style: ui.Style().
-										Width(360).
-										Padding(24).
-										BackgroundColor("white"),
-								}},
-								func() *native.Node {
-									return ui.Fragment([]*native.Node{ui.AlertDialog.Title(ui.PartProps{}, "Delete project?"),
-										ui.AlertDialog.Viewport(
-											ui.PartProps{},
-											func() *native.Node {
-												return ui.AlertDialog.Description(
-													ui.PartProps{},
-													"This cannot be undone.",
-												)
-											},
-										),
-										ui.AlertDialog.Close(ui.PartProps{AriaLabel: "Cancel"}, "Cancel")})
-								},
-							)})
-					},
-				)})
-		},
-	)
+	alertDialog1 := ui.NewAlertDialog(ui.DialogRootProps{Open: open, OnOpenChange: func(value bool, _ ui.DialogOpenChangeDetails) {
+		setOpen(value)
+	}, ExitDuration: 160, OnOpenChangeComplete: func(open bool, _ *native.Event) {
+		log.Print("Dialog transition finished; open: ", open)
+	}})
+	return alertDialog1.Root().Children(func() *native.Node {
+		return ui.Fragment([]*native.Node{alertDialog1.Trigger(ui.PartProps{}).Children("Delete project").NativeNode(), alertDialog1.Portal(ui.PartProps{}).Children(func() *native.Node {
+			return ui.Fragment([]*native.Node{alertDialog1.Backdrop(ui.PartProps{Style: ui.Style().BackgroundColor("#0f172a80")}).NativeNode(), alertDialog1.Popup(ui.DialogPopupProps{PartProps: ui.PartProps{Style: ui.Style().Width(360).Padding(24).BackgroundColor("white")}}).Children(func() *native.Node {
+				return ui.Fragment([]*native.Node{alertDialog1.Title(ui.PartProps{}).Children("Delete project?").NativeNode(), alertDialog1.Viewport(ui.PartProps{}).Children(func() *native.Node {
+					return alertDialog1.Description(ui.PartProps{}).Children("This cannot be undone.").NativeNode()
+				}).NativeNode(), alertDialog1.Close(ui.PartProps{AriaLabel: "Cancel"}).Children("Cancel").NativeNode()})
+			}).NativeNode()})
+		}).NativeNode()})
+	}).NativeNode()
 }
 ```
 
@@ -202,7 +175,7 @@ functions; see [Go platform services](go.md#native-services).
 
 ## Viewport and transition completion
 
-`Dialog::viewport_part(element)` is Base UI's Viewport: the scrolling region between the backdrop
+`Dialog::viewport_with(element)` is Base UI's Viewport: the scrolling region between the backdrop
 and the popup. A dialog taller than the window must scroll as one surface rather than clipping its
 own content, and the scroll has to live outside the popup so the popup keeps its padding and shadow.
 QuickGUI supplies the stable identity and the scroll container; size, alignment, and padding stay
@@ -220,7 +193,7 @@ let state = DialogState::new()
 // In a listener:
 view.dialog.set_open(false, |view| &mut view.dialog, cx);
 // Mount against is_mounted(), not is_open(), so the exit transition can play:
-if self.dialog.is_mounted() { /* declare Dialog::root_part(..) */ }
+if self.dialog.is_mounted() { /* declare Dialog::root_with(..) */ }
 ```
 
 `is_open` is the controlled value, `is_mounted` stays true through a closing transition, and

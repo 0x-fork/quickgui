@@ -8,8 +8,8 @@ function identifier(token: KeyedToken): string | undefined {
   if (!name) return;
 
   const normalized = name.replace(/[-_]/g, "").toLowerCase();
-  // JSX's color prop corresponds to TextColor/text_color, but Rust's Color
-  // type does not. Background helpers use both Bg and BackgroundColor.
+  // TypeScript's color style key corresponds to TextColor/text_color, but
+  // Rust's Color type does not. Background helpers use both names.
   if (name === "color") return "textcolor";
   if (normalized === "bg") return "backgroundcolor";
   return normalized.length >= 3 ? normalized : undefined;
@@ -32,9 +32,14 @@ export function syncSimilarTokenKeys(from: KeyedTokensInfo, to: KeyedTokensInfo)
   };
   // Shiki's matcher mutates keys. Never mutate cached loader data or a
   // previously rendered step: both can be reused on the next switch.
-  const result = syncTokenKeys({ ...from, tokens: from.tokens.map((token) => ({ ...token })) }, next);
+  const result = syncTokenKeys(
+    { ...from, tokens: from.tokens.map((token) => ({ ...token })) },
+    next,
+  );
   const sourceKeys = new Set(result.from.tokens.map((token) => token.key));
-  const matchedKeys = new Set(result.to.tokens.filter((token) => sourceKeys.has(token.key)).map((token) => token.key));
+  const matchedKeys = new Set(
+    result.to.tokens.filter((token) => sourceKeys.has(token.key)).map((token) => token.key),
+  );
   const candidates = new Map<string, KeyedToken[]>();
 
   for (const token of result.to.tokens) {

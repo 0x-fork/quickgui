@@ -95,7 +95,7 @@ Builder `.When(condition, func(s ui.StyleBuilder) ui.StyleBuilder { ... })` take
 
 ```go
 selected, setSelected := ui.CreateSignal(false)
-return ui.Button("Toggle selection").
+return ui.Button().Child("Toggle selection").
 	Padding(12).
 	Bg("#ccc").
 	RoundedLg().

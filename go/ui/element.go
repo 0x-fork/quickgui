@@ -2,6 +2,7 @@ package ui
 
 import (
 	"github.com/egoist/quickgui/go/native"
+	"github.com/egoist/quickgui/go/reactive"
 )
 
 // Element is a retained native node with fluent property, event, and style
@@ -9,10 +10,14 @@ import (
 // handle for low-level native APIs; fluent methods always return this element.
 type Element struct {
 	*native.Node
-	props     *Props
-	bindings  map[elementBinding]*native.PropertyBinding
-	arguments []any
-	update    func()
+	props              *Props
+	bindings           map[elementBinding]*native.PropertyBinding
+	arguments          []any
+	update             func()
+	compound           *compoundElement
+	componentListeners map[int]native.EventListener
+	childOwner         *reactive.Owner
+	content            *compoundContent
 }
 
 // NativeNode exposes this builder's retained node to windows and lazy components.
@@ -20,16 +25,37 @@ func (element *Element) NativeNode() *native.Node {
 	if element == nil {
 		return nil
 	}
+	if element.compound != nil {
+		element.mountCompound()
+	}
 	return element.Node
 }
 
 // Child appends content and returns this element. Content can be an element,
 // native node, scalar, accessor, or node-returning construction callback.
 func (element *Element) Child(child any) *Element {
+	if element.compound != nil {
+		element.compound.children = append(element.compound.children, child)
+		return element
+	}
 	if element.Removed {
 		panic("a removed QuickGUI element cannot be configured")
 	}
-	insertChildren(element.Node, child)
+	if element.content != nil {
+		element.content.children = append(element.content.children, child)
+		if element.content.current != nil {
+			element.content.current.Child(child)
+		}
+		return element
+	}
+	if element.childOwner != nil {
+		reactive.RunWithOwner(element.childOwner, func() struct{} {
+			insertChildren(element.Node, child)
+			return struct{}{}
+		})
+	} else {
+		insertChildren(element.Node, child)
+	}
 	return element
 }
 
@@ -86,8 +112,20 @@ func newElement(tag uint8, arguments []any) *Element {
 }
 
 func (element *Element) configureFields(fields []elementBinding, options ...Option) *Element {
+	if element.compound != nil {
+		element.compound.record(fields, options)
+		return element
+	}
 	if element.Removed {
 		panic("a removed QuickGUI element cannot be configured")
+	}
+	if element.content != nil {
+		declaration := element.content.declaration
+		declaration.record(fields, options)
+		if element.content.current != nil {
+			element.content.current.configureFields(fields, options...)
+		}
+		return element
 	}
 	if element.update != nil {
 		for _, option := range options {
@@ -177,6 +215,17 @@ func (element *Element) OnClickEvent(handler func(*native.Event)) *Element {
 
 // Ref exposes the native handle once at this point in the declaration chain.
 func (element *Element) Ref(handler func(*native.Node)) *Element {
+	if element.compound != nil {
+		element.compound.refs = append(element.compound.refs, handler)
+		return element
+	}
+	if element.content != nil {
+		element.content.declaration.refs = append(element.content.declaration.refs, handler)
+		if handler != nil && element.content.current != nil {
+			handler(element.content.current.Node)
+		}
+		return element
+	}
 	if handler != nil {
 		handler(element.Node)
 	}

@@ -175,32 +175,32 @@ fn main() {
         .anchor_gap(8.0)
         .viewport_margin(12.0);
     let popover = popover.initial_focus(popover.close_id());
-    let _popover_trigger = popover.trigger_part(div()).child("Open packaged popover");
+    let _popover_trigger = popover.trigger().child("Open packaged popover");
     let _popover_positioner =
-        popover.positioner_part(div().child(popover.popover_part(div()).children([
-            popover.title_part(text("Packaged popover")),
-            popover.description_part(text("Packaged unstyled parts")),
-            popover.close_part("Close packaged popover", div()),
-        ])));
-    let _popover_backdrop = popover.backdrop_part(div());
+        popover.positioner().child(popover.popup().children([
+            popover.title_with(text("Packaged popover")),
+            popover.description_with(text("Packaged unstyled parts")),
+            popover.close_with("Close packaged popover", div()),
+        ]));
+    let _popover_backdrop = popover.backdrop();
     let _merged_popover_surface = popover.surface();
     let checkbox_parts = Checkbox::new(ToggleState::Mixed);
-    let _checkbox_root = checkbox_parts.root_part(
+    let _checkbox_root = checkbox_parts.root_with(
         div()
-            .child(checkbox_parts.indicator_part(div()))
+            .child(checkbox_parts.indicator_with(div()))
             .child("Packaged checkbox"),
     );
     let radio_parts = Radio::new(true);
-    let _radio_group_root = RadioGroup::new().root_part(
+    let _radio_group_root = RadioGroup::new().root_with(
         div().child(
             radio_parts
-                .root_part(div().child(radio_parts.indicator_part(div())))
+                .root().child(radio_parts.indicator_with(div()))
                 .child("Packaged radio"),
         ),
     );
     let switch_parts = Switch::new(false);
     let _switch_root = switch_parts
-        .root_part(div().child(switch_parts.thumb_part(div())))
+        .root().child(switch_parts.thumb_with(div()))
         .child("Packaged switch");
     let _selection_shorthands = (checkbox(false), radio(false), radio_group(), switch(false));
     let fieldset = Fieldset::new("packaged-fieldset");
@@ -209,41 +209,41 @@ fn main() {
         .required(true)
         .invalid(true)
         .validation_message("Packaged field is required");
-    let _field_root = field.root_part(div()).children([
-        field.label_part(text("Packaged field")),
-        field.control_part(text_input("")),
-        field.description_part(text("Packaged field description")),
-        field.error_part(text("Packaged field is required")),
+    let _field_root = field.root().children([
+        field.label_with(text("Packaged field")),
+        field.control_with(text_input("")),
+        field.description_with(text("Packaged field description")),
+        field.error_with(text("Packaged field is required")),
     ]);
-    let _fieldset_root = fieldset.root_part(div()).children([
-        fieldset.legend_part(text("Packaged fieldset")),
-        fieldset.description_part(text("Packaged related controls")),
+    let _fieldset_root = fieldset.root().children([
+        fieldset.legend_with(text("Packaged fieldset")),
+        fieldset.description_with(text("Packaged related controls")),
     ]);
     let _standalone_field = Field::new("standalone-field").state();
     let collapsible = Collapsible::new("packaged-collapsible", true).keep_mounted(true);
     let _collapsible_root = collapsible
-        .root_part(div().child(collapsible.trigger_part(div()).child("Packaged disclosure")))
-        .children(collapsible.panel_part(text("Packaged collapsible panel")));
+        .root().child(collapsible.trigger().child("Packaged disclosure"))
+        .children(collapsible.panel_with(text("Packaged collapsible panel")));
     let mut accordion_state = AccordionState::new().with_multiple(true);
     accordion_state
         .replace_open(["packaged-one", "packaged-two"])
         .expect("packaged bounded accordion state");
     let accordion = Accordion::new("packaged-accordion").keep_mounted(true);
     let accordion_item = accordion.item_from_state("packaged-one", 0, &accordion_state);
-    let _accordion_root = accordion.root_part(
+    let _accordion_root = accordion.root_with(
         div().child(
-            accordion_item.root_part(
+            accordion_item.root_with(
                 div()
                     .child(
-                        accordion_item.header_part(
+                        accordion_item.header_with(
                             div().child(
                                 accordion_item
-                                    .trigger_part(div())
+                                    .trigger()
                                     .child("Packaged accordion item"),
                             ),
                         ),
                     )
-                    .children(accordion_item.panel_part(text("Packaged accordion panel"))),
+                    .children(accordion_item.panel_with(text("Packaged accordion panel"))),
             ),
         ),
     );
@@ -265,21 +265,21 @@ fn main() {
     ])
     .expect("packaged PopoverMenu API should accept labeled groups and separators");
     let _group = popover_menu
-        .labeled_group_part("packaged-menu", 0, div())
+        .labeled_group_with("packaged-menu", 0, div())
         .expect("the packaged group label should name its group part");
     let _separator = popover_menu
-        .item_part("packaged-menu", 2, div())
+        .item_with("packaged-menu", 2, div())
         .expect("the packaged separator part should project semantics");
     let _labelled = div()
         .accessibility_role(AccessibilityRole::Group)
         .accessibility_labelled_by("packaged-label")
         .accessibility_described_by("packaged-description");
     let dialog = Dialog::alert("packaged-dialog", true).restore_focus_to("packaged-trigger");
-    let _dialog_root = dialog.root_part(div()).children([
-        dialog.backdrop_part(div()),
-        dialog.popover_part(div()).children([
-            dialog.title_part(text("Packaged alert")),
-            dialog.description_part(text("Packaged description")),
+    let _dialog_root = dialog.root().children([
+        dialog.backdrop(),
+        dialog.popup().children([
+            dialog.title_with(text("Packaged alert")),
+            dialog.description_with(text("Packaged description")),
         ]),
     ]);
     let _application = Application::new().bind_keys(combobox_key_bindings());

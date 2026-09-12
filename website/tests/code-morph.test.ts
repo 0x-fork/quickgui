@@ -65,10 +65,10 @@ test("actual counter and SwiftUI tokens retain equivalent identifiers", async ()
   const swiftUi = await getSwiftUiTokens();
   const ts = syncSimilarTokenKeys(counters.go, counters.typescript).to;
   const rust = syncSimilarTokenKeys(ts, counters.rust).to;
-  expect(keyOf(ts, "color")).toBe(keyOf(counters.go, "TextColor"));
-  expect(keyOf(rust, "text_color")).toBe(keyOf(ts, "color"));
-  expect(keyOf(ts, "flex-col")).toBe(keyOf(counters.go, "FlexCol"));
-  expect(keyOf(rust, "flex_col")).toBe(keyOf(ts, "flex-col"));
+  expect(keyOf(ts, "color:")).toBe(keyOf(counters.go, "TextColor"));
+  expect(keyOf(rust, "text_color")).toBe(keyOf(ts, "color:"));
+  expect(keyOf(ts, "flexCol:")).toBe(keyOf(counters.go, "FlexCol"));
+  expect(keyOf(rust, "flex_col")).toBe(keyOf(ts, "flexCol:"));
 
   const swiftTs = syncSimilarTokenKeys(swiftUi.go, swiftUi.typescript).to;
   const swiftRust = syncSimilarTokenKeys(swiftTs, swiftUi.rust).to;

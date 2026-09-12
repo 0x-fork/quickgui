@@ -123,16 +123,16 @@ impl DisclosuresDemo {
         palette: Palette,
     ) -> Element {
         let open = item.is_open();
-        item.root_part(
+        item.root_with(
             div()
                 .w_full()
                 .flex_col()
                 .rounded_lg()
                 .border(1.0, palette.border)
                 .child(
-                    item.header_part(
+                    item.header_with(
                         div().child(
-                            item.trigger_part(Self::trigger(
+                            item.trigger_with(Self::trigger(
                                 div().child(text(title).font_medium()),
                                 open,
                                 palette,
@@ -141,7 +141,7 @@ impl DisclosuresDemo {
                         ),
                     ),
                 )
-                .children(item.panel_part(Self::panel(body, palette))),
+                .children(item.panel_with(Self::panel(body, palette))),
         )
     }
 }
@@ -229,10 +229,10 @@ impl View for DisclosuresDemo {
         )
         .child(
             recovery
-                .root_part(
+                .root_with(
                     div().child(
                         recovery
-                            .trigger_part(Self::trigger(
+                            .trigger_with(Self::trigger(
                                 div().child(text("Recovery keys").font_medium()),
                                 recovery.is_open(),
                                 palette,
@@ -240,7 +240,7 @@ impl View for DisclosuresDemo {
                             .on_click(toggle_recovery),
                     ),
                 )
-                .children(recovery.panel_part(Self::panel(
+                .children(recovery.panel_with(Self::panel(
                     "alien-bean-pasta · wild-irish-burrito · horse-battery-staple",
                     palette,
                 ))),
@@ -251,7 +251,7 @@ impl View for DisclosuresDemo {
             "Opening one panel closes the previously open panel. Every heading remains in Tab order.",
             palette,
         )
-        .child(single.root_part(
+        .child(single.root_with(
             div()
                 .w_full()
                 .flex_col()
@@ -294,7 +294,7 @@ impl View for DisclosuresDemo {
             "Panels toggle independently. Closed panels in this sample are retained as display: none.",
             palette,
         )
-        .child(multiple.root_part(
+        .child(multiple.root_with(
             div()
                 .w_full()
                 .flex_col()

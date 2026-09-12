@@ -73,8 +73,6 @@ func createSliderPart(part string, props PartProps) *native.Node {
 }
 
 // Slider is a controlled slider. Value carries one entry per thumb.
-var Slider = sliderAPI{}
-
 type sliderAPI struct{}
 
 func (sliderAPI) Root(props SliderRootProps, children ...any) *native.Node {
@@ -233,8 +231,6 @@ func createSplitterPart(part string, props SplitterPaneProps) *native.Node {
 }
 
 // Splitter is a controlled pane splitter.
-var Splitter = splitterAPI{}
-
 type splitterAPI struct{}
 
 func (splitterAPI) Root(props SplitterRootProps, children ...any) *native.Node {

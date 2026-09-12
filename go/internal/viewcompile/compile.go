@@ -355,7 +355,8 @@ func Source(fs *token.FileSet, file *ast.File, source []byte, pkg *types.Package
 				if named, ok := result.(*types.Named); ok {
 					style = named.Obj().Pkg().Path() == uiPath && named.Obj().Name() == "StyleBuilder"
 				}
-				if !element(result) && !style {
+				instance := compoundInstanceType(result)
+				if !element(result) && !style && !instance {
 					break
 				}
 				inCallback := false
@@ -377,7 +378,7 @@ func Source(fs *token.FileSet, file *ast.File, source []byte, pkg *types.Package
 								receiver = method.X
 								continue
 							}
-							fresh = element(info.TypeOf(call))
+							fresh = element(info.TypeOf(call)) || compoundInstanceType(info.TypeOf(call))
 							break
 						}
 						if !fresh {
@@ -497,4 +498,14 @@ func componentKey(obj types.Object) string {
 		return ""
 	}
 	return fn.Pkg().Path() + "." + fn.Name()
+}
+
+// Compound descriptors expose retained settings before their Root is inserted.
+func compoundInstanceType(typ types.Type) bool {
+	ptr, ok := types.Unalias(typ).(*types.Pointer)
+	if !ok {
+		return false
+	}
+	named, ok := types.Unalias(ptr.Elem()).(*types.Named)
+	return ok && named.Obj().Pkg() != nil && named.Obj().Pkg().Path() == uiPath && strings.HasSuffix(named.Obj().Name(), "Component")
 }

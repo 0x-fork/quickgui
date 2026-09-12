@@ -23,7 +23,7 @@ pub const MAX_FIND_QUERY_BYTES: usize = 1_024;
 /// Maximum UTF-8 bytes accepted for one replacement string.
 pub const MAX_FIND_REPLACEMENT_BYTES: usize = 4 * 1_024;
 
-/// Key context declared by [`FindBar::root_part`].
+/// Key context declared by [`FindBar::root_with`].
 pub const FIND_BAR_KEY_CONTEXT: &str = "FindBar";
 
 /// Move to the next match, wrapping at the end.
@@ -471,44 +471,64 @@ impl FindBar {
     }
 
     /// Decorate the application-owned root and declare the find-bar key context.
-    pub fn root_part(&self, root: Element) -> Element {
+    pub fn root_with(&self, root: Element) -> Element {
         root.id(self.id)
             .key_context(FIND_BAR_KEY_CONTEXT)
             .accessibility_role(AccessibilityRole::Group)
             .accessibility_label(self.label.clone())
             .accessibility_described_by(self.count_id())
     }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(&self) -> Element {
+        self.root_with(crate::div())
+    }
 
     /// Decorate the caller-owned query text input.
-    pub fn query_input_part(&self, input: Element) -> Element {
+    pub fn query_input_with(&self, input: Element) -> Element {
         input
             .id(self.query_input_id())
             .accessibility_label(self.label.clone())
             .accessibility_described_by(self.count_id())
     }
+    /// Create the unstyled query input part. Use [`Self::query_input_with`] to supply an existing element.
+    pub fn query_input(&self) -> Element {
+        self.query_input_with(crate::text_input(""))
+    }
 
     /// Decorate the caller-owned replacement text input.
-    pub fn replace_input_part(&self, input: Element) -> Element {
+    pub fn replace_input_with(&self, input: Element) -> Element {
         input
             .id(self.replace_input_id())
             .accessibility_label("Replace with")
     }
+    /// Create the unstyled replace input part. Use [`Self::replace_input_with`] to supply an existing element.
+    pub fn replace_input(&self) -> Element {
+        self.replace_input_with(crate::text_input(""))
+    }
 
     /// Decorate the visible match count and expose it as this bar's description.
-    pub fn count_part(&self, count: Element) -> Element {
+    pub fn count_with(&self, count: Element) -> Element {
         count
             .id(self.count_id())
             .accessibility_role(AccessibilityRole::Label)
             .accessibility_value(self.count.clone())
     }
+    /// Create the unstyled count part. Use [`Self::count_with`] to supply an existing element.
+    pub fn count(&self) -> Element {
+        self.count_with(crate::div())
+    }
 
     /// Decorate the "next match" control.
-    pub fn next_part(&self, button: Element) -> Element {
+    pub fn next_with(&self, button: Element) -> Element {
         self.command_part(button, FIND_BAR_NEXT_TAG, "Next match", !self.has_matches)
+    }
+    /// Create the unstyled next part. Use [`Self::next_with`] to supply an existing element.
+    pub fn next(&self) -> Element {
+        self.next_with(crate::button())
     }
 
     /// Decorate the "previous match" control.
-    pub fn previous_part(&self, button: Element) -> Element {
+    pub fn previous_with(&self, button: Element) -> Element {
         self.command_part(
             button,
             FIND_BAR_PREVIOUS_TAG,
@@ -516,9 +536,13 @@ impl FindBar {
             !self.has_matches,
         )
     }
+    /// Create the unstyled previous part. Use [`Self::previous_with`] to supply an existing element.
+    pub fn previous(&self) -> Element {
+        self.previous_with(crate::button())
+    }
 
     /// Decorate the "replace current match" control.
-    pub fn replace_part(&self, button: Element) -> Element {
+    pub fn replace_with(&self, button: Element) -> Element {
         self.command_part(
             button,
             FIND_BAR_REPLACE_BUTTON_TAG,
@@ -526,9 +550,13 @@ impl FindBar {
             !self.can_replace,
         )
     }
+    /// Create the unstyled replace part. Use [`Self::replace_with`] to supply an existing element.
+    pub fn replace(&self) -> Element {
+        self.replace_with(crate::button())
+    }
 
     /// Decorate the "replace every match" control.
-    pub fn replace_all_part(&self, button: Element) -> Element {
+    pub fn replace_all_with(&self, button: Element) -> Element {
         self.command_part(
             button,
             FIND_BAR_REPLACE_ALL_TAG,
@@ -536,10 +564,18 @@ impl FindBar {
             !self.can_replace,
         )
     }
+    /// Create the unstyled replace all part. Use [`Self::replace_all_with`] to supply an existing element.
+    pub fn replace_all(&self) -> Element {
+        self.replace_all_with(crate::button())
+    }
 
     /// Decorate the dismissal control.
-    pub fn close_part(&self, button: Element) -> Element {
+    pub fn close_with(&self, button: Element) -> Element {
         self.command_part(button, FIND_BAR_CLOSE_TAG, "Close find bar", false)
+    }
+    /// Create the unstyled close part. Use [`Self::close_with`] to supply an existing element.
+    pub fn close(&self) -> Element {
+        self.close_with(crate::button())
     }
 
     fn command_part(&self, button: Element, tag: u64, label: &str, disabled: bool) -> Element {
@@ -692,7 +728,7 @@ mod tests {
         let bar = FindBar::new("editor-find").state(&find);
         assert_eq!(bar.count_text().as_ref(), "1 of 2");
 
-        let root = bar.root_part(crate::div().w(320.0));
+        let root = bar.root_with(crate::div().w(320.0));
         assert_eq!(root.explicit_id, Some(bar.id()));
         assert!(root.key_context.is_some());
         assert_eq!(root.accessibility.role, AccessibilityRole::Group);
@@ -701,11 +737,11 @@ mod tests {
             Some(bar.count_id())
         );
 
-        let count = bar.count_part(crate::text("1 of 2"));
+        let count = bar.count_with(crate::text("1 of 2"));
         assert_eq!(count.explicit_id, Some(bar.count_id()));
         assert_eq!(count.accessibility.value.as_deref(), Some("1 of 2"));
 
-        let next = bar.next_part(crate::button());
+        let next = bar.next_with(crate::button());
         assert_eq!(
             next.explicit_id,
             Some(derived_find_id(bar.id(), FIND_BAR_NEXT_TAG))
@@ -713,10 +749,10 @@ mod tests {
         assert!(!next.accessibility.disabled);
 
         let empty = FindBar::new("editor-find").state(&FindState::new());
-        assert!(empty.next_part(crate::button()).accessibility.disabled);
+        assert!(empty.next_with(crate::button()).accessibility.disabled);
         assert!(
             empty
-                .replace_all_part(crate::button())
+                .replace_all_with(crate::button())
                 .accessibility
                 .disabled
         );

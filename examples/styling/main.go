@@ -44,9 +44,7 @@ func Styling() *ui.Element {
 				ui.Text(
 					"Declared styling",
 				).FontSize(14).FontWeight(700),
-				ui.Button(
-					"Switch palette",
-				).Height(28).PaddingLeft(12).PaddingRight(12).BorderRadius(7).BackgroundColor("#1b2434").TextColor(ink).FontSize(12).AppRegion("no-drag").UserSelect("none").Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
+				ui.Button().Child("Switch palette").Height(28).PaddingLeft(12).PaddingRight(12).BorderRadius(7).BackgroundColor("#1b2434").TextColor(ink).FontSize(12).AppRegion("no-drag").UserSelect("none").Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
 					return s.BackgroundColor("#243047")
 				}).OnClick(func() { setWarm(!warm()) }),
 			).Display("flex").Height(52).FlexShrink(0).AlignItems("center").JustifyContent("space-between").PaddingLeft(96).PaddingRight(20).AppRegion("drag"),

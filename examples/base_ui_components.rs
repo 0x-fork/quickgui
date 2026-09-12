@@ -223,7 +223,7 @@ impl BaseUiGallery {
             NavigationMenuItem::new("support").disabled(true),
         ];
         let menu = NavigationMenu::new("main-nav", &self.nav, &items);
-        let mut list = menu.list_part(div().flex_row().gap(4.0));
+        let mut list = menu.list().flex_row().gap(4.0);
         let mut panels = div();
         for item in items.iter() {
             let entry = menu.entry(item.value()).expect("declared item");
@@ -239,10 +239,10 @@ impl BaseUiGallery {
             let dismiss = entry.on_dismiss(cx, Self::nav, |view, _, _| {
                 view.status = "Navigation menu dismissed".to_owned();
             });
-            let trigger = entry.key_part(
+            let trigger = entry.key_with(
                 cx,
                 entry
-                    .trigger_part(
+                    .trigger_with(
                         button()
                             .px(12.0)
                             .py(6.0)
@@ -265,12 +265,12 @@ impl BaseUiGallery {
                     .on_hover(hover),
                 Self::nav,
             );
-            list = list.child(entry.item_part(div()).child(trigger));
+            list = list.child(entry.item_with(div()).child(trigger));
             if open {
                 panels = panels.child(
-                    entry.positioner_part(div()).child(
+                    entry.positioner().child(
                         entry
-                            .popup_part(
+                            .popup_with(
                                 div()
                                     .w(260.0)
                                     .p(12.0)
@@ -281,11 +281,13 @@ impl BaseUiGallery {
                             .on_hover(popup_hover)
                             .on_dismiss(dismiss)
                             .child(
-                                entry.viewport_part(div()).child(
+                                entry.viewport().child(
                                     entry
-                                        .content_part(div().flex_col().gap(6.0))
+                                        .content()
+                                        .flex_col()
+                                        .gap(6.0)
                                         .child(self.control("Overview"))
-                                        .child(menu.link_part(
+                                        .child(menu.link_with(
                                             "pricing",
                                             false,
                                             text("Pricing").text_sm().text_color(palette.accent),
@@ -300,7 +302,7 @@ impl BaseUiGallery {
             "Navigation menu",
             div()
                 .relative()
-                .child(menu.root_part(div()).child(list))
+                .child(menu.root().child(list))
                 .child(panels),
         )
     }
@@ -328,7 +330,7 @@ impl BaseUiGallery {
             );
         });
 
-        let mut face = avatar.root_part(
+        let mut face = avatar.root_with(
             div()
                 .size(48.0, 48.0)
                 .rounded_full()
@@ -339,11 +341,11 @@ impl BaseUiGallery {
         );
         if self.avatar.shows_image() {
             face =
-                face.child(avatar.image_part(div().size_full().rounded_full().bg(palette.accent)));
+                face.child(avatar.image_with(div().size_full().rounded_full().bg(palette.accent)));
         }
         if self.avatar.shows_fallback() {
             face = face
-                .child(avatar.fallback_part(text("AL").text_sm().text_color(palette.foreground)));
+                .child(avatar.fallback_with(text("AL").text_sm().text_color(palette.foreground)));
         }
 
         self.section(
@@ -363,7 +365,13 @@ impl BaseUiGallery {
                         .child(self.control("Cycle status"))
                         .on_click(cycle),
                 )
-                .child(Separator::horizontal().root_part(div().h(1.0).w_full().bg(palette.border)))
+                .child(
+                    Separator::horizontal()
+                        .root()
+                        .h(1.0)
+                        .w_full()
+                        .bg(palette.border),
+                )
                 .child(self.control(&format!("{:?}", self.avatar.loading_status()))),
         )
     }
@@ -374,11 +382,11 @@ impl BaseUiGallery {
         let parent = group.on_parent_click(cx, Self::colors, |view, values, _| {
             view.status = format!("Checkbox group: {} checked", values.len());
         });
-        let mut root = group.root_part(div().flex_col().gap(8.0)).child(
+        let mut root = group.root().flex_col().gap(8.0).child(
             group
-                .parent_part(div().flex_row().gap(8.0).items_center())
+                .parent_with(div().flex_row().gap(8.0).items_center())
                 .on_click(parent)
-                .child(group.indicator_part(indicator_box(&palette, self.colors.parent_state())))
+                .child(group.indicator_with(indicator_box(&palette, self.colors.parent_state())))
                 .child(self.control("All colours")),
         );
         for value in ["red", "green", "blue"] {
@@ -388,10 +396,10 @@ impl BaseUiGallery {
             });
             root = root.child(
                 group
-                    .checkbox_part(value, div().flex_row().gap(8.0).items_center().ml(16.0))
+                    .checkbox_with(value, div().flex_row().gap(8.0).items_center().ml(16.0))
                     .on_click(click)
                     .child(
-                        group.indicator_part(indicator_box(&palette, ToggleState::from(checked))),
+                        group.indicator_with(indicator_box(&palette, ToggleState::from(checked))),
                     )
                     .child(self.control(value)),
             );
@@ -410,8 +418,8 @@ impl BaseUiGallery {
             view.status = "Preview card dismissed".to_owned();
         });
 
-        let mut body = card.root_part(div().relative().flex_col().gap(8.0)).child(
-            card.trigger_part(
+        let mut body = card.root().relative().flex_col().gap(8.0).child(
+            card.trigger_with(
                 text("@ada")
                     .text_sm()
                     .text_color(palette.accent)
@@ -421,8 +429,8 @@ impl BaseUiGallery {
         );
         if card.is_open() {
             body = body.child(
-                card.positioner_part(div()).child(
-                    card.popup_part(
+                card.positioner().child(
+                    card.popup_with(
                         div()
                             .w(220.0)
                             .p(12.0)
@@ -440,7 +448,7 @@ impl BaseUiGallery {
                             .text_xs()
                             .text_color(palette.muted),
                     )
-                    .child(card.arrow_part(div().size(8.0, 8.0).bg(palette.raised))),
+                    .child(card.arrow().size(8.0, 8.0).bg(palette.raised)),
                 ),
             );
         }
@@ -483,7 +491,10 @@ impl BaseUiGallery {
         );
 
         let mut lines = area
-            .content_part(div().flex_col().gap(4.0).w_full())
+            .content()
+            .flex_col()
+            .gap(4.0)
+            .w_full()
             .translate(0.0, -offset.y);
         for index in 0..40 {
             lines = lines.child(
@@ -494,7 +505,7 @@ impl BaseUiGallery {
         }
 
         let mut row = div().flex_row().gap(6.0).child(
-            area.viewport_part(
+            area.viewport_with(
                 div()
                     .size(SCROLL_VIEWPORT.width, SCROLL_VIEWPORT.height)
                     .p(8.0)
@@ -514,7 +525,7 @@ impl BaseUiGallery {
         );
         if area.shows_scrollbar(&self.log, ScrollAreaOrientation::Vertical) {
             row = row.child(
-                area.scrollbar_part(
+                area.scrollbar_with(
                     &self.log,
                     ScrollAreaOrientation::Vertical,
                     div()
@@ -526,7 +537,7 @@ impl BaseUiGallery {
                         .on_pointer(track),
                 )
                 .child(
-                    area.thumb_part(
+                    area.thumb_with(
                         ScrollAreaOrientation::Vertical,
                         div()
                             .absolute()
@@ -552,7 +563,7 @@ impl BaseUiGallery {
             div()
                 .flex_col()
                 .gap(8.0)
-                .child(area.root_part(row))
+                .child(area.root_with(row))
                 .child(self.control(&format!(
                     "start {} · end {}",
                     style.overflow_y_start, style.overflow_y_end
@@ -563,15 +574,15 @@ impl BaseUiGallery {
     fn otp_section(&mut self, cx: &mut ViewContext<'_, Self>) -> Element {
         let palette = self.palette;
         let field = OtpField::new("code");
-        let mut row = field.root_part(&self.code, div().flex_row().items_center().gap(6.0));
+        let mut row = field.root_with(&self.code, div().flex_row().items_center().gap(6.0));
         for index in 0..self.code.length() {
             if index == 3 {
                 row = row.child(
-                    field.separator_part(index - 1, text("–").text_sm().text_color(palette.muted)),
+                    field.separator_with(index - 1, text("–").text_sm().text_color(palette.muted)),
                 );
             }
             row = row.child(
-                field.slot_part(
+                field.slot_with(
                     cx,
                     &self.code,
                     index,
@@ -620,7 +631,7 @@ impl BaseUiGallery {
         self.section(
             "Drawer",
             drawer
-                .trigger_part(
+                .trigger_with(
                     button()
                         .px(12.0)
                         .py(8.0)
@@ -660,12 +671,12 @@ impl BaseUiGallery {
             return div();
         }
         drawer
-            .portal_part(div())
-            .child(drawer.backdrop_part(div().bg(palette.scrim)))
+            .portal()
+            .child(drawer.backdrop().bg(palette.scrim))
             .child(
-                drawer.viewport_part(div().flex_col().justify_end()).child(
+                drawer.viewport().flex_col().justify_end().child(
                     drawer
-                        .popup_part(
+                        .popup_with(
                             div()
                                 .w_full()
                                 .h(DRAWER_EXTENT)
@@ -679,7 +690,7 @@ impl BaseUiGallery {
                         .translate(0.0, self.sheet.swipe_offset())
                         .on_dismiss(dismiss)
                         .child(
-                            drawer.swipe_area_part(
+                            drawer.swipe_area_with(
                                 div()
                                     .w(48.0)
                                     .h(5.0)
@@ -690,14 +701,14 @@ impl BaseUiGallery {
                             ),
                         )
                         .child(
-                            drawer.title_part(
+                            drawer.title_with(
                                 text("Filters")
                                     .font_semibold()
                                     .text_color(palette.foreground),
                             ),
                         )
                         .child(
-                            drawer.description_part(
+                            drawer.description_with(
                                 text("Narrow the results")
                                     .text_sm()
                                     .text_color(palette.muted),
@@ -705,13 +716,15 @@ impl BaseUiGallery {
                         )
                         .child(
                             drawer
-                                .content_part(div().flex_col().gap(8.0))
+                                .content()
+                                .flex_col()
+                                .gap(8.0)
                                 .child(button().id("sheet-first").child(self.control("Recent")))
                                 .child(button().id("sheet-second").child(self.control("Starred"))),
                         )
                         .child(
                             drawer
-                                .close_part(
+                                .close_with(
                                     "Close filters",
                                     div()
                                         .px(12.0)

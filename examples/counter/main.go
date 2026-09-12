@@ -55,9 +55,7 @@ func openDetailsWindow() {
 					"This window has its own retained tree and native lifecycle.",
 				).TextColor("#94a3b8").LineHeight(21),
 
-				ui.Button(
-					"Close window",
-				).OnClick(func() { window.Close() }).
+				ui.Button().Child("Close window").OnClick(func() { window.Close() }).
 					Display("flex").
 					Height(40).
 					AlignItems("center").
@@ -122,9 +120,7 @@ func Counter() *ui.Element {
 
 					},
 				),
-				ui.Button(
-					"Increment",
-				).OnClick(func() { setCount(count() + 1) }).
+				ui.Button().Child("Increment").OnClick(func() { setCount(count() + 1) }).
 					Display("flex").
 					Height(44).
 					AlignItems("center").
@@ -139,9 +135,7 @@ func Counter() *ui.Element {
 						return s.BackgroundColor("#3b82f6")
 					}),
 
-				ui.Button(
-					"Open window",
-				).OnClick(func() { openDetailsWindow() }).
+				ui.Button().Child("Open window").OnClick(func() { openDetailsWindow() }).
 					Display("flex").
 					Height(44).
 					AlignItems("center").

@@ -14,54 +14,39 @@ import (
 
 ```go
 func ToastExample() *native.Node {
-	return ui.Toast.Provider(
-		ui.ToastProviderProps{Timeout: 5000, Limit: 3},
-		func() *native.Node {
-			var children []*native.Node
-			manager := ui.UseToastManager()
-			children = append(children, ui.Button(
-				"Save",
-			).OnClick(func() { manager.Add(ui.ToastRequest{Title: "Saved", Type: "success"}) }).Node)
-			children = append(children, ui.Toast.Viewport(
-				ui.ToastViewportProps{},
-				func() *native.Node {
-					return ui.For(
-						manager.Toasts,
-						func(toast ui.ToastDeclaration, _ func() int) *native.Node {
-							return ui.Toast.Root(
-								ui.ToastPartProps{ToastID: toast.ID},
-								func() *native.Node {
-									return ui.Fragment([]*native.Node{ui.Toast.Title(
-										ui.ToastPartProps{ToastID: toast.ID},
-										toast.Title,
-									),
-										ui.Toast.Close(ui.ToastPartProps{ToastID: toast.ID}, "Dismiss")})
-								},
-							)
-						},
-						func(toast ui.ToastDeclaration) any { return toast.ID },
-						nil,
-					)
-				},
-			))
-			return ui.Fragment(children)
-		},
-	)
+	toast1 := ui.NewToast(ui.ToastProviderProps{Timeout: 5000, Limit: 3})
+	return toast1.Provider().Children(func() *native.Node {
+		var children []*native.Node
+		manager := ui.UseToastManager()
+		children = append(children, ui.Button().Child("Save").OnClick(func() {
+			manager.Add(ui.ToastRequest{Title: "Saved", Type: "success"})
+		}).Node)
+		children = append(children, toast1.Viewport(ui.ToastViewportProps{}).Children(func() *native.Node {
+			return ui.For(manager.Toasts, func(toast ui.ToastDeclaration, _ func() int) *native.Node {
+				return toast1.Root(ui.ToastPartProps{ToastID: toast.ID}).Children(func() *native.Node {
+					return ui.Fragment([]*native.Node{toast1.Title(ui.ToastPartProps{ToastID: toast.ID}).Children(toast.Title).NativeNode(), toast1.Close(ui.ToastPartProps{ToastID: toast.ID}).Children("Dismiss").NativeNode()})
+				}).NativeNode()
+			}, func(toast ui.ToastDeclaration) any {
+				return toast.ID
+			}, nil)
+		}).NativeNode())
+		return ui.Fragment(children)
+	}).NativeNode()
 }
 ```
 
 ## 结构
 
-- `ui.Toast.Provider`
-- `ui.Toast.Portal`
-- `ui.Toast.Viewport`
-- `ui.Toast.Positioner`
-- `ui.Toast.Root`
-- `ui.Toast.Content`
-- `ui.Toast.Title`
-- `ui.Toast.Description`
-- `ui.Toast.Action`
-- `ui.Toast.Close`
+- `toast.Provider`
+- `toast.Portal`
+- `toast.Viewport`
+- `toast.Positioner`
+- `toast.Root`
+- `toast.Content`
+- `toast.Title`
+- `toast.Description`
+- `toast.Action`
+- `toast.Close`
 
 ## 主要属性
 

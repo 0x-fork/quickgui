@@ -149,7 +149,7 @@ impl View for DialogGallery {
                             )
                             .child(
                                 dialog
-                                    .trigger_part(
+                                    .trigger_with(
                                         "open-project-dialog",
                                         gallery_button("Edit project", true, colors),
                                     )
@@ -171,14 +171,14 @@ impl View for DialogGallery {
                 .text_color(colors.text)
                 .child(if self.docs_component == "alert-dialog" {
                     alert
-                        .trigger_part(
+                        .trigger_with(
                             "delete-workspace",
                             gallery_button("Delete project", false, colors),
                         )
                         .on_click(open_alert)
                 } else {
                     dialog
-                        .trigger_part(
+                        .trigger_with(
                             "open-project-dialog",
                             gallery_button("Edit project", true, colors),
                         )
@@ -187,7 +187,7 @@ impl View for DialogGallery {
         }
         if self.dialog_open {
             let popover = dialog
-                .popover_part(
+                .popup_with(
                     div()
                         .relative()
                         .w(460.0_f32.min((viewport.width - 32.0).max(1.0))).max_h((viewport.height - 32.0).max(1.0)).overflow_y_scroll()
@@ -199,9 +199,9 @@ impl View for DialogGallery {
                         .flex_col()
                         .gap_4()
                         .child(
-                            dialog.title_part(text("Edit project").text_xl().font_bold()),
+                            dialog.title_with(text("Edit project").text_xl().font_bold()),
                         )
-                        .child(dialog.description_part(
+                        .child(dialog.description_with(
                             text("Rename the project or open the nested destructive confirmation.")
                                 .wrap()
                                 .text_sm()
@@ -243,7 +243,7 @@ impl View for DialogGallery {
                                         .gap_2()
                                         .child(
                                             dialog
-                                                .close_part(
+                                                .close_with(
                                                     "Cancel project changes",
                                                     gallery_button("Cancel", false, colors),
                                                 )
@@ -260,13 +260,17 @@ impl View for DialogGallery {
                 .on_dismiss(dismiss_dialog);
             root = root.child(
                 dialog
-                    .root_part(div().p_6().flex_row().items_center().justify_center())
-                    .child(dialog.backdrop_part(div().bg(colors.backdrop)))
+                    .root()
+                    .p_6()
+                    .flex_row()
+                    .items_center()
+                    .justify_center()
+                    .child(dialog.backdrop().bg(colors.backdrop))
                     // Base UI's Viewport: the scroll lives outside the popup, so a dialog taller
                     // than the window scrolls as one surface instead of clipping its own content.
                     .child(
                         dialog
-                            .viewport_part(div())
+                            .viewport()
                             .h_full()
                             .flex_col()
                             .items_center()
@@ -278,7 +282,7 @@ impl View for DialogGallery {
 
         if self.alert_open {
             let popover = alert
-                .popover_part(
+                .popup_with(
                     div()
                         .relative()
                         .w(400.0)
@@ -289,8 +293,8 @@ impl View for DialogGallery {
                         .p_6()
                         .flex_col()
                         .gap_4()
-                        .child(alert.title_part(text("Delete workspace?").text_xl().font_bold()))
-                        .child(alert.description_part(
+                        .child(alert.title_with(text("Delete workspace?").text_xl().font_bold()))
+                        .child(alert.description_with(
                             text("This action cannot be undone. A backdrop press is intentionally blocked; use Cancel, Delete, or Escape.")
                                 .wrap()
                                 .text_sm()
@@ -318,9 +322,13 @@ impl View for DialogGallery {
                 .on_dismiss(dismiss_alert);
             root = root.child(
                 alert
-                    .root_part(div().p_6().flex_row().items_center().justify_center())
+                    .root()
+                    .p_6()
+                    .flex_row()
+                    .items_center()
+                    .justify_center()
                     .z_index(1)
-                    .child(alert.backdrop_part(div().bg(colors.backdrop_strong)))
+                    .child(alert.backdrop().bg(colors.backdrop_strong))
                     .child(popover),
             );
         }

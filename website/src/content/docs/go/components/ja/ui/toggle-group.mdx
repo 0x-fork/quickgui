@@ -16,25 +16,19 @@ import (
 ```go
 func ToggleGroupExample() *native.Node {
 	values, setValues := ui.CreateSignal([]string{"bold"})
-	return ui.ToggleGroup.Root(
-		ui.ToggleGroupProps{
-			Multiple:      true,
-			Value:         values,
-			Items:         []ui.ComponentItem{{Value: "bold"}, {Value: "italic"}},
-			OnValueChange: func(next []string, _ *native.Event) { setValues(next) },
-		},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.ToggleGroup.Item(ui.ToggleGroupItemProps{Value: "bold"}, "Bold"),
-				ui.ToggleGroup.Item(ui.ToggleGroupItemProps{Value: "italic"}, "Italic")})
-		},
-	)
+	toggleGroup1 := ui.NewToggleGroup(ui.ToggleGroupProps{Multiple: true, Value: values, Items: []ui.ComponentItem{{Value: "bold"}, {Value: "italic"}}, OnValueChange: func(next []string, _ *native.Event) {
+		setValues(next)
+	}})
+	return toggleGroup1.Root().Children(func() *native.Node {
+		return ui.Fragment([]*native.Node{toggleGroup1.ItemWith(ui.ToggleGroupItemProps{Value: "bold"}).Children("Bold").NativeNode(), toggleGroup1.ItemWith(ui.ToggleGroupItemProps{Value: "italic"}).Children("Italic").NativeNode()})
+	}).NativeNode()
 }
 ```
 
 ## 構成
 
-- `ui.ToggleGroup.Root`
-- `ui.ToggleGroup.Item`
+- `toggleGroup.Root`
+- `toggleGroup.Item`
 
 ## 主なプロパティ
 

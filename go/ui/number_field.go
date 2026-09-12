@@ -77,8 +77,6 @@ func createNumberFieldPart(tag uint8, part string, props PartProps) *native.Node
 }
 
 // NumberField is a controlled number field. The core parses, clamps, formats, and steps.
-var NumberField = numberFieldAPI{}
-
 type numberFieldAPI struct{}
 
 func (numberFieldAPI) Root(props NumberFieldRootProps, children ...any) *native.Node {

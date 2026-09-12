@@ -11,7 +11,7 @@ func App() *ui.Element {
 	return ui.View().Children(
 		ui.Text("{{NAME}}").FontSize(24).FontWeight(700),
 		extension.Notice(message, ui.Style().FontSize(16)),
-		ui.Button("Update message").
+		ui.Button().Child("Update message").
 			OnClick(func() { setMessage("Only the message text changed") }).
 			Padding(12).BorderRadius(8).BackgroundColor("#2563eb").TextColor("white").
 			Hover(func(s ui.StyleBuilder) ui.StyleBuilder { return s.BackgroundColor("#3b82f6") }),

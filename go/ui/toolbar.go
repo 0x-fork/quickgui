@@ -53,8 +53,6 @@ func toolbarElementTag(element string) uint8 {
 }
 
 // Toolbar is a toolbar with a single roving Tab stop.
-var Toolbar = toolbarAPI{}
-
 type toolbarAPI struct{}
 
 func (toolbarAPI) Root(props ToolbarRootProps, children ...any) *native.Node {
@@ -173,8 +171,6 @@ type SeparatorProps struct {
 }
 
 // Separator is an unstyled semantic separator.
-var Separator = separatorAPI{}
-
 type separatorAPI struct{}
 
 func (separatorAPI) Root(props SeparatorProps, children ...any) *native.Node {

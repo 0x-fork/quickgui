@@ -4,6 +4,8 @@
 
 ## View API
 
+Compound controls use short constructors such as `popover.root()`, `popover.trigger()`, and `popover.popup()`. Each returns a fluent element accepting direct strings: `popover.trigger().child("Help")`. See the [component API guide](component-api.md) for the matching Go instance API.
+
 Views use regular Rust with JSX-like composition, composable Tailwind-style spacing, inherited typography, Flexbox and CSS Grid, stable identities, and view-local listeners:
 
 ```rust

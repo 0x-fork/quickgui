@@ -14,57 +14,36 @@ import (
 
 ```go
 func NavigationMenuExample() *native.Node {
-	return ui.NavigationMenu.Root(
-		ui.NavigationMenuRootProps{
-			Items: []ui.ComponentItem{{Value: "products"}},
-			Delay: 100,
-		},
-		func() *native.Node {
-			return ui.NavigationMenu.List(
-				ui.PartProps{},
-				func() *native.Node {
-					return ui.NavigationMenu.Item(
-						ui.NavigationMenuItemProps{Value: "products"},
-						func() *native.Node {
-							return ui.Fragment([]*native.Node{ui.NavigationMenu.Trigger(ui.NavigationMenuPartProps{}, "Products"),
-								ui.NavigationMenu.Positioner(
-									ui.NavigationMenuPartProps{},
-									func() *native.Node {
-										return ui.NavigationMenu.Popup(
-											ui.NavigationMenuPartProps{},
-											func() *native.Node {
-												return ui.NavigationMenu.Link(
-													ui.NavigationMenuLinkProps{Value: "overview"},
-													"Overview",
-												)
-											},
-										)
-									},
-								)})
-						},
-					)
-				},
-			)
-		},
-	)
+	navigationMenu1 := ui.NewNavigationMenu(ui.NavigationMenuRootProps{Items: []ui.ComponentItem{{Value: "products"}}, Delay: 100})
+	return navigationMenu1.Root().Children(func() *native.Node {
+		return navigationMenu1.List(ui.PartProps{}).Children(func() *native.Node {
+			return navigationMenu1.Item(ui.NavigationMenuItemProps{Value: "products"}).Children(func() *native.Node {
+				return ui.Fragment([]*native.Node{navigationMenu1.Trigger(ui.NavigationMenuPartProps{}).Children("Products").NativeNode(), navigationMenu1.Positioner(ui.NavigationMenuPartProps{}).Children(func() *native.Node {
+					return navigationMenu1.Popup(ui.NavigationMenuPartProps{}).Children(func() *native.Node {
+						return navigationMenu1.Link(ui.NavigationMenuLinkProps{Value: "overview"}).Children("Overview").NativeNode()
+					}).NativeNode()
+				}).NativeNode()})
+			}).NativeNode()
+		}).NativeNode()
+	}).NativeNode()
 }
 ```
 
 ## 结构
 
-- `ui.NavigationMenu.Root`
-- `ui.NavigationMenu.List`
-- `ui.NavigationMenu.Item`
-- `ui.NavigationMenu.Trigger`
-- `ui.NavigationMenu.Icon`
-- `ui.NavigationMenu.Content`
-- `ui.NavigationMenu.Link`
-- `ui.NavigationMenu.Portal`
-- `ui.NavigationMenu.Positioner`
-- `ui.NavigationMenu.Popup`
-- `ui.NavigationMenu.Viewport`
-- `ui.NavigationMenu.Arrow`
-- `ui.NavigationMenu.Backdrop`
+- `navigationMenu.Root`
+- `navigationMenu.List`
+- `navigationMenu.Item`
+- `navigationMenu.Trigger`
+- `navigationMenu.Icon`
+- `navigationMenu.Content`
+- `navigationMenu.Link`
+- `navigationMenu.Portal`
+- `navigationMenu.Positioner`
+- `navigationMenu.Popup`
+- `navigationMenu.Viewport`
+- `navigationMenu.Arrow`
+- `navigationMenu.Backdrop`
 
 ## 主要属性
 

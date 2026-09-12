@@ -70,11 +70,11 @@ test("component setup and language switches do not read reactive state outside t
 test("native tokens keep their IDs while moving and interrupted exits are eventually removed", async () => {
   const host = mount();
   try {
-    const original = tokens(host).find((node) => text(node) === "TextColor")!;
+    const original = tokens(host).find((node) => text(node) === "FormatTemperature")!;
     expect(original).toBeDefined();
     const transform = original.properties.get(PropertyCode.Transform);
     click(host, "Show TypeScript");
-    const ts = tokens(host).find((node) => text(node) === "color")!;
+    const ts = tokens(host).find((node) => text(node) === "formatTemperature")!;
     expect(ts).toBe(original);
     expect(ts.properties.get(PropertyCode.Transform)).not.toBe(transform);
     expect(ts.properties.get(PropertyCode.Left)).toBe(0);
@@ -82,7 +82,7 @@ test("native tokens keep their IDs while moving and interrupted exits are eventu
     expect(ts.properties.get(PropertyCode.TransitionProperties)).toBe("all");
     expect(ts.properties.get(PropertyCode.TransitionDuration)).toBe(550);
     click(host, "Show Rust");
-    expect(tokens(host).find((node) => text(node) === "text_color")).toBe(original);
+    expect(tokens(host).find((node) => text(node) === "format_temperature")).toBe(original);
     click(host, "Show Go");
     click(host, "Show TypeScript");
     await Bun.sleep(850);

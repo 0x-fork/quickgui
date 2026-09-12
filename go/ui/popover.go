@@ -451,8 +451,6 @@ func createSystemContent(props PopoverContentProps, state *popoverState) *native
 }
 
 // Popover is an in-window retained popover.
-var Popover = popoverAPI{}
-
 type popoverAPI struct{}
 
 func (popoverAPI) Root(props PopoverRootProps, children ...any) *native.Node {
@@ -557,8 +555,6 @@ func (popoverAPI) Close(props PartProps, children ...any) *native.Node {
 }
 
 // SystemPopover opens its content in a native child window.
-var SystemPopover = systemPopoverAPI{}
-
 type systemPopoverAPI struct{}
 
 func (systemPopoverAPI) Root(props PopoverRootProps, children ...any) *native.Node {

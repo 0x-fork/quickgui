@@ -4,6 +4,8 @@ QuickGUI applications are ordinary Go programs. `purego` loads the prebuilt Rust
 
 ## Components
 
+Compound controls use instances such as `popover := ui.NewPopover()`. Compose their parts as `popover.Root().Child(popover.Trigger().Child("Help"))`. Strings are direct children in both Go and Rust. See the [component API guide](component-api.md) for part constructors and lifecycle.
+
 Components return a retained native node: `*ui.Element` for the fluent builder or `*native.Node` for lower-level code. Pass a root directly as `WindowOptions.Component`, and compose children as `ui.View().Child(Child(...)).Child(ui.Text(count()))`. The compiler recognizes the return type and keeps props and native view expressions reactive without a children callback. Optional callbacks remain available for deferred construction and controls that establish child context.
 
 ```go
@@ -95,7 +97,7 @@ Builder `.When(condition, func(s ui.StyleBuilder) ui.StyleBuilder { ... })` take
 
 ```go
 selected, setSelected := ui.CreateSignal(false)
-return ui.Button("Toggle selection").
+return ui.Button().Child("Toggle selection").
 	Padding(12).
 	Bg("#ccc").
 	RoundedLg().

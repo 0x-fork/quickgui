@@ -29,8 +29,6 @@ type avatarState struct {
 var avatarContext = createPartContext[avatarState]()
 
 // Avatar is a compound whose image and fallback mount policy belongs to the core.
-var Avatar = avatarAPI{}
-
 type avatarAPI struct{}
 
 func (avatarAPI) Root(props AvatarRootProps, children ...any) *native.Node {
@@ -147,8 +145,6 @@ func extentPtr(value Extent) *Extent {
 }
 
 // ScrollArea is a scroll area with caller-drawn scrollbars.
-var ScrollArea = scrollAreaAPI{}
-
 type scrollAreaAPI struct{}
 
 func (scrollAreaAPI) Root(props ScrollAreaRootProps, children ...any) *native.Node {
@@ -285,8 +281,6 @@ type otpFieldState struct {
 var otpFieldContext = createPartContext[otpFieldState]()
 
 // OtpField is a controlled OTP field. Each slot composes the core's own text input.
-var OtpField = otpFieldAPI{}
-
 type otpFieldAPI struct{}
 
 func (otpFieldAPI) Root(props OtpFieldRootProps, children ...any) *native.Node {
@@ -429,8 +423,6 @@ func navigationMenuPart(name, part string, props NavigationMenuPartProps, button
 }
 
 // NavigationMenu is a controlled navigation menu whose hover deadlines belong to the core.
-var NavigationMenu = navigationMenuAPI{}
-
 type navigationMenuAPI struct{}
 
 func (navigationMenuAPI) Root(props NavigationMenuRootProps, children ...any) *native.Node {

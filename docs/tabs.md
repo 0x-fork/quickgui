@@ -39,28 +39,28 @@ let select_files = cx.listener(files.tab_id(), |view, cx| {
     }
 });
 
-tabs.root_part(
+tabs.root_with(
     div()
-        .child(tabs.list_part(
+        .child(tabs.list_with(
             div()
                 .child(
                     overview
-                        .tab_part(div().child("Overview"))
+                        .tab_with(div().child("Overview"))
                         .on_click(select_overview),
                 )
                 .child(
                     files
-                        .tab_part(div().child("Files"))
+                        .tab_with(div().child("Files"))
                         .on_click(select_files),
                 ),
         ))
-        .children(overview.panel_part(div().child("Workspace activity")))
-        .children(files.panel_part(div().child("Project files"))),
+        .children(overview.panel_with(div().child("Workspace activity")))
+        .children(files.panel_with(div().child("Project files"))),
 )
 ```
 
 `Tab::state()` exposes `active`, `disabled`, and `orientation` for caller-authored presentation.
-`indicator_part` mounts a caller-owned decorative element only for the active tab and hides that
+`indicator_with` mounts a caller-owned decorative element only for the active tab and hides that
 element from accessibility. QuickGUI does not measure or animate a shared indicator; callers can
 put an underline inside each tab, as the gallery does, without retaining a geometry observer.
 
@@ -88,7 +88,7 @@ to that child while the panel remains programmatically focusable.
 
 Inactive panels are unmounted by default. `.keep_mounted(true)` returns them as `display: none`,
 which preserves caller state without contributing layout, paint, input, focus, accessibility, or
-runtime work. `panel_part` returns `Option<Element>`, so pass it to `.children(...)` for either
+runtime work. `panel_with` returns `Option<Element>`, so pass it to `.children(...)` for either
 policy. A per-tab `.keep_mounted(...)` override is also available.
 
 The list projects the TabList role and explicit orientation. Each enabled or disabled tab projects
@@ -106,12 +106,12 @@ from. `Tabs::activation_direction()` turns that into Base UI's `data-activation-
 selection has happened. `select` and `set_active` keep working and clear the recorded movement,
 because a bare value carries no ordering.
 
-`Tab::anchored_indicator_part(indicator, placement)` mounts a caller-owned indicator that QuickGUI
+`Tab::anchored_indicator_with(indicator, placement)` mounts a caller-owned indicator that QuickGUI
 keeps positioned on the tab that is really active, using the same anchoring a popover uses.
 `AnchorPlacement::Bottom` draws the familiar underline. The indicator never collides its way off its
 tab and travels with a scrolled list rather than detaching from it.
 
-`Tab::tracked_indicator_part(indicator, placement, &handle)` does the same and publishes the active
+`Tab::tracked_indicator_with(indicator, placement, &handle)` does the same and publishes the active
 tab's laid-out rectangle into an application-owned `AnchorPlacementHandle`; read it back with
 `Tabs::indicator_geometry(&handle)`, which returns `TabsIndicatorGeometry { left, top, width,
 height }` in window logical coordinates. Base UI measures the DOM for the same numbers. QuickGUI
@@ -140,38 +140,22 @@ retained and unmounted panels, application-owned indicators, and wrapped content
 
 ## Go components
 
-`ui.Tabs.Root`, `List`, `Tab`, `Indicator`, and `Panel` declare the same core tab
-identities. `Value` is a `func() *string`; `nil` means no selection. Leaving it
+`ui.NewTabs()` creates an instance whose `Root`, `List`, `Tab`, `Indicator`, and
+`Panel` parts declare the core tab identities. `Value` is a `func() *string`; `nil` means no selection. Leaving it
 unset uses the root's `DefaultValue` and internal signal.
 
 ```go
 func EditorTabs() *native.Node {
 	initial := "overview"
 	tab, setTab := ui.CreateSignal(&initial)
-	return ui.Tabs.Root(
-		ui.TabsRootProps{
-			Value:         tab,
-			OnValueChange: func(value string, _ *native.Event) { setTab(&value) },
-			Orientation:   "vertical",
-			Activation:    "automatic",
-		},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.Tabs.List(
-				ui.PartProps{},
-				func() *native.Node {
-					return ui.Fragment([]*native.Node{ui.Tabs.Tab(ui.TabsTabProps{Value: "overview"}, "Overview"),
-						ui.Tabs.Tab(
-							ui.TabsTabProps{
-								PartProps: ui.PartProps{Disabled: true},
-								Value:     "usage",
-							},
-							"Usage",
-						)})
-				},
-			),
-				ui.Tabs.Panel(ui.TabsPanelProps{Value: "overview"}, "Project overview")})
-		},
-	)
+	tabs1 := ui.NewTabs(ui.TabsRootProps{Value: tab, OnValueChange: func(value string, _ *native.Event) {
+		setTab(&value)
+	}, Orientation: "vertical", Activation: "automatic"})
+	return tabs1.Root().Children(func() *native.Node {
+		return ui.Fragment([]*native.Node{tabs1.List(ui.PartProps{}).Children(func() *native.Node {
+			return ui.Fragment([]*native.Node{tabs1.TabWith(ui.TabsTabProps{Value: "overview"}).Children("Overview").NativeNode(), tabs1.TabWith(ui.TabsTabProps{PartProps: ui.PartProps{Disabled: true}, Value: "usage"}).Children("Usage").NativeNode()})
+		}).NativeNode(), tabs1.PanelWith(ui.TabsPanelProps{Value: "overview"}).Children("Project overview").NativeNode()})
+	}).NativeNode()
 }
 ```
 
@@ -189,29 +173,16 @@ accessor inside a reactive text or style binding to follow changes:
 ```go
 func MeasuredTabs() *native.Node {
 	first, second := 0, 1
-	return ui.Tabs.Root(
-		ui.TabsRootProps{DefaultValue: "list"},
-		func() *native.Node {
-			var children []*native.Node
-			state := ui.UseTabsState()
-			children = append(children, ui.Tabs.List(
-				ui.PartProps{},
-				func() *native.Node {
-					return ui.Fragment([]*native.Node{ui.Tabs.Tab(ui.TabsTabProps{Value: "list", Index: &first}, "List"),
-						ui.Tabs.Tab(ui.TabsTabProps{Value: "grid", Index: &second}, "Grid"),
-						ui.Tabs.Indicator(ui.TabsIndicatorProps{
-							PartProps: ui.PartProps{Style: ui.Style().Height(2)},
-							Placement: "bottom",
-						})})
-				},
-			))
-			children = append(children, ui.Text(
-				"Direction: ",
-				state().ActivationDirection,
-			).Node)
-			return ui.Fragment(children)
-		},
-	)
+	tabs1 := ui.NewTabs(ui.TabsRootProps{DefaultValue: "list"})
+	return tabs1.Root().Children(func() *native.Node {
+		var children []*native.Node
+		state := ui.UseTabsState()
+		children = append(children, tabs1.List(ui.PartProps{}).Children(func() *native.Node {
+			return ui.Fragment([]*native.Node{tabs1.TabWith(ui.TabsTabProps{Value: "list", Index: &first}).Children("List").NativeNode(), tabs1.TabWith(ui.TabsTabProps{Value: "grid", Index: &second}).Children("Grid").NativeNode(), tabs1.Indicator(ui.TabsIndicatorProps{PartProps: ui.PartProps{Style: ui.Style().Height(2)}, Placement: "bottom"}).NativeNode()})
+		}).NativeNode())
+		children = append(children, ui.Text("Direction: ", state().ActivationDirection).Node)
+		return ui.Fragment(children)
+	}).NativeNode()
 }
 ```
 

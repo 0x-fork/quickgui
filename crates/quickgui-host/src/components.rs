@@ -1303,10 +1303,10 @@ pub(super) fn apply_dialog_part(
     let key = component_key(id, node);
     let dialog = native_dialog(id, node);
     if part == "dialog-viewport" {
-        return Some(dialog.viewport_part(element));
+        return Some(dialog.viewport_with(element));
     }
     let Some(retained) = components.dialogs.get(&key) else {
-        return dialog.is_open().then(|| dialog.root_part(element));
+        return dialog.is_open().then(|| dialog.root_with(element));
     };
     // The declared open value is handed to the core's own transition on the next event-loop turn,
     // which is the only place a `DialogState` can arm its exact deadline.
@@ -1341,7 +1341,7 @@ pub(super) fn apply_dialog_part(
     if !retained.is_mounted() {
         return None;
     }
-    Some(dialog.root_part(element))
+    Some(dialog.root_with(element))
 }
 
 pub(super) fn enqueue_component_change(
@@ -1506,7 +1506,7 @@ pub(super) fn apply_component_part(
             if !tab.is_active() {
                 return element;
             }
-            tab.tracked_indicator_part(element, placement, &retained.geometry)
+            tab.tracked_indicator_with(element, placement, &retained.geometry)
                 .expect("an active tab always mounts its indicator")
         }
         SLIDER_PART => {
@@ -1514,11 +1514,11 @@ pub(super) fn apply_component_part(
                 return element;
             };
             let slider = Slider::new(root, &retained.state);
-            let element = slider.root_part(element);
+            let element = slider.root_with(element);
             // A single-thumb slider answers arrows on its root; a range slider answers them on
             // each thumb so the focused thumb is always the one that moves.
             if listeners_enabled && retained.state.thumb_count() == 1 {
-                slider.key_part_with(cx, element, slider_accessor(key))
+                slider.key_with_accessor(cx, element, slider_accessor(key))
             } else {
                 element
             }
@@ -1528,7 +1528,7 @@ pub(super) fn apply_component_part(
                 return element;
             };
             let slider = Slider::new(root, &retained.state);
-            let element = slider.track_part(element);
+            let element = slider.track_with(element);
             if !listeners_enabled || retained.has_control {
                 return element;
             }
@@ -1536,7 +1536,7 @@ pub(super) fn apply_component_part(
             slider_pointer_part(element, slider.track_id(), key, cx)
         }
         SLIDER_RANGE_PART | SLIDER_INDICATOR_PART => match components.sliders.get(&key) {
-            Some(retained) => Slider::new(root, &retained.state).indicator_part(element),
+            Some(retained) => Slider::new(root, &retained.state).indicator_with(element),
             None => element,
         },
         SLIDER_CONTROL_PART => {
@@ -1544,7 +1544,7 @@ pub(super) fn apply_component_part(
                 return element;
             };
             let slider = Slider::new(root, &retained.state);
-            let element = slider.control_part(element);
+            let element = slider.control_with(element);
             if !listeners_enabled {
                 return element;
             }
@@ -1553,11 +1553,11 @@ pub(super) fn apply_component_part(
             slider_pointer_part(element, slider.control_id(), key, cx)
         }
         SLIDER_LABEL_PART => match components.sliders.get(&key) {
-            Some(retained) => Slider::new(root, &retained.state).label_part(element),
+            Some(retained) => Slider::new(root, &retained.state).label_with(element),
             None => element,
         },
         SLIDER_VALUE_PART => match components.sliders.get(&key) {
-            Some(retained) => Slider::new(root, &retained.state).value_part(element),
+            Some(retained) => Slider::new(root, &retained.state).value_with(element),
             None => element,
         },
         SLIDER_THUMB_PART => {
@@ -1568,15 +1568,15 @@ pub(super) fn apply_component_part(
             let Some(thumb) = slider.thumb(declared_index(node)) else {
                 return element;
             };
-            let element = thumb.thumb_part(element);
+            let element = thumb.thumb_with(element);
             if listeners_enabled && retained.state.thumb_count() > 1 {
-                thumb.key_part_with(cx, element, slider_accessor(key))
+                thumb.key_with_accessor(cx, element, slider_accessor(key))
             } else {
                 element
             }
         }
         SPLITTER_PART => match components.splitters.get(&key) {
-            Some(retained) => Splitter::new(root, &retained.state).root_part(element),
+            Some(retained) => Splitter::new(root, &retained.state).root_with(element),
             None => element,
         },
         SPLITTER_PANE_PART => {
@@ -1586,7 +1586,7 @@ pub(super) fn apply_component_part(
             };
             match Splitter::new(root, &retained.state).pane(index) {
                 Some(pane) => {
-                    let element = pane.pane_part(element);
+                    let element = pane.pane_with(element);
                     match retained.pane_bounds.get(index) {
                         Some(bounds) => element.report_bounds(bounds.clone()),
                         None => element,
@@ -1603,7 +1603,7 @@ pub(super) fn apply_component_part(
             let Some(handle) = Splitter::new(root, &retained.state).handle(index) else {
                 return element;
             };
-            let element = handle.handle_part(element);
+            let element = handle.handle_with(element);
             if !listeners_enabled {
                 return element;
             }
@@ -1614,26 +1614,26 @@ pub(super) fn apply_component_part(
                 }
             });
             handle
-                .key_part_with(cx, element, splitter_accessor(key))
+                .key_with_accessor(cx, element, splitter_accessor(key))
                 .on_pointer(drag)
         }
         TOOLBAR_PART => match components.toolbars.get(&key) {
             Some(retained) => Toolbar::new(root, &retained.state, &retained.items)
                 .orientation(retained.orientation)
                 .loop_focus(retained.loop_focus)
-                .root_part(element),
+                .root_with(element),
             None => element,
         },
         TOOLBAR_GROUP_PART => match components.toolbars.get(&key) {
             Some(retained) => Toolbar::new(root, &retained.state, &retained.items)
                 .orientation(retained.orientation)
-                .group_part(element),
+                .group_with(element),
             None => element,
         },
         TOOLBAR_SEPARATOR_PART => match components.toolbars.get(&key) {
             Some(retained) => Toolbar::new(root, &retained.state, &retained.items)
                 .orientation(retained.orientation)
-                .separator_part(element),
+                .separator_with(element),
             None => element,
         },
         TOOLBAR_ITEM_PART | TOOLBAR_BUTTON_PART | TOOLBAR_LINK_PART | TOOLBAR_INPUT_PART => {
@@ -1652,10 +1652,10 @@ pub(super) fn apply_component_part(
             // Base UI's Button, Link, and Input each keep the roving-focus contract and differ
             // only in the role the core projects for them.
             let element = match part {
-                TOOLBAR_BUTTON_PART => entry.button_part(element),
-                TOOLBAR_LINK_PART => entry.link_part(element),
-                TOOLBAR_INPUT_PART => entry.input_part(element),
-                _ => entry.item_part(element),
+                TOOLBAR_BUTTON_PART => entry.button_with(element),
+                TOOLBAR_LINK_PART => entry.link_with(element),
+                TOOLBAR_INPUT_PART => entry.input_with(element),
+                _ => entry.item_with(element),
             };
             if !listeners_enabled {
                 return element;
@@ -1669,7 +1669,7 @@ pub(super) fn apply_component_part(
                 }
             });
             entry
-                .key_part_with(cx, element, toolbar_accessor(key))
+                .key_with_accessor(cx, element, toolbar_accessor(key))
                 .on_click(focus)
         }
         TOGGLE_GROUP_PART => match components.toggle_groups.get(&key) {
@@ -1680,7 +1680,7 @@ pub(super) fn apply_component_part(
                     AccessibilityOrientation::Vertical => group.vertical(),
                     AccessibilityOrientation::Horizontal => group,
                 };
-                group.root_part(element)
+                group.root_with(element)
             }
             None => element,
         },
@@ -1700,7 +1700,7 @@ pub(super) fn apply_component_part(
             let Some(entry) = group.item(value) else {
                 return element;
             };
-            let element = entry.item_part(element);
+            let element = entry.item_with(element);
             if !listeners_enabled {
                 return element;
             }
@@ -1716,7 +1716,7 @@ pub(super) fn apply_component_part(
                 }
             });
             entry
-                .key_part_with(cx, element, toggle_group_accessor(key))
+                .key_with_accessor(cx, element, toggle_group_accessor(key))
                 .on_click(toggle)
         }
         _ => element,
@@ -2662,14 +2662,14 @@ pub(super) fn apply_field_part(
             if let Some(deadline) = retained.repeat_deadline {
                 cx.request_repaint_at(deadline);
             }
-            Some(NumberField::new(root).root_part(element))
+            Some(NumberField::new(root).root_with(element))
         }
         NUMBER_FIELD_INPUT_PART => {
             let Some(retained) = components.number_fields.get(&key) else {
                 return Some(element);
             };
             let field = NumberField::new(root);
-            let element = field.input_part(&retained.state, element);
+            let element = field.input_with(&retained.state, element);
             if !listeners_enabled {
                 return Some(element);
             }
@@ -2712,16 +2712,16 @@ pub(super) fn apply_field_part(
             });
             Some(element.on_input(edit).on_submit(commit))
         }
-        NUMBER_FIELD_GROUP_PART => Some(NumberField::new(root).group_part(element)),
+        NUMBER_FIELD_GROUP_PART => Some(NumberField::new(root).group_with(element)),
         NUMBER_FIELD_SCRUB_AREA_CURSOR_PART => {
-            Some(NumberField::new(root).scrub_area_cursor_part(element))
+            Some(NumberField::new(root).scrub_area_cursor_with(element))
         }
         NUMBER_FIELD_SCRUB_AREA_PART => {
             let Some(retained) = components.number_fields.get(&key) else {
                 return Some(element);
             };
             let field = NumberField::new(root);
-            let element = field.scrub_area_part(&retained.state, element);
+            let element = field.scrub_area_with(&retained.state, element);
             if !listeners_enabled {
                 return Some(element);
             }
@@ -2742,9 +2742,9 @@ pub(super) fn apply_field_part(
             let field = NumberField::new(root);
             let forward = part == NUMBER_FIELD_INCREMENT_PART;
             let element = if forward {
-                field.increment_part(&retained.state, element)
+                field.increment_with(&retained.state, element)
             } else {
-                field.decrement_part(&retained.state, element)
+                field.decrement_with(&retained.state, element)
             };
             if !listeners_enabled {
                 return Some(element);
@@ -2775,7 +2775,7 @@ pub(super) fn apply_field_part(
             )
         }
         DATE_FIELD_PART => match components.date_fields.get(&key) {
-            Some(retained) => Some(DateField::new(root).root_part(&retained.state, element)),
+            Some(retained) => Some(DateField::new(root).root_with(&retained.state, element)),
             None => Some(element),
         },
         DATE_FIELD_SEGMENT_PART => {
@@ -2794,14 +2794,14 @@ pub(super) fn apply_field_part(
             } else {
                 element
             };
-            let element = descriptor.segment_part(&retained.state, element);
+            let element = descriptor.segment_with(&retained.state, element);
             if !listeners_enabled {
                 return Some(element);
             }
-            Some(descriptor.key_part_with(cx, element, date_field_accessor(key)))
+            Some(descriptor.key_with_accessor(cx, element, date_field_accessor(key)))
         }
         TIME_FIELD_PART => match components.time_fields.get(&key) {
-            Some(retained) => Some(TimeField::new(root).root_part(&retained.state, element)),
+            Some(retained) => Some(TimeField::new(root).root_with(&retained.state, element)),
             None => Some(element),
         },
         TIME_FIELD_SEGMENT_PART => {
@@ -2822,14 +2822,14 @@ pub(super) fn apply_field_part(
             } else {
                 element
             };
-            let element = descriptor.segment_part(&retained.state, element);
+            let element = descriptor.segment_with(&retained.state, element);
             if !listeners_enabled {
                 return Some(element);
             }
-            Some(descriptor.key_part_with(cx, element, time_field_accessor(key)))
+            Some(descriptor.key_with_accessor(cx, element, time_field_accessor(key)))
         }
         CALENDAR_PART => match components.calendars.get(&key) {
-            Some(retained) => Some(Calendar::new(root).grid_part(retained.state, element)),
+            Some(retained) => Some(Calendar::new(root).grid_with(retained.state, element)),
             None => Some(element),
         },
         CALENDAR_WEEK_PART => {
@@ -2840,7 +2840,7 @@ pub(super) fn apply_field_part(
             if index >= retained.state.week_count() {
                 return None;
             }
-            Some(Calendar::new(root).week_part(index, element))
+            Some(Calendar::new(root).week_with(index, element))
         }
         CALENDAR_DAY_PART => {
             let Some(retained) = components.calendars.get(&key) else {
@@ -2850,14 +2850,14 @@ pub(super) fn apply_field_part(
                 .string(property::CIVIL_VALUE)
                 .and_then(parse_civil_date)?;
             let calendar = Calendar::new(root);
-            let element = calendar.day_part(retained.state, day, element);
+            let element = calendar.day_with(retained.state, day, element);
             if !listeners_enabled {
                 return Some(element);
             }
-            Some(calendar.key_part_with(cx, day, element, calendar_accessor(key)))
+            Some(calendar.key_with_accessor(cx, day, element, calendar_accessor(key)))
         }
         MENUBAR_PART => match components.menubars.get(&key) {
-            Some(retained) => Some(Menubar::new(root).root_part(retained.state, element)),
+            Some(retained) => Some(Menubar::new(root).root_with(retained.state, element)),
             None => Some(element),
         },
         MENUBAR_ITEM_PART => {
@@ -2868,11 +2868,11 @@ pub(super) fn apply_field_part(
             let Some(item) = Menubar::new(root).item(retained.state, index) else {
                 return Some(element);
             };
-            let element = item.item_part(element);
+            let element = item.item_with(element);
             if !listeners_enabled {
                 return Some(element);
             }
-            Some(item.key_part_with(cx, element, menubar_accessor(key)))
+            Some(item.key_with_accessor(cx, element, menubar_accessor(key)))
         }
         TOAST_VIEWPORT_PART => {
             let Some(retained) = components.toasts.get(&key) else {
@@ -2883,9 +2883,9 @@ pub(super) fn apply_field_part(
             if let Some(deadline) = retained.deadline {
                 cx.request_repaint_at(deadline);
             }
-            Some(ToastViewport::new(root).viewport_part(element))
+            Some(ToastViewport::new(root).viewport_with(element))
         }
-        TOAST_PORTAL_PART => Some(ToastViewport::new(root).portal_part(element)),
+        TOAST_PORTAL_PART => Some(ToastViewport::new(root).portal_with(element)),
         TOAST_PART
         | TOAST_TITLE_PART
         | TOAST_DESCRIPTION_PART
@@ -2901,7 +2901,7 @@ pub(super) fn apply_field_part(
             let toast_id = parts.id();
             match part {
                 TOAST_PART => {
-                    let element = parts.root_part(element);
+                    let element = parts.root_with(element);
                     if !listeners_enabled {
                         return Some(element);
                     }
@@ -2916,17 +2916,17 @@ pub(super) fn apply_field_part(
                     });
                     Some(
                         parts
-                            .key_part_with(cx, element, toast_accessor(key))
+                            .key_with_accessor(cx, element, toast_accessor(key))
                             .on_pointer(swipe),
                     )
                 }
-                TOAST_POSITIONER_PART => Some(parts.positioner_part(element)),
-                TOAST_CONTENT_PART => Some(parts.content_part(element)),
-                TOAST_TITLE_PART => Some(parts.title_part(element)),
-                TOAST_DESCRIPTION_PART => Some(parts.description_part(element)),
-                TOAST_ACTION_PART => Some(parts.action_part(element)),
+                TOAST_POSITIONER_PART => Some(parts.positioner_with(element)),
+                TOAST_CONTENT_PART => Some(parts.content_with(element)),
+                TOAST_TITLE_PART => Some(parts.title_with(element)),
+                TOAST_DESCRIPTION_PART => Some(parts.description_with(element)),
+                TOAST_ACTION_PART => Some(parts.action_with(element)),
                 _ => {
-                    let element = parts.close_part(element);
+                    let element = parts.close_with(element);
                     if !listeners_enabled {
                         return Some(element);
                     }

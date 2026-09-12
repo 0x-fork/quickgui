@@ -656,18 +656,26 @@ impl TooltipState {
     /// Decorate a caller-owned trigger.
     ///
     /// This is the `fn`-pointer entry point for a view that owns one tooltip per field; a host that
-    /// renders many declared tooltips through one view uses [`Self::trigger_part_with`].
-    pub fn trigger_part<V: 'static>(
+    /// renders many declared tooltips through one view uses [`Self::trigger_with_accessor`].
+    pub fn trigger_with<V: 'static>(
         &self,
         cx: &mut ViewContext<'_, V>,
         access: fn(&mut V) -> &mut Self,
         trigger: Element,
     ) -> Element {
-        self.trigger_part_with(cx, StateAccessor::from(access), trigger)
+        self.trigger_with_accessor(cx, StateAccessor::from(access), trigger)
+    }
+    /// Create the unstyled trigger part. Use [`Self::trigger_with`] to supply an existing element.
+    pub fn trigger<V: 'static>(
+        &self,
+        cx: &mut ViewContext<'_, V>,
+        access: fn(&mut V) -> &mut Self,
+    ) -> Element {
+        self.trigger_with(cx, access, crate::button())
     }
 
     /// Decorate a caller-owned trigger through a per-instance accessor.
-    pub fn trigger_part_with<V: 'static>(
+    pub fn trigger_with_accessor<V: 'static>(
         &self,
         cx: &mut ViewContext<'_, V>,
         access: StateAccessor<V, Self>,
@@ -715,9 +723,9 @@ impl TooltipState {
     /// Decorate the caller-owned portal/positioner and publish the placement it resolves to.
     ///
     /// QuickGUI's retained overlay node is itself the portal, so Base UI's Portal and Positioner
-    /// are one element here; [`Self::portal_part`] is the same decorator under Base UI's other
+    /// are one element here; [`Self::portal_with`] is the same decorator under Base UI's other
     /// name.
-    pub fn positioner_part(&self, positioner: Element) -> Element {
+    pub fn positioner_with(&self, positioner: Element) -> Element {
         let positioner = positioner
             .id(self.positioner_id())
             .app_region_no_drag()
@@ -730,10 +738,18 @@ impl TooltipState {
             .anchor_gap(self.side_offset)
             .viewport_margin(self.collision_padding)
     }
+    /// Create the unstyled positioner part. Use [`Self::positioner_with`] to supply an existing element.
+    pub fn positioner(&self) -> Element {
+        self.positioner_with(crate::div())
+    }
 
     /// Base UI's Portal name for the combined portal/positioner part.
-    pub fn portal_part(&self, portal: Element) -> Element {
-        self.positioner_part(portal)
+    pub fn portal_with(&self, portal: Element) -> Element {
+        self.positioner_with(portal)
+    }
+    /// Create the unstyled portal part. Use [`Self::portal_with`] to supply an existing element.
+    pub fn portal(&self) -> Element {
+        self.portal_with(crate::div())
     }
 
     /// Decorate the caller-owned popup.
@@ -741,17 +757,25 @@ impl TooltipState {
     /// The popup carries the Tooltip role, is dismissed by Escape through
     /// [`crate::Event::Dismiss`] under [`Self::popup_id`], and — unless
     /// [`Self::hoverable`] was disabled — keeps the tooltip open while the pointer rests on it.
-    pub fn popup_part<V: 'static>(
+    pub fn popup_with<V: 'static>(
         &self,
         cx: &mut ViewContext<'_, V>,
         access: fn(&mut V) -> &mut Self,
         popup: Element,
     ) -> Element {
-        self.popup_part_with(cx, StateAccessor::from(access), popup)
+        self.popup_with_accessor(cx, StateAccessor::from(access), popup)
+    }
+    /// Create the unstyled popup part. Use [`Self::popup_with`] to supply an existing element.
+    pub fn popup<V: 'static>(
+        &self,
+        cx: &mut ViewContext<'_, V>,
+        access: fn(&mut V) -> &mut Self,
+    ) -> Element {
+        self.popup_with(cx, access, crate::div())
     }
 
     /// Decorate the caller-owned popup through a per-instance accessor.
-    pub fn popup_part_with<V: 'static>(
+    pub fn popup_with_accessor<V: 'static>(
         &self,
         cx: &mut ViewContext<'_, V>,
         access: StateAccessor<V, Self>,
@@ -784,7 +808,7 @@ impl TooltipState {
     ///
     /// Size, shape, rotation, and color stay application-owned, and the arrow is hidden from
     /// assistive technology because the popup already carries the description relationship.
-    pub fn arrow_part(&self, arrow: Element) -> Element {
+    pub fn arrow_with(&self, arrow: Element) -> Element {
         let arrow = arrow
             .id(self.arrow_id())
             .absolute()
@@ -796,6 +820,10 @@ impl TooltipState {
             AnchorSide::Right => arrow.left(0.0),
             AnchorSide::Left => arrow.right(0.0),
         }
+    }
+    /// Create the unstyled arrow part. Use [`Self::arrow_with`] to supply an existing element.
+    pub fn arrow(&self) -> Element {
+        self.arrow_with(crate::div())
     }
 
     /// The point a cursor-tracking tooltip anchors to, once the trigger rectangle is known.
@@ -1037,7 +1065,7 @@ mod tests {
         assert!(!tooltip.is_open());
         assert!(!tooltip.is_disabled());
 
-        let positioner = tooltip.positioner_part(div());
+        let positioner = tooltip.positioner_with(div());
         assert_eq!(positioner.explicit_id, Some(tooltip.positioner_id()));
         assert!(positioner.reports_anchor_placement());
         let anchor = positioner.anchor.expect("tooltip positioner anchor");
@@ -1048,11 +1076,11 @@ mod tests {
         assert_eq!(positioner.visual.background, None);
         assert_eq!(positioner.visual.border_color, None);
         assert_eq!(
-            tooltip.portal_part(div()).explicit_id,
+            tooltip.portal_with(div()).explicit_id,
             Some(tooltip.positioner_id())
         );
 
-        let arrow = tooltip.arrow_part(div());
+        let arrow = tooltip.arrow_with(div());
         assert_eq!(arrow.explicit_id, Some(tooltip.arrow_id()));
         assert!(arrow.accessibility.hidden);
         assert_eq!(arrow.visual.background, None);
@@ -1063,11 +1091,11 @@ mod tests {
         assert_ne!(tooltip.positioner_id(), tooltip.trigger_id());
 
         let flipped = TooltipState::new("trigger", "popup").side(AnchorSide::Left);
-        assert_eq!(flipped.arrow_part(div()).layout.inset.right, length(0.0));
+        assert_eq!(flipped.arrow_with(div()).layout.inset.right, length(0.0));
         let below = TooltipState::new("trigger", "popup").side(AnchorSide::Bottom);
-        assert_eq!(below.arrow_part(div()).layout.inset.top, length(0.0));
+        assert_eq!(below.arrow_with(div()).layout.inset.top, length(0.0));
         let above = TooltipState::new("trigger", "popup").side(AnchorSide::Top);
-        assert_eq!(above.arrow_part(div()).layout.inset.bottom, length(0.0));
+        assert_eq!(above.arrow_with(div()).layout.inset.bottom, length(0.0));
 
         let state = tooltip.state();
         assert_eq!(
@@ -1152,12 +1180,12 @@ mod tests {
 
     impl crate::View for TooltipGroupView {
         fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
-            let left_trigger = self.left.trigger_part(
+            let left_trigger = self.left.trigger_with(
                 cx,
                 |view| &mut view.left,
                 div().absolute().left(0.0).top(0.0).w(80.0).h(24.0),
             );
-            let right_trigger = self.right.trigger_part(
+            let right_trigger = self.right.trigger_with(
                 cx,
                 |view| &mut view.right,
                 div().absolute().left(200.0).top(0.0).w(80.0).h(24.0),
@@ -1170,14 +1198,14 @@ mod tests {
             if self.left.is_open() {
                 let popup = self
                     .left
-                    .popup_part(cx, |view| &mut view.left, div().w(120.0).h(40.0));
-                root = root.child(self.left.positioner_part(div().child(popup)));
+                    .popup_with(cx, |view| &mut view.left, div().w(120.0).h(40.0));
+                root = root.child(self.left.positioner_with(div().child(popup)));
             }
             if self.right.is_open() {
                 let popup =
                     self.right
-                        .popup_part(cx, |view| &mut view.right, div().w(120.0).h(40.0));
-                root = root.child(self.right.positioner_part(div().child(popup)));
+                        .popup_with(cx, |view| &mut view.right, div().w(120.0).h(40.0));
+                root = root.child(self.right.positioner_with(div().child(popup)));
             }
             root
         }
@@ -1264,7 +1292,7 @@ mod tests {
 
     impl crate::View for CursorTooltipView {
         fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
-            let trigger = self.tooltip.trigger_part(
+            let trigger = self.tooltip.trigger_with(
                 cx,
                 |view| &mut view.tooltip,
                 div().absolute().left(100.0).top(200.0).w(200.0).h(40.0),
@@ -1273,8 +1301,8 @@ mod tests {
             if self.tooltip.is_open() {
                 let popup =
                     self.tooltip
-                        .popup_part(cx, |view| &mut view.tooltip, div().w(80.0).h(30.0));
-                root = root.child(self.tooltip.positioner_part(div().child(popup)));
+                        .popup_with(cx, |view| &mut view.tooltip, div().w(80.0).h(30.0));
+                root = root.child(self.tooltip.positioner_with(div().child(popup)));
             }
             root
         }

@@ -2677,7 +2677,7 @@ fn range_and_feedback_parts_adopt_core_value_ranges() {
         Some(PropertyValue::String(Arc::from("3 of 12 files"))),
     );
     let declared = native_progress(41, &progress);
-    assert_eq!(declared.value(), Some(3.0));
+    assert_eq!(declared.current_value(), Some(3.0));
     assert_eq!(declared.maximum(), 12.0);
     assert_eq!(declared.completion(), Some(0.25));
     assert!(apply_part(div(), 41, &progress).is_some());

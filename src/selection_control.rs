@@ -97,20 +97,28 @@ impl Checkbox {
     }
 
     /// Decorate an application-owned root without adding layout or appearance.
-    pub fn root_part(self, root: Element) -> Element {
+    pub fn root_with(self, root: Element) -> Element {
         selection_root(root, AccessibilityRole::CheckBox, self.state)
             .accessibility_read_only(self.read_only)
     }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(self) -> Element {
+        self.root_with(crate::button())
+    }
 
     /// Hide an application-owned visual indicator from the accessible name.
-    pub fn indicator_part(self, indicator: Element) -> Element {
+    pub fn indicator_with(self, indicator: Element) -> Element {
         indicator.accessibility_hidden(true)
+    }
+    /// Create the unstyled indicator part. Use [`Self::indicator_with`] to supply an existing element.
+    pub fn indicator(self) -> Element {
+        self.indicator_with(crate::div())
     }
 }
 
 /// Copyable declaration for one controlled, unstyled radio button.
 ///
-/// Put related roots inside [`RadioGroup::root_part`]. QuickGUI supplies roving Tab/arrow
+/// Put related roots inside [`RadioGroup::root_with`]. QuickGUI supplies roving Tab/arrow
 /// behavior from the mounted semantic tree; the application owns every visual declaration.
 /// The descriptor retains no allocation, task, timer, observer, or idle scheduler source.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -151,7 +159,7 @@ impl Radio {
     }
 
     /// Decorate an application-owned root without adding layout or appearance.
-    pub fn root_part(self, root: Element) -> Element {
+    pub fn root_with(self, root: Element) -> Element {
         selection_root(
             root,
             AccessibilityRole::RadioButton,
@@ -159,10 +167,18 @@ impl Radio {
         )
         .accessibility_read_only(self.read_only)
     }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(self) -> Element {
+        self.root_with(crate::button())
+    }
 
     /// Hide an application-owned visual indicator from the accessible name.
-    pub fn indicator_part(self, indicator: Element) -> Element {
+    pub fn indicator_with(self, indicator: Element) -> Element {
         indicator.accessibility_hidden(true)
+    }
+    /// Create the unstyled indicator part. Use [`Self::indicator_with`] to supply an existing element.
+    pub fn indicator(self) -> Element {
+        self.indicator_with(crate::div())
     }
 }
 
@@ -206,10 +222,14 @@ impl RadioGroup {
     }
 
     /// Decorate an application-owned group root without adding layout or appearance.
-    pub fn root_part(self, root: Element) -> Element {
+    pub fn root_with(self, root: Element) -> Element {
         root.accessibility_role(AccessibilityRole::RadioGroup)
             .accessibility_read_only(self.read_only)
             .required(self.required)
+    }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(self) -> Element {
+        self.root_with(crate::div())
     }
 }
 
@@ -260,7 +280,7 @@ impl Switch {
     }
 
     /// Decorate an application-owned root/track without adding layout or appearance.
-    pub fn root_part(self, root: Element) -> Element {
+    pub fn root_with(self, root: Element) -> Element {
         selection_root(
             root,
             AccessibilityRole::Switch,
@@ -268,41 +288,49 @@ impl Switch {
         )
         .accessibility_read_only(self.read_only)
     }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(self) -> Element {
+        self.root_with(crate::button())
+    }
 
     /// Hide an application-owned visual thumb from the accessible name.
-    pub fn thumb_part(self, thumb: Element) -> Element {
+    pub fn thumb_with(self, thumb: Element) -> Element {
         thumb.accessibility_hidden(true)
+    }
+    /// Create the unstyled thumb part. Use [`Self::thumb_with`] to supply an existing element.
+    pub fn thumb(self) -> Element {
+        self.thumb_with(crate::div())
     }
 }
 
 /// Create an unstyled controlled checkbox root.
 ///
-/// This shorthand is equivalent to `Checkbox::new(state).root_part(div())`. Use [`Checkbox`]
+/// This shorthand is equivalent to `Checkbox::new(state).root_with(div())`. Use [`Checkbox`]
 /// directly when composing a separate indicator part.
 pub fn checkbox(state: impl Into<ToggleState>) -> Element {
-    Checkbox::new(state).root_part(div())
+    Checkbox::new(state).root_with(div())
 }
 
 /// Create an unstyled controlled radio root.
 ///
-/// This shorthand is equivalent to `Radio::new(selected).root_part(div())`.
+/// This shorthand is equivalent to `Radio::new(selected).root_with(div())`.
 pub fn radio(selected: bool) -> Element {
-    Radio::new(selected).root_part(div())
+    Radio::new(selected).root_with(div())
 }
 
 /// Create an unstyled semantic radio-group root.
 ///
-/// This shorthand is equivalent to `RadioGroup::new().root_part(div())`.
+/// This shorthand is equivalent to `RadioGroup::new().root_with(div())`.
 pub fn radio_group() -> Element {
-    RadioGroup::new().root_part(div())
+    RadioGroup::new().root_with(div())
 }
 
 /// Create an unstyled controlled switch root.
 ///
-/// This shorthand is equivalent to `Switch::new(checked).root_part(div())`. Use [`Switch`]
+/// This shorthand is equivalent to `Switch::new(checked).root_with(div())`. Use [`Switch`]
 /// directly when composing a separate thumb part.
 pub fn switch(checked: bool) -> Element {
-    Switch::new(checked).root_part(div())
+    Switch::new(checked).root_with(div())
 }
 
 fn selection_root(root: Element, role: AccessibilityRole, state: ToggleState) -> Element {
@@ -326,7 +354,7 @@ mod tests {
     fn parts_add_exact_behavior_without_layout_or_appearance() {
         let checkbox = Checkbox::new(ToggleState::Mixed);
         assert_eq!(checkbox.state(), ToggleState::Mixed);
-        let checkbox_root = checkbox.root_part(
+        let checkbox_root = checkbox.root_with(
             div()
                 .w(137.0)
                 .bg(Color::rgb8(4, 5, 6))
@@ -356,7 +384,7 @@ mod tests {
         assert_eq!(checkbox_root.children.len(), 1);
         assert!(checkbox_root.transition.is_none());
 
-        let indicator = checkbox.indicator_part(
+        let indicator = checkbox.indicator_with(
             div()
                 .size(19.0, 17.0)
                 .bg(Color::rgb8(10, 11, 12))
@@ -368,22 +396,22 @@ mod tests {
 
         let radio = Radio::new(true);
         assert!(radio.is_selected());
-        let radio_root = radio.root_part(div());
+        let radio_root = radio.root_with(div());
         assert_eq!(
             radio_root.accessibility.role,
             AccessibilityRole::RadioButton
         );
         assert_eq!(radio_root.accessibility.toggled, Some(ToggleState::On));
-        assert!(radio.indicator_part(div()).accessibility.hidden);
+        assert!(radio.indicator_with(div()).accessibility.hidden);
 
         let switch = Switch::new(false);
         assert!(!switch.is_checked());
-        let switch_root = switch.root_part(div());
+        let switch_root = switch.root_with(div());
         assert_eq!(switch_root.accessibility.role, AccessibilityRole::Switch);
         assert_eq!(switch_root.accessibility.toggled, Some(ToggleState::Off));
-        assert!(switch.thumb_part(div()).accessibility.hidden);
+        assert!(switch.thumb_with(div()).accessibility.hidden);
 
-        let group = RadioGroup::new().root_part(
+        let group = RadioGroup::new().root_with(
             div()
                 .bg(Color::rgb8(13, 14, 15))
                 .child("Application-owned group"),
@@ -453,21 +481,21 @@ mod tests {
 
             div().children([
                 checkbox_control
-                    .root_part(
-                        div().child(checkbox_control.indicator_part(text("decorative mark"))),
+                    .root_with(
+                        div().child(checkbox_control.indicator_with(text("decorative mark"))),
                     )
                     .id("check")
                     .on_click(check)
                     .child("Checkbox"),
-                RadioGroup::new().root_part(
+                RadioGroup::new().root_with(
                     div().children([
                         first_radio
-                            .root_part(div().child(first_radio.indicator_part(div())))
+                            .root_with(div().child(first_radio.indicator_with(div())))
                             .id("radio-zero")
                             .on_click(radio_zero)
                             .child("First radio"),
                         second_radio
-                            .root_part(div().child(second_radio.indicator_part(div())))
+                            .root_with(div().child(second_radio.indicator_with(div())))
                             .id("radio-one")
                             .on_click(radio_one)
                             .child("Second radio"),
@@ -478,7 +506,7 @@ mod tests {
                     ]),
                 ),
                 switch
-                    .root_part(div().child(switch.thumb_part(div())))
+                    .root_with(div().child(switch.thumb_with(div())))
                     .id("switch")
                     .on_click(toggle)
                     .child("Switch"),
@@ -529,7 +557,7 @@ mod tests {
         assert!(checkbox.is_read_only());
         assert_eq!(checkbox.next_state(), None);
         assert_eq!(checkbox.parent_next_checked(), None);
-        let root = checkbox.root_part(div());
+        let root = checkbox.root_with(div());
         assert!(root.accessibility.read_only);
         assert!(!root.accessibility.disabled);
         assert!(root.focusable);
@@ -544,13 +572,13 @@ mod tests {
         assert_eq!(Checkbox::new(true).next_state(), Some(ToggleState::Off));
         assert!(
             !Checkbox::new(false)
-                .root_part(div())
+                .root_with(div())
                 .accessibility
                 .read_only
         );
 
         // A disabled control leaves the sequence; a read-only one does not.
-        let disabled = Checkbox::new(true).root_part(div()).disabled(true);
+        let disabled = Checkbox::new(true).root_with(div()).disabled(true);
         assert!(!disabled.is_keyboard_focusable());
 
         let radio = Radio::new(false).read_only(true);
@@ -559,12 +587,12 @@ mod tests {
         assert!(Radio::new(false).accepts_selection());
         // A radio that is already selected has nothing to select.
         assert!(!Radio::new(true).accepts_selection());
-        assert!(radio.root_part(div()).accessibility.read_only);
+        assert!(radio.root_with(div()).accessibility.read_only);
 
         let group = RadioGroup::new().read_only(true).required(true);
         assert!(group.is_read_only());
         assert!(group.is_required());
-        let group_root = group.root_part(div());
+        let group_root = group.root_with(div());
         assert!(group_root.accessibility.read_only);
         assert!(group_root.accessibility.required);
         assert_eq!(group_root.accessibility.role, AccessibilityRole::RadioGroup);
@@ -573,8 +601,8 @@ mod tests {
         assert_eq!(switch.next_checked(), None);
         assert_eq!(Switch::new(true).next_checked(), Some(false));
         assert_eq!(Switch::new(false).next_checked(), Some(true));
-        assert!(switch.root_part(div()).accessibility.read_only);
-        assert!(switch.thumb_part(div()).accessibility.hidden);
+        assert!(switch.root_with(div()).accessibility.read_only);
+        assert!(switch.thumb_with(div()).accessibility.hidden);
     }
 
     #[test]
@@ -617,7 +645,7 @@ mod tests {
         );
 
         // The derived state reaches the mounted root as the mixed checkbox contract.
-        let mixed = Checkbox::parent([true, false]).root_part(div());
+        let mixed = Checkbox::parent([true, false]).root_with(div());
         assert_eq!(mixed.accessibility.toggled, Some(ToggleState::Mixed));
         assert_eq!(mixed.accessibility.role, AccessibilityRole::CheckBox);
     }

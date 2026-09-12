@@ -14,33 +14,24 @@ import (
 
 ```go
 func PreviewCardExample() *native.Node {
-	return ui.PreviewCard.Root(
-		ui.PreviewCardRootProps{Placement: "bottom-start"},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.PreviewCard.Trigger(ui.PreviewCardTriggerProps{Delay: 350}, "@ada"),
-				ui.PreviewCard.Positioner(
-					ui.PartProps{},
-					func() *native.Node {
-						return ui.PreviewCard.Popup(
-							ui.PartProps{},
-							"Ada Lovelace",
-						)
-					},
-				)})
-		},
-	)
+	previewCard1 := ui.NewPreviewCard(ui.PreviewCardRootProps{Placement: "bottom-start"})
+	return previewCard1.Root().Children(func() *native.Node {
+		return ui.Fragment([]*native.Node{previewCard1.Trigger(ui.PreviewCardTriggerProps{Delay: 350}).Children("@ada").NativeNode(), previewCard1.Positioner(ui.PartProps{}).Children(func() *native.Node {
+			return previewCard1.Popup(ui.PartProps{}).Children("Ada Lovelace").NativeNode()
+		}).NativeNode()})
+	}).NativeNode()
 }
 ```
 
 ## 構成
 
-- `ui.PreviewCard.Root`
-- `ui.PreviewCard.Trigger`
-- `ui.PreviewCard.Portal`
-- `ui.PreviewCard.Backdrop`
-- `ui.PreviewCard.Positioner`
-- `ui.PreviewCard.Popup`
-- `ui.PreviewCard.Arrow`
+- `previewCard.Root`
+- `previewCard.Trigger`
+- `previewCard.Portal`
+- `previewCard.Backdrop`
+- `previewCard.Positioner`
+- `previewCard.Popup`
+- `previewCard.Arrow`
 
 ## 主なプロパティ
 

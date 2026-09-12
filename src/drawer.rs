@@ -586,12 +586,16 @@ impl Drawer {
     }
 
     /// Decorate the optional application-owned structural wrapper.
-    pub fn root_part(self, root: Element) -> Element {
+    pub fn root_with(self, root: Element) -> Element {
         root.id(self.id).app_region_no_drag()
+    }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(self) -> Element {
+        self.root_with(crate::div())
     }
 
     /// Decorate an application-owned trigger without adding appearance.
-    pub fn trigger_part(self, trigger: Element) -> Element {
+    pub fn trigger_with(self, trigger: Element) -> Element {
         let trigger = trigger
             .id(self.trigger_id())
             .focusable()
@@ -606,11 +610,15 @@ impl Drawer {
             trigger
         }
     }
+    /// Create the unstyled trigger part. Use [`Self::trigger_with`] to supply an existing element.
+    pub fn trigger(self) -> Element {
+        self.trigger_with(crate::button())
+    }
 
     /// Decorate the full-window portal and, for a containing modality, the focus boundary.
-    pub fn portal_part(self, portal: Element) -> Element {
+    pub fn portal_with(self, portal: Element) -> Element {
         if self.modality.traps_focus() {
-            return self.dialog.root_part(portal);
+            return self.dialog.root_with(portal);
         }
         portal
             .id(self.portal_id())
@@ -620,22 +628,34 @@ impl Drawer {
             .app_region_no_drag()
             .cursor_default()
     }
+    /// Create the unstyled portal part. Use [`Self::portal_with`] to supply an existing element.
+    pub fn portal(self) -> Element {
+        self.portal_with(crate::div())
+    }
 
     /// Decorate the caller-owned visual backdrop.
-    pub fn backdrop_part(self, backdrop: Element) -> Element {
-        self.dialog.backdrop_part(backdrop)
+    pub fn backdrop_with(self, backdrop: Element) -> Element {
+        self.dialog.backdrop_with(backdrop)
+    }
+    /// Create the unstyled backdrop part. Use [`Self::backdrop_with`] to supply an existing element.
+    pub fn backdrop(self) -> Element {
+        self.backdrop_with(crate::div())
     }
 
     /// Decorate the container that aligns the sheet against its edge.
     ///
     /// QuickGUI adds no alignment of its own: the application declares the flex or grid alignment
     /// that puts a bottom sheet at the bottom and a side drawer against a side.
-    pub fn viewport_part(self, viewport: Element) -> Element {
+    pub fn viewport_with(self, viewport: Element) -> Element {
         viewport
             .id(self.viewport_id())
             .size_full()
             .app_region_no_drag()
             .cursor_default()
+    }
+    /// Create the unstyled viewport part. Use [`Self::viewport_with`] to supply an existing element.
+    pub fn viewport(self) -> Element {
+        self.viewport_with(crate::div())
     }
 
     /// Decorate the caller-owned sheet.
@@ -643,22 +663,30 @@ impl Drawer {
     /// The sheet is the dialog surface: it carries the drawer role, the title and description
     /// relationships, Escape dismissal, backdrop dismissal unless it is disabled, and focus
     /// restoration. Apply [`DrawerState::swipe_offset`] to it as a paint-only transform.
-    pub fn popup_part(self, popup: Element) -> Element {
+    pub fn popup_with(self, popup: Element) -> Element {
         self.dialog
-            .popover_part(popup)
+            .popup_with(popup)
             .accessibility_modal(self.modality.is_modal())
+    }
+    /// Create the unstyled popup part. Use [`Self::popup_with`] to supply an existing element.
+    pub fn popup(self) -> Element {
+        self.popup_with(crate::div())
     }
 
     /// Decorate the caller-owned scrollable body of the sheet.
-    pub fn content_part(self, content: Element) -> Element {
+    pub fn content_with(self, content: Element) -> Element {
         content.id(self.content_id())
+    }
+    /// Create the unstyled content part. Use [`Self::content_with`] to supply an existing element.
+    pub fn content(self) -> Element {
+        self.content_with(crate::div())
     }
 
     /// Decorate the caller-owned grab handle that starts a swipe.
     ///
     /// Attach a [`crate::ViewContext::pointer_listener`] registered for [`Self::swipe_area_id`]
     /// and forward the event to [`DrawerState::apply_pointer`], or use [`Self::on_swipe`].
-    pub fn swipe_area_part(self, swipe_area: Element) -> Element {
+    pub fn swipe_area_with(self, swipe_area: Element) -> Element {
         swipe_area
             .id(self.swipe_area_id())
             .accessibility_hidden(true)
@@ -666,20 +694,36 @@ impl Drawer {
             .user_select_none()
             .cursor_default()
     }
+    /// Create the unstyled swipe area part. Use [`Self::swipe_area_with`] to supply an existing element.
+    pub fn swipe_area(self) -> Element {
+        self.swipe_area_with(crate::div())
+    }
 
     /// Assign the stable visible label target used by the sheet.
-    pub fn title_part(self, title: Element) -> Element {
-        self.dialog.title_part(title)
+    pub fn title_with(self, title: Element) -> Element {
+        self.dialog.title_with(title)
+    }
+    /// Create the unstyled title part. Use [`Self::title_with`] to supply an existing element.
+    pub fn title(self) -> Element {
+        self.title_with(crate::div())
     }
 
     /// Assign the stable visible description target used by the sheet.
-    pub fn description_part(self, description: Element) -> Element {
-        self.dialog.description_part(description)
+    pub fn description_with(self, description: Element) -> Element {
+        self.dialog.description_with(description)
+    }
+    /// Create the unstyled description part. Use [`Self::description_with`] to supply an existing element.
+    pub fn description(self) -> Element {
+        self.description_with(crate::div())
     }
 
     /// Decorate a caller-owned close control with button behavior and no visual defaults.
-    pub fn close_part(self, label: impl Into<Arc<str>>, close: Element) -> Element {
-        self.dialog.close_part(label, close)
+    pub fn close_with(self, label: impl Into<Arc<str>>, close: Element) -> Element {
+        self.dialog.close_with(label, close)
+    }
+    /// Create the unstyled close part. Use [`Self::close_with`] to supply an existing element.
+    pub fn close(self, label: impl Into<Arc<str>>) -> Element {
+        self.close_with(label, crate::button())
     }
 
     /// Build the swipe area's captured pointer behavior.
@@ -771,9 +815,9 @@ impl Drawer {
 
 /// Create an unstyled drawer sheet root.
 ///
-/// This shorthand is equivalent to `Drawer::from_state(id, state).popup_part(div())`.
+/// This shorthand is equivalent to `Drawer::from_state(id, state).popup_with(div())`.
 pub fn drawer_popup(id: impl Into<ElementId>, state: &DrawerState) -> Element {
-    Drawer::from_state(id, state).popup_part(div())
+    Drawer::from_state(id, state).popup_with(div())
 }
 
 fn derived_drawer_id(scope: ElementId, tag: u64) -> ElementId {
@@ -963,7 +1007,7 @@ mod tests {
         assert_eq!(drawer.swipe_axis(), SwipeDirection::Down);
         assert_eq!(drawer.modality(), DrawerModality::Modal);
 
-        let trigger = drawer.trigger_part(button());
+        let trigger = drawer.trigger_with(button());
         assert_eq!(trigger.explicit_id, Some(drawer.trigger_id()));
         assert_eq!(trigger.accessibility.expanded, Some(true));
         assert_eq!(
@@ -971,25 +1015,25 @@ mod tests {
             Some(drawer.popup_id())
         );
 
-        let portal = drawer.portal_part(div());
+        let portal = drawer.portal_with(div());
         assert!(portal.portal);
         assert!(portal.focus_trap);
         assert!(portal.restore_previous_focus);
         assert_eq!(portal.visual.background, None);
 
         let open = Drawer::new("sheet", true).modal(DrawerModality::NonModal);
-        let loose = open.portal_part(div());
+        let loose = open.portal_with(div());
         assert!(loose.portal);
         assert!(!loose.focus_trap);
-        assert!(!open.popup_part(div()).accessibility.modal);
+        assert!(!open.popup_with(div()).accessibility.modal);
         assert!(
             Drawer::new("sheet", true)
                 .modal(DrawerModality::TrapFocus)
-                .portal_part(div())
+                .portal_with(div())
                 .focus_trap
         );
 
-        let popup = drawer.popup_part(div().bg(Color::rgb8(4, 5, 6)));
+        let popup = drawer.popup_with(div().bg(Color::rgb8(4, 5, 6)));
         assert_eq!(popup.explicit_id, Some(drawer.popup_id()));
         assert_eq!(popup.accessibility.role, AccessibilityRole::Dialog);
         assert!(popup.accessibility.modal);
@@ -1000,32 +1044,32 @@ mod tests {
         let protected = Drawer::new("sheet", true).disable_pointer_dismissal(true);
         assert!(
             !protected
-                .popup_part(div())
+                .popup_with(div())
                 .dismiss_policy
                 .on_pointer_outside()
         );
-        assert!(protected.popup_part(div()).dismiss_policy.on_escape());
+        assert!(protected.popup_with(div()).dismiss_policy.on_escape());
 
-        let viewport = drawer.viewport_part(div());
+        let viewport = drawer.viewport_with(div());
         assert_eq!(viewport.explicit_id, Some(drawer.viewport_id()));
-        let content = drawer.content_part(div());
+        let content = drawer.content_with(div());
         assert_eq!(content.explicit_id, Some(drawer.content_id()));
-        let swipe = drawer.swipe_area_part(div().h(20.0));
+        let swipe = drawer.swipe_area_with(div().h(20.0));
         assert_eq!(swipe.explicit_id, Some(drawer.swipe_area_id()));
         assert!(swipe.accessibility.hidden);
-        let backdrop = drawer.backdrop_part(div());
+        let backdrop = drawer.backdrop_with(div());
         assert_eq!(backdrop.explicit_id, Some(drawer.backdrop_id()));
-        assert_eq!(drawer.root_part(div()).explicit_id, Some("sheet".into()));
+        assert_eq!(drawer.root_with(div()).explicit_id, Some("sheet".into()));
         assert_eq!(
-            drawer.title_part(div()).explicit_id,
+            drawer.title_with(div()).explicit_id,
             Some(drawer.title_id())
         );
         assert_eq!(
-            drawer.description_part(div()).explicit_id,
+            drawer.description_with(div()).explicit_id,
             Some(drawer.description_id())
         );
         assert_eq!(
-            drawer.close_part("Close", div()).explicit_id,
+            drawer.close_with("Close", div()).explicit_id,
             Some(drawer.close_id())
         );
         assert_eq!(drawer.dialog().popover_id(), drawer.popup_id());
@@ -1100,31 +1144,31 @@ mod tests {
             );
 
             let mut root = drawer
-                .root_part(div().size_full().relative())
-                .child(drawer.trigger_part(button().child("Open")).on_click(open))
+                .root_with(div().size_full().relative())
+                .child(drawer.trigger_with(button().child("Open")).on_click(open))
                 .child(button().id("outside").child("Outside"));
             if drawer.is_open() {
                 root = root.child(
                     drawer
-                        .portal_part(div())
-                        .child(drawer.backdrop_part(div()))
+                        .portal_with(div())
+                        .child(drawer.backdrop_with(div()))
                         .child(
-                            drawer.viewport_part(div().flex_col().justify_end()).child(
+                            drawer.viewport_with(div().flex_col().justify_end()).child(
                                 drawer
-                                    .popup_part(div().w(400.0).h(EXTENT))
+                                    .popup_with(div().w(400.0).h(EXTENT))
                                     .translate(0.0, self.sheet.swipe_offset())
                                     .on_dismiss(dismiss)
-                                    .child(drawer.swipe_area_part(div().h(20.0).on_pointer(swipe)))
-                                    .child(drawer.title_part(text("Filters")))
-                                    .child(drawer.description_part(text("Narrow the results")))
+                                    .child(drawer.swipe_area_with(div().h(20.0).on_pointer(swipe)))
+                                    .child(drawer.title_with(text("Filters")))
+                                    .child(drawer.description_with(text("Narrow the results")))
                                     .child(
                                         drawer
-                                            .content_part(div())
+                                            .content_with(div())
                                             .child(button().id("sheet-first").child("First"))
                                             .child(button().id("sheet-second").child("Second")),
                                     )
                                     .child(
-                                        drawer.close_part("Close filters", div()).on_click(close),
+                                        drawer.close_with("Close filters", div()).on_click(close),
                                     ),
                             ),
                         ),

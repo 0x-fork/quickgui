@@ -63,23 +63,13 @@ func InteractionStates() *ui.Element {
 								return s.Opacity(1)
 							},
 						),
-						ui.Button(
+						ui.Button().Style(actionStyle).Child(ui.Text(
+							"Rename",
+						).FontSize(12).TextColor(ink)).AriaLabel(title+" Rename"),
 
-							ui.Text(
-								"Rename",
-							).FontSize(12).TextColor(ink),
-
-							actionStyle,
-						).AriaLabel(title+" Rename"),
-
-						ui.Button(
-
-							ui.Text(
-								"Share",
-							).FontSize(12).TextColor(ink),
-
-							actionStyle,
-						).Disabled(true).AriaLabel(title+" Share"),
+						ui.Button().Style(actionStyle).Child(ui.Text(
+							"Share",
+						).FontSize(12).TextColor(ink)).Disabled(true).AriaLabel(title+" Share"),
 
 						rowStyle,
 					).Group(true).Node)

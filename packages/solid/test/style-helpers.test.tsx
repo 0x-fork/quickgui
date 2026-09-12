@@ -16,25 +16,27 @@ import {
 
 await app.whenReady();
 
-test("compiled JSX exposes kebab-case Rust helpers on primitives and compound parts", () => {
+test("JSX style objects expose camelCase presets on primitives and compound parts", () => {
   const host = new Window({
     renderer: createRenderer(() => (
       <View
-        flex-col
-        items-center
-        p-3
-        gap-2
-        rounded-lg
-        width={320}
-        height={120}
-        bg="#090d16"
-        text-color="#e2e8f0"
+        style={{
+          flexCol: true,
+          itemsCenter: true,
+          p3: true,
+          gap2: true,
+          roundedLg: true,
+          width: 320,
+          height: 120,
+          bg: "#090d16",
+          textColor: "#e2e8f0",
+        }}
       >
-        <Text text-lg font-semibold text-center cursor-pointer>
+        <Text style={{ textLg: true, fontSemibold: true, textCenter: true, cursorPointer: true }}>
           Title
         </Text>
         <Tabs.Root value="one">
-          <Tabs.List rounded-md px-3 bg="#18181b" />
+          <Tabs.List style={{ roundedMd: true, px3: true, bg: "#18181b" }} />
         </Tabs.Root>
       </View>
     )),
@@ -64,27 +66,27 @@ test("compiled JSX exposes kebab-case Rust helpers on primitives and compound pa
   host.close();
 });
 
-test("compiled bg attributes project colors, gradients, images, and transitions", () => {
+test("camelCase style values project colors, gradients, images, and transitions", () => {
   const [color, setColor] = createSignal("#090d16");
   const gradient = "linear-gradient(90deg, #1d4ed8, #38bdf8)";
   const imageStyle = {
-    "bg-image": "/assets/paper.png",
-    "bg-size": "cover",
-    "bg-repeat": "no-repeat",
-    "bg-position": "center",
-    "hover-bg": "#1d4ed8",
-    "active-bg": "#0b1220",
-    "focus-bg": gradient,
-  } satisfies JSX.NativeProps;
+    bgImage: "/assets/paper.png",
+    bgSize: "cover",
+    bgRepeat: "no-repeat",
+    bgPosition: "center",
+    hoverBg: "#1d4ed8",
+    activeBg: "#0b1220",
+    focusBg: gradient,
+  } satisfies JSX.Style;
   const host = new Window({
     renderer: createRenderer(() => (
-      <View bg={color()} transition-property="bg, opacity" {...imageStyle}>
-        <View bg-gradient={gradient} />
+      <View style={[imageStyle, { bg: color(), transitionProperty: "bg, opacity" }]}>
+        <View style={{ bgGradient: gradient }} />
       </View>
     )),
   });
-  const node = host.root.children[0]!;
-  const child = node.children[0]!;
+  const node = host.root.children[0]!,
+    child = node.children[0]!;
   expect(node.properties.get(PropertyCode.BackgroundColor)).toBe(parseColor("#090d16"));
   expect(node.properties.get(PropertyCode.BackgroundImage)).toBe("/assets/paper.png");
   expect(node.properties.get(PropertyCode.BackgroundSize)).toBe("cover");
@@ -100,105 +102,105 @@ test("compiled bg attributes project colors, gradients, images, and transitions"
   expect(host.root.children[0]).toBe(node);
   expect(node.children[0]).toBe(child);
   expect(node.properties.get(PropertyCode.BackgroundColor)).toBe(parseColor("#ffffff"));
-  setProp(child, "bg-gradient", null);
+  setProp(child, "style", undefined);
   expect(child.properties.has(PropertyCode.BackgroundGradient)).toBe(false);
-  setProp(node, "transition-property", undefined);
-  expect(node.properties.has(PropertyCode.TransitionProperties)).toBe(false);
   host.close();
-
-  // @ts-expect-error Background colors use the Rust-style bg name.
-  const oldColor: JSX.Style = { backgroundColor: "#ffffff" };
-  // @ts-expect-error Background images use the bg- prefix in JSX.
-  const oldImage: JSX.NativeProps = { "background-image": "/assets/paper.png" };
-  void oldColor;
-  void oldImage;
 });
 
-test("radius helpers are boolean presets and custom radii use style attributes", () => {
-  const radii = {
-    "rounded-sm": 4,
-    "rounded-md": 6,
-    "rounded-lg": 8,
-    "rounded-xl": 12,
-    "rounded-2xl": 16,
-    "rounded-full": 4096,
-  };
-  for (const [helper, expected] of Object.entries(radii)) {
-    const node = createComponent(View, { [helper]: true });
+test("presets use boolean style entries and custom radii use camelCase values", () => {
+  for (const [helper, expected] of Object.entries({
+    roundedSm: 4,
+    roundedMd: 6,
+    roundedLg: 8,
+    roundedXl: 12,
+    rounded2xl: 16,
+    roundedFull: 4096,
+  })) {
+    const node = createComponent(View, { style: { [helper]: true } });
     expect(node.properties.get(PropertyCode.BorderRadius)).toBe(expected);
   }
   const node = createComponent(View, {
-    "border-radius": 10,
-    "border-top-left-radius": 8,
-    "border-top-right-radius": 8,
-    "border-bottom-right-radius": 3,
+    style: {
+      borderRadius: 10,
+      borderTopLeftRadius: 8,
+      borderTopRightRadius: 8,
+      borderBottomRightRadius: 3,
+    },
   });
   expect(node.properties.get(PropertyCode.BorderRadius)).toBe(10);
   expect(node.properties.get(PropertyCode.BorderTopLeftRadius)).toBe(8);
   expect(node.properties.get(PropertyCode.BorderTopRightRadius)).toBe(8);
   expect(node.properties.get(PropertyCode.BorderBottomRightRadius)).toBe(3);
-  expect(() => setProp(node, "rounded-lg", "lg")).toThrow("boolean");
-  expect(() => setProp(node, "p-3", 3)).toThrow("boolean");
-  // @ts-expect-error Helpers cannot take radius or size values.
-  const invalidValue: JSX.NativeProps = { "rounded-lg": 8 };
-  void invalidValue;
-  // @ts-expect-error The old value-taking rounded shortcut is not a style property.
-  const invalid: JSX.NativeProps = { rounded: "huge" };
+  expect(() => setProp(node, "style", { roundedLg: "lg" })).toThrow("boolean");
+  expect(() => setProp(node, "style", { p3: 3 })).toThrow("boolean");
+  expect(() => setProp(node, "style", { fontSize: 20, "text-lg": true })).toThrow("camelCase");
+  expect(node.properties.has(PropertyCode.FontSize)).toBe(false);
+  expect(() => setProp(node, "text-lg", true)).toThrow("style");
+  expect(() => setProp(node, "textLg", true)).toThrow("style");
+  expect(() => setProp(node, "flex", true)).toThrow("style");
+  expect(() => setProp(node, "fontSize", 18)).toThrow("style");
+  expect(() => setProp(node, "font-size", 18)).toThrow("style");
+
+  // @ts-expect-error Presets belong in the style object.
+  const directive: JSX.NativeProps = { textLg: true };
+  // @ts-expect-error Native styling belongs in the style object.
+  const direct: JSX.NativeProps = { fontSize: 18 };
+  // @ts-expect-error Style keys are camelCase.
+  const kebab: JSX.Style = { "text-lg": true };
+  // @ts-expect-error Presets are boolean, not size values.
+  const invalid: JSX.Style = { roundedLg: 8 };
+  void directive;
+  void direct;
+  void kebab;
   void invalid;
-  // @ts-expect-error Scale helpers use kebab-case, including the separator before the number.
-  const invalidSpacing: JSX.NativeProps = { p3: true };
-  void invalidSpacing;
 });
 
-test("style arrays expand helpers in declaration order and direct props restore style fallbacks", () => {
-  const panel = { "rounded-lg": true, "p-3": true, "text-lg": true } satisfies JSX.Style;
-  const style = flattenStyle([panel, false, [{ "rounded-xl": true, paddingLeft: 20 }]]);
-  expect(style.borderRadius).toBe(12);
-  expect(style.paddingLeft).toBe(20);
-  expect(style.paddingRight).toBe(12);
-  expect(style.fontSize).toBe(18);
-  expect(style.lineHeight).toBe(26);
-  for (const directFirst of [true, false]) {
-    const node = createElement("view");
-    if (directFirst) setProp(node, "rounded-sm", true);
-    setProp(node, "style", style);
-    if (!directFirst) setProp(node, "rounded-sm", true);
-    expect(node.properties.get(PropertyCode.BorderRadius)).toBe(4);
-    setProp(node, "style", { ...style, "rounded-2xl": true });
-    expect(node.properties.get(PropertyCode.BorderRadius)).toBe(4);
-    setProp(node, "rounded-sm", undefined);
-    expect(node.properties.get(PropertyCode.BorderRadius)).toBe(16);
-    setProp(node, "style", undefined);
-    expect(node.properties.size).toBe(0);
-  }
+test("style arrays expand presets in declaration order and restore earlier values", () => {
+  const panel = { roundedLg: true, p3: true, textLg: true } satisfies JSX.Style;
+  const base = flattenStyle([panel, false, [{ roundedXl: true, paddingLeft: 20 }]]);
+  expect(base.borderRadius).toBe(12);
+  expect(base.paddingLeft).toBe(20);
+  expect(base.paddingRight).toBe(12);
+  expect(base.fontSize).toBe(18);
+  expect(base.lineHeight).toBe(26);
+  const node = createElement("view");
+  setProp(node, "style", [base, { roundedSm: true }]);
+  expect(node.properties.get(PropertyCode.BorderRadius)).toBe(4);
+  const changed = { ...base, rounded2xl: true } satisfies JSX.Style;
+  setProp(node, "style", [changed, { roundedSm: true }]);
+  expect(node.properties.get(PropertyCode.BorderRadius)).toBe(4);
+  setProp(node, "style", [changed, false]);
+  expect(node.properties.get(PropertyCode.BorderRadius)).toBe(16);
+  setProp(node, "style", undefined);
+  expect(node.properties.size).toBe(0);
 });
 
-test("reactive helpers retain nodes and restore every affected field without overwriting sibling props", async () => {
-  const [enabled, setEnabled] = createSignal(true);
-  const [rounded, setRounded] = createSignal(true);
-  const [large, setLarge] = createSignal(false);
+test("reactive style presets retain nodes and restore all affected fields", async () => {
+  const [enabled, setEnabled] = createSignal(true),
+    [rounded, setRounded] = createSignal(true),
+    [large, setLarge] = createSignal(false),
+    [corner, setCorner] = createSignal<number | undefined>(3);
   const host = new Window({
     renderer: createRenderer(() => (
       <View
-        style={{
-          borderRadius: 2,
-          borderTopLeftRadius: 20,
-          fontSize: 14,
-          lineHeight: 20,
-          paddingLeft: 8,
-        }}
-        text-lg={enabled()}
-        p-3={enabled()}
-        rounded-lg={rounded()}
-        rounded-xl={large()}
-        border-top-left-radius={3}
+        style={[
+          {
+            borderRadius: 2,
+            borderTopLeftRadius: 20,
+            fontSize: 14,
+            lineHeight: 20,
+            paddingLeft: 8,
+          },
+          { textLg: enabled(), p3: enabled(), roundedLg: rounded(), roundedXl: large() },
+          corner() === undefined ? undefined : { borderTopLeftRadius: corner()! },
+        ]}
       >
         <Text>Retained</Text>
       </View>
     )),
   });
-  const node = host.root.children[0]!;
-  const child = node.children[0]!;
+  const node = host.root.children[0]!,
+    child = node.children[0]!;
   expect(node.properties.get(PropertyCode.BorderRadius)).toBe(8);
   expect(node.properties.get(PropertyCode.BorderTopLeftRadius)).toBe(3);
   expect(node.properties.get(PropertyCode.PaddingLeft)).toBe(12);
@@ -213,9 +215,8 @@ test("reactive helpers retain nodes and restore every affected field without ove
   expect(node.properties.get(PropertyCode.LineHeight)).toBe(20);
   expect(node.properties.get(PropertyCode.PaddingLeft)).toBe(8);
   expect(node.properties.has(PropertyCode.PaddingRight)).toBe(false);
-  setProp(node, "border-top-left-radius", undefined);
+  setCorner(undefined);
   flush();
-  // Rust's uniform rounded helper explicitly resets the per-corner radii.
   expect(node.properties.has(PropertyCode.BorderTopLeftRadius)).toBe(false);
   setRounded(false);
   setLarge(false);
@@ -234,42 +235,41 @@ test("reactive helpers retain nodes and restore every affected field without ove
   expect(host.nodes.size).toBe(0);
 });
 
-test("equivalent helpers and hidden fallbacks submit no native work", async () => {
-  const host = new Window({
-    renderer: createRenderer(() => <View style={{ "rounded-lg": true }} rounded-lg />),
-  });
+test("equivalent styles and hidden fallback changes submit no native work", async () => {
+  const host = new Window({ renderer: createRenderer(() => <View style={{ roundedLg: true }} />) });
   await host.whenReady();
   await Promise.resolve();
-  const node = host.root.children[0]!;
-  const before = callsNamed("applyBatch").length;
-  setProp(node, "rounded-lg", true);
-  setProp(node, "style", { "rounded-xl": true });
+  const node = host.root.children[0]!,
+    before = callsNamed("applyBatch").length;
+  setProp(node, "style", { roundedLg: true });
+  setProp(node, "style", [{ roundedXl: true }, { roundedLg: true }]);
   await Promise.resolve();
   expect(callsNamed("applyBatch")).toHaveLength(before);
-  setProp(node, "rounded-lg", false);
+  setProp(node, "style", [{ roundedXl: true }, false]);
   await Promise.resolve();
   expect(node.properties.get(PropertyCode.BorderRadius)).toBe(12);
   expect(callsNamed("applyBatch")).toHaveLength(before + 1);
   host.close();
 });
 
-test("boolean layout helpers compose with kebab-case native style values", () => {
-  const node = createComponent(View, {
+test("layout presets compose with native values in one style object", () => {
+  const layout = {
     grid: true,
-    "grid-template-columns": 3,
-    "grid-template-rows": "repeat(2, minmax(min-content, 1fr))",
-    "grid-column-span": 2,
-    "row-span-full": true,
+    gridTemplateColumns: 3,
+    gridTemplateRows: "repeat(2, minmax(min-content, 1fr))",
+    gridColumnSpan: 2,
+    rowSpanFull: true,
     width: "50%",
-    "h-full": true,
+    hFull: true,
     rtl: true,
-    "padding-start": 12,
-    "border-end-width": 1,
-    "position-sticky": true,
+    paddingStart: 12,
+    borderEndWidth: 1,
+    positionSticky: true,
     top: 8,
-    "overflow-x-scroll": true,
-    "scroll-snap-align": "center",
-  });
+    overflowXScroll: true,
+    scrollSnapAlign: "center",
+  } satisfies JSX.Style;
+  const node = createComponent(View, { style: layout });
   expect(node.properties.get(PropertyCode.GridTemplateColumns)).toBe(3);
   expect(node.properties.get(PropertyCode.GridTemplateRows)).toBe(
     "repeat(2, minmax(min-content, 1fr))",
@@ -287,30 +287,27 @@ test("boolean layout helpers compose with kebab-case native style values", () =>
   expect(node.properties.get(PropertyCode.OverflowX)).toBe("scroll");
   expect(node.properties.get(PropertyCode.OverflowY)).toBe("hidden");
   expect(node.properties.get(PropertyCode.ScrollSnapAlign)).toBe("center");
-  setProp(node, "col-span-full", true);
+  setProp(node, "style", [layout, { colSpanFull: true }]);
   expect(node.properties.has(PropertyCode.GridColumnSpan)).toBe(false);
   expect(node.properties.get(PropertyCode.GridColumnEnd)).toBe(-1);
-  setProp(node, "col-span-full", false);
+  setProp(node, "style", [layout, false]);
   expect(node.properties.get(PropertyCode.GridColumnSpan)).toBe(2);
   expect(node.properties.has(PropertyCode.GridColumnEnd)).toBe(false);
 });
 
-test("flex helpers are flags and CSS flex shorthand stays in style objects", () => {
-  const node = createComponent(View, { flex: true, "flex-wrap": true });
+test("flex presets and CSS flex shorthand compose inside style", () => {
+  const node = createComponent(View, { style: { flex: true, flexWrap: true } });
   expect(node.properties.get(PropertyCode.Display)).toBe("flex");
   expect(node.properties.get(PropertyCode.FlexWrap)).toBe("wrap");
-  expect(() => setProp(node, "flex", 1)).toThrow("boolean");
-  expect(() => setProp(node, "flex-wrap", "wrap-reverse")).toThrow("boolean");
-  setProp(node, "style", { flex: "2 0 20px", flexWrap: "wrap-reverse" });
+  setProp(node, "style", [
+    { flex: true, flexWrap: true },
+    { flex: "2 0 20px", flexWrap: "wrap-reverse" },
+  ]);
   expect(node.properties.get(PropertyCode.FlexGrow)).toBe(2);
   expect(node.properties.get(PropertyCode.FlexShrink)).toBe(0);
   expect(node.properties.get(PropertyCode.FlexBasis)).toBe(20);
-  setProp(node, "flex-wrap", false);
   expect(node.properties.get(PropertyCode.FlexWrap)).toBe("wrap-reverse");
-  setProp(node, "flexWrap", "nowrap");
-  setProp(node, "flex-wrap", true);
-  expect(node.properties.get(PropertyCode.FlexWrap)).toBe("nowrap");
-  setProp(node, "flexWrap", undefined);
+  setProp(node, "style", [{ flex: "2 0 20px", flexWrap: "wrap-reverse" }, { flexWrap: true }]);
   expect(node.properties.get(PropertyCode.FlexWrap)).toBe("wrap");
   setProp(node, "style", undefined);
   expect(node.properties.has(PropertyCode.FlexGrow)).toBe(false);
@@ -318,11 +315,11 @@ test("flex helpers are flags and CSS flex shorthand stays in style objects", () 
   expect(node.properties.has(PropertyCode.FlexBasis)).toBe(false);
 });
 
-test("grid shorthands and helper spans restore one another across reactive updates", () => {
+test("grid shorthands and preset spans restore one another across reactive updates", () => {
   const [full, setFull] = createSignal(true);
   const host = new Window({
     renderer: createRenderer(() => (
-      <view style={{ gridColumn: "1 / 4" }} col-span-full={full()} rounded-lg />
+      <div style={[{ gridColumn: "1 / 4" }, { colSpanFull: full(), roundedLg: true }]} />
     )),
   });
   const node = host.root.children[0]!;
@@ -342,4 +339,29 @@ test("grid shorthands and helper spans restore one another across reactive updat
   expect(node.properties.has(PropertyCode.GridColumnStart)).toBe(false);
   expect(node.properties.has(PropertyCode.GridColumnEnd)).toBe(false);
   host.close();
+});
+
+test("span and Text share style objects while behavior stays in ordinary props", () => {
+  const host = new Window({
+    renderer: createRenderer(() => (
+      <div>
+        <Text style={{ fontSize: 18, fontWeight: 600 }}>some text</Text>
+        <span aria-label="caption" style={{ fontSize: 18, fontWeight: 600 }}>
+          some text
+        </span>
+      </div>
+    )),
+  });
+  const [label, span] = host.root.children[0]!.children;
+  expect(span!.tag).toBe(label!.tag);
+  expect(span!.properties.get(PropertyCode.FontSize)).toBe(18);
+  expect(span!.properties.get(PropertyCode.FontWeight)).toBe(600);
+  expect(span!.properties.get(PropertyCode.AccessibilityLabel)).toBe("caption");
+  host.close();
+  // @ts-expect-error Styling uses style objects.
+  const classProp: JSX.NativeProps = { class: "text-lg" };
+  // @ts-expect-error className is not a native JSX prop.
+  const classNameProp: JSX.NativeProps = { className: "text-lg" };
+  void classProp;
+  void classNameProp;
 });

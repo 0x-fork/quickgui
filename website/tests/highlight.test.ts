@@ -15,11 +15,12 @@ test("the homepage can highlight every frontend, including Solid TSX", async () 
   }
   expect(highlighted.typescriptCounter).toContain("createSignal");
   expect(highlighted.typescriptCounter).toContain("bg");
-  expect(snippets.typescriptCounter.code).toMatch(/\bbg=/);
-  expect(snippets.typescriptCounter.code).not.toContain("background-");
-  expect(snippets.typescriptCounter.code).not.toContain("backgroundColor");
-  expect(snippets.typescriptCounter.code).toMatch(/\brounded-lg(?:\s|>)/);
-  expect(snippets.typescriptCounter.code).not.toContain('rounded="');
+  expect(snippets.typescriptCounter.code).toMatch(/\bstyle=\{\{/);
+  expect(snippets.typescriptCounter.code).toMatch(/\bflexCol:\s*true/);
+  expect(snippets.typescriptCounter.code).toMatch(/\broundedLg:\s*true/);
+  expect(snippets.typescriptCounter.code).not.toMatch(/\b(?:bg|color)=/);
+  expect(snippets.typescriptCounter.code).not.toMatch(/\b(?:flex-col|rounded-lg|p-3)\b/);
+  expect(snippets.typescriptCounter.code).not.toMatch(/\bclass(?:Name)?=/);
 });
 
 test("precompiled homepage tokens preserve source and both color themes", async () => {

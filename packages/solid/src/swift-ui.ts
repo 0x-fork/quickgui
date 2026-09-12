@@ -612,11 +612,11 @@ export function QuickGUIHostView(props: QuickGUIHostViewProps): NativeNode {
   const axes = matchAxes(props.matchContents);
   const node = createElement("swift-ui-quickgui-host");
   spread(node, {
-    get width() {
-      return props.width;
-    },
-    get height() {
-      return props.height;
+    get style() {
+      return {
+        ...(props.width === undefined ? {} : { width: props.width }),
+        ...(props.height === undefined ? {} : { height: props.height }),
+      } satisfies JSX.Style;
     },
     get matchContents() {
       return props.matchContents;

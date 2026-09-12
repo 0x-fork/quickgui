@@ -10,8 +10,6 @@ function identifier(token: KeyedToken): string | undefined {
   const name = token.content.match(/^[({.]*([A-Za-z_$][\w$-]*)[)}.,:;]*$/)?.[1];
   if (!name) return;
   const normalized = name.replace(/[-_]/g, "").toLowerCase();
-  if (name === "color") return "textcolor";
-  if (normalized === "bg") return "backgroundcolor";
   return normalized.length >= 3 ? normalized : undefined;
 }
 

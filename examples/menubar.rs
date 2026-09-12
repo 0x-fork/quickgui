@@ -147,7 +147,7 @@ impl View for MenubarGallery {
 
         let bar = Menubar::new("menubar");
         let mut bar_row = bar
-            .root_part(self.menubar, div())
+            .root_with(self.menubar, div())
             .accessibility_label("Application menus")
             .flex_row()
             .items_center()
@@ -159,7 +159,7 @@ impl View for MenubarGallery {
         for index in 0..self.menubar.menu_count() {
             let item = bar.item(self.menubar, index).expect("a declared menu");
             let open = item.is_open();
-            let element = item.item_part(
+            let element = item.item_with(
                 div()
                     .px(10.0)
                     .h(24.0)
@@ -174,7 +174,7 @@ impl View for MenubarGallery {
                     .hover(move |hover| hover.bg(palette.open))
                     .child(text(MENU_TITLES[index]).text_sm()),
             );
-            bar_row = bar_row.child(item.key_part(cx, element, Self::menubar));
+            bar_row = bar_row.child(item.key_with(cx, element, Self::menubar));
         }
 
         let surface = self.menubar.open_menu().map(|index| {

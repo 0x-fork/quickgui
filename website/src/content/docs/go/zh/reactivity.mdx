@@ -14,7 +14,7 @@ func TextExample() *ui.Element {
 			"Count: ",
 			count(),
 		).FontSize(20),
-		ui.Button("Increment").OnClick(func() { setCount(count() + 1) }),
+		ui.Button().Child("Increment").OnClick(func() { setCount(count() + 1) }),
 	)
 }
 ```
@@ -29,7 +29,7 @@ func DerivedExample() *ui.Element {
 	doubled := ui.CreateMemo(func() int { return count() * 2 })
 	return ui.View().Children(
 		ui.Text("Doubled: ", doubled()),
-		ui.Button("Increment").OnClick(func() { setCount(count() + 1) }),
+		ui.Button().Child("Increment").OnClick(func() { setCount(count() + 1) }),
 	)
 }
 ```
@@ -50,9 +50,7 @@ func EffectExample() *ui.Element {
 	})
 	return ui.View().Children(
 		ui.Text("Watching: ", topic()),
-		ui.Button(
-			"Switch topic",
-		).OnClick(func() {
+		ui.Button().Child("Switch topic").OnClick(func() {
 			if topic() == "Inbox" {
 				setTopic("Archive")
 			} else {
@@ -82,7 +80,7 @@ func BatchedExample() *ui.Element {
 	}
 	return ui.View().Children(
 		ui.Text(first(), " ", last()),
-		ui.Button("Apply profile").OnClick(applyProfile),
+		ui.Button().Child("Apply profile").OnClick(applyProfile),
 	)
 }
 ```

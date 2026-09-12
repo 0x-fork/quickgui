@@ -42,37 +42,39 @@ func Text(children ...any) *Element {
 	return newElement(protocol.TagView, children)
 }
 
-func Button(children ...any) *Element {
-	return newElement(protocol.TagButton, children)
+// Button constructs an empty button. Add content with Child or Children.
+func Button() *Element {
+	return newElement(protocol.TagButton, nil)
 }
 
-func Input(children ...any) *Element {
-	return newElement(protocol.TagInput, children)
+// Input constructs an empty editor. Configure its text with Value.
+func Input() *Element {
+	return newElement(protocol.TagInput, nil)
 }
 
-func TextArea(children ...any) *Element {
-	return Input(children...).Multiline(true)
+func TextArea() *Element {
+	return Input().Multiline(true)
 }
 
-func Markdown(children ...any) *Element {
-	return newElement(protocol.TagMarkdown, children)
+func Markdown() *Element {
+	return newElement(protocol.TagMarkdown, nil)
 }
 
-func Image(children ...any) *Element {
-	return newElement(protocol.TagImage, children)
+func Image() *Element {
+	return newElement(protocol.TagImage, nil)
 }
 
 // SVG renders inline SVG markup supplied through Value using the Rust renderer.
-func SVG(children ...any) *Element {
-	return newElement(protocol.TagSvg, children)
+func SVG() *Element {
+	return newElement(protocol.TagSvg, nil)
 }
 
 // Shader paints WGSL supplied through Value, with up to sixteen parameter floats.
-func Shader(children ...any) *Element {
-	return newElement(protocol.TagShader, children)
+func Shader() *Element {
+	return newElement(protocol.TagShader, nil)
 }
 
 // VirtualList lays out and paints the visible children using the core's virtual list.
-func VirtualList(children ...any) *Element {
-	return newElement(protocol.TagVirtualList, children)
+func VirtualList() *Element {
+	return newElement(protocol.TagVirtualList, nil)
 }

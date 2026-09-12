@@ -156,8 +156,6 @@ func civilFromCalendar(props CalendarRootProps) civilValueProps {
 }
 
 // DateField is a controlled date field. Values are ISO YYYY-MM-DD civil dates.
-var DateField = dateFieldAPI{}
-
 type dateFieldAPI struct{}
 
 func (dateFieldAPI) Root(props DateFieldRootProps, children ...any) *native.Node {
@@ -185,8 +183,6 @@ func (dateFieldAPI) Segment(props DateFieldSegmentProps, children ...any) *nativ
 }
 
 // TimeField is a controlled time field. Values are HH:MM or HH:MM:SS civil times.
-var TimeField = timeFieldAPI{}
-
 type timeFieldAPI struct{}
 
 func (timeFieldAPI) Root(props TimeFieldRootProps, children ...any) *native.Node {
@@ -221,8 +217,6 @@ func (timeFieldAPI) Segment(props TimeFieldSegmentProps, children ...any) *nativ
 }
 
 // Calendar is a controlled month grid.
-var Calendar = calendarAPI{}
-
 type calendarAPI struct{}
 
 func (calendarAPI) Root(props CalendarRootProps, children ...any) *native.Node {

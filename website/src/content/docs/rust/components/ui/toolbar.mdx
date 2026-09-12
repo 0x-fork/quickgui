@@ -12,18 +12,18 @@ use quickgui::*;
 
 ```rust
 let bar = Toolbar::new("main", &state, &items);
-bar.root_part(div().flex_row().gap(8.0))
+bar.root().flex_row().gap(8.0)
 ```
 
 ## Anatomy
 
-- `Toolbar::root_part`
-- `Toolbar::item_part`
-- `Toolbar::button_part`
-- `Toolbar::link_part`
-- `Toolbar::input_part`
-- `Toolbar::group_part`
-- `Toolbar::separator_part`
+- `Toolbar::root`
+- `Toolbar::item`
+- `Toolbar::button`
+- `Toolbar::link`
+- `Toolbar::input`
+- `Toolbar::group`
+- `Toolbar::separator`
 
 ## Key props
 

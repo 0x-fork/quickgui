@@ -74,7 +74,7 @@ func TestChildrenBlocksPreserveNestingAndFineGrainedUpdates(t *testing.T) {
 			mounts++
 			nestedView := func() *Element {
 				mounts++
-				return View().Children(Text(value), Button("Increment"))
+				return View().Children(Text(value), Button().Child("Increment"))
 			}
 			nested = nestedView().Node
 			return View().Children(Text("before"), nested, Text("after"))
@@ -132,9 +132,9 @@ func TestCompoundChildrenInheritContextAndDisposeEffects(t *testing.T) {
 		value, setValue := CreateSignal(0)
 		effects, cleanups := 0, 0
 		parent := View()
-		root := Tabs.Root(TabsRootProps{DefaultValue: "one"}, func() *native.Node {
-			return Fragment([]*native.Node{Tabs.List(PartProps{}, func() *native.Node { return Tabs.Tab(TabsTabProps{Value: "one"}, "One") }),
-				Tabs.Panel(TabsPanelProps{Value: "one"}, func() *Element {
+		root := (tabsAPI{}).Root(TabsRootProps{DefaultValue: "one"}, func() *native.Node {
+			return Fragment([]*native.Node{(tabsAPI{}).List(PartProps{}, func() *native.Node { return (tabsAPI{}).Tab(TabsTabProps{Value: "one"}, "One") }),
+				(tabsAPI{}).Panel(TabsPanelProps{Value: "one"}, func() *Element {
 					CreateRenderEffect(func() { _ = value(); effects++ })
 					OnCleanup(func() { cleanups++ })
 					return Text(Props{}, "panel")

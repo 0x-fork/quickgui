@@ -97,31 +97,31 @@ nothing. `set_disabled(disabled, cx)` likewise closes an open popover when disab
 
 | Base UI part | QuickGUI decorator | What QuickGUI owns |
 | --- | --- | --- |
-| Root | `SelectState::root_part(element)` | the structural wrapper, kept out of the window drag region |
-| Label | `label_part(id, element)` | Label role and the identity the trigger points at |
-| Trigger | `trigger_part(id, label, element)` | combo-box role, `has-popup`, `expanded`, required/read-only/invalid state |
-| Value | `value_part(id, element)` | stable identity, hidden from assistive technology so the value is announced once |
-| Icon | `icon_part(id, element)` | stable identity, accessibility-hidden decoration |
-| Backdrop | `backdrop_part(id, element)` | full-viewport, accessibility-hidden owner-window layer |
-| Portal / Positioner / Popup | `portal_part(...)`, `positioner_part(...)`, `popup_part(id, label, option_count, multiple, element)` | list-box role, accessible name, set size, multi-select state |
-| Arrow | `arrow_part(id, element)` | absolutely positioned, accessibility-hidden decoration |
-| List | `list_part(id, option_count, element)` | the scrolling container's stable identity |
-| Item | `item_part(row_id, label, state, element)` | option role, selected and disabled state, accessible name |
-| ItemText / ItemIndicator | `item_text_part(element)`, `item_indicator_part(element)` | accessibility-hidden decoration |
-| Group / GroupLabel | `group_part(element)`, `group_label_part(label_id, element)` | group and label roles |
-| ScrollUpArrow / ScrollDownArrow | `SelectPopupParts::scroll_up_arrow_part(element)`, `scroll_down_arrow_part(element)` | hovered scrolling on exact deadlines, accessibility-hidden |
-| Separator | `separator_part(element)` | non-interactive divider role |
+| Root | `SelectState::root_with(element)` | the structural wrapper, kept out of the window drag region |
+| Label | `label_with(id, element)` | Label role and the identity the trigger points at |
+| Trigger | `trigger_with(id, label, element)` | combo-box role, `has-popup`, `expanded`, required/read-only/invalid state |
+| Value | `value_with(id, element)` | stable identity, hidden from assistive technology so the value is announced once |
+| Icon | `icon_with(id, element)` | stable identity, accessibility-hidden decoration |
+| Backdrop | `backdrop_with(id, element)` | full-viewport, accessibility-hidden owner-window layer |
+| Portal / Positioner / Popup | `portal_with(...)`, `positioner_with(...)`, `popup_with(id, label, option_count, multiple, element)` | list-box role, accessible name, set size, multi-select state |
+| Arrow | `arrow_with(id, element)` | absolutely positioned, accessibility-hidden decoration |
+| List | `list_with(id, option_count, element)` | the scrolling container's stable identity |
+| Item | `item_with(row_id, label, state, element)` | option role, selected and disabled state, accessible name |
+| ItemText / ItemIndicator | `item_text_with(element)`, `item_indicator_with(element)` | accessibility-hidden decoration |
+| Group / GroupLabel | `group_with(element)`, `group_label_with(label_id, element)` | group and label roles |
+| ScrollUpArrow / ScrollDownArrow | `SelectPopupParts::scroll_up_arrow_with(element)`, `scroll_down_arrow_with(element)` | hovered scrolling on exact deadlines, accessibility-hidden |
+| Separator | `separator_with(element)` | non-interactive divider role |
 
 The option surface is a separate native child window, so Portal, Positioner, and Popup are one
 element: all three names decorate it identically and QuickGUI resolves placement against the
-display work area. `popup_part` and `item_part` are the same decorators the native surface applies
+display work area. `popup_with` and `item_with` are the same decorators the native surface applies
 internally, so an application composing its own in-window list gets exactly the same semantics.
 
 The two scroll-arrow decorators carry behavior, not just semantics, so they arrive through
-`element_with_parts` rather than from `SelectState` directly:
+`element_with_trigger` rather than from `SelectState` directly:
 
 ```rust,ignore
-self.theme.element_with_parts(
+self.theme.element_with_trigger(
     cx,
     "theme-select",
     "Editor theme",
@@ -130,10 +130,10 @@ self.theme.element_with_parts(
     |list, parts| {
         let mut root = quickgui::div().relative();
         if list.can_scroll_up {
-            root = root.child(parts.scroll_up_arrow_part(quickgui::div().h(12.0)));
+            root = root.child(parts.scroll_up_arrow_with(quickgui::div().h(12.0)));
         }
         if list.can_scroll_down {
-            root = root.child(parts.scroll_down_arrow_part(quickgui::div().h(12.0)));
+            root = root.child(parts.scroll_down_arrow_with(quickgui::div().h(12.0)));
         }
         root
     },
@@ -157,7 +157,7 @@ exactly one value, so the retained set can never disagree with the declared arit
 `required(true)` and `read_only(true)` project the same states the other form controls do; a
 read-only select stays focusable and refuses `select_source`, `toggle_source`, and
 `clear_selection` on its own state, not only in the accessibility tree. `modal(true)` declares the
-intent a mounted `backdrop_part` paints. `align_item_with_trigger(true)` offsets the surface by the
+intent a mounted `backdrop_with` paints. `align_item_with_trigger(true)` offsets the surface by the
 selected row's distance from the top of the popup plus `SelectPopoverLayout::trigger_height`, so
 the row the user is already looking at does not move under the pointer; presentation stays
 application-owned, which is why the trigger's own height is declared rather than measured.
@@ -311,24 +311,24 @@ failed replacement changes neither source nor selection.
 
 | Base UI part | QuickGUI decorator | What QuickGUI owns |
 | --- | --- | --- |
-| Root | `ComboboxState::root_part(element)` | the structural wrapper |
-| Label | `label_part(id, element)` | Label role and the identity the input and chips point at |
-| Value | `value_part(id, element)` | stable identity, accessibility-hidden decoration |
-| Icon | `icon_part(id, element)` | stable identity, accessibility-hidden decoration |
-| InputGroup | `input_group_part(id, element)` | group role and the mounted label relationship |
-| Input | `input_part(id, element)` | required, read-only, invalid, and label relationships beside `element`'s interaction |
-| Clear | `clear_part(id, label, element)` | button semantics and an accessible name |
-| Trigger | `trigger_part(id, label, element)` | button semantics, `has-popup`, `expanded`, `controls` |
-| Chips / Chip / ChipRemove | `chips_part(id, element)`, `chip_part(id, index, label, element)`, `chip_remove_part(id, index, label, element)` | list and list-item roles, position in set, a real focusable remove button |
-| Backdrop | `backdrop_part(id, element)` | full-viewport, accessibility-hidden owner-window layer |
-| Portal / Positioner / Popup | `portal_part(id, element)`, `positioner_part(id, element)`, `popup_part(id, element)` | list-box role, result-set size, multi-select state |
-| Arrow | `arrow_part(id, element)` | absolutely positioned, accessibility-hidden decoration |
-| Status | `status_part(id, element)` | Status role and a polite live region |
-| Empty | `empty_part(id, element)` | stable identity for the no-results pass |
-| List / Collection / Row | `list_part(id, element)`, `collection_part(id, element)`, `row_part(element)` | stable identities and the grid-row group role |
-| Item / ItemIndicator | `item_part(id, source_index, state, element)`, `item_indicator_part(element)` | option role, selected/disabled state, accessibility-hidden indicator |
-| Group / GroupLabel | `group_part(element)`, `group_label_part(label_id, element)` | group and label roles |
-| Separator | `separator_part(element)` | non-interactive divider role |
+| Root | `ComboboxState::root_with(element)` | the structural wrapper |
+| Label | `label_with(id, element)` | Label role and the identity the input and chips point at |
+| Value | `value_with(id, element)` | stable identity, accessibility-hidden decoration |
+| Icon | `icon_with(id, element)` | stable identity, accessibility-hidden decoration |
+| InputGroup | `input_group_with(id, element)` | group role and the mounted label relationship |
+| Input | `input_with(id, element)` | required, read-only, invalid, and label relationships beside `element`'s interaction |
+| Clear | `clear_with(id, label, element)` | button semantics and an accessible name |
+| Trigger | `trigger_with(id, label, element)` | button semantics, `has-popup`, `expanded`, `controls` |
+| Chips / Chip / ChipRemove | `chips_with(id, element)`, `chip_with(id, index, label, element)`, `chip_remove_with(id, index, label, element)` | list and list-item roles, position in set, a real focusable remove button |
+| Backdrop | `backdrop_with(id, element)` | full-viewport, accessibility-hidden owner-window layer |
+| Portal / Positioner / Popup | `portal_with(id, element)`, `positioner_with(id, element)`, `popup_with(id, element)` | list-box role, result-set size, multi-select state |
+| Arrow | `arrow_with(id, element)` | absolutely positioned, accessibility-hidden decoration |
+| Status | `status_with(id, element)` | Status role and a polite live region |
+| Empty | `empty_with(id, element)` | stable identity for the no-results pass |
+| List / Collection / Row | `list_with(id, element)`, `collection_with(id, element)`, `row_with(element)` | stable identities and the grid-row group role |
+| Item / ItemIndicator | `item_with(id, source_index, state, element)`, `item_indicator_with(element)` | option role, selected/disabled state, accessibility-hidden indicator |
+| Group / GroupLabel | `group_with(element)`, `group_label_with(label_id, element)` | group and label roles |
+| Separator | `separator_with(element)` | non-interactive divider role |
 
 The suggestion surface is a separate native child window, so Portal, Positioner, and Popup are one
 element and all three names decorate it identically.

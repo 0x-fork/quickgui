@@ -285,7 +285,7 @@ impl Tabs {
 
     /// Read back the active tab's laid-out geometry from a bound indicator handle.
     ///
-    /// Mount the indicator with [`Tab::tracked_indicator_part`] and pass the same handle here on
+    /// Mount the indicator with [`Tab::tracked_indicator_with`] and pass the same handle here on
     /// the next frame. The rectangle is the active tab's own, in window logical coordinates, and is
     /// `None` until the indicator has been painted once.
     pub fn indicator_geometry(
@@ -302,12 +302,16 @@ impl Tabs {
     }
 
     /// Decorate an application-owned structural root without adding role or appearance.
-    pub fn root_part(self, root: Element) -> Element {
+    pub fn root_with(self, root: Element) -> Element {
         root.id(self.root_id)
+    }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(self) -> Element {
+        self.root_with(crate::div())
     }
 
     /// Decorate an application-owned tab-list root.
-    pub fn list_part(self, list: Element) -> Element {
+    pub fn list_with(self, list: Element) -> Element {
         let mut list = list
             .id(self.list_id())
             .accessibility_role(AccessibilityRole::TabList);
@@ -323,6 +327,10 @@ impl Tabs {
             loop_focus: self.loop_focus,
         });
         list
+    }
+    /// Create the unstyled list part. Use [`Self::list_with`] to supply an existing element.
+    pub fn list(self) -> Element {
+        self.list_with(crate::div())
     }
 
     pub fn tab(self, value: impl Into<ElementId>) -> Tab {
@@ -404,7 +412,7 @@ impl Tab {
     }
 
     /// Decorate an application-owned tab button without adding appearance.
-    pub fn tab_part(self, tab: Element) -> Element {
+    pub fn tab_with(self, tab: Element) -> Element {
         let disabled = self.state.disabled || tab.accessibility.disabled;
         tab.id(self.tab_id())
             .accessibility_role(AccessibilityRole::Tab)
@@ -417,15 +425,23 @@ impl Tab {
             .user_select_none()
             .disabled(disabled)
     }
+    /// Create the unstyled tab part. Use [`Self::tab_with`] to supply an existing element.
+    pub fn tab(self) -> Element {
+        self.tab_with(crate::button())
+    }
 
     /// Mount a caller-owned decorative indicator only for the active tab.
     ///
     /// Indicator geometry and motion are intentionally application-owned. Put this part inside the
     /// tab or position it absolutely in the caller's list layout.
-    pub fn indicator_part(self, indicator: Element) -> Option<Element> {
+    pub fn indicator_with(self, indicator: Element) -> Option<Element> {
         self.state
             .active
             .then(|| indicator.id(self.indicator_id()).accessibility_hidden(true))
+    }
+    /// Create the unstyled indicator part. Use [`Self::indicator_with`] to supply an existing element.
+    pub fn indicator(self) -> Option<Element> {
+        self.indicator_with(crate::div())
     }
 
     /// The side the selection travelled toward when this tab became active.
@@ -439,12 +455,12 @@ impl Tab {
     /// without the application re-deriving the tab's box every frame. `placement` chooses the edge:
     /// `AnchorPlacement::Bottom` draws the familiar underline. Size, colour, radius, and motion stay
     /// application-owned, and the part is still mounted only for the active tab.
-    pub fn anchored_indicator_part(
+    pub fn anchored_indicator_with(
         self,
         indicator: Element,
         placement: crate::AnchorPlacement,
     ) -> Option<Element> {
-        self.indicator_part(indicator).map(|indicator| {
+        self.indicator_with(indicator).map(|indicator| {
             indicator
                 .anchor_to(self.tab_id(), placement)
                 .anchor_gap(0.0)
@@ -454,22 +470,34 @@ impl Tab {
                 .anchor_sticky(false)
         })
     }
+    /// Create the unstyled anchored indicator part. Use [`Self::anchored_indicator_with`] to supply an existing element.
+    pub fn anchored_indicator(self, placement: crate::AnchorPlacement) -> Option<Element> {
+        self.anchored_indicator_with(crate::div(), placement)
+    }
 
     /// Mount an anchored indicator that also publishes the active tab's laid-out geometry.
     ///
     /// Read it back with [`Tabs::indicator_geometry`] on the next frame. QuickGUI writes the handle
     /// during the paint it was already performing and requests exactly one correcting frame when
     /// the geometry changes, so a settled tab list adds no redraw source.
-    pub fn tracked_indicator_part(
+    pub fn tracked_indicator_with(
         self,
         indicator: Element,
         placement: crate::AnchorPlacement,
         geometry: &crate::AnchorPlacementHandle,
     ) -> Option<Element> {
-        self.anchored_indicator_part(
+        self.anchored_indicator_with(
             indicator.report_anchor_placement(geometry.clone()),
             placement,
         )
+    }
+    /// Create the unstyled tracked indicator part. Use [`Self::tracked_indicator_with`] to supply an existing element.
+    pub fn tracked_indicator(
+        self,
+        placement: crate::AnchorPlacement,
+        geometry: &crate::AnchorPlacementHandle,
+    ) -> Option<Element> {
+        self.tracked_indicator_with(crate::div(), placement, geometry)
     }
 
     /// Decorate and mount this tab's application-owned panel.
@@ -477,7 +505,7 @@ impl Tab {
     /// The active panel is focusable so Tab can move from the composite tab list into panel
     /// content even when that content has no focusable first child. Inactive retained panels use
     /// `display: none`, contributing no layout, paint, input, accessibility node, or runtime work.
-    pub fn panel_part(self, panel: Element) -> Option<Element> {
+    pub fn panel_with(self, panel: Element) -> Option<Element> {
         let panel = panel
             .id(self.panel_id())
             .accessibility_role(AccessibilityRole::TabPanel)
@@ -490,6 +518,10 @@ impl Tab {
         } else {
             None
         }
+    }
+    /// Create the unstyled panel part. Use [`Self::panel_with`] to supply an existing element.
+    pub fn panel(self) -> Option<Element> {
+        self.panel_with(crate::div())
     }
 }
 
@@ -537,11 +569,11 @@ mod tests {
         assert!(!tabs.loops_focus());
         assert!(tabs.keeps_panels_mounted());
 
-        let root = tabs.root_part(div().w(317.0).bg(Color::rgb8(1, 2, 3)));
+        let root = tabs.root_with(div().w(317.0).bg(Color::rgb8(1, 2, 3)));
         assert_eq!(root.explicit_id, Some(tabs.root_id()));
         assert_eq!(root.visual.background, Some(Color::rgb8(1, 2, 3)));
 
-        let list = tabs.list_part(div().gap_3().border(2.0, Color::rgb8(4, 5, 6)));
+        let list = tabs.list_with(div().gap_3().border(2.0, Color::rgb8(4, 5, 6)));
         assert_eq!(list.explicit_id, Some(tabs.list_id()));
         assert_eq!(list.accessibility.role, AccessibilityRole::TabList);
         assert_eq!(
@@ -575,7 +607,7 @@ mod tests {
             assert!(!ids[..index].contains(id));
         }
 
-        let tab = active.tab_part(div().px_4().bg(Color::rgb8(7, 8, 9)));
+        let tab = active.tab_with(div().px_4().bg(Color::rgb8(7, 8, 9)));
         assert_eq!(tab.explicit_id, Some(active.tab_id()));
         assert_eq!(tab.accessibility.role, AccessibilityRole::Tab);
         assert!(tab.accessibility.selected);
@@ -593,14 +625,14 @@ mod tests {
         assert!(tab.transition.is_none());
 
         let indicator = active
-            .indicator_part(div().h(3.0).bg(Color::rgb8(10, 11, 12)))
+            .indicator_with(div().h(3.0).bg(Color::rgb8(10, 11, 12)))
             .expect("active indicator");
         assert_eq!(indicator.explicit_id, Some(active.indicator_id()));
         assert!(indicator.accessibility.hidden);
         assert_eq!(indicator.visual.background, Some(Color::rgb8(10, 11, 12)));
 
         let panel = active
-            .panel_part(div().bg(Color::rgb8(13, 14, 15)))
+            .panel_with(div().bg(Color::rgb8(13, 14, 15)))
             .expect("active panel");
         assert_eq!(panel.explicit_id, Some(active.panel_id()));
         assert_eq!(panel.accessibility.role, AccessibilityRole::TabPanel);
@@ -613,14 +645,14 @@ mod tests {
 
         let inactive = tabs.tab("files");
         assert!(!inactive.is_active());
-        assert!(inactive.indicator_part(div()).is_none());
+        assert!(inactive.indicator_with(div()).is_none());
         assert!(
             inactive
-                .panel_part(div())
+                .panel_with(div())
                 .expect("retained inactive panel")
                 .is_display_none()
         );
-        let disabled = inactive.disabled(true).tab_part(div());
+        let disabled = inactive.disabled(true).tab_with(div());
         assert!(disabled.accessibility.disabled);
         assert!(!disabled.accessibility.selected);
     }
@@ -690,71 +722,71 @@ mod tests {
             div()
                 .child(button().id("before").child("Before"))
                 .child(
-                    manual.root_part(
+                    manual.root_with(
                         div()
                             .child(
-                                manual.list_part(
+                                manual.list_with(
                                     div()
                                         .child(
                                             overview
-                                                .tab_part(div().child("Overview"))
+                                                .tab_with(div().child("Overview"))
                                                 .on_click(select_overview),
                                         )
                                         .child(
                                             disabled
-                                                .tab_part(div().child("Disabled"))
+                                                .tab_with(div().child("Disabled"))
                                                 .on_click(select_disabled),
                                         )
                                         .child(
                                             files
-                                                .tab_part(div().child("Files"))
+                                                .tab_with(div().child("Files"))
                                                 .on_click(select_files),
                                         )
                                         .child(
                                             settings
-                                                .tab_part(div().child("Settings"))
+                                                .tab_with(div().child("Settings"))
                                                 .on_click(select_settings),
                                         ),
                                 ),
                             )
-                            .children(overview.panel_part(text("Overview panel")))
-                            .children(disabled.panel_part(text("Disabled panel")))
-                            .children(files.panel_part(text("Files panel")))
-                            .children(settings.panel_part(text("Settings panel"))),
+                            .children(overview.panel_with(text("Overview panel")))
+                            .children(disabled.panel_with(text("Disabled panel")))
+                            .children(files.panel_with(text("Files panel")))
+                            .children(settings.panel_with(text("Settings panel"))),
                     ),
                 )
                 .child(button().id("between").child("Between"))
                 .child(
-                    automatic.root_part(
+                    automatic.root_with(
                         div()
                             .child(
-                                automatic.list_part(
+                                automatic.list_with(
                                     div()
                                         .child(
                                             alpha
-                                                .tab_part(div().child("Alpha"))
+                                                .tab_with(div().child("Alpha"))
                                                 .on_click(select_alpha),
                                         )
                                         .child(
-                                            beta.tab_part(div().child("Beta"))
+                                            beta.tab_with(div().child("Beta"))
                                                 .on_click(select_beta),
                                         )
                                         .child(
                                             gamma
-                                                .tab_part(div().child("Gamma"))
+                                                .tab_with(div().child("Gamma"))
                                                 .on_click(select_gamma),
                                         )
                                         .child(
                                             delta
-                                                .tab_part(div().child("Delta"))
+                                                .tab_with(div().child("Delta"))
                                                 .on_click(select_delta),
                                         ),
                                 ),
                             )
-                            .children(alpha.panel_part(text("Alpha panel")))
-                            .children(beta.panel_part(text("Beta panel")))
-                            .children(gamma.panel_part(text("Gamma panel")))
-                            .children(delta.panel_part(text("Delta panel"))),
+                            .children(alpha.panel_with(text("Alpha panel")))
+                            .children(beta.panel_with(text("Beta panel")))
+                            .children(gamma.panel_with(text("Gamma panel")))
+                            .children(delta.panel_with(text("Delta panel"))),
                     ),
                 )
                 .child(button().id("after").child("After"))
@@ -886,19 +918,19 @@ mod tests {
                 }
             });
 
-            tabs.root_part(
+            tabs.root_with(
                 div()
                     .child(
-                        tabs.list_part(
+                        tabs.list_with(
                             div()
-                                .child(first.tab_part(div().child("First")).on_click(select_first))
-                                .child(unavailable.tab_part(div().child("Unavailable")))
-                                .child(last.tab_part(div().child("Last")).on_click(select_last)),
+                                .child(first.tab_with(div().child("First")).on_click(select_first))
+                                .child(unavailable.tab_with(div().child("Unavailable")))
+                                .child(last.tab_with(div().child("Last")).on_click(select_last)),
                         ),
                     )
-                    .children(first.panel_part(text("First panel")))
-                    .children(unavailable.panel_part(text("Unavailable panel")))
-                    .children(last.panel_part(text("Last panel"))),
+                    .children(first.panel_with(text("First panel")))
+                    .children(unavailable.panel_with(text("Unavailable panel")))
+                    .children(last.panel_with(text("Last panel"))),
             )
         }
     }
@@ -1030,7 +1062,7 @@ mod tests {
     impl View for IndicatorView {
         fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
             let tabs = Tabs::from_state("tabs", &self.tabs);
-            let mut list = tabs.list_part(div().relative().flex_row());
+            let mut list = tabs.list_with(div().relative().flex_row());
             for (index, value) in ["overview", "activity"].into_iter().enumerate() {
                 let tab = tabs.tab(value);
                 let select = cx.listener(tab.tab_id(), move |view: &mut Self, cx| {
@@ -1038,8 +1070,8 @@ mod tests {
                         cx.invalidate();
                     }
                 });
-                let mut element = tab.tab_part(div().w(120.0).h(32.0).on_click(select));
-                if let Some(indicator) = tab.tracked_indicator_part(
+                let mut element = tab.tab_with(div().w(120.0).h(32.0).on_click(select));
+                if let Some(indicator) = tab.tracked_indicator_with(
                     div().h(3.0).w(120.0),
                     crate::AnchorPlacement::Bottom,
                     &self.geometry,
@@ -1048,7 +1080,7 @@ mod tests {
                 }
                 list = list.child(element);
             }
-            div().size_full().child(tabs.root_part(div()).child(list))
+            div().size_full().child(tabs.root_with(div()).child(list))
         }
     }
 

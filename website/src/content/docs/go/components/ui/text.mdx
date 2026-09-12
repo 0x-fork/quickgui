@@ -20,7 +20,7 @@ func TextExample() *ui.Element {
 			"Count: ",
 			count(),
 		).FontSize(20),
-		ui.Button("Increment").OnClick(func() { setCount(count() + 1) }),
+		ui.Button().Child("Increment").OnClick(func() { setCount(count() + 1) }),
 	)
 }
 ```

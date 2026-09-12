@@ -131,7 +131,7 @@ impl View for ComboboxGallery {
             .map(|item| item.label().clone())
             .unwrap_or_else(|| Arc::from("Choose a theme…"));
         let theme_open = self.theme.is_open();
-        let theme = self.theme.element_with_parts(
+        let theme = self.theme.element_with_trigger(
             cx,
             "theme-select",
             "Editor theme",
@@ -173,7 +173,7 @@ impl View for ComboboxGallery {
                 // its exact deadlines, the application owns every pixel of the affordance.
                 if state.can_scroll_up {
                     root = root.child(
-                        parts.scroll_up_arrow_part(
+                        parts.scroll_up_arrow_with(
                             div()
                                 .overlay()
                                 .top(0.0)
@@ -190,7 +190,7 @@ impl View for ComboboxGallery {
                 }
                 if state.can_scroll_down {
                     root = root.child(
-                        parts.scroll_down_arrow_part(
+                        parts.scroll_down_arrow_with(
                             div()
                                 .overlay()
                                 .bottom(0.0)

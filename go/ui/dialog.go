@@ -185,8 +185,6 @@ func createDialogClose(props PartProps) *native.Node {
 }
 
 // Dialog is a controlled in-window modal dialog.
-var Dialog = dialogAPI{}
-
 type dialogAPI struct{}
 
 func (dialogAPI) Root(props DialogRootProps, children ...any) *native.Node {
@@ -240,8 +238,6 @@ func (dialogAPI) Close(props PartProps, children ...any) *native.Node {
 }
 
 // AlertDialog is a consequential dialog whose backdrop does not dismiss by default.
-var AlertDialog = alertDialogAPI{}
-
 type alertDialogAPI struct{}
 
 func (alertDialogAPI) Root(props DialogRootProps, children ...any) *native.Node {
@@ -262,12 +258,12 @@ func (alertDialogAPI) Portal(props PartProps, children ...any) *native.Node {
 
 func (alertDialogAPI) Viewport(props PartProps, children ...any) *native.Node {
 	props.Children = withPartChildren(props.Children, children)
-	return Dialog.Viewport(props)
+	return (dialogAPI{}).Viewport(props)
 }
 
 func (alertDialogAPI) Backdrop(props PartProps, children ...any) *native.Node {
 	props.Children = withPartChildren(props.Children, children)
-	return Dialog.Backdrop(props)
+	return (dialogAPI{}).Backdrop(props)
 }
 
 func (alertDialogAPI) Popup(props DialogPopupProps, children ...any) *native.Node {
@@ -277,12 +273,12 @@ func (alertDialogAPI) Popup(props DialogPopupProps, children ...any) *native.Nod
 
 func (alertDialogAPI) Title(props PartProps, children ...any) *native.Node {
 	props.Children = withPartChildren(props.Children, children)
-	return Dialog.Title(props)
+	return (dialogAPI{}).Title(props)
 }
 
 func (alertDialogAPI) Description(props PartProps, children ...any) *native.Node {
 	props.Children = withPartChildren(props.Children, children)
-	return Dialog.Description(props)
+	return (dialogAPI{}).Description(props)
 }
 
 func (alertDialogAPI) Close(props PartProps, children ...any) *native.Node {

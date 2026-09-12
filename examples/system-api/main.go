@@ -109,10 +109,7 @@ func SystemAPIs() *ui.Element {
 				func() *native.Node {
 					var children []*native.Node
 					for _, item := range state.actions() {
-						children = append(children, ui.Button(
-							item.label,
-							buttonStyle,
-						).Disabled(busy()).OnClick(func() { state.run(item) }).Node)
+						children = append(children, ui.Button().Style(buttonStyle).Child(item.label).Disabled(busy()).OnClick(func() { state.run(item) }).Node)
 
 					}
 					return ui.Fragment(children)

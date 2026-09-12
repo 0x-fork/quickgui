@@ -133,8 +133,7 @@ describe("Solid universal host", () => {
     const parent = createElement("view");
     const child = createTextNode("hello");
     insertNode(parent, child);
-    setProp(parent, "display", "flex");
-    setProp(parent, "padding", 12);
+    setProp(parent, "style", { display: "flex", padding: 12 });
 
     expect(parent.children).toEqual([child]);
     expect(child.parent).toBe(parent);
@@ -202,13 +201,13 @@ describe("Solid universal host", () => {
 
   test("rejects invalid CSS-like box shadows", () => {
     const negativeBlur = createElement("view");
-    expect(() => setProp(negativeBlur, "boxShadow", "0 2px -1px black")).toThrow(
+    expect(() => setProp(negativeBlur, "style", { boxShadow: "0 2px -1px black" })).toThrow(
       "blur radius cannot be negative",
     );
     const tooMany = createElement("view");
-    expect(() => setProp(tooMany, "boxShadow", Array(9).fill("0 1px black").join(", "))).toThrow(
-      "at most 8 shadows",
-    );
+    expect(() =>
+      setProp(tooMany, "style", { boxShadow: Array(9).fill("0 1px black").join(", ") }),
+    ).toThrow("at most 8 shadows");
   });
 
   test("projects modal input, focus, dismissal, and accessibility to the native core", () => {
@@ -502,7 +501,7 @@ describe("Solid universal host", () => {
     const markdown = createComponent(Markdown, {
       content: "# Hello",
       streaming: true,
-      markdownLinkColor: "#60a5fa",
+      style: { markdownLinkColor: "#60a5fa" },
     });
 
     expect(markdown.properties.get(PropertyCode.Value)).toBe("# Hello");
@@ -1326,8 +1325,10 @@ describe("Solid universal host", () => {
     expect(declared.properties.get(PropertyCode.TransitionMaxFps)).toBe(30);
 
     const rejected = createElement("view");
-    expect(() => setProp(rejected, "transition", "left 100ms")).toThrow("cannot transition");
-    expect(() => setProp(rejected, "transition", "opacity 100ms 40ms")).toThrow("delay");
+    expect(() => setProp(rejected, "style", { transition: "left 100ms" })).toThrow(
+      "cannot transition",
+    );
+    expect(() => setProp(rejected, "style", { transition: "opacity 100ms 40ms" })).toThrow("delay");
   });
 
   test("creates retained image and shader nodes with bounded declarations", () => {
@@ -2589,40 +2590,42 @@ describe("declared option sources, virtual collections, and stateful fields", ()
 
   test("refuses layout, unpaintable, and unbounded declarations inside a state", () => {
     const node = createElement("view");
-    expect(() => setProp(node, "hover", { padding: 12 })).toThrow("paint-only");
-    expect(() => setProp(node, "hover", { borderRadius: "50%" })).toThrow("logical pixels");
-    expect(() => setProp(node, "hover", { outline: "2px solid chartreuse" })).toThrow(
+    expect(() => setProp(node, "style", { hover: { padding: 12 } })).toThrow("paint-only");
+    expect(() => setProp(node, "style", { hover: { borderRadius: "50%" } })).toThrow(
+      "logical pixels",
+    );
+    expect(() => setProp(node, "style", { hover: { outline: "2px solid chartreuse" } })).toThrow(
       "unsupported QuickGUI color",
     );
-    expect(() => setProp(node, "groupHover", { cursor: "pointer" })).toThrow(
+    expect(() => setProp(node, "style", { groupHover: { cursor: "pointer" } })).toThrow(
       "cannot declare a cursor",
     );
-    expect(() => setProp(node, "hover", { group: "sidebar" })).toThrow(
+    expect(() => setProp(node, "style", { hover: { group: "sidebar" } })).toThrow(
       "only `groupHover` and `groupActive`",
     );
-    expect(() => setProp(node, "focusWithin", { cursor: "pointer" })).toThrow(
+    expect(() => setProp(node, "style", { focusWithin: { cursor: "pointer" } })).toThrow(
       "cannot declare a cursor",
     );
     expect(() =>
-      setProp(
-        node,
-        "groupHover",
-        Array.from({ length: MAX_GROUP_STYLES_PER_ELEMENT + 1 }, (_, index) => ({
+      setProp(node, "style", {
+        groupHover: Array.from({ length: MAX_GROUP_STYLES_PER_ELEMENT + 1 }, (_, index) => ({
           group: `g${index}`,
           opacity: 1,
         })),
-      ),
+      }),
     ).toThrow("follows at most");
     expect(() =>
-      setProp(node, "hover", {
-        transform: `a${"b".repeat(MAX_STYLE_DECLARATION_BYTES)}`,
+      setProp(node, "style", {
+        hover: { transform: `a${"b".repeat(MAX_STYLE_DECLARATION_BYTES)}` },
       }),
     ).toThrow("style declarations");
     expect(() =>
-      setProp(node, "hover", { cursor: "x".repeat(MAX_STATE_STYLE_JSON_BYTES) }),
+      setProp(node, "style", {
+        hover: { cursor: "x".repeat(MAX_STATE_STYLE_JSON_BYTES) },
+      }),
     ).toThrow("bounded to");
     // An empty state declares nothing at all.
-    setProp(node, "hover", {});
+    setProp(node, "style", { hover: {} });
     expect(node.properties.has(PropertyCode.HoverStyle)).toBe(false);
   });
 
@@ -2720,37 +2723,37 @@ describe("declared option sources, virtual collections, and stateful fields", ()
       "hoverOutline",
       "focusTransform",
     ]) {
-      expect(() => setProp(overlong, name, `a${"b".repeat(MAX_STYLE_DECLARATION_BYTES)}`)).toThrow(
-        "style declarations",
-      );
+      expect(() =>
+        setProp(overlong, "style", {
+          [name]: `a${"b".repeat(MAX_STYLE_DECLARATION_BYTES)}`,
+        }),
+      ).toThrow("style declarations");
     }
     expect(() =>
-      setProp(
-        overlong,
-        "bg-gradient",
-        `linear-gradient(90deg, ${"#000000, ".repeat(MAX_STYLE_DECLARATION_BYTES)}#ffffff)`,
-      ),
+      setProp(overlong, "style", {
+        bgGradient: `linear-gradient(90deg, ${"#000000, ".repeat(MAX_STYLE_DECLARATION_BYTES)}#ffffff)`,
+      }),
     ).toThrow("style declarations");
-    expect(() => setProp(overlong, "borderRadius", "1 2 3 4 5")).toThrow(
+    expect(() => setProp(overlong, "style", { borderRadius: "1 2 3 4 5" })).toThrow(
       "one to four corner radii",
     );
-    expect(() => setProp(overlong, "outline", "2px solid chartreuse")).toThrow(
+    expect(() => setProp(overlong, "style", { outline: "2px solid chartreuse" })).toThrow(
       "unsupported QuickGUI color",
     );
   });
 
   test("clears extended styling when a declaration is withdrawn", () => {
     const node = createElement("view");
-    setProp(node, "bg", "linear-gradient(90deg, #000000, #ffffff)");
+    setProp(node, "style", { bg: "linear-gradient(90deg, #000000, #ffffff)" });
     expect(node.properties.get(PropertyCode.BackgroundGradient)).toBeTypeOf("string");
-    setProp(node, "bg", "#101828");
+    setProp(node, "style", { bg: "#101828" });
     expect(node.properties.has(PropertyCode.BackgroundGradient)).toBe(false);
-    setProp(node, "bg", null);
+    setProp(node, "style", undefined);
     expect(node.properties.has(PropertyCode.BackgroundColor)).toBe(false);
 
-    setProp(node, "outline", "2px solid #38bdf8");
+    setProp(node, "style", { outline: "2px solid #38bdf8" });
     expect(node.properties.get(PropertyCode.OutlineWidth)).toBe(2);
-    setProp(node, "outline", null);
+    setProp(node, "style", undefined);
     expect(node.properties.has(PropertyCode.OutlineWidth)).toBe(false);
     expect(node.properties.has(PropertyCode.OutlineColor)).toBe(false);
   });

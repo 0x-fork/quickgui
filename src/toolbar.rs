@@ -28,7 +28,7 @@ pub struct ToolbarFirst;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct ToolbarLast;
 
-/// Contextual bindings used by [`ToolbarEntry::key_part`].
+/// Contextual bindings used by [`ToolbarEntry::key_with`].
 ///
 /// A horizontal toolbar answers Left and Right; a vertical toolbar answers Up and Down. The other
 /// axis is left to the surrounding application, which matches the tab-list contract.
@@ -250,29 +250,37 @@ impl<'a> Toolbar<'a> {
     }
 
     /// Decorate an application-owned toolbar root without adding layout or appearance.
-    pub fn root_part(self, root: Element) -> Element {
+    pub fn root_with(self, root: Element) -> Element {
         root.id(self.root_id)
             .accessibility_role(AccessibilityRole::Toolbar)
             .accessibility_orientation(self.orientation.accessibility())
             .app_region_no_drag()
+    }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(self) -> Element {
+        self.root_with(crate::div())
     }
 
     /// Decorate a caller-owned group of related toolbar items, Base UI's Toolbar.Group.
     ///
     /// The group is a labelling and structural unit only: every item inside it keeps taking part
     /// in the toolbar's single roving Tab stop, so grouping never creates a second focus scope.
-    pub fn group_part(self, group: Element) -> Element {
+    pub fn group_with(self, group: Element) -> Element {
         group
             .accessibility_role(AccessibilityRole::Group)
             .accessibility_orientation(self.orientation.accessibility())
             .app_region_no_drag()
+    }
+    /// Create the unstyled group part. Use [`Self::group_with`] to supply an existing element.
+    pub fn group(self) -> Element {
+        self.group_with(crate::div())
     }
 
     /// Decorate a caller-owned divider between toolbar groups, Base UI's Toolbar.Separator.
     ///
     /// A separator carries the Separator role across the toolbar's cross axis and never takes
     /// focus, so arrow navigation steps straight past it.
-    pub fn separator_part(self, separator: Element) -> Element {
+    pub fn separator_with(self, separator: Element) -> Element {
         separator
             .accessibility_role(AccessibilityRole::Separator)
             .accessibility_orientation(match self.orientation {
@@ -281,6 +289,10 @@ impl<'a> Toolbar<'a> {
             })
             .app_region_no_drag()
             .user_select_none()
+    }
+    /// Create the unstyled separator part. Use [`Self::separator_with`] to supply an existing element.
+    pub fn separator(self) -> Element {
+        self.separator_with(crate::div())
     }
 
     /// Describe one declared item.
@@ -330,7 +342,7 @@ impl<'a> ToolbarEntry<'a> {
     ///
     /// Exactly one enabled item is in the window's normal Tab sequence; the rest are reachable
     /// with the toolbar's arrow keys.
-    pub fn item_part(self, item: Element) -> Element {
+    pub fn item_with(self, item: Element) -> Element {
         let disabled = self.item.disabled || item.accessibility.disabled;
         let item = item
             .id(self.item_id())
@@ -347,45 +359,69 @@ impl<'a> ToolbarEntry<'a> {
             item
         }
     }
+    /// Create the unstyled item part. Use [`Self::item_with`] to supply an existing element.
+    pub fn item(self) -> Element {
+        self.item_with(crate::div())
+    }
 
     /// Decorate an application-owned toolbar button, Base UI's Toolbar.Button.
     ///
-    /// This is [`Self::item_part`] plus the Button role and click activation.
-    pub fn button_part(self, button: Element) -> Element {
-        self.item_part(button.accessibility_role(AccessibilityRole::Button))
+    /// This is [`Self::item_with`] plus the Button role and click activation.
+    pub fn button_with(self, button: Element) -> Element {
+        self.item_with(button.accessibility_role(AccessibilityRole::Button))
+    }
+    /// Create the unstyled button part. Use [`Self::button_with`] to supply an existing element.
+    pub fn button(self) -> Element {
+        self.button_with(crate::button())
     }
 
     /// Decorate an application-owned toolbar link, Base UI's Toolbar.Link.
-    pub fn link_part(self, link: Element) -> Element {
-        self.item_part(link.accessibility_role(AccessibilityRole::Link))
+    pub fn link_with(self, link: Element) -> Element {
+        self.item_with(link.accessibility_role(AccessibilityRole::Link))
+    }
+    /// Create the unstyled link part. Use [`Self::link_with`] to supply an existing element.
+    pub fn link(self) -> Element {
+        self.link_with(crate::div())
     }
 
     /// Decorate an application-owned toolbar input, Base UI's Toolbar.Input.
     ///
     /// The element keeps whatever role it already declares — a [`crate::text_input`] is already a
     /// text field — and gains the toolbar's roving Tab stop and arrow key context.
-    pub fn input_part(self, input: Element) -> Element {
-        self.item_part(input)
+    pub fn input_with(self, input: Element) -> Element {
+        self.item_with(input)
+    }
+    /// Create the unstyled input part. Use [`Self::input_with`] to supply an existing element.
+    pub fn input(self) -> Element {
+        self.input_with(crate::text_input(""))
     }
 
     /// Attach QuickGUI's typed toolbar navigation to this item.
     ///
     /// Each item answers its own arrow keys, so the focused item is always the one that moves.
     /// Install [`toolbar_key_bindings`] once on the application keymap.
-    pub fn key_part<V: 'static>(
+    pub fn key_with<V: 'static>(
         self,
         cx: &mut ViewContext<'_, V>,
         item: Element,
         access: fn(&mut V) -> &mut ToolbarState,
     ) -> Element {
-        self.key_part_with(cx, item, StateAccessor::from(access))
+        self.key_with_accessor(cx, item, StateAccessor::from(access))
+    }
+    /// Create the unstyled key part. Use [`Self::key_with`] to supply an existing element.
+    pub fn key<V: 'static>(
+        self,
+        cx: &mut ViewContext<'_, V>,
+        access: fn(&mut V) -> &mut ToolbarState,
+    ) -> Element {
+        self.key_with(cx, crate::div(), access)
     }
 
     /// Attach the typed toolbar navigation against a per-instance state accessor.
     ///
     /// A host that renders many declared toolbars through one view passes an accessor that
     /// captures which [`ToolbarState`] this item belongs to.
-    pub fn key_part_with<V: 'static>(
+    pub fn key_with_accessor<V: 'static>(
         self,
         cx: &mut ViewContext<'_, V>,
         item: Element,
@@ -513,9 +549,9 @@ fn assert_toolbar_items(items: &[ToolbarItem]) {
 
 /// Create an unstyled semantic toolbar root.
 ///
-/// This shorthand is equivalent to `Toolbar::new(id, state, items).root_part(div())`.
+/// This shorthand is equivalent to `Toolbar::new(id, state, items).root_with(div())`.
 pub fn toolbar(id: impl Into<ElementId>, state: &ToolbarState, items: &[ToolbarItem]) -> Element {
-    Toolbar::new(id, state, items).root_part(div())
+    Toolbar::new(id, state, items).root_with(div())
 }
 
 fn derived_toolbar_id(scope: ElementId, value: ElementId) -> ElementId {
@@ -575,7 +611,7 @@ mod tests {
             Some("bold".into())
         );
 
-        let root = toolbar.root_part(div().gap_2().bg(Color::rgb8(1, 2, 3)));
+        let root = toolbar.root_with(div().gap_2().bg(Color::rgb8(1, 2, 3)));
         assert_eq!(root.explicit_id, Some("format".into()));
         assert_eq!(root.accessibility.role, AccessibilityRole::Toolbar);
         assert_eq!(
@@ -588,7 +624,7 @@ mod tests {
 
         let underline = toolbar.item("underline").expect("underline entry");
         assert!(underline.is_roving_stop());
-        let element = underline.item_part(button().child("Underline"));
+        let element = underline.item_with(button().child("Underline"));
         assert_eq!(element.explicit_id, Some(toolbar.item_id("underline")));
         assert_eq!(element.tab_index, 0);
         assert!(element.focusable);
@@ -597,16 +633,16 @@ mod tests {
 
         let bold = toolbar.item("bold").expect("bold entry");
         assert!(!bold.is_roving_stop());
-        assert_eq!(bold.item_part(div()).tab_index, -1);
+        assert_eq!(bold.item_with(div()).tab_index, -1);
 
         let italic = toolbar.item("italic").expect("italic entry");
         assert!(italic.is_disabled());
-        assert!(italic.item_part(div()).accessibility.disabled);
+        assert!(italic.item_with(div()).accessibility.disabled);
         assert!(toolbar.item("absent").is_none());
 
         let vertical = Toolbar::new("sidebar", &focused, &items).vertical();
         assert_eq!(
-            vertical.root_part(div()).accessibility.orientation,
+            vertical.root_with(div()).accessibility.orientation,
             Some(AccessibilityOrientation::Vertical)
         );
 
@@ -663,7 +699,7 @@ mod tests {
         fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
             let items = items();
             let toolbar = Toolbar::new("format", &self.toolbar, &items);
-            let mut root = toolbar.root_part(div());
+            let mut root = toolbar.root_with(div());
             for item in items {
                 let entry = toolbar.item(item.value()).expect("declared entry");
                 let value = item.value();
@@ -672,9 +708,9 @@ mod tests {
                     view.toolbar.focus(value);
                     cx.invalidate();
                 });
-                root = root.child(entry.key_part(
+                root = root.child(entry.key_with(
                     cx,
-                    entry.item_part(div().child(text("Item")).on_click(clicked)),
+                    entry.item_with(div().child(text("Item")).on_click(clicked)),
                     Self::toolbar,
                 ));
             }
@@ -792,7 +828,7 @@ mod tests {
         let button = toolbar
             .item("bold")
             .expect("declared item")
-            .button_part(div());
+            .button_with(div());
         assert_eq!(button.accessibility.role, AccessibilityRole::Button);
         assert_eq!(button.tab_index, 0);
         assert_eq!(button.visual.background, None);
@@ -800,7 +836,7 @@ mod tests {
         let link = toolbar
             .item("link")
             .expect("declared item")
-            .link_part(div());
+            .link_with(div());
         assert_eq!(link.accessibility.role, AccessibilityRole::Link);
         assert_eq!(link.tab_index, -1);
 
@@ -808,7 +844,7 @@ mod tests {
         let input = toolbar
             .item("search")
             .expect("declared item")
-            .input_part(crate::text_input("query"));
+            .input_with(crate::text_input("query"));
         assert_eq!(input.accessibility.role, AccessibilityRole::TextInput);
         assert_eq!(input.tab_index, -1);
         assert_eq!(input.key_context, button.key_context);
@@ -817,7 +853,7 @@ mod tests {
         let unavailable = toolbar
             .item("italic")
             .expect("declared item")
-            .button_part(div());
+            .button_with(div());
         assert!(unavailable.accessibility.disabled);
         assert!(unavailable.is_keyboard_focusable());
         assert!(ToolbarItem::new("x").is_focusable_when_disabled());
@@ -828,10 +864,10 @@ mod tests {
         let skipped = Toolbar::new("format", &state, &skipped_items)
             .item("bold")
             .expect("declared item")
-            .item_part(div());
+            .item_with(div());
         assert!(!skipped.is_keyboard_focusable());
 
-        let group = toolbar.group_part(div().bg(Color::rgb8(1, 2, 3)));
+        let group = toolbar.group_with(div().bg(Color::rgb8(1, 2, 3)));
         assert_eq!(group.accessibility.role, AccessibilityRole::Group);
         assert_eq!(
             group.accessibility.orientation,
@@ -841,7 +877,7 @@ mod tests {
         assert!(!group.focusable);
 
         // A separator crosses the toolbar's axis and never takes focus.
-        let separator = toolbar.separator_part(div());
+        let separator = toolbar.separator_with(div());
         assert_eq!(separator.accessibility.role, AccessibilityRole::Separator);
         assert_eq!(
             separator.accessibility.orientation,
@@ -852,7 +888,7 @@ mod tests {
         assert_eq!(
             toolbar
                 .vertical()
-                .separator_part(div())
+                .separator_with(div())
                 .accessibility
                 .orientation,
             Some(AccessibilityOrientation::Horizontal)

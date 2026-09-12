@@ -601,7 +601,7 @@ impl PopoverMenuItemState {
 ///
 /// Base UI publishes this as `data-highlighted`, `data-disabled`, `data-checked`, and — on a
 /// submenu trigger — `data-popup-open`. QuickGUI has no style sheet, so the same facts arrive as
-/// fields the application styles from. Build one with [`PopoverMenu::item_part_state`] or
+/// fields the application styles from. Build one with [`PopoverMenu::item_render_state`] or
 /// [`PopoverMenuItemState::part_state`].
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct MenuItemPartState {
@@ -1000,7 +1000,7 @@ impl PopoverMenu {
 
     /// Decorate a caller-owned menu root with focus, keyboard, drag-region, and accessibility
     /// semantics without adding any appearance.
-    pub fn root_part(&self, id: impl Into<ElementId>, root: Element) -> Element {
+    pub fn root_with(&self, id: impl Into<ElementId>, root: Element) -> Element {
         let id = id.into();
         let mut root = root
             .id(id)
@@ -1020,9 +1020,13 @@ impl PopoverMenu {
         }
         root
     }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(&self, id: impl Into<ElementId>) -> Element {
+        self.root_with(id, crate::div())
+    }
 
     /// Decorate one caller-owned row with its exact menu-item semantics and stable derived ID.
-    pub fn item_part(
+    pub fn item_with(
         &self,
         menu_id: impl Into<ElementId>,
         index: usize,
@@ -1064,20 +1068,28 @@ impl PopoverMenu {
         };
         Some(root)
     }
+    /// Create the unstyled item part. Use [`Self::item_with`] to supply an existing element.
+    pub fn item(&self, menu_id: impl Into<ElementId>, index: usize) -> Option<Element> {
+        self.item_with(menu_id, index, crate::div())
+    }
 
     /// Decorate an application-composed wrapper around a related item group.
-    pub fn group_part(group: Element) -> Element {
+    pub fn group_with(group: Element) -> Element {
         group
             .accessibility_role(AccessibilityRole::Group)
             .app_region_no_drag()
             .cursor_default()
+    }
+    /// Create the unstyled group part. Use [`Self::group_with`] to supply an existing element.
+    pub fn group() -> Element {
+        Self::group_with(crate::div())
     }
 
     /// Decorate a caller-composed item group and name it from one mounted group-label row.
     ///
     /// Returns `None` when `label_index` is not a group label. The caller owns visual nesting and
     /// layout; this helper adds only the native group role and mounted `labelled-by` relationship.
-    pub fn labeled_group_part(
+    pub fn labeled_group_with(
         &self,
         menu_id: impl Into<ElementId>,
         label_index: usize,
@@ -1087,23 +1099,31 @@ impl PopoverMenu {
             return None;
         }
         let label = self.item_element_id(menu_id, label_index)?;
-        Some(Self::group_part(group).accessibility_labelled_by(label))
+        Some(Self::group_with(group).accessibility_labelled_by(label))
+    }
+    /// Create the unstyled labeled group part. Use [`Self::labeled_group_with`] to supply an existing element.
+    pub fn labeled_group(
+        &self,
+        menu_id: impl Into<ElementId>,
+        label_index: usize,
+    ) -> Option<Element> {
+        self.labeled_group_with(menu_id, label_index, crate::div())
     }
 
     /// The Base UI-named render snapshot for one row.
     ///
     /// Returns `None` for an index outside the retained model. `submenu_open` reports whether this
     /// row's submenu is currently mounted; it is ignored for rows that have none.
-    pub fn item_part_state(&self, index: usize, submenu_open: bool) -> Option<MenuItemPartState> {
+    pub fn item_render_state(&self, index: usize, submenu_open: bool) -> Option<MenuItemPartState> {
         Some(self.item_state(index)?.part_state(submenu_open))
     }
 
     /// Decorate a checkbox row, Base UI's `Menu.CheckboxItem`.
     ///
-    /// This is the kind-checked Base UI-named alias of [`Self::item_part`]: it returns `None` when
+    /// This is the kind-checked Base UI-named alias of [`Self::item_with`]: it returns `None` when
     /// `index` is not a checkbox row, so a composition that renders parts by name cannot silently
     /// mount the wrong semantics.
-    pub fn checkbox_item_part(
+    pub fn checkbox_item_with(
         &self,
         menu_id: impl Into<ElementId>,
         index: usize,
@@ -1111,9 +1131,13 @@ impl PopoverMenu {
     ) -> Option<Element> {
         self.kind_checked_part(menu_id, index, PopoverMenuItemKind::Checkbox, item_root)
     }
+    /// Create the unstyled checkbox item part. Use [`Self::checkbox_item_with`] to supply an existing element.
+    pub fn checkbox_item(&self, menu_id: impl Into<ElementId>, index: usize) -> Option<Element> {
+        self.checkbox_item_with(menu_id, index, crate::div())
+    }
 
     /// Decorate a radio row, Base UI's `Menu.RadioItem`.
-    pub fn radio_item_part(
+    pub fn radio_item_with(
         &self,
         menu_id: impl Into<ElementId>,
         index: usize,
@@ -1121,9 +1145,13 @@ impl PopoverMenu {
     ) -> Option<Element> {
         self.kind_checked_part(menu_id, index, PopoverMenuItemKind::Radio, item_root)
     }
+    /// Create the unstyled radio item part. Use [`Self::radio_item_with`] to supply an existing element.
+    pub fn radio_item(&self, menu_id: impl Into<ElementId>, index: usize) -> Option<Element> {
+        self.radio_item_with(menu_id, index, crate::div())
+    }
 
     /// Decorate a link row, Base UI's `Menu.LinkItem`.
-    pub fn link_item_part(
+    pub fn link_item_with(
         &self,
         menu_id: impl Into<ElementId>,
         index: usize,
@@ -1131,12 +1159,16 @@ impl PopoverMenu {
     ) -> Option<Element> {
         self.kind_checked_part(menu_id, index, PopoverMenuItemKind::Link, item_root)
     }
+    /// Create the unstyled link item part. Use [`Self::link_item_with`] to supply an existing element.
+    pub fn link_item(&self, menu_id: impl Into<ElementId>, index: usize) -> Option<Element> {
+        self.link_item_with(menu_id, index, crate::div())
+    }
 
     /// Decorate a submenu row, Base UI's `Menu.SubmenuTrigger`.
     ///
     /// The row already declares `has-popup` and `menuitem`; `open` adds the expanded state that
     /// Base UI publishes as `data-popup-open` while the child level is mounted.
-    pub fn submenu_trigger_part(
+    pub fn submenu_trigger_with(
         &self,
         menu_id: impl Into<ElementId>,
         index: usize,
@@ -1147,9 +1179,18 @@ impl PopoverMenu {
             self.kind_checked_part(menu_id, index, PopoverMenuItemKind::Submenu, item_root)?;
         Some(part.accessibility_expanded(open))
     }
+    /// Create the unstyled submenu trigger part. Use [`Self::submenu_trigger_with`] to supply an existing element.
+    pub fn submenu_trigger(
+        &self,
+        menu_id: impl Into<ElementId>,
+        index: usize,
+        open: bool,
+    ) -> Option<Element> {
+        self.submenu_trigger_with(menu_id, index, open, crate::button())
+    }
 
     /// Decorate a separator row, Base UI's `Menu.Separator`.
-    pub fn separator_part(
+    pub fn separator_with(
         &self,
         menu_id: impl Into<ElementId>,
         index: usize,
@@ -1157,15 +1198,23 @@ impl PopoverMenu {
     ) -> Option<Element> {
         self.kind_checked_part(menu_id, index, PopoverMenuItemKind::Separator, item_root)
     }
+    /// Create the unstyled separator part. Use [`Self::separator_with`] to supply an existing element.
+    pub fn separator(&self, menu_id: impl Into<ElementId>, index: usize) -> Option<Element> {
+        self.separator_with(menu_id, index, crate::div())
+    }
 
     /// Decorate a group-label row, Base UI's `Menu.GroupLabel`.
-    pub fn group_label_part(
+    pub fn group_label_with(
         &self,
         menu_id: impl Into<ElementId>,
         index: usize,
         item_root: Element,
     ) -> Option<Element> {
         self.kind_checked_part(menu_id, index, PopoverMenuItemKind::GroupLabel, item_root)
+    }
+    /// Create the unstyled group label part. Use [`Self::group_label_with`] to supply an existing element.
+    pub fn group_label(&self, menu_id: impl Into<ElementId>, index: usize) -> Option<Element> {
+        self.group_label_with(menu_id, index, crate::div())
     }
 
     fn kind_checked_part(
@@ -1178,7 +1227,7 @@ impl PopoverMenu {
         if self.items.get(index)?.kind() != kind {
             return None;
         }
-        self.item_part(menu_id, index, item_root)
+        self.item_with(menu_id, index, item_root)
     }
 
     /// Decorate a caller-composed radio group, Base UI's `Menu.RadioGroup`.
@@ -1187,17 +1236,21 @@ impl PopoverMenu {
     /// three" for its items. Membership itself stays in the model: every row built with
     /// [`PopoverMenuItem::radio`] names the group it belongs to, and
     /// [`Self::set_radio_value`] keeps exactly one of them checked.
-    pub fn radio_group_part(group: Element) -> Element {
+    pub fn radio_group_with(group: Element) -> Element {
         group
             .accessibility_role(AccessibilityRole::RadioGroup)
             .app_region_no_drag()
             .cursor_default()
     }
+    /// Create the unstyled radio group part. Use [`Self::radio_group_with`] to supply an existing element.
+    pub fn radio_group() -> Element {
+        Self::radio_group_with(crate::div())
+    }
 
     /// Decorate a caller-composed radio group and name it from one mounted group-label row.
     ///
     /// Returns `None` when `label_index` is not a group label.
-    pub fn labeled_radio_group_part(
+    pub fn labeled_radio_group_with(
         &self,
         menu_id: impl Into<ElementId>,
         label_index: usize,
@@ -1207,7 +1260,15 @@ impl PopoverMenu {
             return None;
         }
         let label = self.item_element_id(menu_id, label_index)?;
-        Some(Self::radio_group_part(group).accessibility_labelled_by(label))
+        Some(Self::radio_group_with(group).accessibility_labelled_by(label))
+    }
+    /// Create the unstyled labeled radio group part. Use [`Self::labeled_radio_group_with`] to supply an existing element.
+    pub fn labeled_radio_group(
+        &self,
+        menu_id: impl Into<ElementId>,
+        label_index: usize,
+    ) -> Option<Element> {
+        self.labeled_radio_group_with(menu_id, label_index, crate::div())
     }
 
     /// Decorate a caller-owned checkbox indicator, Base UI's `Menu.CheckboxItemIndicator`.
@@ -1215,13 +1276,21 @@ impl PopoverMenu {
     /// The indicator is decoration: the row it sits in already carries the checked state, so
     /// mounting a second announcement would make assistive technology read the value twice. Mount
     /// it only while the row is checked, exactly as Base UI does.
-    pub fn checkbox_item_indicator_part(indicator: Element) -> Element {
+    pub fn checkbox_item_indicator_with(indicator: Element) -> Element {
         indicator.accessibility_hidden(true).app_region_no_drag()
+    }
+    /// Create the unstyled checkbox item indicator part. Use [`Self::checkbox_item_indicator_with`] to supply an existing element.
+    pub fn checkbox_item_indicator() -> Element {
+        Self::checkbox_item_indicator_with(crate::div())
     }
 
     /// Decorate a caller-owned radio indicator, Base UI's `Menu.RadioItemIndicator`.
-    pub fn radio_item_indicator_part(indicator: Element) -> Element {
-        Self::checkbox_item_indicator_part(indicator)
+    pub fn radio_item_indicator_with(indicator: Element) -> Element {
+        Self::checkbox_item_indicator_with(indicator)
+    }
+    /// Create the unstyled radio item indicator part. Use [`Self::radio_item_indicator_with`] to supply an existing element.
+    pub fn radio_item_indicator() -> Element {
+        Self::radio_item_indicator_with(crate::div())
     }
 
     /// Build the complete unstyled interaction layer for one menu level.
@@ -1436,12 +1505,12 @@ impl PopoverMenu {
                 row = row.on_hover(hover).on_click(click);
             }
             children.push(
-                self.item_part(id, index, row)
+                self.item_with(id, index, row)
                     .expect("a retained popover-menu index remains valid during rendering"),
             );
         }
 
-        self.root_part(id, root)
+        self.root_with(id, root)
             .on_action(previous)
             .on_action(next)
             .on_action(first)
@@ -1682,7 +1751,7 @@ pub const DEFAULT_MENU_CLOSE_DELAY: Duration = Duration::from_millis(100);
 /// [`PopoverMenu`] is the row model — items, highlighting, typeahead, activation. `MenuState` is
 /// the surface around it: the controlled open flag, Base UI's `Menu.Root` props, the anchored
 /// in-window placement its popup uses, and the exact hover deadlines an `openOnHover` trigger or a
-/// submenu trigger needs. Compose the two by mounting [`Self::popup_part`] and putting the model's
+/// submenu trigger needs. Compose the two by mounting [`Self::popup_with`] and putting the model's
 /// [`PopoverMenu::element`] tree inside it.
 ///
 /// QuickGUI owns the trigger's semantics and relationships, portal/positioner anchoring with flip
@@ -1990,13 +2059,21 @@ impl MenuState {
     }
 
     /// Decorate the optional application-owned structural wrapper, Base UI's `Menu.Root`.
-    pub fn root_part(&self, root: Element) -> Element {
+    pub fn root_with(&self, root: Element) -> Element {
         root.app_region_no_drag()
+    }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(&self) -> Element {
+        self.root_with(crate::div())
     }
 
     /// Decorate a nested level's structural wrapper, Base UI's `Menu.SubmenuRoot`.
-    pub fn submenu_root_part(&self, root: Element) -> Element {
-        self.root_part(root)
+    pub fn submenu_root_with(&self, root: Element) -> Element {
+        self.root_with(root)
+    }
+    /// Create the unstyled submenu root part. Use [`Self::submenu_root_with`] to supply an existing element.
+    pub fn submenu_root(&self) -> Element {
+        self.submenu_root_with(crate::div())
     }
 
     /// Decorate a caller-owned trigger, Base UI's `Menu.Trigger`.
@@ -2005,7 +2082,7 @@ impl MenuState {
     /// [`Self::delay`] and closes it after [`Self::close_delay`], both exact one-shot deadlines: a
     /// pointer that returns before the deadline cancels it rather than reopening, and a zero delay
     /// applies the change in the same controlled update with no task at all.
-    pub fn trigger_part<V: 'static, Change>(
+    pub fn trigger_with<V: 'static, Change>(
         &self,
         cx: &mut ViewContext<'_, V>,
         access: fn(&mut V) -> &mut Self,
@@ -2015,11 +2092,23 @@ impl MenuState {
     where
         Change: Fn(&mut V, bool, &mut EventContext) + Clone + 'static,
     {
-        self.trigger_part_with(cx, StateAccessor::from(access), on_open_change, trigger)
+        self.trigger_with_accessor(cx, StateAccessor::from(access), on_open_change, trigger)
+    }
+    /// Create the unstyled trigger part. Use [`Self::trigger_with`] to supply an existing element.
+    pub fn trigger<V: 'static, Change>(
+        &self,
+        cx: &mut ViewContext<'_, V>,
+        access: fn(&mut V) -> &mut Self,
+        on_open_change: Change,
+    ) -> Element
+    where
+        Change: Fn(&mut V, bool, &mut EventContext) + Clone + 'static,
+    {
+        self.trigger_with(cx, access, on_open_change, crate::button())
     }
 
     /// Decorate a caller-owned trigger through a per-instance accessor.
-    pub fn trigger_part_with<V: 'static, Change>(
+    pub fn trigger_with_accessor<V: 'static, Change>(
         &self,
         cx: &mut ViewContext<'_, V>,
         access: StateAccessor<V, Self>,
@@ -2031,7 +2120,7 @@ impl MenuState {
     {
         let trigger = self
             .popover()
-            .trigger_part(trigger)
+            .trigger_with(trigger)
             .disabled(self.disabled)
             .accessibility_has_popover(AccessibilityPopover::Menu);
         self.interactive_trigger(cx, access, on_open_change, trigger)
@@ -2041,7 +2130,7 @@ impl MenuState {
     ///
     /// A submenu trigger is a row of its parent menu, so it keeps `menuitem` semantics rather than
     /// button semantics. Declare [`Self::open_on_hover`] for the native dwell-to-open behavior.
-    pub fn submenu_trigger_part<V: 'static, Change>(
+    pub fn submenu_trigger_with<V: 'static, Change>(
         &self,
         cx: &mut ViewContext<'_, V>,
         access: fn(&mut V) -> &mut Self,
@@ -2051,11 +2140,23 @@ impl MenuState {
     where
         Change: Fn(&mut V, bool, &mut EventContext) + Clone + 'static,
     {
-        self.submenu_trigger_part_with(cx, StateAccessor::from(access), on_open_change, trigger)
+        self.submenu_trigger_with_accessor(cx, StateAccessor::from(access), on_open_change, trigger)
+    }
+    /// Create the unstyled submenu trigger part. Use [`Self::submenu_trigger_with`] to supply an existing element.
+    pub fn submenu_trigger<V: 'static, Change>(
+        &self,
+        cx: &mut ViewContext<'_, V>,
+        access: fn(&mut V) -> &mut Self,
+        on_open_change: Change,
+    ) -> Element
+    where
+        Change: Fn(&mut V, bool, &mut EventContext) + Clone + 'static,
+    {
+        self.submenu_trigger_with(cx, access, on_open_change, crate::button())
     }
 
     /// Decorate a caller-owned submenu trigger through a per-instance accessor.
-    pub fn submenu_trigger_part_with<V: 'static, Change>(
+    pub fn submenu_trigger_with_accessor<V: 'static, Change>(
         &self,
         cx: &mut ViewContext<'_, V>,
         access: StateAccessor<V, Self>,
@@ -2124,32 +2225,48 @@ impl MenuState {
     /// Decorate the caller-owned portal boundary, Base UI's `Menu.Portal`.
     ///
     /// QuickGUI's retained overlay node is itself the portal, so this is the same boundary as
-    /// [`Self::positioner_part`]; mount exactly one of them.
-    pub fn portal_part(&self, portal: Element) -> Element {
-        self.positioner_part(portal)
+    /// [`Self::positioner_with`]; mount exactly one of them.
+    pub fn portal_with(&self, portal: Element) -> Element {
+        self.positioner_with(portal)
+    }
+    /// Create the unstyled portal part. Use [`Self::portal_with`] to supply an existing element.
+    pub fn portal(&self) -> Element {
+        self.portal_with(crate::div())
     }
 
     /// Decorate the caller-owned positioner, Base UI's `Menu.Positioner`.
     ///
-    /// The positioner publishes the placement it resolved to, so [`Self::arrow_part`] and
+    /// The positioner publishes the placement it resolved to, so [`Self::arrow_with`] and
     /// [`Self::state`] follow the real side after a flip instead of the declared preference.
-    pub fn positioner_part(&self, positioner: Element) -> Element {
+    pub fn positioner_with(&self, positioner: Element) -> Element {
         self.popover()
-            .tracked_positioner_part(positioner, &self.placement_handle)
+            .tracked_positioner_with(positioner, &self.placement_handle)
+    }
+    /// Create the unstyled positioner part. Use [`Self::positioner_with`] to supply an existing element.
+    pub fn positioner(&self) -> Element {
+        self.positioner_with(crate::div())
     }
 
     /// Decorate an optional caller-painted viewport backdrop, Base UI's `Menu.Backdrop`.
-    pub fn backdrop_part(&self, backdrop: Element) -> Element {
-        self.popover().backdrop_part(backdrop)
+    pub fn backdrop_with(&self, backdrop: Element) -> Element {
+        self.popover().backdrop_with(backdrop)
+    }
+    /// Create the unstyled backdrop part. Use [`Self::backdrop_with`] to supply an existing element.
+    pub fn backdrop(&self) -> Element {
+        self.backdrop_with(crate::div())
     }
 
     /// Position a caller-owned arrow on the edge the popup actually opened against.
-    pub fn arrow_part(&self, arrow: Element) -> Element {
-        self.popover().arrow_part(arrow)
+    pub fn arrow_with(&self, arrow: Element) -> Element {
+        self.popover().arrow_with(arrow)
+    }
+    /// Create the unstyled arrow part. Use [`Self::arrow_with`] to supply an existing element.
+    pub fn arrow(&self) -> Element {
+        self.arrow_with(crate::div())
     }
 
     /// Decorate the caller-owned popup, Base UI's `Menu.Popup`.
-    pub fn popup_part<V: 'static, Change>(
+    pub fn popup_with<V: 'static, Change>(
         &self,
         cx: &mut ViewContext<'_, V>,
         access: fn(&mut V) -> &mut Self,
@@ -2159,7 +2276,19 @@ impl MenuState {
     where
         Change: Fn(&mut V, bool, &mut EventContext) + Clone + 'static,
     {
-        self.popup_part_with(cx, StateAccessor::from(access), on_open_change, popup)
+        self.popup_with_accessor(cx, StateAccessor::from(access), on_open_change, popup)
+    }
+    /// Create the unstyled popup part. Use [`Self::popup_with`] to supply an existing element.
+    pub fn popup<V: 'static, Change>(
+        &self,
+        cx: &mut ViewContext<'_, V>,
+        access: fn(&mut V) -> &mut Self,
+        on_open_change: Change,
+    ) -> Element
+    where
+        Change: Fn(&mut V, bool, &mut EventContext) + Clone + 'static,
+    {
+        self.popup_with(cx, access, on_open_change, crate::div())
     }
 
     /// Decorate the caller-owned popup through a per-instance accessor.
@@ -2167,7 +2296,7 @@ impl MenuState {
     /// The popup dismisses on Escape and on an outside press and restores trigger focus. When
     /// [`Self::close_parent_on_esc`] is set it additionally dispatches [`MenuCloseParent`], which
     /// travels the focus path to the level above and closes it too.
-    pub fn popup_part_with<V: 'static, Change>(
+    pub fn popup_with_accessor<V: 'static, Change>(
         &self,
         cx: &mut ViewContext<'_, V>,
         access: StateAccessor<V, Self>,
@@ -2179,7 +2308,7 @@ impl MenuState {
     {
         let popup_id = self.popup_id();
         let dismiss = self.dismiss_listener_with(cx, access.clone(), on_open_change.clone());
-        let mut popup = self.popover().popover_part(popup).on_dismiss(dismiss);
+        let mut popup = self.popover().popup_with(popup).on_dismiss(dismiss);
 
         let parent_access = access.clone();
         let parent_change = on_open_change.clone();
@@ -2206,7 +2335,7 @@ impl MenuState {
 
     /// Build the popup's dismissal behavior for Escape and outside presses.
     ///
-    /// [`Self::popup_part`] attaches this already; build it directly only when the application
+    /// [`Self::popup_with`] attaches this already; build it directly only when the application
     /// composes the popup element itself.
     pub fn dismiss_listener<V: 'static, Change>(
         &self,
@@ -2507,7 +2636,7 @@ mod tests {
     #[test]
     fn unstyled_parts_add_behavior_without_appearance() {
         let menu = sample_menu();
-        let root = menu.root_part("menu", div());
+        let root = menu.root_with("menu", div());
         assert_eq!(root.accessibility.role, AccessibilityRole::Menu);
         assert!(root.focusable);
         assert!(root.auto_focus);
@@ -2515,13 +2644,13 @@ mod tests {
         assert_eq!(root.visual.background, None);
         assert_eq!(root.visual.border_color, None);
 
-        let action = menu.item_part("menu", 1, div()).unwrap();
+        let action = menu.item_with("menu", 1, div()).unwrap();
         assert_eq!(action.accessibility.role, AccessibilityRole::MenuItem);
         assert!(action.clickable);
         assert_eq!(action.visual.background, None);
         assert_eq!(action.visual.border_color, None);
 
-        let checkbox = menu.item_part("menu", 4, div()).unwrap();
+        let checkbox = menu.item_with("menu", 4, div()).unwrap();
         assert_eq!(
             checkbox.accessibility.role,
             AccessibilityRole::MenuItemCheckBox
@@ -2529,18 +2658,18 @@ mod tests {
         assert_eq!(checkbox.accessibility.toggled, Some(false.into()));
 
         let group_label_id = menu.item_element_id("menu", 0).unwrap();
-        let group_label = menu.item_part("menu", 0, div()).unwrap();
+        let group_label = menu.item_with("menu", 0, div()).unwrap();
         assert_eq!(group_label.explicit_id, Some(group_label_id));
         assert_eq!(group_label.accessibility.role, AccessibilityRole::Label);
         assert_eq!(group_label.accessibility.label.as_deref(), Some("File"));
 
-        let separator = menu.item_part("menu", 3, div()).unwrap();
+        let separator = menu.item_with("menu", 3, div()).unwrap();
         assert_eq!(separator.accessibility.role, AccessibilityRole::Separator);
         assert!(!separator.clickable);
         assert_eq!(menu.item_element_id("menu", 3), None);
 
         let group = menu
-            .labeled_group_part("menu", 0, div())
+            .labeled_group_with("menu", 0, div())
             .expect("the first row is a group label");
         assert_eq!(group.accessibility.role, AccessibilityRole::Group);
         assert_eq!(
@@ -2548,9 +2677,9 @@ mod tests {
             Some(group_label_id)
         );
         assert_eq!(group.visual.background, None);
-        assert!(menu.labeled_group_part("menu", 1, div()).is_none());
+        assert!(menu.labeled_group_with("menu", 1, div()).is_none());
 
-        let styled = menu.root_part("styled", div().bg(Color::BLACK));
+        let styled = menu.root_with("styled", div().bg(Color::BLACK));
         assert_eq!(styled.visual.background, Some(Color::BLACK));
     }
 
@@ -2603,10 +2732,10 @@ mod tests {
             PopoverMenuError::LinkUrlTooLong
         );
 
-        let part = menu.link_item_part("menu", 1, div()).unwrap();
+        let part = menu.link_item_with("menu", 1, div()).unwrap();
         assert_eq!(part.accessibility.role, AccessibilityRole::MenuItem);
         assert_eq!(part.visual.background, None);
-        assert!(menu.link_item_part("menu", 0, div()).is_none());
+        assert!(menu.link_item_with("menu", 0, div()).is_none());
     }
 
     #[test]
@@ -2628,18 +2757,18 @@ mod tests {
         assert!(!menu.set_radio_value("other", "dark"));
 
         let label_id = menu.item_element_id("menu", 0).unwrap();
-        let group = menu.labeled_radio_group_part("menu", 0, div()).unwrap();
+        let group = menu.labeled_radio_group_with("menu", 0, div()).unwrap();
         assert_eq!(group.accessibility.role, AccessibilityRole::RadioGroup);
         assert_eq!(group.accessibility.relations.labelled_by(), Some(label_id));
         assert_eq!(group.visual.background, None);
-        assert!(menu.labeled_radio_group_part("menu", 1, div()).is_none());
+        assert!(menu.labeled_radio_group_with("menu", 1, div()).is_none());
     }
 
     #[test]
     fn horizontal_orientation_installs_the_menubar_key_context() {
         let menu = sample_menu().orientation(MenuOrientation::Horizontal);
         assert_eq!(menu.orientation_value(), MenuOrientation::Horizontal);
-        let root = menu.root_part("bar", div());
+        let root = menu.root_with("bar", div());
         assert!(
             root.key_context
                 .as_ref()
@@ -2651,7 +2780,7 @@ mod tests {
         );
 
         let vertical = sample_menu();
-        let vertical_root = vertical.root_part("menu", div());
+        let vertical_root = vertical.root_with("menu", div());
         assert!(
             vertical_root
                 .key_context
@@ -2675,20 +2804,20 @@ mod tests {
     #[test]
     fn base_ui_named_item_parts_are_kind_checked_and_indicators_are_hidden() {
         let menu = sample_menu();
-        assert!(menu.checkbox_item_part("menu", 4, div()).is_some());
-        assert!(menu.checkbox_item_part("menu", 1, div()).is_none());
-        assert!(menu.radio_item_part("menu", 5, div()).is_some());
-        assert!(menu.radio_item_part("menu", 4, div()).is_none());
-        assert!(menu.separator_part("menu", 3, div()).is_some());
-        assert!(menu.separator_part("menu", 0, div()).is_none());
-        assert!(menu.group_label_part("menu", 0, div()).is_some());
-        assert!(menu.group_label_part("menu", 3, div()).is_none());
-        assert!(menu.submenu_trigger_part("menu", 1, true, div()).is_none());
+        assert!(menu.checkbox_item_with("menu", 4, div()).is_some());
+        assert!(menu.checkbox_item_with("menu", 1, div()).is_none());
+        assert!(menu.radio_item_with("menu", 5, div()).is_some());
+        assert!(menu.radio_item_with("menu", 4, div()).is_none());
+        assert!(menu.separator_with("menu", 3, div()).is_some());
+        assert!(menu.separator_with("menu", 0, div()).is_none());
+        assert!(menu.group_label_with("menu", 0, div()).is_some());
+        assert!(menu.group_label_with("menu", 3, div()).is_none());
+        assert!(menu.submenu_trigger_with("menu", 1, true, div()).is_none());
 
         let submenu_menu =
             PopoverMenu::new([PopoverMenuItem::submenu("more", "More", sample_menu())]).unwrap();
         let trigger = submenu_menu
-            .submenu_trigger_part("menu", 0, true, div())
+            .submenu_trigger_with("menu", 0, true, div())
             .unwrap();
         assert_eq!(trigger.accessibility.expanded, Some(true));
         assert_eq!(
@@ -2696,16 +2825,16 @@ mod tests {
             Some(AccessibilityPopover::Menu)
         );
 
-        let indicator = PopoverMenu::checkbox_item_indicator_part(div().bg(Color::BLACK));
+        let indicator = PopoverMenu::checkbox_item_indicator_with(div().bg(Color::BLACK));
         assert!(indicator.accessibility.hidden);
         assert_eq!(indicator.visual.background, Some(Color::BLACK));
         assert!(
-            PopoverMenu::radio_item_indicator_part(div())
+            PopoverMenu::radio_item_indicator_with(div())
                 .accessibility
                 .hidden
         );
 
-        let state = menu.item_part_state(4, false).unwrap();
+        let state = menu.item_render_state(4, false).unwrap();
         assert_eq!(
             state,
             MenuItemPartState {
@@ -2715,9 +2844,9 @@ mod tests {
                 open: false,
             }
         );
-        assert!(!menu.item_part_state(1, true).unwrap().open);
-        assert!(submenu_menu.item_part_state(0, true).unwrap().open);
-        assert!(menu.item_part_state(99, false).is_none());
+        assert!(!menu.item_render_state(1, true).unwrap().open);
+        assert!(submenu_menu.item_render_state(0, true).unwrap().open);
+        assert!(menu.item_render_state(99, false).is_none());
     }
 
     #[test]
@@ -2752,17 +2881,17 @@ mod tests {
         );
         assert!(format!("{menu:?}").contains("MenuState"));
 
-        let positioner = menu.positioner_part(div().bg(Color::BLACK));
+        let positioner = menu.positioner_with(div().bg(Color::BLACK));
         assert!(positioner.reports_anchor_placement());
         assert_eq!(positioner.visual.background, Some(Color::BLACK));
-        let arrow = menu.arrow_part(div());
+        let arrow = menu.arrow_with(div());
         assert!(arrow.accessibility.hidden);
-        let backdrop = menu.backdrop_part(div());
+        let backdrop = menu.backdrop_with(div());
         assert!(backdrop.accessibility.hidden);
         assert_eq!(backdrop.visual.background, None);
-        assert_eq!(menu.root_part(div()).app_region, Some(AppRegion::NoDrag));
+        assert_eq!(menu.root_with(div()).app_region, Some(AppRegion::NoDrag));
         assert_eq!(
-            menu.submenu_root_part(div()).app_region,
+            menu.submenu_root_with(div()).app_region,
             Some(AppRegion::NoDrag)
         );
 
@@ -2795,7 +2924,7 @@ mod tests {
 
     impl View for MenuHost {
         fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
-            let trigger = self.menu.trigger_part(
+            let trigger = self.menu.trigger_with(
                 cx,
                 |view| &mut view.menu,
                 |view: &mut Self, open, _cx| view.changes.push(open),
@@ -2803,16 +2932,16 @@ mod tests {
             );
             let mut root = self
                 .menu
-                .root_part(div().size_full().flex_col())
+                .root_with(div().size_full().flex_col())
                 .child(trigger);
             if self.menu.is_open() {
-                let popup = self.menu.popup_part(
+                let popup = self.menu.popup_with(
                     cx,
                     |view| &mut view.menu,
                     |view: &mut Self, open, _cx| view.changes.push(open),
                     div().w(160.0).h(80.0),
                 );
-                root = root.child(self.menu.positioner_part(div()).child(popup));
+                root = root.child(self.menu.positioner_with(div()).child(popup));
             }
             root
         }

@@ -12,14 +12,14 @@ use quickgui::*;
 
 ```rust
 let disclosure = Collapsible::new("notes", open);
-disclosure.root_part(div()).child(disclosure.trigger_part(text("Notes")))
+disclosure.root().child(disclosure.trigger_with(text("Notes")))
 ```
 
 ## 構成
 
-- `Collapsible::root_part`
-- `Collapsible::trigger_part`
-- `Collapsible::panel_part`
+- `Collapsible::root`
+- `Collapsible::trigger`
+- `Collapsible::panel`
 
 ## 主なプロパティ
 

@@ -19,12 +19,12 @@ let toggle = cx.listener("auto-save", |view, cx| {
 let checkbox = Checkbox::new(self.auto_save);
 
 checkbox
-    .root_part(
+    .root_with(
         div()
             .flex_row()
             .items_center()
             .gap_2()
-            .child(checkbox.indicator_part(
+            .child(checkbox.indicator_with(
                 div().size(16.0, 16.0).children(
                     self.auto_save.then(|| text("✓")),
                 ),
@@ -35,7 +35,7 @@ checkbox
     .on_click(toggle)
 ```
 
-`root_part` decorates the caller's `Element` in place. It does not add children, dimensions,
+`root_with` decorates the caller's `Element` in place. It does not add children, dimensions,
 spacing, colors, borders, radii, state paint, transitions, or other appearance. The separate
 indicator/thumb parts only hide decorative content from the accessible name.
 
@@ -49,9 +49,9 @@ use quickgui::{Checkbox, ToggleState, div};
 
 let checkbox = Checkbox::new(ToggleState::Mixed);
 checkbox
-    .root_part(
+    .root_with(
         div()
-            .child(checkbox.indicator_part(div().child("−")))
+            .child(checkbox.indicator_with(div().child("−")))
             .child("Select visible files"),
     )
     .id("select-visible")
@@ -63,11 +63,11 @@ Custom checkbox-like roots can also use `.checked(bool)`, `.toggle_state(...)`, 
 `.indeterminate(bool)` directly.
 
 For a root without a distinct indicator part, `checkbox(state)` is shorthand for
-`Checkbox::new(state).root_part(div())`.
+`Checkbox::new(state).root()`.
 
 ## Radio groups
 
-Decorate an application-owned group with `RadioGroup::root_part`, then place controlled `Radio`
+Decorate an application-owned group with `RadioGroup::root_with`, then place controlled `Radio`
 roots inside it:
 
 ```rust
@@ -75,23 +75,23 @@ let group = RadioGroup::new();
 let compact = Radio::new(self.density == Density::Compact);
 let comfortable = Radio::new(self.density == Density::Comfortable);
 
-group.root_part(
+group.root_with(
     div()
         .accessibility_label("Editor density")
         .flex_col()
         .children([
             compact
-                .root_part(
+                .root_with(
                     div()
-                        .child(compact.indicator_part(div()))
+                        .child(compact.indicator_with(div()))
                         .child("Compact"),
                 )
                 .id("compact")
                 .on_click(select_compact),
             comfortable
-                .root_part(
+                .root_with(
                     div()
-                        .child(comfortable.indicator_part(div()))
+                        .child(comfortable.indicator_with(div()))
                         .child("Comfortable"),
                 )
                 .id("comfortable")
@@ -116,13 +116,13 @@ Only the decorative thumb has a dedicated part:
 let control = Switch::new(self.sync_settings);
 
 control
-    .root_part(
+    .root_with(
         div()
             .flex_row()
             .child(
                 div()
                     .size(30.0, 18.0)
-                    .child(control.thumb_part(div().size(14.0, 14.0))),
+                    .child(control.thumb_with(div().size(14.0, 14.0))),
             )
             .child("Sync settings"),
     )
@@ -153,25 +153,22 @@ cargo run --release --example selection_controls
 
 ## Go components
 
-`ReadOnly` is supported by `ui.Checkbox.Root`, `ui.Radio.Root`,
-`ui.RadioGroup.Root`, and `ui.Switch.Root`; radio groups also accept `Required`.
+`ReadOnly` is supported by instances from `ui.NewCheckbox()`, `ui.NewRadio()`,
+`ui.NewRadioGroup()`, and `ui.NewSwitch()`; radio groups also accept `Required`.
 A read-only control stays in the Tab sequence while the core refuses changes.
 
-`ui.Checkbox.Root(ui.CheckboxProps{Parent: true}, ...)` inside a checkbox group
+`ui.NewCheckbox().Parent(true).Root()` inside a checkbox group
 derives its state from that group's declared values. Standalone parent checkboxes
 use a `ChildrenChecked` accessor; the core folds the values into on, mixed, or off:
 
 ```go
 func ParentCheckbox() *native.Node {
-	return ui.Checkbox.Root(
-		ui.CheckboxProps{
-			Parent:          true,
-			ChildrenChecked: func() []bool { return []bool{true, false, true} },
-		},
-		func() *native.Node {
-			return ui.Checkbox.Indicator(ui.PartProps{})
-		},
-	)
+	checkbox1 := ui.NewCheckbox(ui.CheckboxProps{Parent: true, ChildrenChecked: func() []bool {
+		return []bool{true, false, true}
+	}})
+	return checkbox1.Root().Children(func() *native.Node {
+		return checkbox1.Indicator(ui.PartProps{}).NativeNode()
+	}).NativeNode()
 }
 ```
 
@@ -183,19 +180,14 @@ window-drag exclusion.
 ```go
 func ReleaseNotification() *native.Node {
 	enabled, setEnabled := ui.CreateSignal(false)
-	return ui.Checkbox.Root(
-		ui.CheckboxProps{
-			Checked:         func() ui.CheckedState { return enabled() },
-			OnCheckedChange: func(value bool, _ *native.Event) { setEnabled(value) },
-		},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.Checkbox.Indicator(ui.PartProps{Style: ui.Style().
-				Width(12).
-				Height(12).
-				BackgroundColor("#2563eb")}),
-				ui.Text("Email me about releases").Node})
-		},
-	)
+	checkbox1 := ui.NewCheckbox(ui.CheckboxProps{Checked: func() ui.CheckedState {
+		return enabled()
+	}, OnCheckedChange: func(value bool, _ *native.Event) {
+		setEnabled(value)
+	}})
+	return checkbox1.Root().Children(func() *native.Node {
+		return ui.Fragment([]*native.Node{checkbox1.Indicator(ui.PartProps{Style: ui.Style().Width(12).Height(12).BackgroundColor("#2563eb")}).NativeNode(), ui.Text("Email me about releases").Node})
+	}).NativeNode()
 }
 ```
 

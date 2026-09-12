@@ -11,6 +11,15 @@ function Greeting(props: { name: string }) {
 <Greeting name={name()} />
 ```
 
+`<View>some text</View>` 可以直接包含文本。`<div>` 和 `<span>` 分别对应 `View` 和 `Text`，无需导入组件。所有视觉声明都使用 `style` 中的 camelCase 键；不支持直接样式属性、`class` 或 `className`。
+
+```tsx
+<div style={{ flexCol: true, gap2: true }}>
+  some text
+  <span style={{ textLg: true, fontSemibold: true }}>Styled text</span>
+</div>
+```
+
 ## 基础组件
 
 `View`, `Text`, `Button`, `Input`, `TextArea`, `Markdown`, `Image`, `Svg`, `Shader`, `VirtualList`, and optional `Terminal` are native building blocks. `TextInput` is also available as the single-line input spelling.

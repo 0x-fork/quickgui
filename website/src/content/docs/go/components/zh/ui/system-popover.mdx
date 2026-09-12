@@ -14,28 +14,18 @@ import (
 
 ```go
 func SystemPopoverExample() *native.Node {
-	return ui.SystemPopover.Root(
-		ui.PopoverRootProps{},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.SystemPopover.Trigger(ui.PopoverTriggerProps{}, "Account"),
-				ui.SystemPopover.Content(
-					ui.PopoverContentProps{
-						Width:     240,
-						Height:    120,
-						Placement: "bottom-start",
-					},
-					"Account settings",
-				)})
-		},
-	)
+	systemPopover1 := ui.NewSystemPopover(ui.PopoverRootProps{})
+	return systemPopover1.Root().Children(func() *native.Node {
+		return ui.Fragment([]*native.Node{systemPopover1.Trigger(ui.PopoverTriggerProps{}).Children("Account").NativeNode(), systemPopover1.Content(ui.PopoverContentProps{Width: 240, Height: 120, Placement: "bottom-start"}).Children("Account settings").NativeNode()})
+	}).NativeNode()
 }
 ```
 
 ## 结构
 
-- `ui.SystemPopover.Root`
-- `ui.SystemPopover.Trigger`
-- `ui.SystemPopover.Content`
+- `systemPopover.Root`
+- `systemPopover.Trigger`
+- `systemPopover.Content`
 
 ## 主要属性
 

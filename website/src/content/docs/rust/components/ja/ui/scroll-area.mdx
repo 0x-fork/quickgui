@@ -12,17 +12,17 @@ use quickgui::*;
 
 ```rust
 let area = ScrollArea::new("log");
-area.viewport_part(div().h(160.0).overflow_hidden())
+area.viewport().h(160.0).overflow_hidden()
 ```
 
 ## 構成
 
-- `ScrollArea::root_part`
-- `ScrollArea::viewport_part`
-- `ScrollArea::content_part`
-- `ScrollArea::scrollbar_part`
-- `ScrollArea::thumb_part`
-- `ScrollArea::corner_part`
+- `ScrollArea::root`
+- `ScrollArea::viewport`
+- `ScrollArea::content`
+- `ScrollArea::scrollbar`
+- `ScrollArea::thumb`
+- `ScrollArea::corner`
 
 ## 主なプロパティ
 

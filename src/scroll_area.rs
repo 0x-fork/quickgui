@@ -552,20 +552,24 @@ impl ScrollArea {
     }
 
     /// Decorate an application-owned root without adding layout or appearance.
-    pub fn root_part(self, root: Element) -> Element {
+    pub fn root_with(self, root: Element) -> Element {
         root.id(self.root_id)
             .relative()
             .app_region_no_drag()
             .cursor_default()
     }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(self) -> Element {
+        self.root_with(crate::div())
+    }
 
     /// Decorate the application-owned scroll container.
     ///
     /// The viewport clips its content on both axes and carries the ScrollView role. The caller
-    /// places the content by translating [`Self::content_part`] with the retained offset, which
+    /// places the content by translating [`Self::content_with`] with the retained offset, which
     /// keeps scrolling paint-only and keeps QuickGUI's built-in overlay scrollbar out of a
     /// component whose scrollbars the application draws itself.
-    pub fn viewport_part(self, viewport: Element) -> Element {
+    pub fn viewport_with(self, viewport: Element) -> Element {
         viewport
             .id(self.viewport_id())
             .overflow_hidden()
@@ -573,13 +577,21 @@ impl ScrollArea {
             .app_region_no_drag()
             .cursor_default()
     }
+    /// Create the unstyled viewport part. Use [`Self::viewport_with`] to supply an existing element.
+    pub fn viewport(self) -> Element {
+        self.viewport_with(crate::div())
+    }
 
     /// Decorate the application-owned scrolled content.
     ///
     /// Translate it by the negated [`ScrollAreaState::offset`]; QuickGUI adds no transform of its
     /// own so the application keeps full control of the motion.
-    pub fn content_part(self, content: Element) -> Element {
+    pub fn content_with(self, content: Element) -> Element {
         content.id(self.content_id())
+    }
+    /// Create the unstyled content part. Use [`Self::content_with`] to supply an existing element.
+    pub fn content(self) -> Element {
+        self.content_with(crate::div())
     }
 
     /// Decorate one application-owned scrollbar track.
@@ -587,7 +599,7 @@ impl ScrollArea {
     /// The track projects the ScrollBar role with the exact current position, the scrollable
     /// range, and its orientation. It is not focusable: a scrollbar duplicates keyboard scrolling
     /// the viewport already provides, so it stays out of the Tab sequence.
-    pub fn scrollbar_part(
+    pub fn scrollbar_with(
         self,
         state: &ScrollAreaState,
         orientation: ScrollAreaOrientation,
@@ -615,13 +627,17 @@ impl ScrollArea {
             .cursor_default()
             .user_select_none()
     }
+    /// Create the unstyled scrollbar part. Use [`Self::scrollbar_with`] to supply an existing element.
+    pub fn scrollbar(self, state: &ScrollAreaState, orientation: ScrollAreaOrientation) -> Element {
+        self.scrollbar_with(state, orientation, crate::div())
+    }
 
     /// Decorate one application-owned scrollbar thumb.
     ///
     /// The thumb carries the captured pointer drag. Attach a
     /// [`crate::ViewContext::pointer_listener`] registered for [`Self::thumb_id`] and forward the
     /// event to [`ScrollAreaState::apply_thumb_pointer`] with the track length the caller laid out.
-    pub fn thumb_part(self, orientation: ScrollAreaOrientation, thumb: Element) -> Element {
+    pub fn thumb_with(self, orientation: ScrollAreaOrientation, thumb: Element) -> Element {
         thumb
             .id(self.thumb_id(orientation))
             .accessibility_hidden(true)
@@ -629,15 +645,19 @@ impl ScrollArea {
             .cursor_default()
             .user_select_none()
     }
+    /// Create the unstyled thumb part. Use [`Self::thumb_with`] to supply an existing element.
+    pub fn thumb(self, orientation: ScrollAreaOrientation) -> Element {
+        self.thumb_with(orientation, crate::div())
+    }
 
     /// Decorate and position one application-owned scrollbar thumb inside its scrollbar.
     ///
-    /// This is [`Self::thumb_part`] plus the structural geometry a draggable thumb needs: the
+    /// This is [`Self::thumb_with`] plus the structural geometry a draggable thumb needs: the
     /// thumb is absolutely positioned along the scrollbar's axis at
     /// [`ScrollAreaState::thumb_offset`] with [`ScrollAreaState::thumb_length`], so it follows
     /// the offset without the application re-deriving either value. Cross-axis size and every
     /// visual property stay application-owned.
-    pub fn positioned_thumb_part(
+    pub fn positioned_thumb_with(
         self,
         state: &ScrollAreaState,
         orientation: ScrollAreaOrientation,
@@ -646,29 +666,42 @@ impl ScrollArea {
     ) -> Element {
         let offset = state.thumb_offset(orientation, track_length);
         let length = state.thumb_length(orientation, track_length);
-        let thumb = self.thumb_part(orientation, thumb).absolute();
+        let thumb = self.thumb_with(orientation, thumb).absolute();
         if orientation.is_horizontal() {
             thumb.left(offset).top(0.0).w(length)
         } else {
             thumb.top(offset).left(0.0).h(length)
         }
     }
+    /// Create the unstyled positioned thumb part. Use [`Self::positioned_thumb_with`] to supply an existing element.
+    pub fn positioned_thumb(
+        self,
+        state: &ScrollAreaState,
+        orientation: ScrollAreaOrientation,
+        track_length: f32,
+    ) -> Element {
+        self.positioned_thumb_with(state, orientation, track_length, crate::div())
+    }
 
     /// Decorate the application-owned corner between a horizontal and a vertical scrollbar.
-    pub fn corner_part(self, corner: Element) -> Element {
+    pub fn corner_with(self, corner: Element) -> Element {
         corner
             .id(self.corner_id())
             .accessibility_hidden(true)
             .app_region_no_drag()
             .cursor_default()
     }
+    /// Create the unstyled corner part. Use [`Self::corner_with`] to supply an existing element.
+    pub fn corner(self) -> Element {
+        self.corner_with(crate::div())
+    }
 }
 
 /// Create an unstyled scroll-area viewport.
 ///
-/// This shorthand is equivalent to `ScrollArea::new(id).viewport_part(div())`.
+/// This shorthand is equivalent to `ScrollArea::new(id).viewport_with(div())`.
 pub fn scroll_area_viewport(id: impl Into<ElementId>) -> Element {
-    ScrollArea::new(id).viewport_part(div())
+    ScrollArea::new(id).viewport_with(div())
 }
 
 fn derived_scroll_area_id(scope: ElementId, tag: u64, index: u64) -> ElementId {
@@ -875,19 +908,19 @@ mod tests {
         state.set_offset(Vector::new(0.0, 250.0));
         let area = ScrollArea::new("log");
 
-        let root = area.root_part(div().bg(Color::rgb8(1, 2, 3)));
+        let root = area.root_with(div().bg(Color::rgb8(1, 2, 3)));
         assert_eq!(root.explicit_id, Some("log".into()));
         assert_eq!(root.visual.background, Some(Color::rgb8(1, 2, 3)));
 
-        let viewport = area.viewport_part(div().size(200.0, 200.0));
+        let viewport = area.viewport_with(div().size(200.0, 200.0));
         assert_eq!(viewport.explicit_id, Some(area.viewport_id()));
         assert_eq!(viewport.accessibility.role, AccessibilityRole::ScrollView);
         assert_eq!(viewport.visual.background, None);
 
-        let content = area.content_part(div());
+        let content = area.content_with(div());
         assert_eq!(content.explicit_id, Some(area.content_id()));
 
-        let vertical = area.scrollbar_part(&state, ScrollAreaOrientation::Vertical, div().w(10.0));
+        let vertical = area.scrollbar_with(&state, ScrollAreaOrientation::Vertical, div().w(10.0));
         assert_eq!(
             vertical.explicit_id,
             Some(area.scrollbar_id(ScrollAreaOrientation::Vertical))
@@ -909,19 +942,19 @@ mod tests {
         assert!(!vertical.focusable);
 
         let horizontal =
-            area.scrollbar_part(&state, ScrollAreaOrientation::Horizontal, div().h(10.0));
+            area.scrollbar_with(&state, ScrollAreaOrientation::Horizontal, div().h(10.0));
         assert!(
             horizontal.accessibility.hidden,
             "an axis that cannot scroll is not announced"
         );
 
-        let thumb = area.thumb_part(ScrollAreaOrientation::Vertical, div());
+        let thumb = area.thumb_with(ScrollAreaOrientation::Vertical, div());
         assert_eq!(
             thumb.explicit_id,
             Some(area.thumb_id(ScrollAreaOrientation::Vertical))
         );
         assert!(thumb.accessibility.hidden);
-        let corner = area.corner_part(div());
+        let corner = area.corner_with(div());
         assert_eq!(corner.explicit_id, Some(area.corner_id()));
         assert!(corner.accessibility.hidden);
 
@@ -989,23 +1022,23 @@ mod tests {
                 .state
                 .thumb_offset(ScrollAreaOrientation::Vertical, TRACK);
 
-            area.root_part(div().size(212.0, 200.0).flex_row())
+            area.root_with(div().size(212.0, 200.0).flex_row())
                 .child(
-                    area.viewport_part(div().size(200.0, 200.0).on_scroll_wheel(wheel))
+                    area.viewport_with(div().size(200.0, 200.0).on_scroll_wheel(wheel))
                         .child(
-                            area.content_part(div().w(200.0).h(1_000.0))
+                            area.content_with(div().w(200.0).h(1_000.0))
                                 .translate(-offset.x, -offset.y)
                                 .child(text("Scrolled content")),
                         ),
                 )
                 .child(
-                    area.scrollbar_part(
+                    area.scrollbar_with(
                         &self.state,
                         ScrollAreaOrientation::Vertical,
                         div().w(12.0).h(TRACK).relative(),
                     )
                     .child(
-                        area.thumb_part(
+                        area.thumb_with(
                             ScrollAreaOrientation::Vertical,
                             div()
                                 .absolute()

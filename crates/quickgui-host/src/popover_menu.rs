@@ -507,7 +507,7 @@ pub(super) fn apply_context_menu(
         Rc::from(context_menu_rows(id, tree))
     };
     if !declared_entries && rows.is_empty() {
-        return state.target_part(element_id, element);
+        return state.target_with(element_id, element);
     }
     let declaration = declaration.unwrap_or_default();
     let style = declaration.style();
@@ -567,7 +567,7 @@ pub(super) fn popover_menu_surface(
                     let row = menu_row(state.style, item, item_state)
                         .h(state.style.row_height(item.kind()))
                         .flex_none();
-                    let row = state.menu.item_part(element_id, index, row)?;
+                    let row = state.menu.item_with(element_id, index, row)?;
                     let interactive = item.is_interactive() && !item_state.disabled;
                     let row_id = interactive
                         .then(|| state.menu.item_element_id(element_id, index))
@@ -616,7 +616,7 @@ pub(super) fn popover_menu_surface(
     let root = {
         let states = menus.borrow();
         match states.get(&id) {
-            Some(state) => state.menu.root_part(element_id, element),
+            Some(state) => state.menu.root_with(element_id, element),
             None => return element,
         }
     };

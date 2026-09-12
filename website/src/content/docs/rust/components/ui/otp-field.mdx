@@ -12,14 +12,14 @@ use quickgui::*;
 
 ```rust
 let field = OtpField::new("code");
-field.root_part(div().flex_row().gap(8.0))
+field.root().flex_row().gap(8.0)
 ```
 
 ## Anatomy
 
-- `OtpField::root_part`
-- `OtpField::input_part`
-- `OtpField::separator_part`
+- `OtpField::root`
+- `OtpField::input`
+- `OtpField::separator`
 
 ## Key props
 

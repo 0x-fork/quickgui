@@ -68,7 +68,7 @@ func NestedRouterExample() *native.Node {
 ```go
 func BackButton() *ui.Element {
 	router := ui.UseRouter()
-	return ui.Button("Back").OnClick(router.Back)
+	return ui.Button().Child("Back").OnClick(router.Back)
 }
 ```
 

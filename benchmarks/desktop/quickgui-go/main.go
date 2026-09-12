@@ -53,7 +53,7 @@ func caption(value any) *ui.Element {
 	return ui.Text(value).FontSize(12).LineHeight(18).TextColor(muted)
 }
 func control(label any, click func(), disabled func() bool) *ui.Element {
-	return ui.Button(label).Style(row()).JustifyContent("center").Height(32).
+	return ui.Button().Child(label).Style(row()).JustifyContent("center").Height(32).
 		PaddingLeft(12).PaddingRight(12).BorderWidth(1).BorderColor("#dce0e7").
 		BorderRadius(6).BackgroundColor("white").FontSize(12).
 		DisabledStyle(func(s ui.StyleBuilder) ui.StyleBuilder { return s.Opacity(0.4) }).
@@ -120,7 +120,7 @@ func issueTracker() *ui.Element {
 		ui.For(
 			func() []string { return []string{"All issues", "Open", "Completed"} },
 			func(name string, _ func() int) *ui.Element {
-				return ui.Button(name).Style(row()).Height(42).PaddingLeft(12).
+				return ui.Button().Child(name).Style(row()).Height(42).PaddingLeft(12).
 					JustifyContent("flex-start").BorderWidth(0).BorderRadius(7).
 					FontWeight(func() int {
 						if filter() == name {
@@ -181,13 +181,10 @@ func issueTracker() *ui.Element {
 						visible,
 						func(index int, _ func() int) *ui.Element {
 							item := issues[index]
-							return ui.Button(
-								ui.Text(item.Title).FontSize(14).FontWeight(500).WhiteSpace("nowrap").TextOverflow("ellipsis").Overflow("hidden"),
-								ui.Text(func() string {
+							return ui.Button().Children(ui.Text(item.Title).FontSize(14).FontWeight(500).WhiteSpace("nowrap").TextOverflow("ellipsis").Overflow("hidden"),ui.Text(func() string {
 									return item.ID + "  ·  " + item.Project + "  ·  " + item.status() + "  ·  " + item.Owner
 								}).
-									FontSize(11).TextColor(muted).WhiteSpace("nowrap"),
-							).Style(column()).AriaLabel(item.ID).Height(68).FlexShrink(0).JustifyContent("center").AlignItems("stretch").
+									FontSize(11).TextColor(muted).WhiteSpace("nowrap")).Style(column()).AriaLabel(item.ID).Height(68).FlexShrink(0).JustifyContent("center").AlignItems("stretch").
 								Gap(8).PaddingLeft(20).PaddingRight(20).BorderWidth(0).BorderBottomWidth(1).BorderRadius(0).BorderColor("#edf0f4").
 								BackgroundColor(func() string {
 									if selected() == index {
@@ -227,7 +224,7 @@ func issueTracker() *ui.Element {
 		ui.TextArea().Value(func() string { return current().notes() }).AriaLabel("Working notes").
 			OnInputEvent(func(e *native.Event) { current().setNotes(e.Value) }).Height(100).FlexShrink(0).
 			Padding(10).FontSize(13).LineHeight(19).BorderWidth(1).BorderColor("#dce0e7").BorderRadius(7),
-		ui.Button(func() string {
+		ui.Button().Child(func() string {
 			if current().status() == "Done" {
 				return "Reopen issue"
 			}

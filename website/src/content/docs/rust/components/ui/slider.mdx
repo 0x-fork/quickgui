@@ -13,21 +13,21 @@ use quickgui::*;
 ```rust
 let slider = Slider::new("volume", &state);
 slider
-    .root_part(div().flex_col().gap(14.0))
+    .root().flex_col().gap(14.0)
     .child(text("Volume"))
-    .child(slider.track_part(div().w(240.0).h(24.0)))
+    .child(slider.track().w(240.0).h(24.0))
 ```
 
 ## Anatomy
 
-- `Slider::root_part`
-- `Slider::label_part`
-- `Slider::value_part`
-- `Slider::control_part`
-- `Slider::track_part`
-- `Slider::range_part`
-- `Slider::indicator_part`
-- `Slider::thumb_part`
+- `Slider::root`
+- `Slider::label`
+- `Slider::value`
+- `Slider::control`
+- `Slider::track`
+- `Slider::range`
+- `Slider::indicator`
+- `Slider::thumb`
 
 ## Key props
 

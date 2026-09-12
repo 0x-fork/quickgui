@@ -42,7 +42,7 @@ let target = self.context_menu.element(
 );
 ```
 
-`target_part` can apply only the `has-popup` and expanded semantics when an application needs to
+`target_with` can apply only the `has-popup` and expanded semantics when an application needs to
 compose the low-level `on_context_menu` listener itself. Neither API changes colors, borders,
 typography, cursor policy, focusability, drag regions, or ordinary click behavior.
 
@@ -77,10 +77,10 @@ parts are exactly the ones documented there. Two names are its own:
 
 | Base UI part | QuickGUI decorator | What QuickGUI owns |
 | --- | --- | --- |
-| Trigger | `trigger_part(id, element)` (alias of `target_part`) | `has-popup`, `expanded`, secondary-click opening |
-| Backdrop | `backdrop_part(id, element)` | full-viewport, accessibility-hidden pointer layer in the owner window |
+| Trigger | `trigger_with(id, element)` (alias of `target_with`) | `has-popup`, `expanded`, secondary-click opening |
+| Backdrop | `backdrop_with(id, element)` | full-viewport, accessibility-hidden pointer layer in the owner window |
 
-`ContextMenuState::item_part_state(menu, index, submenu_open)` returns the same `MenuItemPartState`
+`ContextMenuState::item_render_state(menu, index, submenu_open)` returns the same `MenuItemPartState`
 snapshot the in-window menu publishes. Portal, Positioner, Popup, and Arrow have no separate
 decorator here: the menu surface is its own native child window, so QuickGUI resolves its placement
 against the display work area rather than a parent stacking context, and the popover view already

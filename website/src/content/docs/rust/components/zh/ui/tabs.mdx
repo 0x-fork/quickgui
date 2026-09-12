@@ -12,16 +12,16 @@ use quickgui::*;
 
 ```rust
 let tabs = Tabs::new("settings", "general");
-tabs.root_part(div().flex_col()).child(tabs.list_part(div().flex_row()))
+tabs.root().flex_col().child(tabs.list().flex_row())
 ```
 
 ## 结构
 
-- `Tabs::root_part`
-- `Tabs::list_part`
-- `Tabs::tab_part`
-- `Tabs::indicator_part`
-- `Tabs::panel_part`
+- `Tabs::root`
+- `Tabs::list`
+- `Tabs::tab`
+- `Tabs::indicator`
+- `Tabs::panel`
 
 ## 主要属性
 

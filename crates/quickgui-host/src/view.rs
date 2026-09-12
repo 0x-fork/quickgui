@@ -1650,7 +1650,7 @@ fn build_element_inner(
         if let Some(margin) = node.number(property::VIEWPORT_MARGIN) {
             popover = popover.viewport_margin(margin);
         }
-        element = popover.surface_part(element);
+        element = popover.surface_with(element);
 
         element = attach_dismiss_listener(
             element,
@@ -2193,93 +2193,93 @@ pub(super) fn apply_part(element: Element, id: u32, node: &NativeNode) -> Option
         return Some(element);
     };
     Some(match part {
-        "checkbox" => native_checkbox(node).root_part(element),
-        "checkbox-indicator" => Checkbox::new(ToggleState::Off).indicator_part(element),
+        "checkbox" => native_checkbox(node).root_with(element),
+        "checkbox-indicator" => Checkbox::new(ToggleState::Off).indicator_with(element),
         "radio" => Radio::new(node.boolean(property::CHECKED).unwrap_or(false))
             .read_only(node.boolean(property::READ_ONLY).unwrap_or(false))
-            .root_part(element),
-        "radio-indicator" => Radio::new(false).indicator_part(element),
+            .root_with(element),
+        "radio-indicator" => Radio::new(false).indicator_with(element),
         "radio-group" => RadioGroup::new()
             .read_only(node.boolean(property::READ_ONLY).unwrap_or(false))
             .required(node.boolean(property::REQUIRED).unwrap_or(false))
-            .root_part(element),
+            .root_with(element),
         "switch" => Switch::new(node.boolean(property::CHECKED).unwrap_or(false))
             .read_only(node.boolean(property::READ_ONLY).unwrap_or(false))
-            .root_part(element),
-        "switch-thumb" => Switch::new(false).thumb_part(element),
-        "tabs" => native_tabs(id, node).root_part(element),
-        "tabs-list" => native_tabs(id, node).list_part(element),
+            .root_with(element),
+        "switch-thumb" => Switch::new(false).thumb_with(element),
+        "tabs" => native_tabs(id, node).root_with(element),
+        "tabs-list" => native_tabs(id, node).list_with(element),
         "tab" => match native_tab(id, node) {
-            Some(tab) => tab.tab_part(element),
+            Some(tab) => tab.tab_with(element),
             None => element,
         },
-        "tab-indicator" => native_tab(id, node)?.indicator_part(element)?,
-        "tab-panel" => native_tab(id, node)?.panel_part(element)?,
-        "collapsible" => native_collapsible(id, node).root_part(element),
-        "collapsible-trigger" => native_collapsible(id, node).trigger_part(element),
-        "collapsible-panel" => native_collapsible(id, node).panel_part(element)?,
-        "accordion" => Accordion::new(native_part_scope(id, node)).root_part(element),
+        "tab-indicator" => native_tab(id, node)?.indicator_with(element)?,
+        "tab-panel" => native_tab(id, node)?.panel_with(element)?,
+        "collapsible" => native_collapsible(id, node).root_with(element),
+        "collapsible-trigger" => native_collapsible(id, node).trigger_with(element),
+        "collapsible-panel" => native_collapsible(id, node).panel_with(element)?,
+        "accordion" => Accordion::new(native_part_scope(id, node)).root_with(element),
         "accordion-item" => match native_accordion_item(id, node) {
-            Some(item) => item.root_part(element),
+            Some(item) => item.root_with(element),
             None => element,
         },
         "accordion-header" => match native_accordion_item(id, node) {
-            Some(item) => item.header_part(element),
+            Some(item) => item.header_with(element),
             None => element,
         },
         "accordion-trigger" => match native_accordion_item(id, node) {
-            Some(item) => item.trigger_part(element),
+            Some(item) => item.trigger_with(element),
             None => element,
         },
-        "accordion-panel" => native_accordion_item(id, node)?.panel_part(element)?,
-        "field" => native_field(id, node).root_part(element),
-        "field-label" => native_field(id, node).label_part(element),
-        "field-passive-label" => native_field(id, node).passive_label_part(element),
-        "field-control" => native_field(id, node).control_part(element),
-        "field-description" => native_field(id, node).description_part(element),
-        "field-error" => native_field(id, node).error_part(element),
-        "field-item" => native_field(id, node).item_part(element),
+        "accordion-panel" => native_accordion_item(id, node)?.panel_with(element)?,
+        "field" => native_field(id, node).root_with(element),
+        "field-label" => native_field(id, node).label_with(element),
+        "field-passive-label" => native_field(id, node).passive_label_with(element),
+        "field-control" => native_field(id, node).control_with(element),
+        "field-description" => native_field(id, node).description_with(element),
+        "field-error" => native_field(id, node).error_with(element),
+        "field-item" => native_field(id, node).item_with(element),
         "field-validity" => native_field(id, node)
-            .validity_part(node.boolean(property::OPEN).unwrap_or(true), element),
-        "progress" => native_progress(id, node).root_part(element),
-        "progress-indicator" => native_progress(id, node).indicator_part(element),
-        "progress-track" => native_progress(id, node).track_part(element),
-        "progress-label" => native_progress(id, node).label_part(element),
-        "progress-value" => native_progress(id, node).value_part(element),
-        "meter" => native_meter(id, node).root_part(element),
-        "meter-indicator" => native_meter(id, node).indicator_part(element),
-        "meter-track" => native_meter(id, node).track_part(element),
-        "meter-label" => native_meter(id, node).label_part(element),
-        "meter-value" => native_meter(id, node).value_part(element),
+            .validity_with(node.boolean(property::OPEN).unwrap_or(true), element),
+        "progress" => native_progress(id, node).root_with(element),
+        "progress-indicator" => native_progress(id, node).indicator_with(element),
+        "progress-track" => native_progress(id, node).track_with(element),
+        "progress-label" => native_progress(id, node).label_with(element),
+        "progress-value" => native_progress(id, node).value_with(element),
+        "meter" => native_meter(id, node).root_with(element),
+        "meter-indicator" => native_meter(id, node).indicator_with(element),
+        "meter-track" => native_meter(id, node).track_with(element),
+        "meter-label" => native_meter(id, node).label_with(element),
+        "meter-value" => native_meter(id, node).value_with(element),
         "toggle" => {
-            Toggle::new(node.boolean(property::PRESSED).unwrap_or(false)).root_part(element)
+            Toggle::new(node.boolean(property::PRESSED).unwrap_or(false)).root_with(element)
         }
-        "toggle-indicator" => Toggle::new(false).indicator_part(element),
-        "fieldset" => native_fieldset(id, node).root_part(element),
-        "fieldset-legend" => native_fieldset(id, node).legend_part(element),
-        "fieldset-description" => native_fieldset(id, node).description_part(element),
-        "fieldset-control" => native_fieldset(id, node).control_part(element),
+        "toggle-indicator" => Toggle::new(false).indicator_with(element),
+        "fieldset" => native_fieldset(id, node).root_with(element),
+        "fieldset-legend" => native_fieldset(id, node).legend_with(element),
+        "fieldset-description" => native_fieldset(id, node).description_with(element),
+        "fieldset-control" => native_fieldset(id, node).control_with(element),
         // The Rust guide requires the portal root to be mounted only while the dialog is open,
         // so a closed dialog contributes no overlay, focus trap, backdrop, or accessibility node.
         // `apply_dialog_part` owns that decision, because the core may hold a closing dialog
         // mounted for its own exit transition.
         "dialog" => element,
         "dialog-trigger" => {
-            native_dialog(id, node).trigger_part(ElementId::new(id as u64), element)
+            native_dialog(id, node).trigger_with(ElementId::new(id as u64), element)
         }
-        "dialog-backdrop" => native_dialog(id, node).backdrop_part(element),
-        "dialog-popup" => native_dialog(id, node).popover_part(element),
-        "dialog-title" => native_dialog(id, node).title_part(element),
-        "dialog-description" => native_dialog(id, node).description_part(element),
+        "dialog-backdrop" => native_dialog(id, node).backdrop_with(element),
+        "dialog-popup" => native_dialog(id, node).popup_with(element),
+        "dialog-title" => native_dialog(id, node).title_with(element),
+        "dialog-description" => native_dialog(id, node).description_with(element),
         // A menu trigger declares only `has-popup` and expansion here; the mounted relationship to
         // its surface travels through the validated `controls` property instead of a guessed id.
         POPOVER_MENU_TRIGGER_PART => {
             Popover::new(ElementId::new(id as u64), ElementId::new(id as u64), false)
                 .kind(PopoverKind::Menu)
-                .trigger_part(element)
+                .trigger_with(element)
                 .accessibility_expanded(node.boolean(property::OPEN).unwrap_or(false))
         }
-        "dialog-close" => native_dialog(id, node).close_part(
+        "dialog-close" => native_dialog(id, node).close_with(
             node.string(property::ACCESSIBILITY_LABEL)
                 .unwrap_or("Close"),
             element,

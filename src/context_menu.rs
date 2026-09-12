@@ -211,19 +211,27 @@ impl ContextMenuState {
 
     /// Decorate a caller-owned target with context-menu semantics without changing appearance,
     /// focusability, pointer cursor, drag-region behavior, layout, or ordinary click handling.
-    pub fn target_part(self, id: impl Into<ElementId>, target: Element) -> Element {
+    pub fn target_with(self, id: impl Into<ElementId>, target: Element) -> Element {
         target
             .id(id)
             .accessibility_has_popover(AccessibilityPopover::Menu)
             .accessibility_expanded(self.is_open())
     }
+    /// Create the unstyled target part. Use [`Self::target_with`] to supply an existing element.
+    pub fn target(self, id: impl Into<ElementId>) -> Element {
+        self.target_with(id, crate::div())
+    }
 
     /// Decorate a caller-owned target, Base UI's `ContextMenu.Trigger`.
     ///
-    /// This is the Base UI-named alias of [`Self::target_part`]; both names decorate the same
+    /// This is the Base UI-named alias of [`Self::target_with`]; both names decorate the same
     /// element identically.
-    pub fn trigger_part(self, id: impl Into<ElementId>, trigger: Element) -> Element {
-        self.target_part(id, trigger)
+    pub fn trigger_with(self, id: impl Into<ElementId>, trigger: Element) -> Element {
+        self.target_with(id, trigger)
+    }
+    /// Create the unstyled trigger part. Use [`Self::trigger_with`] to supply an existing element.
+    pub fn trigger(self, id: impl Into<ElementId>) -> Element {
+        self.trigger_with(id, crate::button())
     }
 
     /// Decorate an optional caller-painted backdrop, Base UI's `ContextMenu.Backdrop`.
@@ -231,7 +239,7 @@ impl ContextMenuState {
     /// The native popover surface already takes the pointer grab, so this layer exists only for a
     /// caller-painted dimming pass inside the owner window. It is hidden from assistive technology
     /// and carries no appearance of its own. Mount it only while [`Self::is_open`] is true.
-    pub fn backdrop_part(self, id: impl Into<ElementId>, backdrop: Element) -> Element {
+    pub fn backdrop_with(self, id: impl Into<ElementId>, backdrop: Element) -> Element {
         backdrop
             .id(id)
             .overlay()
@@ -241,17 +249,21 @@ impl ContextMenuState {
             .cursor_default()
             .accessibility_hidden(true)
     }
+    /// Create the unstyled backdrop part. Use [`Self::backdrop_with`] to supply an existing element.
+    pub fn backdrop(self, id: impl Into<ElementId>) -> Element {
+        self.backdrop_with(id, crate::div())
+    }
 
     /// The Base UI-named render snapshot for one row of an open context menu.
     ///
     /// The native popover surface resolves its own placement against the display work area, so a
     /// context menu publishes row state rather than the popup's side and alignment.
-    pub fn item_part_state(
+    pub fn item_state(
         menu: &PopoverMenu,
         index: usize,
         submenu_open: bool,
     ) -> Option<MenuItemPartState> {
-        menu.item_part_state(index, submenu_open)
+        menu.item_render_state(index, submenu_open)
     }
 
     /// Attach a complete cursor-point popover-menu interaction to a caller-owned target.
@@ -349,7 +361,7 @@ impl ContextMenuState {
             cx.invalidate();
         });
 
-        self.target_part(id, target).on_context_menu(open)
+        self.target_with(id, target).on_context_menu(open)
     }
 
     /// Close the current root context-menu surface synchronously from application state.
@@ -944,7 +956,7 @@ mod tests {
     #[test]
     fn target_part_adds_semantics_without_appearance_or_cursor_policy() {
         let state = ContextMenuState::new();
-        let target = state.target_part("target", div());
+        let target = state.target_with("target", div());
         assert_eq!(
             target.accessibility.has_popover,
             Some(AccessibilityPopover::Menu)

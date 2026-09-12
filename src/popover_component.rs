@@ -76,8 +76,8 @@ impl PopoverKind {
 /// The application owns `open`, every visual declaration, and the listener that changes state.
 /// QuickGUI owns stable part identities, anchored portal geometry, topmost Escape/outside-press
 /// dismissal, click-through prevention, focus movement/restoration, and accessibility relations.
-/// Mount either [`Self::positioner_part`] plus [`Self::popover_part`], or the merged
-/// [`Self::surface_part`], only while [`Self::is_open`] is true.
+/// Mount either [`Self::positioner_with`] plus [`Self::popup_with`], or the merged
+/// [`Self::surface_with`], only while [`Self::is_open`] is true.
 ///
 /// The descriptor retains no allocation, component store, observer, task, timer, animation, or
 /// idle scheduler source.
@@ -253,7 +253,7 @@ impl Popover {
     /// Make the open popover modal, Base UI's `modal` prop.
     ///
     /// A modal popover contains Tab focus inside the popup and expects a mounted
-    /// [`Self::backdrop_part`] to absorb outside pointer input. QuickGUI adds no dimming: the
+    /// [`Self::backdrop_with`] to absorb outside pointer input. QuickGUI adds no dimming: the
     /// backdrop stays an invisible caller-owned element until the application paints it.
     pub const fn modal(mut self, modal: bool) -> Self {
         self.modal = modal;
@@ -267,7 +267,7 @@ impl Popover {
 
     /// Declare the edge length of a framework-positioned arrow.
     ///
-    /// [`Self::arrow_part`] centers an arrow of this size on the anchor. Leaving it at zero pins
+    /// [`Self::arrow_with`] centers an arrow of this size on the anchor. Leaving it at zero pins
     /// the arrow to the resolved edge without a cross-axis offset, which is what an application
     /// that centers the arrow with its own layout wants.
     pub fn arrow_size(mut self, size: f32) -> Self {
@@ -285,8 +285,8 @@ impl Popover {
     /// Adopt the placement QuickGUI resolved for this popover on the previous painted frame.
     ///
     /// Store an [`AnchorPlacementHandle`] on the view next to `open`, mount the positioner with
-    /// [`Self::tracked_positioner_part`] or [`Self::tracked_surface_part`], and pass the handle
-    /// here while declaring the next frame. [`Self::arrow_part`], [`Self::resolved_side`],
+    /// [`Self::tracked_positioner_with`] or [`Self::tracked_surface_with`], and pass the handle
+    /// here while declaring the next frame. [`Self::arrow_with`], [`Self::resolved_side`],
     /// [`Self::resolved_align`], and [`Self::state`] then follow the placement the popover really
     /// used instead of the declared preference.
     ///
@@ -455,8 +455,18 @@ impl Popover {
         cx.focus(self.initial_focus.unwrap_or_else(|| self.popover_focus()));
     }
 
+    /// Group the trigger and floating content in an ordinary, unstyled view.
+    pub fn root(self) -> Element {
+        div()
+    }
+
+    /// Use an existing view as the popover's composition root.
+    pub fn root_with(self, root: Element) -> Element {
+        root
+    }
+
     /// Decorate an application-owned trigger without adding appearance.
-    pub fn trigger_part(self, trigger: Element) -> Element {
+    pub fn trigger_with(self, trigger: Element) -> Element {
         let trigger = trigger
             .id(self.trigger_id)
             .focusable()
@@ -475,7 +485,7 @@ impl Popover {
 
     /// Create an unstyled semantic trigger root.
     pub fn trigger(self) -> Element {
-        self.trigger_part(button())
+        self.trigger_with(button())
     }
 
     /// Decorate the caller-owned portal/positioner without adding popover appearance.
@@ -483,32 +493,44 @@ impl Popover {
     /// QuickGUI's retained overlay node is itself the portal, so this part combines the Base
     /// UI-style Portal and Positioner boundary without introducing a full-window wrapper that
     /// would block unrelated pointer input.
-    pub fn positioner_part(self, positioner: Element) -> Element {
+    pub fn positioner_with(self, positioner: Element) -> Element {
         self.anchored(positioner.id(self.positioner_id()))
             .app_region_no_drag()
             .cursor_default()
     }
+    /// Create the unstyled positioner part. Use [`Self::positioner_with`] to supply an existing element.
+    pub fn positioner(self) -> Element {
+        self.positioner_with(crate::div())
+    }
 
     /// Decorate the positioner and publish the placement it resolves to.
     ///
-    /// This is [`Self::positioner_part`] plus
+    /// This is [`Self::positioner_with`] plus
     /// [`crate::Element::report_anchor_placement`]: the handle receives the side, alignment, anchor
     /// rectangle, and remaining room the popover actually used, and [`Self::track_placement`] feeds
     /// it back into the descriptor on the next frame.
-    pub fn tracked_positioner_part(
+    pub fn tracked_positioner_with(
         self,
         positioner: Element,
         placement: &AnchorPlacementHandle,
     ) -> Element {
-        self.positioner_part(positioner.report_anchor_placement(placement.clone()))
+        self.positioner_with(positioner.report_anchor_placement(placement.clone()))
+    }
+    /// Create the unstyled tracked positioner part. Use [`Self::tracked_positioner_with`] to supply an existing element.
+    pub fn tracked_positioner(self, placement: &AnchorPlacementHandle) -> Element {
+        self.tracked_positioner_with(crate::div(), placement)
     }
 
     /// Base UI's Portal name for the combined portal/positioner part.
     ///
     /// QuickGUI's retained overlay node is itself the portal, so Portal and Positioner are one
     /// element; both names decorate it identically.
-    pub fn portal_part(self, portal: Element) -> Element {
-        self.positioner_part(portal)
+    pub fn portal_with(self, portal: Element) -> Element {
+        self.positioner_with(portal)
+    }
+    /// Create the unstyled portal part. Use [`Self::portal_with`] to supply an existing element.
+    pub fn portal(self) -> Element {
+        self.portal_with(crate::div())
     }
 
     /// Apply the anchored geometry this popover declares to a caller-owned element.
@@ -529,7 +551,7 @@ impl Popover {
     ///
     /// The popover emits [`crate::Event::Dismiss`] under [`Self::surface_id`] for every enabled
     /// dismissal path. Mounted title/description parts are related without copying their text.
-    pub fn popover_part(self, popover: Element) -> Element {
+    pub fn popup_with(self, popover: Element) -> Element {
         let mut popover = popover
             .id(self.surface_id)
             .restore_focus_to(self.trigger_focus())
@@ -551,28 +573,36 @@ impl Popover {
         }
         popover
     }
+    /// Create the unstyled popup part. Use [`Self::popup_with`] to supply an existing element.
+    pub fn popup(self) -> Element {
+        self.popup_with(crate::div())
+    }
 
     /// Decorate one caller-owned element as both positioner and popover.
     ///
-    /// This compact form has the same unstyled contract as composing [`Self::positioner_part`]
-    /// around [`Self::popover_part`]. Use separate parts when the application needs to animate or
+    /// This compact form has the same unstyled contract as composing [`Self::positioner_with`]
+    /// around [`Self::popup_with`]. Use separate parts when the application needs to animate or
     /// size the positioner independently from popover presentation.
-    pub fn surface_part(self, surface: Element) -> Element {
-        self.anchored(self.popover_part(surface))
+    pub fn surface_with(self, surface: Element) -> Element {
+        self.anchored(self.popup_with(surface))
     }
 
     /// Decorate the merged surface and publish the placement it resolves to.
-    pub fn tracked_surface_part(
+    pub fn tracked_surface_with(
         self,
         surface: Element,
         placement: &AnchorPlacementHandle,
     ) -> Element {
-        self.surface_part(surface.report_anchor_placement(placement.clone()))
+        self.surface_with(surface.report_anchor_placement(placement.clone()))
+    }
+    /// Create the unstyled tracked surface part. Use [`Self::tracked_surface_with`] to supply an existing element.
+    pub fn tracked_surface(self, placement: &AnchorPlacementHandle) -> Element {
+        self.tracked_surface_with(crate::div(), placement)
     }
 
     /// Create an unstyled merged positioner/popover root.
     pub fn surface(self) -> Element {
-        self.surface_part(div())
+        self.surface_with(div())
     }
 
     /// Position a caller-owned arrow on the edge the popover actually opened against.
@@ -589,7 +619,7 @@ impl Popover {
     /// [`Self::arrow_padding`] to keep it clear of the popup's corners. The arrow is hidden from
     /// assistive technology: it is decoration attached to a surface that already carries the
     /// relationship.
-    pub fn arrow_part(self, arrow: Element) -> Element {
+    pub fn arrow_with(self, arrow: Element) -> Element {
         let arrow = arrow
             .id(self.arrow_id())
             .absolute()
@@ -608,6 +638,10 @@ impl Popover {
             (AnchorSide::Left, Some(offset)) => arrow.right(0.0).top(offset),
             (AnchorSide::Left, None) => arrow.right(0.0),
         }
+    }
+    /// Create the unstyled arrow part. Use [`Self::arrow_with`] to supply an existing element.
+    pub fn arrow(self) -> Element {
+        self.arrow_with(crate::div())
     }
 
     /// The popup-local cross-axis offset of a centered arrow, once a placement has been reported.
@@ -640,15 +674,19 @@ impl Popover {
     /// between them. QuickGUI supplies the stable identity and the scroll container; height,
     /// padding, and motion stay application-owned — cap it with
     /// [`PopoverPartState::available_height`] to keep a long popup inside the window.
-    pub fn viewport_part(self, viewport: Element) -> Element {
+    pub fn viewport_with(self, viewport: Element) -> Element {
         viewport
             .id(self.viewport_id())
             .overflow_y_scroll()
             .app_region_no_drag()
     }
+    /// Create the unstyled viewport part. Use [`Self::viewport_with`] to supply an existing element.
+    pub fn viewport(self) -> Element {
+        self.viewport_with(crate::div())
+    }
 
     /// Decorate an optional caller-painted viewport backdrop.
-    pub fn backdrop_part(self, backdrop: Element) -> Element {
+    pub fn backdrop_with(self, backdrop: Element) -> Element {
         backdrop
             .id(self.backdrop_id())
             .overlay()
@@ -658,19 +696,31 @@ impl Popover {
             .cursor_default()
             .accessibility_hidden(true)
     }
+    /// Create the unstyled backdrop part. Use [`Self::backdrop_with`] to supply an existing element.
+    pub fn backdrop(self) -> Element {
+        self.backdrop_with(crate::div())
+    }
 
     /// Assign the stable mounted label target used by the popover.
-    pub fn title_part(self, title: Element) -> Element {
+    pub fn title_with(self, title: Element) -> Element {
         title.id(self.title_id())
+    }
+    /// Create the unstyled title part. Use [`Self::title_with`] to supply an existing element.
+    pub fn title(self) -> Element {
+        self.title_with(crate::div())
     }
 
     /// Assign the stable mounted description target used by the popover.
-    pub fn description_part(self, description: Element) -> Element {
+    pub fn description_with(self, description: Element) -> Element {
         description.id(self.description_id())
+    }
+    /// Create the unstyled description part. Use [`Self::description_with`] to supply an existing element.
+    pub fn description(self) -> Element {
+        self.description_with(crate::div())
     }
 
     /// Decorate a caller-owned close control with button behavior and no visual defaults.
-    pub fn close_part(self, label: impl Into<Arc<str>>, close: Element) -> Element {
+    pub fn close_with(self, label: impl Into<Arc<str>>, close: Element) -> Element {
         close
             .id(self.close_id())
             .clickable()
@@ -679,6 +729,10 @@ impl Popover {
             .accessibility_label(label)
             .app_region_no_drag()
             .user_select_none()
+    }
+    /// Create the unstyled close part. Use [`Self::close_with`] to supply an existing element.
+    pub fn close(self, label: impl Into<Arc<str>>) -> Element {
+        self.close_with(label, crate::button())
     }
 }
 
@@ -812,19 +866,28 @@ impl PopoverHoverState {
     /// Decorate a caller-owned trigger with hover opening.
     ///
     /// This is the `fn`-pointer entry point for a view that owns one popover per field. A host that
-    /// renders many declared popovers through one view uses [`Self::trigger_part_with`].
-    pub fn trigger_part<V: 'static>(
+    /// renders many declared popovers through one view uses [`Self::trigger_with_accessor`].
+    pub fn trigger_with<V: 'static>(
         &self,
         cx: &mut ViewContext<'_, V>,
         popover: Popover,
         access: fn(&mut V) -> &mut Self,
         trigger: Element,
     ) -> Element {
-        self.trigger_part_with(cx, popover, StateAccessor::from(access), trigger)
+        self.trigger_with_accessor(cx, popover, StateAccessor::from(access), trigger)
+    }
+    /// Create the unstyled trigger part. Use [`Self::trigger_with`] to supply an existing element.
+    pub fn trigger<V: 'static>(
+        &self,
+        cx: &mut ViewContext<'_, V>,
+        popover: Popover,
+        access: fn(&mut V) -> &mut Self,
+    ) -> Element {
+        self.trigger_with(cx, popover, access, crate::button())
     }
 
     /// Decorate a caller-owned trigger with hover opening through a per-instance accessor.
-    pub fn trigger_part_with<V: 'static>(
+    pub fn trigger_with_accessor<V: 'static>(
         &self,
         cx: &mut ViewContext<'_, V>,
         popover: Popover,
@@ -833,22 +896,31 @@ impl PopoverHoverState {
     ) -> Element {
         let hovered =
             self.hover_listener(cx, popover.trigger_id(), PopoverHoverPart::Trigger, access);
-        popover.trigger_part(trigger).on_hover(hovered)
+        popover.trigger_with(trigger).on_hover(hovered)
     }
 
     /// Decorate the caller-owned popup so the pointer may cross into it without closing.
-    pub fn popup_part<V: 'static>(
+    pub fn popup_with<V: 'static>(
         &self,
         cx: &mut ViewContext<'_, V>,
         popover: Popover,
         access: fn(&mut V) -> &mut Self,
         popup: Element,
     ) -> Element {
-        self.popup_part_with(cx, popover, StateAccessor::from(access), popup)
+        self.popup_with_accessor(cx, popover, StateAccessor::from(access), popup)
+    }
+    /// Create the unstyled popup part. Use [`Self::popup_with`] to supply an existing element.
+    pub fn popup<V: 'static>(
+        &self,
+        cx: &mut ViewContext<'_, V>,
+        popover: Popover,
+        access: fn(&mut V) -> &mut Self,
+    ) -> Element {
+        self.popup_with(cx, popover, access, crate::div())
     }
 
     /// Decorate the caller-owned popup through a per-instance accessor.
-    pub fn popup_part_with<V: 'static>(
+    pub fn popup_with_accessor<V: 'static>(
         &self,
         cx: &mut ViewContext<'_, V>,
         popover: Popover,
@@ -857,7 +929,7 @@ impl PopoverHoverState {
     ) -> Element {
         let hovered =
             self.hover_listener(cx, popover.popover_id(), PopoverHoverPart::Popup, access);
-        popover.popover_part(popup).on_hover(hovered)
+        popover.popup_with(popup).on_hover(hovered)
     }
 
     fn hover_listener<V: 'static>(
@@ -1300,7 +1372,7 @@ mod tests {
             .initial_focus("first-option")
             .dismiss_on_escape(false);
 
-        let trigger = popover.trigger_part(crate::div());
+        let trigger = popover.trigger_with(crate::div());
         assert_eq!(trigger.explicit_id, Some("trigger".into()));
         assert_eq!(trigger.accessibility.role, AccessibilityRole::Button);
         assert!(trigger.focusable);
@@ -1308,7 +1380,7 @@ mod tests {
         assert_eq!(trigger.visual.border_color, None);
         assert_eq!(trigger.cursor_style, Some(crate::CursorStyle::Arrow));
 
-        let positioner = popover.positioner_part(crate::div());
+        let positioner = popover.positioner_with(crate::div());
         assert_eq!(positioner.explicit_id, Some(popover.positioner_id()));
         assert!(positioner.portal);
         assert!(positioner.blocks_pointer);
@@ -1320,7 +1392,7 @@ mod tests {
         assert_eq!(anchor.gap, 12.0);
         assert_eq!(anchor.viewport_margin, 20.0);
 
-        let surface = popover.popover_part(crate::div());
+        let surface = popover.popup_with(crate::div());
         assert_eq!(surface.explicit_id, Some("surface".into()));
         assert_eq!(surface.accessibility.role, AccessibilityRole::ListBox);
         assert!(!surface.portal);
@@ -1341,10 +1413,10 @@ mod tests {
         assert_eq!(surface.visual.shadows, None);
         assert_eq!(surface.visual.radius, 0.0);
 
-        let title = popover.title_part(crate::text("Visible title"));
-        let description = popover.description_part(crate::text("Visible description"));
-        let close = popover.close_part("Close popover", crate::div());
-        let backdrop = popover.backdrop_part(crate::div());
+        let title = popover.title_with(crate::text("Visible title"));
+        let description = popover.description_with(crate::text("Visible description"));
+        let close = popover.close_with("Close popover", crate::div());
+        let backdrop = popover.backdrop_with(crate::div());
         assert_eq!(title.explicit_id, Some(popover.title_id()));
         assert_eq!(description.explicit_id, Some(popover.description_id()));
         assert_eq!(close.explicit_id, Some(popover.close_id()));
@@ -1365,12 +1437,12 @@ mod tests {
             .viewport_margin(f32::NAN)
             .dismiss_on_escape(false)
             .dismiss_on_pointer_outside(false);
-        let positioner = popover.positioner_part(crate::div());
+        let positioner = popover.positioner_with(crate::div());
         let anchor = positioner.anchor.expect("popover positioner anchor");
         assert_eq!(anchor.gap, 0.0);
         assert_eq!(anchor.viewport_margin, DEFAULT_POPOVER_VIEWPORT_MARGIN);
 
-        let popover = popover.popover_part(crate::div());
+        let popover = popover.popup_with(crate::div());
         assert!(popover.dismiss_policy.is_empty());
         assert!(popover.blocks_pointer);
     }
@@ -1565,10 +1637,10 @@ mod tests {
             ]);
             if popover.is_open() {
                 root = root.child(
-                    popover.positioner_part(
+                    popover.positioner_with(
                         crate::div().child(
                             popover
-                                .popover_part(crate::div())
+                                .popup_with(crate::div())
                                 .accessibility_label("Actions")
                                 .child(
                                     crate::button()
@@ -1660,7 +1732,7 @@ mod tests {
         );
         assert!(popover.is_modal());
 
-        let positioner = popover.positioner_part(div());
+        let positioner = popover.positioner_with(div());
         let anchor = positioner.anchor.expect("positioner anchor");
         assert_eq!(anchor.target, AnchorTarget::Element("trigger".into()));
         assert_eq!(anchor.placement, AnchorPlacement::LeftEnd);
@@ -1674,15 +1746,15 @@ mod tests {
 
         // Portal and Positioner are the same retained overlay node in QuickGUI.
         assert_eq!(
-            popover.portal_part(div()).explicit_id,
+            popover.portal_with(div()).explicit_id,
             Some(popover.positioner_id())
         );
 
-        let modal_popup = popover.popover_part(div());
+        let modal_popup = popover.popup_with(div());
         assert!(modal_popup.focus_trap);
         assert!(
             !Popover::new("trigger", "popup", true)
-                .popover_part(div())
+                .popup_with(div())
                 .focus_trap
         );
 
@@ -1703,7 +1775,7 @@ mod tests {
             .collision_padding(-5.0)
             .arrow_size(1.0e9)
             .arrow_padding(f32::NAN);
-        let anchor = clamped.positioner_part(div()).anchor.expect("anchor");
+        let anchor = clamped.positioner_with(div()).anchor.expect("anchor");
         assert_eq!(anchor.gap, MAX_POPOVER_SIDE_OFFSET);
         assert_eq!(anchor.align_offset, 0.0);
         assert_eq!(anchor.viewport_margin, 0.0);
@@ -1711,7 +1783,7 @@ mod tests {
         let broken = Popover::new("trigger", "popup", true)
             .side_offset(f32::INFINITY)
             .collision_padding(f32::NAN);
-        let anchor = broken.positioner_part(div()).anchor.expect("anchor");
+        let anchor = broken.positioner_with(div()).anchor.expect("anchor");
         assert_eq!(anchor.gap, DEFAULT_POPOVER_ANCHOR_GAP);
         assert_eq!(anchor.viewport_margin, DEFAULT_POPOVER_VIEWPORT_MARGIN);
         assert_eq!(clamped.arrow_size, MAX_POPOVER_ARROW_SIZE);
@@ -1719,20 +1791,20 @@ mod tests {
 
         // The anchor override moves placement only; the trigger keeps its own relationships.
         let against_row = popover.anchor_element("row-3");
-        let anchor = against_row.positioner_part(div()).anchor.expect("anchor");
+        let anchor = against_row.positioner_with(div()).anchor.expect("anchor");
         assert_eq!(anchor.target, AnchorTarget::Element("row-3".into()));
         assert_eq!(
             against_row.trigger().accessibility.relations.controls(),
             Some("popup".into())
         );
         let at_point = popover.anchor_point(Point::new(40.0, 50.0));
-        let anchor = at_point.positioner_part(div()).anchor.expect("anchor");
+        let anchor = at_point.positioner_with(div()).anchor.expect("anchor");
         assert_eq!(anchor.target, AnchorTarget::Point(Point::new(40.0, 50.0)));
         assert_eq!(anchor.gap, 14.0);
         assert_eq!(
             at_point
                 .anchor_trigger()
-                .positioner_part(div())
+                .positioner_with(div())
                 .anchor
                 .expect("anchor")
                 .target,
@@ -1740,7 +1812,7 @@ mod tests {
         );
 
         // The viewport part is a scroll container with a stable identity and no appearance.
-        let viewport = popover.viewport_part(div());
+        let viewport = popover.viewport_with(div());
         assert_eq!(viewport.explicit_id, Some(popover.viewport_id()));
         assert_eq!(viewport.visual.background, None);
         assert_ne!(popover.viewport_id(), popover.arrow_id());
@@ -1750,12 +1822,12 @@ mod tests {
         let handle = AnchorPlacementHandle::new();
         assert!(
             popover
-                .tracked_positioner_part(div(), &handle)
+                .tracked_positioner_with(div(), &handle)
                 .reports_anchor_placement()
         );
         assert!(
             popover
-                .tracked_surface_part(div(), &handle)
+                .tracked_surface_with(div(), &handle)
                 .reports_anchor_placement()
         );
     }
@@ -1783,7 +1855,7 @@ mod tests {
         );
         assert!(!preferred.state().is_measured());
         // Without a report the arrow pins to the declared edge and adds no guessed offset.
-        let unmeasured = preferred.arrow_part(div());
+        let unmeasured = preferred.arrow_with(div());
         assert_eq!(unmeasured.layout.inset.top, length(0.0));
         assert!(unmeasured.accessibility.hidden);
 
@@ -1797,7 +1869,7 @@ mod tests {
         }));
         assert_eq!(flipped.resolved_side(), AnchorSide::Top);
         assert_eq!(flipped.resolved_align(), AnchorAlign::Start);
-        let arrow = flipped.arrow_part(div());
+        let arrow = flipped.arrow_with(div());
         assert_eq!(arrow.explicit_id, Some(flipped.arrow_id()));
         assert_eq!(arrow.layout.inset.bottom, length(0.0));
         // 100 + 40/2 - 100 - 10/2 = 15 logical points from the popup's leading edge.
@@ -1820,7 +1892,7 @@ mod tests {
             available: Size::new(944.0, 546.0),
             anchor_hidden: true,
         }));
-        assert_eq!(corner.arrow_part(div()).layout.inset.left, length(4.0));
+        assert_eq!(corner.arrow_with(div()).layout.inset.left, length(4.0));
         assert!(corner.state().anchor_hidden);
 
         // A left placement pins the arrow to the popup's trailing edge and offsets vertically.
@@ -1831,7 +1903,7 @@ mod tests {
             available: Size::new(392.0, 624.0),
             anchor_hidden: false,
         }));
-        let arrow = leftward.arrow_part(div());
+        let arrow = leftward.arrow_with(div());
         assert_eq!(arrow.layout.inset.right, length(0.0));
         // 100 + 60/2 - 90 - 10/2 = 35 from the popup's top edge.
         assert_eq!(arrow.layout.inset.top, length(35.0));
@@ -1875,15 +1947,15 @@ mod tests {
             );
             if popover.is_open() {
                 root = root.child(
-                    popover.tracked_positioner_part(
+                    popover.tracked_positioner_with(
                         div().child(
                             popover
-                                .popover_part(div())
+                                .popup_with(div())
                                 .relative()
                                 .w(200.0)
                                 .h(200.0)
                                 .accessibility_label("Actions")
-                                .child(popover.arrow_part(div().w(10.0).h(6.0))),
+                                .child(popover.arrow_with(div().w(10.0).h(6.0))),
                         ),
                         &self.placement,
                     ),
@@ -1957,7 +2029,7 @@ mod tests {
     impl View for HoverPopoverView {
         fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
             let popover = Popover::new("trigger", "popup", self.hover.is_open());
-            let trigger = self.hover.trigger_part(
+            let trigger = self.hover.trigger_with(
                 cx,
                 popover,
                 |view| &mut view.hover,
@@ -1965,13 +2037,13 @@ mod tests {
             );
             let mut root = div().size_full().relative().child(trigger);
             if popover.is_open() {
-                let popup = self.hover.popup_part(
+                let popup = self.hover.popup_with(
                     cx,
                     popover,
                     |view| &mut view.hover,
                     div().w(100.0).h(60.0),
                 );
-                root = root.child(popover.positioner_part(div().child(popup)));
+                root = root.child(popover.positioner_with(div().child(popup)));
             }
             root
         }

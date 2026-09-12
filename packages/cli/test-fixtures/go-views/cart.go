@@ -18,7 +18,7 @@ func LineItem(product Product, quantity int, add func()) *ui.Element {
 		ui.Text(quantity),
 		ui.Text(product.Price*quantity),
 		ui.Text(initial),
-		ui.Button("Add").OnClick(add),
+		ui.Button().Child("Add").OnClick(add),
 	).Width(quantity * 20)
 }
 
@@ -40,7 +40,10 @@ func Label(value string) *ui.Element {
 
 func EventSnapshot(value string) *ui.Element {
 	input := ui.Input().Value("initial")
-	return ui.View().Children(input, ui.Button("Apply").OnClick(func() { input.Value(value) }))
+	return ui.View().Children(
+		input,
+		ui.Button().Child("Apply").OnClick(func() { input.Value(value) }),
+	)
 }
 
 var fluentBuilds, fluentChildBuilds int

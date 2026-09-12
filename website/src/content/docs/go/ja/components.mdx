@@ -13,7 +13,7 @@ func ComponentExample() *ui.Element {
 	count, setCount := ui.CreateSignal(0)
 	return ui.View().Children(
 		CounterLabel(count()),
-		ui.Button("Increment").OnClick(func() { setCount(count() + 1) }),
+		ui.Button().Child("Increment").OnClick(func() { setCount(count() + 1) }),
 	)
 }
 ```
@@ -35,7 +35,7 @@ func Cart() *ui.Element {
 	quantity, setQuantity := ui.CreateSignal(1)
 	return ui.View().Children(
 		LineItem(Product{ID: "mug", Name: "Mug", Price: 12}, quantity()),
-		ui.Button("Add one").OnClick(func() { setQuantity(quantity() + 1) }),
+		ui.Button().Child("Add one").OnClick(func() { setQuantity(quantity() + 1) }),
 	)
 }
 ```
@@ -53,7 +53,7 @@ func CardComponent(title string, children ...any) *ui.Element {
 func CardComposition() *ui.Element {
 	return CardComponent("Account",
 		ui.Text("Manage your account settings."),
-		ui.Button("Save").OnClick(func() { log.Print("Saved") }),
+		ui.Button().Child("Save").OnClick(func() { log.Print("Saved") }),
 	)
 }
 ```
@@ -64,9 +64,7 @@ func CardComposition() *ui.Element {
 
 ```go
 func ButtonExample(save func()) *ui.Element {
-	return ui.Button(
-		"Save changes",
-	).
+	return ui.Button().Child("Save changes").
 		Height(40).
 		PaddingLeft(16).
 		PaddingRight(16).
@@ -81,24 +79,19 @@ func ButtonExample(save func()) *ui.Element {
 
 ## 複合コンポーネント
 
-複合コンポーネントは `ui.Tabs.Root`、`ui.Tabs.List`、`ui.Tabs.Panel` などのパーツを公開します。コアがロール、キーボード操作、フォーカス、状態を処理します。コンテキストが存在するように、パーツはルートの子要素コールバック内で作成してください。
+`tabs := ui.NewTabs()` でインスタンスを作成し、`tabs.Root()`、`tabs.List()`、`tabs.Panel(...)` でパーツを組み立てます。コアがロール、キーボード操作、フォーカス、状態を処理します。パーツはルートに挿入されるときにコンテキストを受け取ります。
 
 ```go
-func TabsExample() *native.Node {
-	return ui.Tabs.Root(
-		ui.TabsRootProps{DefaultValue: "overview", Activation: "automatic"},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.Tabs.List(
-				ui.PartProps{},
-				func() *native.Node {
-					return ui.Fragment([]*native.Node{ui.Tabs.Tab(ui.TabsTabProps{Value: "overview"}, "Overview"),
-						ui.Tabs.Tab(ui.TabsTabProps{Value: "settings"}, "Settings")})
-				},
-			),
-				ui.Tabs.Panel(ui.TabsPanelProps{Value: "overview"}, "Overview content"),
-				ui.Tabs.Panel(ui.TabsPanelProps{Value: "settings"}, "Settings content")})
-		},
-	)
+func TabsExample() *ui.Element {
+    tabs := ui.NewTabs().DefaultValue("account")
+    return tabs.Root().Children(
+        tabs.List().Children(
+            tabs.Tab("account").Child("Account"),
+            tabs.Tab("security").Child("Security"),
+        ),
+        tabs.Panel("account").Child("Account settings"),
+        tabs.Panel("security").Child("Security settings"),
+    )
 }
 ```
 
@@ -107,18 +100,15 @@ func TabsExample() *native.Node {
 制御値にはアクセサーを渡し、コールバックでコントロールが受け入れた値を保存します。デフォルト値を使うとコンポーネントが状態を管理します。省略可能なスカラー値はポインター、複数選択はスライスで表します。
 
 ```go
-func CheckboxExample() *native.Node {
-	checked, setChecked := ui.CreateSignal(false)
-	return ui.Checkbox.Root(
-		ui.CheckboxProps{
-			Checked:         func() ui.CheckedState { return checked() },
-			OnCheckedChange: func(next bool, _ *native.Event) { setChecked(next) },
-		},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.Checkbox.Indicator(ui.PartProps{}, "✓"), ui.Text("Remember me").
-				Node})
-		},
-	)
+func CheckboxExample() *ui.Element {
+    checked, setChecked := ui.CreateSignal(false)
+    checkbox := ui.NewCheckbox().Checked(checked()).OnCheckedChange(
+        func(next bool, _ *native.Event) { setChecked(next) },
+    )
+    return checkbox.Root().FlexRow().Gap(8).Children(
+        checkbox.Indicator().Child("✓"),
+        "Remember me",
+    )
 }
 ```
 
@@ -135,16 +125,8 @@ bun packages/cli/src/cli.ts dev --project examples/components
 各パーツのスタイルには `PartProps.Style` を使います。`ui.Style()` と fluent メソッドでスタイルを作り、`.Merge(...)` で共有ビルダーを合成します。ビルダーのスライスや、それらを返すアクセサーも使えます。選択状態やテーマのシグナルは子要素を作り直さずにパーツを更新します。
 
 ```go
-ui.PartProps{
-	Style: ui.Style().
-		Display("flex").
-		Height(32).
-		PaddingLeft(12).
-		PaddingRight(12).
-		BackgroundColor("#2563eb").
-		TextColor("white").
-		BorderRadius(8),
-}
+triggerStyle := ui.Style().Padding(12).RoundedLg().Bg("#2563eb")
+return popover.Trigger().Style(triggerStyle).TextColor("#ffffff").Child("Account")
 ```
 
 Components サイドバーでは各ネイティブコントロールに専用ページがあります。実際の組み合わせは[フォームと入力](/docs/go/forms-and-input)と[オーバーレイとダイアログ](/docs/go/overlays-and-dialogs)を参照してください。

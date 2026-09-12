@@ -24,7 +24,7 @@ test("textColor reaches native paint states using the canonical color field", ()
 
 test("memo-derived lists mount synchronously and custom component prop spreads preserve children", () => {
   const host = new Window({ renderer: () => () => {} });
-  const Caption = (props: { children: string }) => <Text fontSize={12} {...props} />;
+  const Caption = (props: { children: string }) => <Text {...props} style={{ fontSize: 12 }} />;
   const dispose = createRenderer(() => {
     const [records] = createSignal(Array.from({ length: 1000 }, (_, i) => String(i)));
     const matching = createMemo(() => records());
@@ -52,8 +52,8 @@ test("compiled Solid 2 JSX updates retained nodes and disposes effects without r
     constructions++;
     onCleanup(() => cleaned++);
     return (
-      <view padding={12}>
-        <Text fontSize={count() + 10}>Count: {count()}</Text>
+      <view style={{ padding: 12 }}>
+        <Text style={{ fontSize: count() + 10 }}>Count: {count()}</Text>
         <Button onClick={() => setCount(count() + 1)}>Increment</Button>
         <Show when={count() > 0}>
           <Text>Visible</Text>
@@ -118,4 +118,65 @@ test("keyed lists preserve native identities and independent windows own their o
   expect(text(second.root)).toBe("b");
   expect(first.nodes.size).toBe(1);
   disposeSecond();
+});
+
+test("View and intrinsic div render direct text and update reactive text in place", async () => {
+  const [value, setValue] = createSignal("one");
+  const view = new Window({ renderer: createRenderer(() => <View>some text {value()}</View>) });
+  const div = new Window({ renderer: createRenderer(() => <div>some text {value()}</div>) });
+  const roots = [view.root.children[0]!, div.root.children[0]!];
+  for (const root of roots) {
+    expect(root.tag).toBe(NativeNodeTag.View);
+    expect(text(root)).toBe("some text one");
+    expect(root.children.every((child) => child.tag === NativeNodeTag.Text)).toBe(true);
+  }
+  setValue("two");
+  flush();
+  for (const [index, root] of roots.entries()) {
+    expect([view, div][index]!.root.children[0]).toBe(root);
+    expect(text(root)).toBe("some text two");
+  }
+  view.close();
+  div.close();
+  await Promise.resolve();
+  setValue("three");
+  flush();
+  expect(view.nodes.size).toBe(0);
+  expect(div.nodes.size).toBe(0);
+});
+
+test("a TSX module with no imports can render an intrinsic div", async () => {
+  const { IntrinsicDiv } = await import("./fixtures/intrinsic-div.tsx");
+  const host = new Window({ renderer: createRenderer(IntrinsicDiv) });
+  const root = host.root.children[0]!;
+  expect(root.tag).toBe(NativeNodeTag.View);
+  expect(root.properties.get(PropertyCode.FontSize)).toBe(18);
+  expect(text(root)).toBe("some text");
+  const span = root.children[1]!;
+  expect(span.tag).toBe(NativeNodeTag.View);
+  expect(span.properties.get(PropertyCode.Color)).toBe(0xff563412);
+  host.close();
+});
+
+test("span uses the same native text container and reactive props as Text", () => {
+  const [value, setValue] = createSignal("one");
+  const [size, setSize] = createSignal(14);
+  const host = new Window({
+    renderer: createRenderer(() => (
+      <div>
+        <Text style={{ fontSize: size() }}>{value()}</Text>
+        <span style={{ fontSize: size() }}>{value()}</span>
+      </div>
+    )),
+  });
+  const [textNode, span] = host.root.children[0]!.children;
+  expect(span!.tag).toBe(textNode!.tag);
+  expect([...span!.properties]).toEqual([...textNode!.properties]);
+  setValue("two");
+  setSize(20);
+  flush();
+  expect(host.root.children[0]!.children[1]).toBe(span!);
+  expect(text(span!)).toBe("two");
+  expect(span!.properties.get(PropertyCode.FontSize)).toBe(20);
+  host.close();
 });

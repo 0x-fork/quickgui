@@ -104,7 +104,7 @@ func TestReturnedProviderChildRemainsTheMountedRoot(t *testing.T) {
 		defer dispose()
 		var child *Element
 		roots := native.CollectChildren(func() *native.Node {
-			return Toast.Provider(ToastProviderProps{}, func() *Element {
+			return (toastAPI{}).Provider(ToastProviderProps{}, func() *Element {
 				child = Text("provider child")
 				return child
 			})

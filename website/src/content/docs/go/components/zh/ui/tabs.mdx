@@ -14,30 +14,22 @@ import (
 
 ```go
 func TabsExample() *native.Node {
-	return ui.Tabs.Root(
-		ui.TabsRootProps{DefaultValue: "overview", Activation: "automatic"},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.Tabs.List(
-				ui.PartProps{},
-				func() *native.Node {
-					return ui.Fragment([]*native.Node{ui.Tabs.Tab(ui.TabsTabProps{Value: "overview"}, "Overview"),
-						ui.Tabs.Tab(ui.TabsTabProps{Value: "settings"}, "Settings")})
-				},
-			),
-				ui.Tabs.Panel(ui.TabsPanelProps{Value: "overview"}, "Overview content"),
-				ui.Tabs.Panel(ui.TabsPanelProps{Value: "settings"}, "Settings content")})
-		},
-	)
+	tabs1 := ui.NewTabs(ui.TabsRootProps{DefaultValue: "overview", Activation: "automatic"})
+	return tabs1.Root().Children(func() *native.Node {
+		return ui.Fragment([]*native.Node{tabs1.List(ui.PartProps{}).Children(func() *native.Node {
+			return ui.Fragment([]*native.Node{tabs1.TabWith(ui.TabsTabProps{Value: "overview"}).Children("Overview").NativeNode(), tabs1.TabWith(ui.TabsTabProps{Value: "settings"}).Children("Settings").NativeNode()})
+		}).NativeNode(), tabs1.PanelWith(ui.TabsPanelProps{Value: "overview"}).Children("Overview content").NativeNode(), tabs1.PanelWith(ui.TabsPanelProps{Value: "settings"}).Children("Settings content").NativeNode()})
+	}).NativeNode()
 }
 ```
 
 ## 结构
 
-- `ui.Tabs.Root`
-- `ui.Tabs.List`
-- `ui.Tabs.Tab`
-- `ui.Tabs.Indicator`
-- `ui.Tabs.Panel`
+- `tabs.Root`
+- `tabs.List`
+- `tabs.Tab`
+- `tabs.Indicator`
+- `tabs.Panel`
 
 ## 主要属性
 

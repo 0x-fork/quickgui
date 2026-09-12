@@ -16,48 +16,44 @@ import (
 ```go
 func ComboboxExample() *native.Node {
 	value, setValue := ui.CreateSignal[*string](nil)
-	return ui.Combobox.Root(ui.ComboboxRootProps{
-		PickerInputProps: ui.PickerInputProps{
-			PickerSourceProps: ui.PickerSourceProps{Items: func() []ui.OptionDeclaration {
-				return []ui.OptionDeclaration{{Value: "go", Label: "Go"}, {Value: "swift", Label: "Swift"}}
-			}},
-			Placeholder: "Choose a language",
-		},
-		Value:         value,
-		OnValueChange: func(next *string, _ *native.Event) { setValue(next) },
-	})
+	combobox1 := ui.NewCombobox(ui.ComboboxRootProps{PickerInputProps: ui.PickerInputProps{PickerSourceProps: ui.PickerSourceProps{Items: func() []ui.OptionDeclaration {
+		return []ui.OptionDeclaration{{Value: "go", Label: "Go"}, {Value: "swift", Label: "Swift"}}
+	}}, Placeholder: "Choose a language"}, Value: value, OnValueChange: func(next *string, _ *native.Event) {
+		setValue(next)
+	}})
+	return combobox1.Root().NativeNode()
 }
 ```
 
 ## 構成
 
-- `ui.Combobox.Root`
-- `ui.Combobox.Input`
-- `ui.Combobox.Option`
-- `ui.Combobox.Label`
-- `ui.Combobox.Value`
-- `ui.Combobox.Icon`
-- `ui.Combobox.InputGroup`
-- `ui.Combobox.Clear`
-- `ui.Combobox.Trigger`
-- `ui.Combobox.Chips`
-- `ui.Combobox.Chip`
-- `ui.Combobox.ChipRemove`
-- `ui.Combobox.Backdrop`
-- `ui.Combobox.Portal`
-- `ui.Combobox.Positioner`
-- `ui.Combobox.Popup`
-- `ui.Combobox.Arrow`
-- `ui.Combobox.Status`
-- `ui.Combobox.Empty`
-- `ui.Combobox.List`
-- `ui.Combobox.Row`
-- `ui.Combobox.Item`
-- `ui.Combobox.ItemIndicator`
-- `ui.Combobox.Group`
-- `ui.Combobox.GroupLabel`
-- `ui.Combobox.Collection`
-- `ui.Combobox.Separator`
+- `combobox.Root`
+- `combobox.Input`
+- `combobox.Option`
+- `combobox.Label`
+- `combobox.Value`
+- `combobox.Icon`
+- `combobox.InputGroup`
+- `combobox.Clear`
+- `combobox.Trigger`
+- `combobox.Chips`
+- `combobox.Chip`
+- `combobox.ChipRemove`
+- `combobox.Backdrop`
+- `combobox.Portal`
+- `combobox.Positioner`
+- `combobox.Popup`
+- `combobox.Arrow`
+- `combobox.Status`
+- `combobox.Empty`
+- `combobox.List`
+- `combobox.Row`
+- `combobox.Item`
+- `combobox.ItemIndicator`
+- `combobox.Group`
+- `combobox.GroupLabel`
+- `combobox.Collection`
+- `combobox.Separator`
 
 ## 主なプロパティ
 

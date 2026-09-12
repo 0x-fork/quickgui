@@ -215,26 +215,26 @@ form()
     .on_form_submit(save)
     .on_form_invalid(report)
     .child(
-        profile.root_part(div().children([
-            profile.legend_part(text("Profile")),
-            profile.description_part(text("Public account details")),
-            name.root_part(div().children([
-                name.label_part(text("Name")),
-                name.control_part(
+        profile.root().children([
+            profile.legend_with(text("Profile")),
+            profile.description_with(text("Public account details")),
+            name.root().children([
+                name.label_with(text("Name")),
+                name.control_with(
                     text_input(self.name.clone())
                         .on_input(edit_name)
                         .placeholder("Type a name…"),
                 ),
-                name.description_part(text("Shown on your profile")),
-                name.error_part(text("Name is required")),
-            ])),
-        ])),
+                name.description_with(text("Shown on your profile")),
+                name.error_with(text("Name is required")),
+            ]),
+        ]),
     )
     .child(submit_button().child("Save"))
 ```
 
 Clicking a normal field label focuses a text input or activates a checkbox/radio control. Use
-`.passive_label_part(...)` for a button-like select or combobox label that should name the control
+`.passive_label_with(...)` for a button-like select or combobox label that should name the control
 without forwarding activation. A mounted invalid control references both its visible description
 and visible error; a valid error part is `display: none`. `FieldState` exposes controlled
 disabled/invalid/required/touched/dirty/filled flags so applications can style every part without
@@ -303,40 +303,25 @@ the accepted triggers and delay through `OnValidationChange`.
 func AccountForm() *native.Node {
 	email, setEmail := ui.CreateSignal("")
 	saving, _ := ui.CreateSignal(false)
-	return ui.Fieldset.Root(
-		ui.PartProps{Disabled: saving},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.Fieldset.Legend(ui.PartProps{}, "Account"),
-				ui.Field.Root(
-					ui.FieldRootProps{
-						Required:               true,
-						Invalid:                func() bool { return email() == "" },
-						ValidationMessage:      func() string { return "Enter an address" },
-						ValidationMode:         "onChange",
-						ValidationDebounceTime: 250,
-						OnValidationChange: func(details ui.FieldValidationDetails, _ *native.Event) {
-							log.Print(details.Triggers, details.Delay)
-						},
-					},
-					func() *native.Node {
-						return ui.Fragment([]*native.Node{ui.Field.Item(
-							ui.PartProps{},
-							func() *native.Node {
-								return ui.Fragment([]*native.Node{ui.Field.Label(ui.FieldLabelProps{}, "Email"),
-									ui.Field.Control(ui.FieldControlProps{InputPartProps: ui.InputPartProps{
-										Value:       email,
-										Placeholder: "you@example.com",
-										OnInput:     func(event *native.Event) { setEmail(ui.InputValue(event)) },
-									}})})
-							},
-						),
-							ui.Field.Description(ui.PartProps{}, "We never share it."),
-							ui.Field.Validity(ui.FieldValidityProps{}),
-							ui.Field.Error(ui.PartProps{}, "Enter an address")})
-					},
-				)})
-		},
-	)
+	fieldset1 := ui.NewFieldset(ui.PartProps{Disabled: saving})
+	return fieldset1.Root().Children(func() *native.Node {
+		return ui.Fragment([]*native.Node{fieldset1.Legend(ui.PartProps{}).Children("Account").NativeNode(), func() *native.Node {
+			field2 := ui.NewField(ui.FieldRootProps{Required: true, Invalid: func() bool {
+				return email() == ""
+			}, ValidationMessage: func() string {
+				return "Enter an address"
+			}, ValidationMode: "onChange", ValidationDebounceTime: 250, OnValidationChange: func(details ui.FieldValidationDetails, _ *native.Event) {
+				log.Print(details.Triggers, details.Delay)
+			}})
+			return field2.Root().Children(func() *native.Node {
+				return ui.Fragment([]*native.Node{field2.Item(ui.PartProps{}).Children(func() *native.Node {
+					return ui.Fragment([]*native.Node{field2.Label(ui.FieldLabelProps{}).Children("Email").NativeNode(), field2.Control(ui.FieldControlProps{InputPartProps: ui.InputPartProps{Value: email, Placeholder: "you@example.com", OnInput: func(event *native.Event) {
+						setEmail(ui.InputValue(event))
+					}}}).NativeNode()})
+				}).NativeNode(), field2.Description(ui.PartProps{}).Children("We never share it.").NativeNode(), field2.Validity(ui.FieldValidityProps{}).NativeNode(), field2.Error(ui.PartProps{}).Children("Enter an address").NativeNode()})
+			}).NativeNode()
+		}()})
+	}).NativeNode()
 }
 ```
 
@@ -504,8 +489,8 @@ all matches and for the current match. `replace_current` and `replace_all` retur
 string rather than mutating anything: the application applies it as one controlled edit, so a
 replace-all is a single undo entry in the input's own history.
 
-`FindBar` decorates caller-owned parts—`root_part`, `query_input_part`, `replace_input_part`,
-`count_part`, `next_part`, `previous_part`, `replace_part`, `replace_all_part`, and `close_part`—
+`FindBar` decorates caller-owned parts—`root_with`, `query_input_with`, `replace_input_with`,
+`count_with`, `next_with`, `previous_with`, `replace_with`, `replace_all_with`, and `close_with`—
 with stable identities, group and button roles, an accessible match count referenced by both the
 root and the query input, and disabled state derived from the projected `FindState`. The root
 declares the `FindBar` key context; `find_bar_key_bindings()` supplies Return for the next match,
@@ -640,14 +625,14 @@ subtree. See "Layout direction" in `docs/view-api.md`.
 
 ## Field items, validity parts, and validation mode
 
-`Field::item_part(element)` is Base UI's Field.Item: the wrapper around one label/control/description
+`Field::item_with(element)` is Base UI's Field.Item: the wrapper around one label/control/description
 row inside a larger fieldset. QuickGUI supplies the stable identity and propagates the field's
 disabled state; layout and appearance stay application-owned.
 
-`Field::validity_part(visible, element)` is Base UI's Field.Validity. The predicate is the
+`Field::validity_with(visible, element)` is Base UI's Field.Validity. The predicate is the
 application's own — "invalid and touched", "valid and dirty", whatever the product means — and
 QuickGUI removes the part from layout, paint, input, and the accessibility tree when it is false,
-exactly as `error_part` does, so an unmatched validity costs nothing.
+exactly as `error_with` does, so an unmatched validity costs nothing.
 
 `Field::validation_mode(...)` declares when validity is expected to be recomputed:
 `FieldValidationMode::{OnSubmit, OnBlur, OnChange}`. QuickGUI never runs the application's validation

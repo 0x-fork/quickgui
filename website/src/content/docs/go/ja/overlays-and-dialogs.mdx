@@ -6,26 +6,14 @@ Popover はトリガー、Positioner、Popup を組み合わせます。指定�
 
 ```go
 func PopoverExample() *native.Node {
-	return ui.Popover.Root(
-		ui.PopoverRootProps{},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.Popover.Trigger(ui.PopoverTriggerProps{}, "Account"),
-				ui.Popover.Positioner(
-					ui.PopoverPositionerProps{},
-					func() *native.Node {
-						return ui.Popover.Popup(
-							ui.PopoverPopupProps{PartProps: ui.PartProps{Style: ui.Style().
-								Width(240).
-								Padding(16)}},
-							func() *native.Node {
-								return ui.Fragment([]*native.Node{ui.Popover.Title(ui.PartProps{}, "Account"),
-									ui.Popover.Close(ui.PartProps{}, "Done")})
-							},
-						)
-					},
-				)})
-		},
-	)
+	popover1 := ui.NewPopover(ui.PopoverRootProps{})
+	return popover1.Root().Children(func() *native.Node {
+		return ui.Fragment([]*native.Node{popover1.Trigger(ui.PopoverTriggerProps{}).Children("Account").NativeNode(), popover1.Positioner(ui.PopoverPositionerProps{}).Children(func() *native.Node {
+			return popover1.Popup(ui.PopoverPopupProps{PartProps: ui.PartProps{Style: ui.Style().Width(240).Padding(16)}}).Children(func() *native.Node {
+				return ui.Fragment([]*native.Node{popover1.Title(ui.PartProps{}).Children("Account").NativeNode(), popover1.Close(ui.PartProps{}).Children("Done").NativeNode()})
+			}).NativeNode()
+		}).NativeNode()})
+	}).NativeNode()
 }
 ```
 
@@ -35,34 +23,16 @@ func PopoverExample() *native.Node {
 
 ```go
 func DialogExample() *native.Node {
-	return ui.Dialog.Root(
-		ui.DialogRootProps{},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.Dialog.Trigger(ui.PartProps{}, "Open dialog"),
-				ui.Dialog.Portal(
-					ui.PartProps{},
-					func() *native.Node {
-						return ui.Fragment([]*native.Node{ui.Dialog.Backdrop(ui.PartProps{}),
-							ui.Dialog.Viewport(
-								ui.PartProps{},
-								func() *native.Node {
-									return ui.Dialog.Popup(
-										ui.DialogPopupProps{},
-										func() *native.Node {
-											return ui.Fragment([]*native.Node{ui.Dialog.Title(ui.PartProps{}, "Confirm action"),
-												ui.Dialog.Description(
-													ui.PartProps{},
-													"Review the details before continuing.",
-												),
-												ui.Dialog.Close(ui.PartProps{}, "Cancel")})
-										},
-									)
-								},
-							)})
-					},
-				)})
-		},
-	)
+	dialog1 := ui.NewDialog(ui.DialogRootProps{})
+	return dialog1.Root().Children(func() *native.Node {
+		return ui.Fragment([]*native.Node{dialog1.Trigger(ui.PartProps{}).Children("Open dialog").NativeNode(), dialog1.Portal(ui.PartProps{}).Children(func() *native.Node {
+			return ui.Fragment([]*native.Node{dialog1.Backdrop(ui.PartProps{}).NativeNode(), dialog1.Viewport(ui.PartProps{}).Children(func() *native.Node {
+				return dialog1.Popup(ui.DialogPopupProps{}).Children(func() *native.Node {
+					return ui.Fragment([]*native.Node{dialog1.Title(ui.PartProps{}).Children("Confirm action").NativeNode(), dialog1.Description(ui.PartProps{}).Children("Review the details before continuing.").NativeNode(), dialog1.Close(ui.PartProps{}).Children("Cancel").NativeNode()})
+				}).NativeNode()
+			}).NativeNode()})
+		}).NativeNode()})
+	}).NativeNode()
 }
 ```
 
@@ -72,20 +42,10 @@ func DialogExample() *native.Node {
 
 ```go
 func SystemPopoverExample() *native.Node {
-	return ui.SystemPopover.Root(
-		ui.PopoverRootProps{},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.SystemPopover.Trigger(ui.PopoverTriggerProps{}, "Account"),
-				ui.SystemPopover.Content(
-					ui.PopoverContentProps{
-						Width:     240,
-						Height:    120,
-						Placement: "bottom-start",
-					},
-					"Account settings",
-				)})
-		},
-	)
+	systemPopover1 := ui.NewSystemPopover(ui.PopoverRootProps{})
+	return systemPopover1.Root().Children(func() *native.Node {
+		return ui.Fragment([]*native.Node{systemPopover1.Trigger(ui.PopoverTriggerProps{}).Children("Account").NativeNode(), systemPopover1.Content(ui.PopoverContentProps{Width: 240, Height: 120, Placement: "bottom-start"}).Children("Account settings").NativeNode()})
+	}).NativeNode()
 }
 ```
 
@@ -96,9 +56,7 @@ func SystemPopoverExample() *native.Node {
 ```go
 func OpenFolderButton() *ui.Element {
 	window := native.CurrentWindow()
-	return ui.Button(
-		"Open folder",
-	).OnClick(func() {
+	return ui.Button().Child("Open folder").OnClick(func() {
 		native.ShowOpenDialog(
 			native.OpenDialogOptions{
 				Window:     window,

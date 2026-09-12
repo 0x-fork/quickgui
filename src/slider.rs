@@ -38,7 +38,7 @@ pub struct SliderMinimum;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct SliderMaximum;
 
-/// Contextual bindings used by [`Slider::key_part`] and [`SliderThumb::key_part`].
+/// Contextual bindings used by [`Slider::key_with`] and [`SliderThumb::key_with`].
 ///
 /// `Shift` selects the large step on the same arrow keys, matching the desktop convention that a
 /// modified arrow moves by the same amount as PageUp and PageDown.
@@ -704,8 +704,8 @@ impl Slider {
     /// Decorate an application-owned root without adding layout or appearance.
     ///
     /// A single-thumb slider becomes the focusable Slider itself. Pair it with
-    /// [`Self::key_part`] to attach the typed keyboard actions.
-    pub fn root_part(self, root: Element) -> Element {
+    /// [`Self::key_with`] to attach the typed keyboard actions.
+    pub fn root_with(self, root: Element) -> Element {
         let disabled = self.state.disabled || root.accessibility.disabled;
         let root = root
             .id(self.root_id)
@@ -735,22 +735,34 @@ impl Slider {
                 .accessibility_orientation(self.state.orientation.accessibility())
         }
     }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(self) -> Element {
+        self.root_with(crate::div())
+    }
 
     /// Attach QuickGUI's typed slider keyboard actions to a single-thumb root.
     ///
     /// Install [`slider_key_bindings`] once on the application keymap. Multi-thumb sliders use
-    /// [`SliderThumb::key_part`] instead so each thumb owns its own focus.
-    pub fn key_part<V: 'static>(
+    /// [`SliderThumb::key_with`] instead so each thumb owns its own focus.
+    pub fn key_with<V: 'static>(
         self,
         cx: &mut ViewContext<'_, V>,
         root: Element,
         access: fn(&mut V) -> &mut SliderState,
     ) -> Element {
-        self.key_part_with(cx, root, StateAccessor::from(access))
+        self.key_with_accessor(cx, root, StateAccessor::from(access))
+    }
+    /// Create the unstyled key part. Use [`Self::key_with`] to supply an existing element.
+    pub fn key<V: 'static>(
+        self,
+        cx: &mut ViewContext<'_, V>,
+        access: fn(&mut V) -> &mut SliderState,
+    ) -> Element {
+        self.key_with(cx, crate::div(), access)
     }
 
     /// Attach the typed slider keyboard actions against a per-instance state accessor.
-    pub fn key_part_with<V: 'static>(
+    pub fn key_with_accessor<V: 'static>(
         self,
         cx: &mut ViewContext<'_, V>,
         root: Element,
@@ -761,11 +773,11 @@ impl Slider {
 
     /// Decorate an application-owned track.
     ///
-    /// Base UI uses [`Self::control_part`] as the larger interactive surface. A declaration that
+    /// Base UI uses [`Self::control_with`] as the larger interactive surface. A declaration that
     /// omits Control can keep the earlier behavior by attaching a
     /// [`crate::ViewContext::pointer_listener`] registered for [`Self::track_id`] and forwarding
     /// the event to [`SliderState::apply_pointer`] with the size the caller laid out.
-    pub fn track_part(self, track: Element) -> Element {
+    pub fn track_with(self, track: Element) -> Element {
         track
             .id(self.track_id())
             .accessibility_hidden(true)
@@ -773,17 +785,29 @@ impl Slider {
             .app_region_no_drag()
             .user_select_none()
     }
+    /// Create the unstyled track part. Use [`Self::track_with`] to supply an existing element.
+    pub fn track(self) -> Element {
+        self.track_with(crate::div())
+    }
 
     /// Decorate the application-owned fill between the slider's minimum and its value.
-    pub fn range_part(self, range: Element) -> Element {
+    pub fn range_with(self, range: Element) -> Element {
         range.id(self.range_id()).accessibility_hidden(true)
+    }
+    /// Create the unstyled range part. Use [`Self::range_with`] to supply an existing element.
+    pub fn range(self) -> Element {
+        self.range_with(crate::div())
     }
 
     /// Base UI's Indicator name for the filled part of the track.
     ///
-    /// This is the same decorator as [`Self::range_part`]; both names stay supported.
-    pub fn indicator_part(self, indicator: Element) -> Element {
-        self.range_part(indicator)
+    /// This is the same decorator as [`Self::range_with`]; both names stay supported.
+    pub fn indicator_with(self, indicator: Element) -> Element {
+        self.range_with(indicator)
+    }
+    /// Create the unstyled indicator part. Use [`Self::indicator_with`] to supply an existing element.
+    pub fn indicator(self) -> Element {
+        self.indicator_with(crate::div())
     }
 
     /// Decorate the caller-owned interactive area that carries the slider's pointer capture.
@@ -791,8 +815,8 @@ impl Slider {
     /// Base UI separates the Control — the region a press acts on — from the Track it paints.
     /// Attach a [`crate::ViewContext::pointer_listener`] registered for [`Self::control_id`] and
     /// forward the event to [`SliderState::apply_pointer_change`] with the size the caller laid
-    /// out. A caller that omits this part can keep pointer capture on [`Self::track_part`].
-    pub fn control_part(self, control: Element) -> Element {
+    /// out. A caller that omits this part can keep pointer capture on [`Self::track_with`].
+    pub fn control_with(self, control: Element) -> Element {
         control
             .id(self.control_id())
             .accessibility_hidden(true)
@@ -800,20 +824,32 @@ impl Slider {
             .app_region_no_drag()
             .user_select_none()
     }
+    /// Create the unstyled control part. Use [`Self::control_with`] to supply an existing element.
+    pub fn control(self) -> Element {
+        self.control_with(crate::div())
+    }
 
     /// Assign the stable mounted label target the slider points at.
     ///
     /// A single-thumb slider takes its accessible name from this part. A multi-thumb slider names
     /// its group from it, and each thumb still needs its own accessible name.
-    pub fn label_part(self, label: Element) -> Element {
+    pub fn label_with(self, label: Element) -> Element {
         label.id(self.label_id())
+    }
+    /// Create the unstyled label part. Use [`Self::label_with`] to supply an existing element.
+    pub fn label(self) -> Element {
+        self.label_with(crate::div())
     }
 
     /// Assign the stable mounted value target the slider points at.
     ///
     /// Put [`Self::display_value`] inside it; QuickGUI never renders the text itself.
-    pub fn value_part(self, value: Element) -> Element {
+    pub fn value_with(self, value: Element) -> Element {
         value.id(self.value_id())
+    }
+    /// Create the unstyled value part. Use [`Self::value_with`] to supply an existing element.
+    pub fn value(self) -> Element {
+        self.value_with(crate::div())
     }
 
     /// Format every thumb value into one string for a caller-owned value part.
@@ -926,7 +962,7 @@ impl SliderThumb {
     /// A single-thumb slider keeps its value on the root, so its thumb is decorative and hidden
     /// from assistive technology. Every thumb of a multi-thumb slider is an independently
     /// focusable Slider bounded by its neighbors.
-    pub fn thumb_part(self, thumb: Element) -> Element {
+    pub fn thumb_with(self, thumb: Element) -> Element {
         let disabled = self.slider.state.disabled || thumb.accessibility.disabled;
         let thumb = thumb.id(self.thumb_id());
         if self.slider.is_single_thumb() {
@@ -947,21 +983,33 @@ impl SliderThumb {
             .user_select_none()
             .disabled(disabled)
     }
+    /// Create the unstyled thumb part. Use [`Self::thumb_with`] to supply an existing element.
+    pub fn thumb(self) -> Element {
+        self.thumb_with(crate::div())
+    }
 
     /// Attach QuickGUI's typed slider keyboard actions to this thumb.
     ///
     /// Focusing the thumb also makes it the active thumb, so arrows move the thumb the user sees.
-    pub fn key_part<V: 'static>(
+    pub fn key_with<V: 'static>(
         self,
         cx: &mut ViewContext<'_, V>,
         thumb: Element,
         access: fn(&mut V) -> &mut SliderState,
     ) -> Element {
-        self.key_part_with(cx, thumb, StateAccessor::from(access))
+        self.key_with_accessor(cx, thumb, StateAccessor::from(access))
+    }
+    /// Create the unstyled key part. Use [`Self::key_with`] to supply an existing element.
+    pub fn key<V: 'static>(
+        self,
+        cx: &mut ViewContext<'_, V>,
+        access: fn(&mut V) -> &mut SliderState,
+    ) -> Element {
+        self.key_with(cx, crate::div(), access)
     }
 
     /// Attach this thumb's typed keyboard actions against a per-instance state accessor.
-    pub fn key_part_with<V: 'static>(
+    pub fn key_with_accessor<V: 'static>(
         self,
         cx: &mut ViewContext<'_, V>,
         thumb: Element,
@@ -1041,9 +1089,9 @@ fn bind_slider_actions<V: 'static>(
 
 /// Create an unstyled controlled single-thumb slider root.
 ///
-/// This shorthand is equivalent to `Slider::new(id, state).root_part(div())`.
+/// This shorthand is equivalent to `Slider::new(id, state).root_with(div())`.
 pub fn slider(id: impl Into<ElementId>, state: &SliderState) -> Element {
-    Slider::new(id, state).root_part(div())
+    Slider::new(id, state).root_with(div())
 }
 
 fn derived_slider_id(scope: ElementId, tag: u64, index: u64) -> ElementId {
@@ -1191,7 +1239,7 @@ mod tests {
     fn parts_add_exact_semantics_without_appearance() {
         let state = SliderState::new(0.0, 10.0, 4.0).step(2.0);
         let slider = Slider::new("volume", &state);
-        let root = slider.root_part(div().w(240.0).bg(Color::rgb8(1, 2, 3)));
+        let root = slider.root_with(div().w(240.0).bg(Color::rgb8(1, 2, 3)));
         assert_eq!(root.explicit_id, Some("volume".into()));
         assert_eq!(root.accessibility.role, AccessibilityRole::Slider);
         assert_eq!(
@@ -1210,12 +1258,12 @@ mod tests {
         assert_eq!(root.visual.background, Some(Color::rgb8(1, 2, 3)));
         assert!(root.transition.is_none());
 
-        let track = slider.track_part(div().h(4.0).bg(Color::rgb8(4, 5, 6)));
+        let track = slider.track_with(div().h(4.0).bg(Color::rgb8(4, 5, 6)));
         assert_eq!(track.explicit_id, Some(slider.track_id()));
         assert!(track.accessibility.hidden);
         assert_eq!(track.visual.background, Some(Color::rgb8(4, 5, 6)));
 
-        let range = slider.range_part(div().bg(Color::rgb8(7, 8, 9)));
+        let range = slider.range_with(div().bg(Color::rgb8(7, 8, 9)));
         assert_eq!(range.explicit_id, Some(slider.range_id()));
         assert!(range.accessibility.hidden);
 
@@ -1223,7 +1271,7 @@ mod tests {
         assert_eq!(thumb.value(), 4.0);
         assert_eq!(thumb.fraction(), 0.4);
         assert!(thumb.is_active());
-        let thumb_element = thumb.thumb_part(div().size(12.0, 12.0));
+        let thumb_element = thumb.thumb_with(div().size(12.0, 12.0));
         assert_eq!(thumb_element.explicit_id, Some(slider.thumb_id(0)));
         assert!(thumb_element.accessibility.hidden);
         assert!(slider.thumb(1).is_none());
@@ -1241,11 +1289,11 @@ mod tests {
 
         let range_state = SliderState::range(0.0, 100.0, &[20.0, 80.0]).step(10.0);
         let range_slider = Slider::new("price", &range_state);
-        let range_root = range_slider.root_part(div());
+        let range_root = range_slider.root_with(div());
         assert_eq!(range_root.accessibility.role, AccessibilityRole::Group);
         assert!(!range_root.focusable);
         let lower = range_slider.thumb(0).expect("lower thumb");
-        let lower_element = lower.thumb_part(div());
+        let lower_element = lower.thumb_with(div());
         assert_eq!(lower_element.accessibility.role, AccessibilityRole::Slider);
         assert_eq!(
             lower_element.accessibility.value_range.as_deref(),
@@ -1257,7 +1305,7 @@ mod tests {
         assert!(!upper.is_active());
 
         let disabled_state = SliderState::new(0.0, 1.0, 0.5).disabled(true);
-        let disabled = Slider::new("muted", &disabled_state).root_part(div());
+        let disabled = Slider::new("muted", &disabled_state).root_with(div());
         assert!(disabled.accessibility.disabled);
     }
 
@@ -1287,7 +1335,7 @@ mod tests {
     impl View for SliderView {
         fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
             let volume = Slider::new("volume", &self.volume);
-            let volume_root = volume.key_part(cx, volume.root_part(div()), Self::volume);
+            let volume_root = volume.key_with(cx, volume.root_with(div()), Self::volume);
             let drag = cx.pointer_listener(volume.track_id(), |view, event, cx| {
                 if view.volume.apply_pointer(event, Size::new(200.0, 20.0)) {
                     cx.invalidate();
@@ -1298,23 +1346,23 @@ mod tests {
             let price = Slider::new("price", &self.price);
             let lower = price.thumb(0).expect("lower thumb");
             let upper = price.thumb(1).expect("upper thumb");
-            let lower_element = lower.key_part(cx, lower.thumb_part(div()), Self::price);
-            let upper_element = upper.key_part(cx, upper.thumb_part(div()), Self::price);
+            let lower_element = lower.key_with(cx, lower.thumb_with(div()), Self::price);
+            let upper_element = upper.key_with(cx, upper.thumb_with(div()), Self::price);
 
             div()
                 .child(text("Slider gallery"))
                 .child(
                     volume_root.child(
                         volume
-                            .track_part(div().w(200.0).h(20.0).on_pointer(drag))
-                            .child(volume.range_part(div()))
-                            .child(volume_thumb.thumb_part(div())),
+                            .track_with(div().w(200.0).h(20.0).on_pointer(drag))
+                            .child(volume.range_with(div()))
+                            .child(volume_thumb.thumb_with(div())),
                     ),
                 )
                 .child(
                     price
-                        .root_part(div())
-                        .child(price.track_part(div().w(200.0).h(20.0)))
+                        .root_with(div())
+                        .child(price.track_with(div().w(200.0).h(20.0)))
                         .child(lower_element)
                         .child(upper_element),
                 )
@@ -1403,9 +1451,9 @@ mod tests {
             for index in 0..self.sliders.len() {
                 let state = self.sliders[index];
                 let slider = Slider::new(Self::slider_id(index), &state);
-                root = root.child(slider.key_part_with(
+                root = root.child(slider.key_with_accessor(
                     cx,
-                    slider.root_part(div()),
+                    slider.root_with(div()),
                     StateAccessor::new(move |view: &mut Self| &mut view.sliders[index]),
                 ));
             }
@@ -1632,7 +1680,7 @@ mod tests {
             assert!(!ids[..index].contains(id));
         }
 
-        let root = slider.root_part(div());
+        let root = slider.root_with(div());
         assert_eq!(
             root.accessibility.relations.labelled_by(),
             Some(slider.label_id())
@@ -1643,7 +1691,7 @@ mod tests {
         );
         assert_eq!(root.visual.background, None);
 
-        let control = slider.control_part(div().bg(Color::rgb8(1, 2, 3)));
+        let control = slider.control_with(div().bg(Color::rgb8(1, 2, 3)));
         assert_eq!(control.explicit_id, Some(slider.control_id()));
         assert!(control.accessibility.hidden);
         assert_eq!(control.app_region, Some(AppRegion::NoDrag));
@@ -1652,16 +1700,16 @@ mod tests {
 
         // Indicator is Base UI's name for the existing range part.
         assert_eq!(
-            slider.indicator_part(div()).explicit_id,
+            slider.indicator_with(div()).explicit_id,
             Some(slider.range_id())
         );
-        assert!(slider.indicator_part(div()).accessibility.hidden);
+        assert!(slider.indicator_with(div()).accessibility.hidden);
         assert_eq!(
-            slider.label_part(text("Volume")).explicit_id,
+            slider.label_with(text("Volume")).explicit_id,
             Some(slider.label_id())
         );
         assert_eq!(
-            slider.value_part(text("20 – 80")).explicit_id,
+            slider.value_with(text("20 – 80")).explicit_id,
             Some(slider.value_id())
         );
 

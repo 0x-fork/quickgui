@@ -9,6 +9,15 @@ function Greeting(props: { name: string }) {
 <Greeting name={name()} />
 ```
 
+`<View>some text</View>` accepts text directly. Use intrinsic `<div>` and `<span>` for `View` and `Text` without component imports. All visual declarations use camelCase keys inside `style`; direct style attributes, `class`, and `className` are unsupported.
+
+```tsx
+<div style={{ flexCol: true, gap2: true }}>
+  some text
+  <span style={{ textLg: true, fontSemibold: true }}>Styled text</span>
+</div>
+```
+
 ## Primitives
 
 `View`, `Text`, `Button`, `Input`, `TextArea`, `Markdown`, `Image`, `Svg`, `Shader`, `VirtualList`, and optional `Terminal` are native building blocks. `TextInput` is also available as the single-line input spelling.

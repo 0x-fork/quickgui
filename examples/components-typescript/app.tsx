@@ -1112,10 +1112,6 @@ function SystemContextMenuDemo() {
   return (
     <Panel title="System Context Menu" hint="A platform-native menu owned by this window.">
       <View
-        padding={28}
-        borderWidth={1}
-        borderColor={p().border}
-        borderRadius={8}
         onContextMenu={() => {
           void NativeMenu.popup(
             [
@@ -1127,6 +1123,7 @@ function SystemContextMenuDemo() {
             { window },
           );
         }}
+        style={{ padding: 28, borderWidth: 1, borderColor: p().border, borderRadius: 8 }}
       >
         <Text>Right-click to open the native menu</Text>
       </View>
@@ -2011,9 +2008,7 @@ function MenubarDemo() {
                   <Text style={{ fontSize: 12, color: p().ink }}>{menu.label}</Text>
                 </Menubar.Item>
               </PopoverMenu.Trigger>
-              <PopoverMenu.Popup
-                style={{ bg: p().popup, borderRadius: 10, width: 220 }}
-              />
+              <PopoverMenu.Popup style={{ bg: p().popup, borderRadius: 10, width: 220 }} />
             </PopoverMenu.Root>
           )}
         </For>
@@ -2829,23 +2824,14 @@ function SeparatorDemo() {
     >
       <Col gap={10}>
         <Label text="Above the rule" />
-        <Separator.Root
-          orientation="horizontal"
-          style={{ height: 1, bg: p().border }}
-        />
+        <Separator.Root orientation="horizontal" style={{ height: 1, bg: p().border }} />
         <Label text="Below the rule" />
       </Col>
       <Row>
         <Muted text="Cut" />
-        <Separator.Root
-          orientation="vertical"
-          style={{ width: 1, height: 18, bg: p().border }}
-        />
+        <Separator.Root orientation="vertical" style={{ width: 1, height: 18, bg: p().border }} />
         <Muted text="Copy" />
-        <Separator.Root
-          orientation="vertical"
-          style={{ width: 1, height: 18, bg: p().border }}
-        />
+        <Separator.Root orientation="vertical" style={{ width: 1, height: 18, bg: p().border }} />
         <Muted text="Paste" />
       </Row>
       <Note text="an adjustable divider is Splitter, which is focusable and carries a value" />
@@ -3547,10 +3533,7 @@ function ToolbarDemo() {
             )}
           </For>
         </Toolbar.Group>
-        <Toolbar.Separator
-          scope="tb"
-          style={{ width: 1, height: 20, bg: p().border }}
-        />
+        <Toolbar.Separator scope="tb" style={{ width: 1, height: 20, bg: p().border }} />
         <Toolbar.Button scope="tb" partValue="share" style={{ ...controlStyle(), height: 26 }}>
           <Text style={{ fontSize: 11, color: p().ink }}>Share</Text>
         </Toolbar.Button>

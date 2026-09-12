@@ -53,8 +53,7 @@ func Vibrancy() *ui.Element {
 					var children []*native.Node
 					for _, option := range materials {
 						selected := func() bool { return material() == option.value }
-						children = append(children, ui.Button(
-
+						children = append(children, ui.Button().Children(
 							ui.Text(
 								option.label,
 							).FontSize(12).FontWeight(600),
@@ -82,9 +81,7 @@ func Vibrancy() *ui.Element {
 						var children []*native.Node
 						for _, option := range effectStates {
 							selected := func() bool { return state() == option.value }
-							children = append(children, ui.Button(
-								option.label,
-							).Display("flex").Flex(1).Height(27).MinWidth(0).AlignItems("center").JustifyContent("center").BackgroundColor("#ffffff24").BorderColor("#ffffff3d").BorderWidth(1).BorderRadius(6).TextColor("#445168").FontSize(10).FontWeight(600).Cursor("default").AppRegion("no-drag").UserSelect("none").When(
+							children = append(children, ui.Button().Child(option.label).Display("flex").Flex(1).Height(27).MinWidth(0).AlignItems("center").JustifyContent("center").BackgroundColor("#ffffff24").BorderColor("#ffffff3d").BorderWidth(1).BorderRadius(6).TextColor("#445168").FontSize(10).FontWeight(600).Cursor("default").AppRegion("no-drag").UserSelect("none").When(
 								selected,
 								ui.Style().BackgroundColor("#ffffff5c"),
 								ui.Style().BorderColor("#ffffff7a"),

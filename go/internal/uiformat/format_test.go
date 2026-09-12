@@ -15,7 +15,7 @@ func TestWrapsFluentDeclarations(t *testing.T) {
 import ui "github.com/egoist/quickgui/go/ui"
 func root() {
 ui.View().Child(ui.Text("hello")).Child(ui.Input().Value("xxx")).Flex().Style(ui.Style().Merge(ui.Style().PaddingLeft(20), ui.Style().TextAlign("center"), ui.Style().Bg("#112233")))
-ui.Button("Toggle").When(func() bool { return selected() }, ui.Style().BackgroundColor("blue"), ui.Style().TextColor("white"))
+ui.Button().Child("Toggle").When(func() bool { return selected() }, ui.Style().BackgroundColor("blue"), ui.Style().TextColor("white"))
 }`)
 	result := checkFormat(t, source)
 	if !bytes.Contains(result, []byte(".Merge(\n")) || !bytes.Contains(result, []byte(".When(\n")) {

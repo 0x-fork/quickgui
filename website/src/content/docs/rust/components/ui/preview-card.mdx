@@ -12,18 +12,18 @@ use quickgui::*;
 
 ```rust
 let card = PreviewCard::new("file", &state);
-card.trigger_part(text("README.md"))
+card.trigger_with(text("README.md"))
 ```
 
 ## Anatomy
 
-- `PreviewCard::root_part`
-- `PreviewCard::trigger_part`
-- `PreviewCard::portal_part`
-- `PreviewCard::backdrop_part`
-- `PreviewCard::positioner_part`
-- `PreviewCard::popup_part`
-- `PreviewCard::arrow_part`
+- `PreviewCard::root`
+- `PreviewCard::trigger`
+- `PreviewCard::portal`
+- `PreviewCard::backdrop`
+- `PreviewCard::positioner`
+- `PreviewCard::popup`
+- `PreviewCard::arrow`
 
 ## Key props
 

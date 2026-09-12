@@ -230,10 +230,14 @@ impl<'a> CheckboxGroup<'a> {
     ///
     /// Pair it with a [`crate::Field`] label, or with
     /// [`crate::Element::accessibility_labelled_by`], to name the group.
-    pub fn root_part(self, root: Element) -> Element {
+    pub fn root_with(self, root: Element) -> Element {
         root.id(self.root_id)
             .accessibility_role(AccessibilityRole::Group)
             .app_region_no_drag()
+    }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(self) -> Element {
+        self.root_with(crate::div())
     }
 
     /// Decorate one application-owned checkbox for `value`.
@@ -241,18 +245,26 @@ impl<'a> CheckboxGroup<'a> {
     /// The part reuses the existing [`Checkbox`] descriptor, so the checkbox role, exact
     /// on/off/mixed semantics, click behavior, and desktop pointer contract are identical to a
     /// standalone checkbox. A disabled group disables every item.
-    pub fn checkbox_part(self, value: impl Into<ElementId>, checkbox: Element) -> Element {
+    pub fn checkbox_with(self, value: impl Into<ElementId>, checkbox: Element) -> Element {
         let value = value.into();
         let disabled = self.state.disabled || checkbox.accessibility.disabled;
         Checkbox::new(self.state.is_checked(value))
-            .root_part(checkbox)
+            .root_with(checkbox)
             .id(self.checkbox_id(value))
             .disabled(disabled)
     }
+    /// Create the unstyled checkbox part. Use [`Self::checkbox_with`] to supply an existing element.
+    pub fn checkbox(self, value: impl Into<ElementId>) -> Element {
+        self.checkbox_with(value, crate::div())
+    }
 
     /// Hide an application-owned indicator inside one item from the accessible name.
-    pub fn indicator_part(self, indicator: Element) -> Element {
+    pub fn indicator_with(self, indicator: Element) -> Element {
         indicator.accessibility_hidden(true)
+    }
+    /// Create the unstyled indicator part. Use [`Self::indicator_with`] to supply an existing element.
+    pub fn indicator(self) -> Element {
+        self.indicator_with(crate::div())
     }
 
     /// Decorate the application-owned parent checkbox.
@@ -260,12 +272,16 @@ impl<'a> CheckboxGroup<'a> {
     /// Its checked state is derived: on when every declared value is checked, mixed when only
     /// some are, and off when none are. QuickGUI retains no separate parent value, so the parent
     /// can never disagree with its children.
-    pub fn parent_part(self, parent: Element) -> Element {
+    pub fn parent_with(self, parent: Element) -> Element {
         let disabled = self.state.disabled || parent.accessibility.disabled;
         Checkbox::new(self.state.parent_state())
-            .root_part(parent)
+            .root_with(parent)
             .id(self.parent_id())
             .disabled(disabled)
+    }
+    /// Create the unstyled parent part. Use [`Self::parent_with`] to supply an existing element.
+    pub fn parent(self) -> Element {
+        self.parent_with(crate::div())
     }
 
     /// Build the click behavior for one item, reporting the whole new value set.
@@ -340,9 +356,9 @@ impl<'a> CheckboxGroup<'a> {
 
 /// Create an unstyled semantic checkbox-group root.
 ///
-/// This shorthand is equivalent to `CheckboxGroup::new(id, state).root_part(div())`.
+/// This shorthand is equivalent to `CheckboxGroup::new(id, state).root_with(div())`.
 pub fn checkbox_group(id: impl Into<ElementId>, state: &CheckboxGroupState) -> Element {
-    CheckboxGroup::new(id, state).root_part(div())
+    CheckboxGroup::new(id, state).root_with(div())
 }
 
 fn derived_group_id(scope: ElementId, tag: u64, value: ElementId) -> ElementId {
@@ -427,32 +443,32 @@ mod tests {
     fn parts_add_exact_semantics_without_appearance() {
         let state = CheckboxGroupState::new(["red", "green"]).checked(["red"]);
         let group = CheckboxGroup::new("colors", &state);
-        let root = group.root_part(div().bg(Color::rgb8(1, 2, 3)));
+        let root = group.root_with(div().bg(Color::rgb8(1, 2, 3)));
         assert_eq!(root.explicit_id, Some("colors".into()));
         assert_eq!(root.accessibility.role, AccessibilityRole::Group);
         assert_eq!(root.visual.background, Some(Color::rgb8(1, 2, 3)));
 
-        let checked = group.checkbox_part("red", div());
+        let checked = group.checkbox_with("red", div());
         assert_eq!(checked.explicit_id, Some(group.checkbox_id("red")));
         assert_eq!(checked.accessibility.role, AccessibilityRole::CheckBox);
         assert_eq!(checked.accessibility.toggled, Some(ToggleState::On));
         assert!(checked.clickable);
         assert_eq!(checked.visual.background, None);
 
-        let unchecked = group.checkbox_part("green", div());
+        let unchecked = group.checkbox_with("green", div());
         assert_eq!(unchecked.accessibility.toggled, Some(ToggleState::Off));
 
-        let parent = group.parent_part(div());
+        let parent = group.parent_with(div());
         assert_eq!(parent.explicit_id, Some(group.parent_id()));
         assert_eq!(parent.accessibility.toggled, Some(ToggleState::Mixed));
 
-        let indicator = group.indicator_part(div());
+        let indicator = group.indicator_with(div());
         assert!(indicator.accessibility.hidden);
 
         let disabled_state = CheckboxGroupState::new(["red"]).disabled(true);
         let disabled = CheckboxGroup::new("colors", &disabled_state);
-        assert!(disabled.checkbox_part("red", div()).accessibility.disabled);
-        assert!(disabled.parent_part(div()).accessibility.disabled);
+        assert!(disabled.checkbox_with("red", div()).accessibility.disabled);
+        assert!(disabled.parent_with(div()).accessibility.disabled);
 
         let all = [
             group.root_id(),
@@ -489,15 +505,15 @@ mod tests {
                 view.reported.push(values.to_vec());
             });
             let mut root = group
-                .root_part(div())
-                .child(group.parent_part(div().child(text("All"))).on_click(parent));
+                .root_with(div())
+                .child(group.parent_with(div().child(text("All"))).on_click(parent));
             for value in ["red", "green", "blue"] {
                 let click = group.on_checkbox_click(cx, value, Self::colors, |view, values, _| {
                     view.reported.push(values.to_vec());
                 });
                 root = root.child(
                     group
-                        .checkbox_part(value, div().child(text(value)))
+                        .checkbox_with(value, div().child(text(value)))
                         .on_click(click),
                 );
             }

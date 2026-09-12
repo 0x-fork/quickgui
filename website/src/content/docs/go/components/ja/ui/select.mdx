@@ -16,43 +16,39 @@ import (
 ```go
 func SelectExample() *native.Node {
 	value, setValue := ui.CreateSignal[*string](nil)
-	return ui.Select.Root(
-		ui.SelectRootProps{
-			PickerSourceProps: ui.PickerSourceProps{Items: func() []ui.OptionDeclaration {
-				return []ui.OptionDeclaration{{Value: "go", Label: "Go"}, {Value: "swift", Label: "Swift"}}
-			}},
-			Value:         value,
-			OnValueChange: func(next *string, _ *native.Event) { setValue(next) },
-		},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.Select.Value(ui.PartProps{}), ui.Select.Icon(ui.PartProps{}, "▾")})
-		},
-	)
+	select1 := ui.NewSelect(ui.SelectRootProps{PickerSourceProps: ui.PickerSourceProps{Items: func() []ui.OptionDeclaration {
+		return []ui.OptionDeclaration{{Value: "go", Label: "Go"}, {Value: "swift", Label: "Swift"}}
+	}}, Value: value, OnValueChange: func(next *string, _ *native.Event) {
+		setValue(next)
+	}})
+	return select1.Root().Children(func() *native.Node {
+		return ui.Fragment([]*native.Node{select1.Value(ui.PartProps{}).NativeNode(), select1.Icon(ui.PartProps{}).Children("▾").NativeNode()})
+	}).NativeNode()
 }
 ```
 
 ## 構成
 
-- `ui.Select.Root`
-- `ui.Select.Trigger`
-- `ui.Select.Option`
-- `ui.Select.Label`
-- `ui.Select.Value`
-- `ui.Select.Icon`
-- `ui.Select.Backdrop`
-- `ui.Select.Portal`
-- `ui.Select.Positioner`
-- `ui.Select.Popup`
-- `ui.Select.Arrow`
-- `ui.Select.List`
-- `ui.Select.Item`
-- `ui.Select.ItemText`
-- `ui.Select.ItemIndicator`
-- `ui.Select.Group`
-- `ui.Select.GroupLabel`
-- `ui.Select.Separator`
-- `ui.Select.ScrollUpArrow`
-- `ui.Select.ScrollDownArrow`
+- `select.Root`
+- `select.Trigger`
+- `select.Option`
+- `select.Label`
+- `select.Value`
+- `select.Icon`
+- `select.Backdrop`
+- `select.Portal`
+- `select.Positioner`
+- `select.Popup`
+- `select.Arrow`
+- `select.List`
+- `select.Item`
+- `select.ItemText`
+- `select.ItemIndicator`
+- `select.Group`
+- `select.GroupLabel`
+- `select.Separator`
+- `select.ScrollUpArrow`
+- `select.ScrollDownArrow`
 
 ## 主なプロパティ
 

@@ -12,18 +12,18 @@ use quickgui::*;
 
 ```rust
 let tooltip = Tooltip::new("hint");
-tooltip.trigger_part(button().child("Save"))
+tooltip.trigger().child("Save")
 ```
 
 ## Anatomy
 
 - `Tooltip::provider_part`
-- `Tooltip::root_part`
-- `Tooltip::trigger_part`
-- `Tooltip::portal_part`
-- `Tooltip::positioner_part`
-- `Tooltip::popup_part`
-- `Tooltip::arrow_part`
+- `Tooltip::root`
+- `Tooltip::trigger`
+- `Tooltip::portal`
+- `Tooltip::positioner`
+- `Tooltip::popup`
+- `Tooltip::arrow`
 
 ## Key props
 

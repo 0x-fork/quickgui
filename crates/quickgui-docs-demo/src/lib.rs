@@ -222,10 +222,13 @@ impl Demo {
                 .required(true)
                 .invalid(!self.input.is_empty() && !self.input.contains('@'));
             let content = field
-                .root_part(div().w(270.0).flex_col().gap(10.0))
-                .child(field.label_part(text("Email address").font_medium()))
+                .root()
+                .w(270.0)
+                .flex_col()
+                .gap(10.0)
+                .child(field.label_with(text("Email address").font_medium()))
                 .child(
-                    field.control_part(
+                    field.control_with(
                         text_input(self.input.clone())
                             .id("email")
                             .placeholder("you@example.com")
@@ -240,7 +243,7 @@ impl Demo {
                     ),
                 )
                 .child(
-                    field.description_part(
+                    field.description_with(
                         text("We’ll only use this for account updates.")
                             .text_sm()
                             .wrap()
@@ -250,7 +253,7 @@ impl Demo {
             if self.component == "fieldset" {
                 let group = Fieldset::new("account");
                 group
-                    .root_part(
+                    .root_with(
                         div()
                             .p(20.0)
                             .rounded(8.0)
@@ -258,7 +261,7 @@ impl Demo {
                             .flex_col()
                             .gap(14.0),
                     )
-                    .child(group.legend_part(text("Account details").font_semibold()))
+                    .child(group.legend_with(text("Account details").font_semibold()))
                     .child(content)
             } else {
                 content
@@ -485,11 +488,13 @@ impl Demo {
             });
             let thumb = slider.thumb(0).unwrap();
             let body = slider
-                .root_part(div().flex_col().gap(14.0))
+                .root()
+                .flex_col()
+                .gap(14.0)
                 .child(text(format!("Volume  ·  {:.0}%", self.slider.value())).font_medium())
                 .child(
                     slider
-                        .track_part(
+                        .track_with(
                             div()
                                 .relative()
                                 .w(size.width)
@@ -506,7 +511,7 @@ impl Demo {
                                 .bg(BORDER),
                         )
                         .child(
-                            slider.indicator_part(
+                            slider.indicator_with(
                                 div()
                                     .absolute()
                                     .top(10.0)
@@ -517,7 +522,7 @@ impl Demo {
                             ),
                         )
                         .child(
-                            thumb.thumb_part(
+                            thumb.thumb_with(
                                 div()
                                     .absolute()
                                     .top(3.0)
@@ -529,7 +534,7 @@ impl Demo {
                             ),
                         ),
                 );
-            slider.key_part(cx, body, Self::slider_state)
+            slider.key_with(cx, body, Self::slider_state)
         }
     }
 
@@ -543,9 +548,9 @@ impl Demo {
                 .bg(BORDER)
                 .child(div().w(value as f32 * 2.4).h(7.0).rounded(4.0).bg(ACCENT));
             let gauge = if self.component == "meter" {
-                Meter::new(value, 0.0, 100.0).root_part(track)
+                Meter::new(value, 0.0, 100.0).root_with(track)
             } else {
-                Progress::new(value, 100.0).root_part(track)
+                Progress::new(value, 100.0).root_with(track)
             };
             div()
                 .flex_col()
@@ -573,19 +578,17 @@ impl Demo {
         });
         {
             let disclosure = Collapsible::new("details", self.checked);
-            let mut root = disclosure
-                .root_part(div().w(270.0).flex_col().gap(12.0))
-                .child(
-                    disclosure.trigger_part(
-                        Self::action(if self.checked {
-                            "Hide details −"
-                        } else {
-                            "Show details +"
-                        })
-                        .on_click(toggle),
-                    ),
-                );
-            if let Some(panel) = disclosure.panel_part(
+            let mut root = disclosure.root().w(270.0).flex_col().gap(12.0).child(
+                disclosure.trigger_with(
+                    Self::action(if self.checked {
+                        "Hide details −"
+                    } else {
+                        "Show details +"
+                    })
+                    .on_click(toggle),
+                ),
+            );
+            if let Some(panel) = disclosure.panel_with(
                 div()
                     .p(16.0)
                     .rounded(8.0)
@@ -607,7 +610,10 @@ impl Demo {
             .child(text("Workspace"))
             .child(
                 Separator::new(SeparatorOrientation::Horizontal)
-                    .root_part(div().w_full().h(1.0).bg(BORDER)),
+                    .root()
+                    .w_full()
+                    .h(1.0)
+                    .bg(BORDER),
             )
             .child(text("Personal settings").text_color(MUTED))
     }

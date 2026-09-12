@@ -55,17 +55,13 @@ func link(label, href string, end bool) *native.Node {
 	)
 }
 
-func button(label string, click func(), options ...any) *ui.Element {
-	args := []any{label, buttonStyle, ui.OnClick(click)}
-	return ui.Button(append(args, options...)...)
+func button(label string, click func()) *ui.Element {
+	return ui.Button().Style(buttonStyle).OnClick(click).Child(label)
 }
 
 func historyButton(label, path string, click func(), disabled func() bool) *ui.Element {
-	return ui.Button(
-
-		ui.SVG().Value(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#e8edf7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="` + path + `"/></svg>`).
-			Width(17).Height(17),
-	).Style(buttonStyle).Width(34).Height(30).PaddingLeft(0).PaddingRight(0).BorderRadius(7).AriaLabel(label).Disabled(disabled()).OnClick(click)
+	return ui.Button().Child(ui.SVG().Value(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#e8edf7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="` + path + `"/></svg>`).
+		Width(17).Height(17)).Style(buttonStyle).Width(34).Height(30).PaddingLeft(0).PaddingRight(0).BorderRadius(7).AriaLabel(label).Disabled(disabled()).OnClick(click)
 
 }
 

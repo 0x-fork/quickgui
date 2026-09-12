@@ -14,23 +14,21 @@ import (
 
 ```go
 func TimeFieldExample() *native.Node {
-	return ui.TimeField.Root(
-		ui.TimeFieldRootProps{DefaultValue: "09:30", Hour12: true},
-		func() *native.Node {
-			var children []*native.Node
-			for _, segment := range []string{"hour", "minute", "period"} {
-				children = append(children, ui.TimeField.Segment(ui.TimeFieldSegmentProps{Segment: segment}))
-			}
-			return ui.Fragment(children)
-		},
-	)
+	timeField1 := ui.NewTimeField(ui.TimeFieldRootProps{DefaultValue: "09:30", Hour12: true})
+	return timeField1.Root().Children(func() *native.Node {
+		var children []*native.Node
+		for _, segment := range []string{"hour", "minute", "period"} {
+			children = append(children, timeField1.SegmentWith(ui.TimeFieldSegmentProps{Segment: segment}).NativeNode())
+		}
+		return ui.Fragment(children)
+	}).NativeNode()
 }
 ```
 
 ## 结构
 
-- `ui.TimeField.Root`
-- `ui.TimeField.Segment`
+- `timeField.Root`
+- `timeField.Segment`
 
 ## 主要属性
 

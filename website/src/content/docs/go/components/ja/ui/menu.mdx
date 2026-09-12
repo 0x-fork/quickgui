@@ -16,54 +16,40 @@ import (
 
 ```go
 func MenuExample() *native.Node {
-	return ui.Menu.Root(
-		ui.MenuRootProps{},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.Menu.Trigger(ui.MenuTriggerProps{}, "Actions"),
-				ui.Menu.Positioner(
-					ui.MenuPositionerProps{},
-					func() *native.Node {
-						return ui.Menu.Popup(
-							ui.PartProps{},
-							func() *native.Node {
-								return ui.Menu.Item(
-									ui.MenuItemProps{
-										Value:     "copy",
-										Label:     "Copy",
-										PartProps: ui.PartProps{OnClick: func(*native.Event) { fmt.Println("Copy") }},
-									},
-									"Copy",
-								)
-							},
-						)
-					},
-				)})
-		},
-	)
+	menu1 := ui.NewMenu(ui.MenuRootProps{})
+	return menu1.Root().Children(func() *native.Node {
+		return ui.Fragment([]*native.Node{menu1.Trigger(ui.MenuTriggerProps{}).Children("Actions").NativeNode(), menu1.Positioner(ui.MenuPositionerProps{}).Children(func() *native.Node {
+			return menu1.Popup(ui.PartProps{}).Children(func() *native.Node {
+				return menu1.Item(ui.MenuItemProps{Value: "copy", Label: "Copy", PartProps: ui.PartProps{OnClick: func(*native.Event) {
+					fmt.Println("Copy")
+				}}}).Children("Copy").NativeNode()
+			}).NativeNode()
+		}).NativeNode()})
+	}).NativeNode()
 }
 ```
 
 ## 構成
 
-- `ui.Menu.Root`
-- `ui.Menu.Trigger`
-- `ui.Menu.Portal`
-- `ui.Menu.Backdrop`
-- `ui.Menu.Positioner`
-- `ui.Menu.Popup`
-- `ui.Menu.Arrow`
-- `ui.Menu.Item`
-- `ui.Menu.LinkItem`
-- `ui.Menu.SubmenuRoot`
-- `ui.Menu.SubmenuTrigger`
-- `ui.Menu.Group`
-- `ui.Menu.GroupLabel`
-- `ui.Menu.RadioGroup`
-- `ui.Menu.RadioItem`
-- `ui.Menu.RadioItemIndicator`
-- `ui.Menu.CheckboxItem`
-- `ui.Menu.CheckboxItemIndicator`
-- `ui.Menu.Separator`
+- `menu.Root`
+- `menu.Trigger`
+- `menu.Portal`
+- `menu.Backdrop`
+- `menu.Positioner`
+- `menu.Popup`
+- `menu.Arrow`
+- `menu.Item`
+- `menu.LinkItem`
+- `menu.SubmenuRoot`
+- `menu.SubmenuTrigger`
+- `menu.Group`
+- `menu.GroupLabel`
+- `menu.RadioGroup`
+- `menu.RadioItem`
+- `menu.RadioItemIndicator`
+- `menu.CheckboxItem`
+- `menu.CheckboxItemIndicator`
+- `menu.Separator`
 
 ## 主なプロパティ
 

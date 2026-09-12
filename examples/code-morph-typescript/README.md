@@ -1,7 +1,7 @@
 # TypeScript code morph
 
 A native version of the website's animated code block, built with Bun and Solid 2.
-Switch between Go, TypeScript, and Rust versions of the Counter snippet.
+Switch between Go, TypeScript, and Rust versions of a standalone forecast routine.
 Use **Next language** to cycle, or enable **Slow motion** to follow individual tokens.
 The app follows the system's Reduce Motion preference.
 
@@ -24,7 +24,8 @@ bun run build
 Shiki highlights the three local snippets once with its JavaScript regex engine; no WASM
 loader, DOM, or WebView is needed. `code-morph.ts` adapts the matching logic from
 [`website/src/lib/code-morph.ts`](../../website/src/lib/code-morph.ts): exact matches
-win, then equivalent names such as `TextColor`, `color`, and `text_color` share keys.
+win, then identifiers such as `FormatTemperature`, `formatTemperature`, and
+`format_temperature` share keys across naming conventions.
 Cached tokens are never mutated.
 
 Solid's keyed `For` retains native text nodes. Tokens sit on a Menlo grid and change

@@ -40,7 +40,7 @@ func TestPartPropsAcceptPrimitiveBoolPointers(t *testing.T) {
 	label := "Stage file"
 	reactive.CreateRoot(func(dispose func()) struct{} {
 		defer dispose()
-		node := Checkbox.Root(CheckboxProps{
+		node := (checkboxAPI{}).Root(CheckboxProps{
 			PartProps: PartProps{
 				FocusOnPointer: &focus,
 				Disabled:       &disabled,

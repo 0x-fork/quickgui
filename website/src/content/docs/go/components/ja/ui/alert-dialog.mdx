@@ -14,48 +14,30 @@ import (
 
 ```go
 func AlertDialogExample() *native.Node {
-	return ui.AlertDialog.Root(
-		ui.DialogRootProps{},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.AlertDialog.Trigger(ui.PartProps{}, "Open dialog"),
-				ui.AlertDialog.Portal(
-					ui.PartProps{},
-					func() *native.Node {
-						return ui.Fragment([]*native.Node{ui.AlertDialog.Backdrop(ui.PartProps{}),
-							ui.AlertDialog.Viewport(
-								ui.PartProps{},
-								func() *native.Node {
-									return ui.AlertDialog.Popup(
-										ui.DialogPopupProps{},
-										func() *native.Node {
-											return ui.Fragment([]*native.Node{ui.AlertDialog.Title(ui.PartProps{}, "Confirm action"),
-												ui.AlertDialog.Description(
-													ui.PartProps{},
-													"Review the details before continuing.",
-												),
-												ui.AlertDialog.Close(ui.PartProps{}, "Cancel")})
-										},
-									)
-								},
-							)})
-					},
-				)})
-		},
-	)
+	alertDialog1 := ui.NewAlertDialog(ui.DialogRootProps{})
+	return alertDialog1.Root().Children(func() *native.Node {
+		return ui.Fragment([]*native.Node{alertDialog1.Trigger(ui.PartProps{}).Children("Open dialog").NativeNode(), alertDialog1.Portal(ui.PartProps{}).Children(func() *native.Node {
+			return ui.Fragment([]*native.Node{alertDialog1.Backdrop(ui.PartProps{}).NativeNode(), alertDialog1.Viewport(ui.PartProps{}).Children(func() *native.Node {
+				return alertDialog1.Popup(ui.DialogPopupProps{}).Children(func() *native.Node {
+					return ui.Fragment([]*native.Node{alertDialog1.Title(ui.PartProps{}).Children("Confirm action").NativeNode(), alertDialog1.Description(ui.PartProps{}).Children("Review the details before continuing.").NativeNode(), alertDialog1.Close(ui.PartProps{}).Children("Cancel").NativeNode()})
+				}).NativeNode()
+			}).NativeNode()})
+		}).NativeNode()})
+	}).NativeNode()
 }
 ```
 
 ## 構成
 
-- `ui.AlertDialog.Root`
-- `ui.AlertDialog.Trigger`
-- `ui.AlertDialog.Portal`
-- `ui.AlertDialog.Backdrop`
-- `ui.AlertDialog.Viewport`
-- `ui.AlertDialog.Popup`
-- `ui.AlertDialog.Title`
-- `ui.AlertDialog.Description`
-- `ui.AlertDialog.Close`
+- `alertDialog.Root`
+- `alertDialog.Trigger`
+- `alertDialog.Portal`
+- `alertDialog.Backdrop`
+- `alertDialog.Viewport`
+- `alertDialog.Popup`
+- `alertDialog.Title`
+- `alertDialog.Description`
+- `alertDialog.Close`
 
 ## 主なプロパティ
 

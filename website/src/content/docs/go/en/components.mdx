@@ -13,7 +13,7 @@ func ComponentExample() *ui.Element {
 	count, setCount := ui.CreateSignal(0)
 	return ui.View().Children(
 		CounterLabel(count()),
-		ui.Button("Increment").OnClick(func() { setCount(count() + 1) }),
+		ui.Button().Child("Increment").OnClick(func() { setCount(count() + 1) }),
 	)
 }
 ```
@@ -35,7 +35,7 @@ func Cart() *ui.Element {
 	quantity, setQuantity := ui.CreateSignal(1)
 	return ui.View().Children(
 		LineItem(Product{ID: "mug", Name: "Mug", Price: 12}, quantity()),
-		ui.Button("Add one").OnClick(func() { setQuantity(quantity() + 1) }),
+		ui.Button().Child("Add one").OnClick(func() { setQuantity(quantity() + 1) }),
 	)
 }
 ```
@@ -53,7 +53,7 @@ func CardComponent(title string, children ...any) *ui.Element {
 func CardComposition() *ui.Element {
 	return CardComponent("Account",
 		ui.Text("Manage your account settings."),
-		ui.Button("Save").OnClick(func() { log.Print("Saved") }),
+		ui.Button().Child("Save").OnClick(func() { log.Print("Saved") }),
 	)
 }
 ```
@@ -64,9 +64,7 @@ Start with `ui.View`, `ui.Text`, `ui.Button`, and `ui.Input`. Use `ui.View().Chi
 
 ```go
 func ButtonExample(save func()) *ui.Element {
-	return ui.Button(
-		"Save changes",
-	).
+	return ui.Button().Child("Save changes").
 		Height(40).
 		PaddingLeft(16).
 		PaddingRight(16).
@@ -81,46 +79,42 @@ func ButtonExample(save func()) *ui.Element {
 
 ## Compound components
 
-Compound families expose parts such as `ui.Tabs.Root`, `ui.Tabs.List`, and `ui.Tabs.Panel`. The core handles roles, keyboard navigation, focus, and control state. Create a part inside its root’s children callback so its context exists.
+Create a component instance and compose its named parts. Every part returns a fluent `*ui.Element`; strings work directly as children, just as `.child("text")` does in Rust.
 
 ```go
-func TabsExample() *native.Node {
-	return ui.Tabs.Root(
-		ui.TabsRootProps{DefaultValue: "overview", Activation: "automatic"},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.Tabs.List(
-				ui.PartProps{},
-				func() *native.Node {
-					return ui.Fragment([]*native.Node{ui.Tabs.Tab(ui.TabsTabProps{Value: "overview"}, "Overview"),
-						ui.Tabs.Tab(ui.TabsTabProps{Value: "settings"}, "Settings")})
-				},
-			),
-				ui.Tabs.Panel(ui.TabsPanelProps{Value: "overview"}, "Overview content"),
-				ui.Tabs.Panel(ui.TabsPanelProps{Value: "settings"}, "Settings content")})
-		},
-	)
+func TabsExample() *ui.Element {
+    tabs := ui.NewTabs().DefaultValue("account")
+    return tabs.Root().Children(
+        tabs.List().Children(
+            tabs.Tab("account").Child("Account"),
+            tabs.Tab("security").Child("Security"),
+        ),
+        tabs.Panel("account").Child("Account settings"),
+        tabs.Panel("security").Child("Security settings"),
+    )
 }
 ```
+
+Configure behavior on the instance and styles on its parts. Parts establish their context when inserted, so ordinary nesting works without provider callbacks. At native boundaries, `.NativeNode()` resolves a compound element; `.Node` becomes available after insertion.
 
 ## Controlled state
 
-A controlled value is an accessor; its callback stores the value accepted by the control. Use a default value to let the component own its state. Optional scalar values use pointers, while multiple selections use slices.
+Instance settings accept values and accessors. The Go view compiler retains direct reactive expressions, while the component body runs once.
 
 ```go
-func CheckboxExample() *native.Node {
-	checked, setChecked := ui.CreateSignal(false)
-	return ui.Checkbox.Root(
-		ui.CheckboxProps{
-			Checked:         func() ui.CheckedState { return checked() },
-			OnCheckedChange: func(next bool, _ *native.Event) { setChecked(next) },
-		},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.Checkbox.Indicator(ui.PartProps{}, "✓"), ui.Text("Remember me").
-				Node})
-		},
-	)
+func CheckboxExample() *ui.Element {
+    checked, setChecked := ui.CreateSignal(false)
+    checkbox := ui.NewCheckbox().Checked(checked()).OnCheckedChange(
+        func(next bool, _ *native.Event) { setChecked(next) },
+    )
+    return checkbox.Root().FlexRow().Gap(8).Children(
+        checkbox.Indicator().Child("✓"),
+        "Remember me",
+    )
 }
 ```
+
+Create each instance inside the component that owns it. Its state and bindings are released with its mounted root. Child factories remain useful for content that closes and later constructs new nodes when it reopens.
 
 ## Component families
 
@@ -132,19 +126,13 @@ bun packages/cli/src/cli.ts dev --project examples/components
 
 ## Styling parts
 
-Use `PartProps.Style` for each part. Build styles with `ui.Style()` and fluent modifiers; combine shared builders with `.Merge(...)`. Parts also accept slices of builders and accessors returning them. Selection and theme signals update retained parts without rebuilding children.
+Apply fluent styles directly to parts or share styles with `ui.Style()` and `.Merge(...)`:
 
 ```go
-ui.PartProps{
-	Style: ui.Style().
-		Display("flex").
-		Height(32).
-		PaddingLeft(12).
-		PaddingRight(12).
-		BackgroundColor("#2563eb").
-		TextColor("white").
-		BorderRadius(8),
-}
+triggerStyle := ui.Style().Padding(12).RoundedLg().Bg("#2563eb")
+return popover.Trigger().Style(triggerStyle).TextColor("#ffffff").Child("Account")
 ```
 
-Every native control has a dedicated page in the Components sidebar. For complete workflows, see [Forms & Input](/docs/go/forms-and-input) and [Overlays & Dialogs](/docs/go/overlays-and-dialogs).
+Scalar accessors retain independent bindings. Adding a user click handler preserves a part's default action; `OnClickEvent` can call `PreventDefault()` to cancel it.
+
+Use `ui.NewPopover()`, `ui.NewTabs()`, and the corresponding component constructors. Constructors accept optional initial settings; instance methods configure individual settings before mounting.

@@ -12,30 +12,30 @@ use quickgui::*;
 
 ```rust
 let menu = PopoverMenu::new("actions", &state);
-menu.root_part(div()).child(menu.trigger_part(button().child("Actions")))
+menu.root().child(menu.trigger().child("Actions"))
 ```
 
 ## 结构
 
-- `PopoverMenu::root_part`
-- `PopoverMenu::trigger_part`
-- `PopoverMenu::portal_part`
-- `PopoverMenu::backdrop_part`
-- `PopoverMenu::positioner_part`
-- `PopoverMenu::popup_part`
-- `PopoverMenu::arrow_part`
-- `PopoverMenu::item_part`
-- `PopoverMenu::link_item_part`
-- `PopoverMenu::submenu_root_part`
-- `PopoverMenu::submenu_trigger_part`
-- `PopoverMenu::group_part`
-- `PopoverMenu::group_label_part`
-- `PopoverMenu::radio_group_part`
-- `PopoverMenu::radio_item_part`
-- `PopoverMenu::radio_item_indicator_part`
-- `PopoverMenu::checkbox_item_part`
-- `PopoverMenu::checkbox_item_indicator_part`
-- `PopoverMenu::separator_part`
+- `PopoverMenu::root`
+- `PopoverMenu::trigger`
+- `PopoverMenu::portal`
+- `PopoverMenu::backdrop`
+- `PopoverMenu::positioner`
+- `PopoverMenu::popup`
+- `PopoverMenu::arrow`
+- `PopoverMenu::item`
+- `PopoverMenu::link_item`
+- `PopoverMenu::submenu_root`
+- `PopoverMenu::submenu_trigger`
+- `PopoverMenu::group`
+- `PopoverMenu::group_label`
+- `PopoverMenu::radio_group`
+- `PopoverMenu::radio_item`
+- `PopoverMenu::radio_item_indicator`
+- `PopoverMenu::checkbox_item`
+- `PopoverMenu::checkbox_item_indicator`
+- `PopoverMenu::separator`
 
 ## 主要属性
 

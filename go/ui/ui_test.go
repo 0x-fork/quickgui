@@ -17,7 +17,7 @@ func TestRemovingDynamicNodesDisposesSubscriptions(t *testing.T) {
 		parent := View()
 		region := Show(visible, func() *Element {
 			renders++
-			return Input(Props{Value: value, Children: value})
+			return Input().Value(value).Child(value)
 		})
 		native.InsertNode(parent.Node, region, nil)
 		native.RemoveNode(parent.Node, region)

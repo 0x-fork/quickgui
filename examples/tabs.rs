@@ -122,12 +122,12 @@ impl TabsDemo {
             .child(text(label).text_sm().font_medium())
             // QuickGUI anchors the indicator to the tab that is really active and publishes
             // that tab's laid-out box, so the example never re-derives either.
-            .children(tab.tracked_indicator_part(
+            .children(tab.tracked_indicator_with(
                 div().h(2.0).w(96.0).rounded(1.0).bg(palette.accent),
                 AnchorPlacement::Bottom,
                 indicator,
             ));
-        tab.tab_part(root)
+        tab.tab_with(root)
     }
 
     fn vertical_tab(tab: Tab, label: &'static str, palette: Palette) -> Element {
@@ -157,7 +157,7 @@ impl TabsDemo {
             .transition(Transition::colors(COLOR_TRANSITION))
             .child(text(label).text_sm().font_medium())
             .children(
-                tab.indicator_part(
+                tab.indicator_with(
                     div()
                         .absolute()
                         .left(0.0)
@@ -168,7 +168,7 @@ impl TabsDemo {
                         .bg(palette.accent),
                 ),
             );
-        tab.tab_part(root)
+        tab.tab_with(root)
     }
 
     fn panel(
@@ -243,12 +243,12 @@ impl View for TabsDemo {
             "Arrow keys move focus without changing the panel. Enter or Space commits the focused tab; disabled tabs are skipped.",
             palette,
         )
-        .child(workspace.root_part(
+        .child(workspace.root_with(
             div()
                 .w_full()
                 .flex_col()
                 .gap_3()
-                .child(workspace.list_part(
+                .child(workspace.list_with(
                     div()
                         .w_full()
                         .flex_row()
@@ -270,25 +270,25 @@ impl View for TabsDemo {
                                 .on_click(select_settings),
                         ),
                 ))
-                .children(overview.panel_part(Self::panel(
+                .children(overview.panel_with(Self::panel(
                     "OVERVIEW",
                     "Workspace activity",
                     "Three views changed today. Tabs retain no collection registry and schedule no work while this window is idle.",
                     palette,
                 )))
-                .children(files.panel_part(Self::panel(
+                .children(files.panel_with(Self::panel(
                     "FILES",
                     "Visible project files",
                     "A real editor can mount a virtual tree here. The inactive panel remains mounted in this sample as display: none.",
                     palette,
                 )))
-                .children(history.panel_part(Self::panel(
+                .children(history.panel_with(Self::panel(
                     "HISTORY",
                     "Unavailable history",
                     "This disabled tab cannot receive pointer or keyboard activation.",
                     palette,
                 )))
-                .children(settings.panel_part(Self::panel(
+                .children(settings.panel_with(Self::panel(
                     "SETTINGS",
                     "Workspace settings",
                     "All typography, spacing, color, borders, focus treatment, and indicator geometry in this example belong to the application.",
@@ -339,14 +339,14 @@ impl View for TabsDemo {
             "Up and Down move focus, activate immediately, wrap at the ends, and skip the disabled Remote item.",
             palette,
         )
-        .child(preferences.root_part(
+        .child(preferences.root_with(
             div()
                 .w_full()
                 .min_h(190.0)
                 .flex_row()
                 .items_stretch()
                 .gap_3()
-                .child(preferences.list_part(
+                .child(preferences.list_with(
                     div()
                         .w(160.0)
                         .flex_none()
@@ -370,25 +370,25 @@ impl View for TabsDemo {
                     div()
                         .min_w(0.0)
                         .flex_1()
-                        .children(editor.panel_part(Self::panel(
+                        .children(editor.panel_with(Self::panel(
                             "EDITOR",
                             "Editing preferences",
                             "Automatic activation is suitable when every panel is already available without noticeable latency.",
                             palette,
                         )))
-                        .children(appearance.panel_part(Self::panel(
+                        .children(appearance.panel_with(Self::panel(
                             "APPEARANCE",
                             "Application appearance",
                             "The same unstyled parts can render native-looking preferences, document tabs, or product-specific navigation.",
                             palette,
                         )))
-                        .children(terminal.panel_part(Self::panel(
+                        .children(terminal.panel_with(Self::panel(
                             "TERMINAL",
                             "Integrated terminal",
                             "Only the active panel is mounted in this set. Switching replaces one bounded subtree and then returns to sleep.",
                             palette,
                         )))
-                        .children(remote.panel_part(Self::panel(
+                        .children(remote.panel_with(Self::panel(
                             "REMOTE",
                             "Remote development",
                             "This panel remains absent because its tab is disabled.",

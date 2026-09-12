@@ -42,7 +42,7 @@ let dismiss = cx.dismiss_listener(popover.surface_id(), |view, cx| {
 
 let mut root = div().child(
     popover
-        .trigger_part(div())
+        .trigger()
         .on_click(toggle)
         .accessibility_label("Account options")
         .child("Account"),
@@ -50,7 +50,7 @@ let mut root = div().child(
 
 if popover.is_open() {
     let popover = popover
-        .popover_part(
+        .popup_with(
             div()
                 .w(280.0)
                 .p_3()
@@ -59,12 +59,12 @@ if popover.is_open() {
         )
         .on_dismiss(dismiss)
         .children([
-            popover.title_part(text("Account options")),
-            popover.description_part(text("Choose an account action.")),
+            popover.title_with(text("Account options")),
+            popover.description_with(text("Choose an account action.")),
         ]);
     root = root.child(
         popover
-            .positioner_part(div().child(popover)),
+            .positioner().child(popover),
     );
 }
 ```
@@ -75,13 +75,13 @@ hiding a second framework-owned copy.
 
 ## Trigger, positioner, and popover contract
 
-`trigger_part(element)` decorates a caller-owned root with stable button semantics, focus,
+`trigger_with(element)` decorates a caller-owned root with stable button semantics, focus,
 hidden-inset drag exclusion, desktop-arrow cursor behavior, controlled `expanded` state, and the
 exact `has-popup` kind. While content is mounted it also exposes a native `controls` relationship
 to the popover; a closed trigger never publishes a dangling AccessKit node reference. `trigger()` is
 an unstyled shorthand that chooses `button()` as the root.
 
-`positioner_part(element)` combines the portal and positioner boundary. A retained QuickGUI
+`positioner_with(element)` combines the portal and positioner boundary. A retained QuickGUI
 overlay is already detached from ancestor clipping, so a separate full-window portal wrapper would
 only create an incorrect pointer blocker. The positioner owns only structural geometry:
 
@@ -90,7 +90,7 @@ only create an incorrect pointer blocker. The positioner owns only structural ge
 - stable positioner identity and exact retained trigger anchoring; and
 - no colors, size, padding, typography, shadow, transition, or popover semantics.
 
-`popover_part(element)` decorates the application-presented content root with:
+`popup_with(element)` decorates the application-presented content root with:
 
 - exact stable popover ID and role;
 - Escape and outside-primary-press dismissal;
@@ -112,10 +112,10 @@ request. Calling it in the same listener that mounts the popover needs no next-f
 outside dismissal restore trigger focus automatically; call `focus_trigger(cx)` when a content
 action closes the controlled popover directly.
 
-`title_part`, `description_part`, and `close_part` decorate application-owned visible parts with
-stable relationships and behavior but no presentation. `backdrop_part` supplies an optional
+`title_with`, `description_with`, and `close_with` decorate application-owned visible parts with
+stable relationships and behavior but no presentation. `backdrop_with` supplies an optional
 full-viewport, accessibility-hidden pointer layer for a caller-painted backdrop. For compact
-composition, `surface_part(element)` and `surface()` merge positioner and popover behavior onto one
+composition, `surface_with(element)` and `surface()` merge positioner and popover behavior onto one
 unstyled root. Separate parts are preferable when the application sizes or animates the
 positioner independently.
 
@@ -124,19 +124,19 @@ positioner independently.
 | Base UI part | QuickGUI decorator | What QuickGUI owns |
 | --- | --- | --- |
 | Root | `Popover::new(trigger_id, popup_id, open)` | copied descriptor, derived part identities, controlled open state |
-| Trigger | `trigger_part(element)` / `trigger()` | button semantics, focus, `expanded`, `has-popup`, `controls` while open |
-| Portal | `portal_part(element)` | the same retained overlay node as the positioner |
-| Positioner | `positioner_part(element)`, `tracked_positioner_part(element, &handle)` | anchoring, flip/shift, side and align offsets, collision padding, sticky policy, placement reporting |
-| Popup | `popover_part(element)` | role, dismissal, pointer blocking, focus restoration, modal focus containment, title/description relationships |
-| Arrow | `arrow_part(element)` | absolute placement on the resolved edge and cross-axis centering on the anchor |
-| Backdrop | `backdrop_part(element)` | full-viewport, accessibility-hidden pointer layer |
-| Viewport | `viewport_part(element)` | stable identity and a scroll container inside the popup |
-| Title | `title_part(element)` | the label target the popup points at |
-| Description | `description_part(element)` | the description target the popup points at |
-| Close | `close_part(label, element)` | button semantics and an accessible name |
+| Trigger | `trigger_with(element)` / `trigger()` | button semantics, focus, `expanded`, `has-popup`, `controls` while open |
+| Portal | `portal_with(element)` | the same retained overlay node as the positioner |
+| Positioner | `positioner_with(element)`, `tracked_positioner_with(element, &handle)` | anchoring, flip/shift, side and align offsets, collision padding, sticky policy, placement reporting |
+| Popup | `popup_with(element)` | role, dismissal, pointer blocking, focus restoration, modal focus containment, title/description relationships |
+| Arrow | `arrow_with(element)` | absolute placement on the resolved edge and cross-axis centering on the anchor |
+| Backdrop | `backdrop_with(element)` | full-viewport, accessibility-hidden pointer layer |
+| Viewport | `viewport_with(element)` | stable identity and a scroll container inside the popup |
+| Title | `title_with(element)` | the label target the popup points at |
+| Description | `description_with(element)` | the description target the popup points at |
+| Close | `close_with(label, element)` | button semantics and an accessible name |
 
-`surface_part(element)` and `surface()` merge positioner and popover behavior onto one unstyled
-root, and `tracked_surface_part(element, &handle)` does the same while publishing placement.
+`surface_with(element)` and `surface()` merge positioner and popover behavior onto one unstyled
+root, and `tracked_surface_with(element, &handle)` does the same while publishing placement.
 Separate parts are preferable when the application sizes or animates the positioner independently.
 
 ### Positioner props
@@ -161,7 +161,7 @@ declared default rather than to a bound.
 A declared placement is a preference. QuickGUI flips the side and re-aligns the cross axis whenever
 the preference does not fit, so an arrow drawn from the preference would point at nothing near a
 window edge. Store an `AnchorPlacementHandle` next to the open flag, mount the positioner with
-`tracked_positioner_part`, and read it back with `track_placement`:
+`tracked_positioner_with`, and read it back with `track_placement`:
 
 ```rust,ignore
 let popover = Popover::new("trigger", "popup", self.open)
@@ -186,7 +186,7 @@ changed size earns exactly one correcting frame. Behavior that must match real l
 whose total is whatever flex gave its panes, a scroll area sized from its painted viewport and
 content — reads `LayoutBoundsHandle::bounds` while declaring the next frame instead of guessing.
 
-`arrow_part(element)` then pins the caller-owned arrow to the popup edge that faces the anchor and
+`arrow_with(element)` then pins the caller-owned arrow to the popup edge that faces the anchor and
 centers it on the anchor along the cross axis, clamped by `arrow_padding`. Size, shape, rotation,
 and color stay application-owned, and the arrow is hidden from assistive technology.
 
@@ -202,8 +202,8 @@ popover is open; the state decides when that changes:
 
 ```rust,ignore
 let popover = Popover::new("trigger", "popup", self.hover.is_open());
-let trigger = self.hover.trigger_part(cx, popover, |view| &mut view.hover, div());
-let popup = self.hover.popup_part(cx, popover, |view| &mut view.hover, div());
+let trigger = self.hover.trigger_with(cx, popover, |view| &mut view.hover, div());
+let popup = self.hover.popup_with(cx, popover, |view| &mut view.hover, div());
 ```
 
 `delay(...)` (Base UI's `delay`, 300 ms by default) and `close_delay(...)` (`closeDelay`, immediate
@@ -302,22 +302,22 @@ let menu = PopoverMenu::new([
 ])?;
 ```
 
-`item_part` assigns exact `menuitem`, checkable/radio item, label, and separator semantics while
+`item_with` assigns exact `menuitem`, checkable/radio item, label, and separator semantics while
 remaining visually inert. AccessKit names its platform-neutral separator role `Splitter`; without
 value-changing actions QuickGUI projects it as the native non-interactive divider. For a
 caller-composed group, keep the visible label mounted and relate it without copying text:
 
 ```rust
-let label = menu.item_part("file-menu", 0, render_group_label())?;
-let open = menu.item_part("file-menu", 1, render_open_row())?;
-let group = menu.labeled_group_part(
+let label = menu.item_with("file-menu", 0, render_group_label())?;
+let open = menu.item_with("file-menu", 1, render_open_row())?;
+let group = menu.labeled_group_with(
     "file-menu",
     0,
     div().flex_col().children([label, open]),
 )?;
 ```
 
-`labeled_group_part` adds only the native group role and a mounted `labelled-by` relationship. The
+`labeled_group_with` adds only the native group role and a mounted `labelled-by` relationship. The
 generic `Element::accessibility_labelled_by` primitive omits dangling and self-referential targets.
 Its compact relation table adds this third relationship without increasing the storage previously
 used by `controls` and `active-descendant`; none of these relationships install an observer or
@@ -352,26 +352,26 @@ ones documented above.
 
 | Base UI part | QuickGUI decorator | What QuickGUI owns |
 | --- | --- | --- |
-| Root | `MenuState::new(trigger_id, popup_id)`, `root_part(element)` | controlled open flag, Root props, derived part identities |
-| Trigger | `trigger_part(cx, access, on_open_change, element)` | button semantics, `expanded`, `has-popup`, click toggling, `open_on_hover` deadlines |
-| Portal / Positioner | `portal_part(element)`, `positioner_part(element)` | anchoring, flip/shift, side and align offsets, placement reporting |
-| Backdrop | `backdrop_part(element)` | full-viewport, accessibility-hidden pointer layer |
-| Popup | `popup_part(cx, access, on_open_change, element)` | menu role, Escape/outside dismissal, focus restoration, `close_parent_on_esc` |
-| Arrow | `arrow_part(element)` | absolute placement on the resolved edge |
-| SubmenuRoot | `submenu_root_part(element)` | the nested level's structural wrapper |
-| SubmenuTrigger | `submenu_trigger_part(cx, access, on_open_change, element)` / `PopoverMenu::submenu_trigger_part(menu_id, index, open, element)` | `menuitem` semantics, `has-popup`, `expanded` |
-| Item | `PopoverMenu::item_part(menu_id, index, element)` | `menuitem` role, disabled state, accessible name, derived identity |
-| LinkItem | `PopoverMenu::link_item_part(menu_id, index, element)` | `menuitem` role over an item whose activation dispatches `OpenMenuLink` |
-| CheckboxItem / RadioItem | `checkbox_item_part(...)`, `radio_item_part(...)` | kind-checked checkable-item roles and checked state |
-| CheckboxItemIndicator / RadioItemIndicator | `PopoverMenu::checkbox_item_indicator_part(element)`, `radio_item_indicator_part(element)` | accessibility-hidden decoration |
-| Group / GroupLabel | `group_part(element)`, `labeled_group_part(menu_id, label_index, element)`, `group_label_part(...)` | group role and the mounted `labelled-by` relationship |
-| RadioGroup | `PopoverMenu::radio_group_part(element)`, `labeled_radio_group_part(menu_id, label_index, element)` | radio-group role and its mounted label relationship |
-| Separator | `PopoverMenu::separator_part(menu_id, index, element)` | non-interactive divider role |
+| Root | `MenuState::new(trigger_id, popup_id)`, `root_with(element)` | controlled open flag, Root props, derived part identities |
+| Trigger | `trigger_with(cx, access, on_open_change, element)` | button semantics, `expanded`, `has-popup`, click toggling, `open_on_hover` deadlines |
+| Portal / Positioner | `portal_with(element)`, `positioner_with(element)` | anchoring, flip/shift, side and align offsets, placement reporting |
+| Backdrop | `backdrop_with(element)` | full-viewport, accessibility-hidden pointer layer |
+| Popup | `popup_with(cx, access, on_open_change, element)` | menu role, Escape/outside dismissal, focus restoration, `close_parent_on_esc` |
+| Arrow | `arrow_with(element)` | absolute placement on the resolved edge |
+| SubmenuRoot | `submenu_root_with(element)` | the nested level's structural wrapper |
+| SubmenuTrigger | `submenu_trigger_with(cx, access, on_open_change, element)` / `PopoverMenu::submenu_trigger_with(menu_id, index, open, element)` | `menuitem` semantics, `has-popup`, `expanded` |
+| Item | `PopoverMenu::item_with(menu_id, index, element)` | `menuitem` role, disabled state, accessible name, derived identity |
+| LinkItem | `PopoverMenu::link_item_with(menu_id, index, element)` | `menuitem` role over an item whose activation dispatches `OpenMenuLink` |
+| CheckboxItem / RadioItem | `checkbox_item_with(...)`, `radio_item_with(...)` | kind-checked checkable-item roles and checked state |
+| CheckboxItemIndicator / RadioItemIndicator | `PopoverMenu::checkbox_item_indicator_with(element)`, `radio_item_indicator_with(element)` | accessibility-hidden decoration |
+| Group / GroupLabel | `group_with(element)`, `labeled_group_with(menu_id, label_index, element)`, `group_label_with(...)` | group role and the mounted `labelled-by` relationship |
+| RadioGroup | `PopoverMenu::radio_group_with(element)`, `labeled_radio_group_with(menu_id, label_index, element)` | radio-group role and its mounted label relationship |
+| Separator | `PopoverMenu::separator_with(menu_id, index, element)` | non-interactive divider role |
 
-The kind-checked aliases (`checkbox_item_part`, `radio_item_part`, `link_item_part`,
-`submenu_trigger_part`, `separator_part`, `group_label_part`) return `None` when the index is not
+The kind-checked aliases (`checkbox_item_with`, `radio_item_with`, `link_item_with`,
+`submenu_trigger_with`, `separator_with`, `group_label_with`) return `None` when the index is not
 that kind, so a composition that mounts parts by name cannot silently attach the wrong semantics.
-`item_part` remains the single unchecked entry point.
+`item_with` remains the single unchecked entry point.
 
 Root props map one-to-one: `with_open`, `modal(true)` (Tab containment plus a mounted backdrop),
 `orientation(MenuOrientation::Horizontal)` for a menubar row, `loop_focus`, `close_parent_on_esc`,
@@ -390,7 +390,7 @@ makes the dismissed level dispatch the `MenuCloseParent` typed action, which tra
 focus path to the level above and stops at the first level that is already closed.
 
 `MenuState::state()` returns a copyable `MenuPartState` carrying `open`, `side`, `align`, and
-`anchor_hidden` from the resolved placement, and `PopoverMenu::item_part_state(index, submenu_open)`
+`anchor_hidden` from the resolved placement, and `PopoverMenu::item_render_state(index, submenu_open)`
 returns a copyable `MenuItemPartState` carrying `highlighted`, `disabled`, `checked`, and `open`.
 
 `PopoverMenuItem::link(id, label, url)` is Base UI's `Menu.LinkItem`. QuickGUI has no document to
@@ -479,42 +479,16 @@ func AccountPopover() *native.Node {
 	open, setOpen := ui.CreateSignal(false)
 	modal, hover := true, true
 	gap, margin := 8.0, 12.0
-	return ui.Popover.Root(
-		ui.PopoverRootProps{
-			Open:         open,
-			Modal:        &modal,
-			OnOpenChange: func(value bool, _ ui.PopoverOpenChangeDetails) { setOpen(value) },
-		},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.Popover.Trigger(
-				ui.PopoverTriggerProps{
-					OpenOnHover: &hover,
-					Delay:       300,
-					CloseDelay:  100,
-				},
-				"Account",
-			),
-				ui.Popover.Positioner(
-					ui.PopoverPositionerProps{
-						Side:             "bottom",
-						Align:            "end",
-						SideOffset:       &gap,
-						CollisionPadding: &margin,
-					},
-					func() *native.Node {
-						return ui.Popover.Popup(
-							ui.PopoverPopupProps{},
-							func() *native.Node {
-								return ui.Fragment([]*native.Node{ui.Popover.Arrow(ui.PartProps{}),
-									ui.Popover.Title(ui.PartProps{}, "Account"),
-									ui.Popover.Viewport(ui.PartProps{}, "Account settings"),
-									ui.Popover.Close(ui.PartProps{}, "Done")})
-							},
-						)
-					},
-				)})
-		},
-	)
+	popover1 := ui.NewPopover(ui.PopoverRootProps{Open: open, Modal: &modal, OnOpenChange: func(value bool, _ ui.PopoverOpenChangeDetails) {
+		setOpen(value)
+	}})
+	return popover1.Root().Children(func() *native.Node {
+		return ui.Fragment([]*native.Node{popover1.Trigger(ui.PopoverTriggerProps{OpenOnHover: &hover, Delay: 300, CloseDelay: 100}).Children("Account").NativeNode(), popover1.Positioner(ui.PopoverPositionerProps{Side: "bottom", Align: "end", SideOffset: &gap, CollisionPadding: &margin}).Children(func() *native.Node {
+			return popover1.Popup(ui.PopoverPopupProps{}).Children(func() *native.Node {
+				return ui.Fragment([]*native.Node{popover1.Arrow(ui.PartProps{}).NativeNode(), popover1.Title(ui.PartProps{}).Children("Account").NativeNode(), popover1.Viewport(ui.PartProps{}).Children("Account settings").NativeNode(), popover1.Close(ui.PartProps{}).Children("Done").NativeNode()})
+			}).NativeNode()
+		}).NativeNode()})
+	}).NativeNode()
 }
 ```
 

@@ -142,6 +142,38 @@ function goApi(component: (typeof ALL_COMPONENT_DOCS)[number]): ApiSection[] {
       : component.kind === "swift-ui"
         ? `SwiftUI${component.name}`
         : component.name;
+  const instanceParts = declarations.filter((d) => d.receiver === `*${name}Component`);
+  const instanceConstructor = declarations.find((d) => !d.receiver && d.name === `New${name}`);
+  if (instanceParts.length && instanceConstructor) {
+    const props = instanceConstructor.signature.match(/\(props \.\.\.(\w+)/)?.[1];
+    const instance = name[0]!.toLowerCase() + name.slice(1);
+    return [
+      {
+        name: `New${name}`,
+        signature: `ui.${instanceConstructor.signature}`,
+        description: instanceConstructor.description,
+        source: instanceConstructor.source,
+        entries: props ? fields(props) : [],
+      },
+      ...instanceParts.map((d) => {
+        const props = d.signature.match(/\((?:options \.\.\.|props )(\w+)/)?.[1];
+        return {
+          name: `${name}.${d.name}`,
+          signature: `${instance}.${d.signature}`,
+          description: describe(d.name, d.description),
+          source: d.source,
+          entries: props ? fields(props) : [],
+        };
+      }),
+      {
+        name: "Element",
+        signature: "part.Child(content).Style(style)",
+        description: "Every part returns a fluent element. Strings, numbers, elements, and deferred child factories compose directly.",
+        source: declarations.find((d) => d.receiver === "*Element" && d.name === "Child")!.source,
+        entries: declarations.filter((d) => d.receiver === "*Element" && ["Child", "Children", "Style", "OnClick", "Ref"].includes(d.name)).map((d) => ({name:d.name,type:d.signature,description:d.description,source:d.source})),
+      },
+    ];
+  }
   // Compound API receivers consistently use the component identity followed by API.
   const receiver = name.toLowerCase() + "api";
   const parts = declarations.filter((d) => d.receiver?.toLowerCase() === receiver);

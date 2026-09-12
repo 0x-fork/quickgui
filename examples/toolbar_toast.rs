@@ -161,12 +161,15 @@ impl ToolbarToastDemo {
         let items = toolbar_items();
         let toolbar = Toolbar::new("commands", &self.toolbar, &items);
         let mut root = toolbar
-            .root_part(div().flex_row().items_center().gap_2())
+            .root()
+            .flex_row()
+            .items_center()
+            .gap_2()
             .accessibility_label("Document commands");
         // Base UI's Toolbar.Group and Toolbar.Separator: a labelling and structural unit and a
         // divider that never takes focus, both inside the toolbar's single roving Tab stop.
         let mut group = toolbar
-            .group_part(div().flex_row().gap_2())
+            .group_with(div().flex_row().gap_2())
             .accessibility_label("File commands");
         for (index, (item, (_, label))) in items.into_iter().zip(COMMANDS).enumerate() {
             let entry = toolbar.item(item.value()).expect("declared item");
@@ -187,10 +190,10 @@ impl ToolbarToastDemo {
                 cx.invalidate();
             });
             group = group.child(
-                entry.key_part(
+                entry.key_with(
                     cx,
                     entry
-                        .button_part(
+                        .button_with(
                             Self::chrome(colors, false)
                                 .child(text(label))
                                 .on_click(clicked),
@@ -201,9 +204,9 @@ impl ToolbarToastDemo {
             );
             if index + 1 == COMMANDS.len() - 1 {
                 root = root.child(group);
-                root = root.child(toolbar.separator_part(div().w(1.0).h(20.0).bg(colors.border)));
+                root = root.child(toolbar.separator_with(div().w(1.0).h(20.0).bg(colors.border)));
                 group = toolbar
-                    .group_part(div().flex_row().gap_2())
+                    .group_with(div().flex_row().gap_2())
                     .accessibility_label("Destructive commands");
             }
         }
@@ -214,7 +217,9 @@ impl ToolbarToastDemo {
         let items = toggle_items(ALIGNMENTS);
         let group = ToggleGroup::new("alignment", &self.alignment, &items);
         let mut root = group
-            .root_part(div().flex_row().gap_2())
+            .root()
+            .flex_row()
+            .gap_2()
             .accessibility_label("Text alignment");
         for (item, (_, label)) in items.into_iter().zip(ALIGNMENTS) {
             let entry = group.item(item.value()).expect("declared item");
@@ -225,10 +230,10 @@ impl ToolbarToastDemo {
                 cx.invalidate();
             });
             root = root.child(
-                entry.key_part(
+                entry.key_with(
                     cx,
                     entry
-                        .item_part(
+                        .item_with(
                             Self::chrome(colors, entry.is_pressed())
                                 .child(text(label))
                                 .on_click(clicked),
@@ -245,7 +250,9 @@ impl ToolbarToastDemo {
         let items = toggle_items(MARKS);
         let group = ToggleGroup::new("marks", &self.marks, &items);
         let mut root = group
-            .root_part(div().flex_row().gap_2())
+            .root()
+            .flex_row()
+            .gap_2()
             .accessibility_label("Text style");
         for (item, (_, label)) in items.into_iter().zip(MARKS) {
             let entry = group.item(item.value()).expect("declared item");
@@ -256,10 +263,10 @@ impl ToolbarToastDemo {
                 cx.invalidate();
             });
             root = root.child(
-                entry.key_part(
+                entry.key_with(
                     cx,
                     entry
-                        .item_part(
+                        .item_with(
                             Self::chrome(colors, entry.is_pressed())
                                 .child(text(label))
                                 .on_click(clicked),
@@ -279,7 +286,7 @@ impl ToolbarToastDemo {
             cx.invalidate();
         });
         control
-            .root_part(
+            .root_with(
                 Self::chrome(colors, control.is_pressed())
                     .child(text("Inspector"))
                     .on_click(clicked),
@@ -289,7 +296,7 @@ impl ToolbarToastDemo {
 
     fn toasts_surface(&self, cx: &mut ViewContext<'_, Self>, colors: Palette) -> Element {
         let viewport = ToastViewport::new("toasts");
-        let mut surface = viewport.viewport_part(div().flex_col().gap_2().w(320.0));
+        let mut surface = viewport.viewport().flex_col().gap_2().w(320.0);
         // `toasts` walks the queue newest first and hands each descriptor its own stack index, the
         // provider's limited flag, the expanded state, and any swipe in flight.
         for parts in viewport.toasts(&self.toasts).collect::<Vec<_>>() {
@@ -341,7 +348,7 @@ impl ToolbarToastDemo {
                 )
                 .bg(colors.surface)
                 .child(
-                    parts.title_part(
+                    parts.title_with(
                         text(entry.toast().title().clone())
                             .text_sm()
                             .font_semibold(),
@@ -349,7 +356,7 @@ impl ToolbarToastDemo {
                 );
             if let Some(description) = entry.toast().description_text() {
                 card = card.child(
-                    parts.description_part(
+                    parts.description_with(
                         text(description.clone())
                             .text_sm()
                             .wrap()
@@ -360,7 +367,7 @@ impl ToolbarToastDemo {
             let mut controls = div().flex_row().gap_2();
             if let Some(label) = entry.toast().action_label() {
                 controls = controls.child(
-                    parts.action_part(
+                    parts.action_with(
                         Self::chrome(colors, false)
                             .child(text(label.clone()))
                             .on_click(undo),
@@ -368,7 +375,7 @@ impl ToolbarToastDemo {
                 );
             }
             controls = controls.child(
-                parts.close_part(
+                parts.close_with(
                     Self::chrome(colors, false)
                         .child(text("Dismiss"))
                         .on_click(dismiss),
@@ -376,10 +383,11 @@ impl ToolbarToastDemo {
             );
             card = card.child(controls);
 
-            let root = parts.key_part(
+            let root = parts.key_with(
                 cx,
                 parts
-                    .root_part(div().child(parts.content_part(card)))
+                    .root()
+                    .child(parts.content_with(card))
                     .focus(|state| state.border(2.0, colors.accent))
                     .opacity(if parts.is_limited() { 0.5 } else { 1.0 })
                     .on_hover(hover)
@@ -387,7 +395,10 @@ impl ToolbarToastDemo {
                 Self::toasts,
             );
             surface = surface.child(
-                parts.positioner_part(div().translate(parts.swipe_movement(), 0.0).child(root)),
+                parts
+                    .positioner()
+                    .translate(parts.swipe_movement(), 0.0)
+                    .child(root),
             );
         }
         surface

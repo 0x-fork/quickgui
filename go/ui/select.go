@@ -388,8 +388,6 @@ func setActiveValue(node *native.Node, value *string) {
 }
 
 // Select is a controlled select whose option list the core paints in its own window.
-var Select = selectAPI{}
-
 type selectAPI struct{}
 
 func (selectAPI) Root(props SelectRootProps, children ...any) *native.Node {
@@ -461,7 +459,7 @@ func (selectAPI) Root(props SelectRootProps, children ...any) *native.Node {
 
 func (selectAPI) Trigger(props SelectRootProps, children ...any) *native.Node {
 	props.Children = withPartChildren(props.Children, children)
-	return Select.Root(props)
+	return (selectAPI{}).Root(props)
 }
 
 func (selectAPI) Option(props OptionProps, children ...any) *native.Node {
@@ -595,8 +593,6 @@ func providePickerInput(state *pickerState, input *native.Node, children PartChi
 }
 
 // Combobox is a constrained combobox. Arbitrary text is a query, not a committable value.
-var Combobox = comboboxAPI{}
-
 type comboboxAPI struct{}
 
 func (comboboxAPI) Root(props ComboboxRootProps, children ...any) *native.Node {
@@ -686,7 +682,7 @@ func (comboboxAPI) Root(props ComboboxRootProps, children ...any) *native.Node {
 
 func (comboboxAPI) Input(props ComboboxRootProps, children ...any) *native.Node {
 	props.Children = withPartChildren(props.Children, children)
-	return Combobox.Root(props)
+	return (comboboxAPI{}).Root(props)
 }
 
 func (comboboxAPI) Option(props OptionProps, children ...any) *native.Node {
@@ -840,8 +836,6 @@ func (comboboxAPI) Separator(props PartProps, children ...any) *native.Node {
 }
 
 // Autocomplete is a free-form autocomplete sharing the combobox's owner-window parts.
-var Autocomplete = autocompleteAPI{}
-
 type autocompleteAPI struct{}
 
 func (autocompleteAPI) Root(props AutocompleteRootProps, children ...any) *native.Node {
@@ -880,7 +874,7 @@ func (autocompleteAPI) Root(props AutocompleteRootProps, children ...any) *nativ
 func (autocompleteAPI) Input(props AutocompleteRootProps, children ...any) *native.Node {
 	props.Children = withPartChildren(props.Children, children)
 
-	return Autocomplete.Root(props)
+	return (autocompleteAPI{}).Root(props)
 }
 
 func (autocompleteAPI) Option(props OptionProps, children ...any) *native.Node {

@@ -53,20 +53,20 @@ struct Task {
 
 let field = DateField::new("due");
 let mut row = field
-    .root_part(&self.due, div().flex_row().gap_1())
+    .root_with(&self.due, div().flex_row().gap_1())
     .accessibility_label("Due date");
 for segment in self.due.segment_order().segments() {
     let part = field.segment(segment);
-    let element = part.segment_part(
+    let element = part.segment_with(
         &self.due,
         div().child(text(self.due.segment_text(segment))),
     );
-    row = row.child(part.key_part(cx, element, |view: &mut Task| &mut view.due));
+    row = row.child(part.key_with(cx, element, |view: &mut Task| &mut view.due));
 }
 ```
 
-`root_part` and `segment_part` are pure decorators; they add identity, roles, relationships, and
-interaction contracts and never add layout or paint. `key_part` attaches the typed keyboard actions
+`root_with` and `segment_with` are pure decorators; they add identity, roles, relationships, and
+interaction contracts and never add layout or paint. `key_with` attaches the typed keyboard actions
 and digit entry to one segment.
 
 `segment_text` returns the zero-padded digits, or that segment's placeholder while it is empty, and
@@ -102,7 +102,7 @@ The root is a group carrying the field's accessible name, its disabled state, it
 active-descendant relationship to the segment being edited. Every segment is a focusable spin button
 with its current numeric value and its live minimum and maximum, or bounds without a value while it
 is empty. QuickGUI supplies a default English name per segment; call `.accessibility_label(...)`
-after `segment_part` to replace it with localized product text.
+after `segment_with` to replace it with localized product text.
 
 ## Time field
 
@@ -139,13 +139,13 @@ fields, no allocation.
 use quickgui::{Calendar, CalendarState, CalendarWeekday, CivilDate, div, text};
 
 let grid = Calendar::new("month");
-let mut month = grid.grid_part(self.month, div().flex_col());
+let mut month = grid.grid_with(self.month, div().flex_col());
 for index in 0..self.month.week_count() {
     let days = self.month.week(index).expect("a mounted week row");
-    let mut row = grid.week_part(index, div().flex_row());
+    let mut row = grid.week_with(index, div().flex_row());
     for day in days {
-        let cell = grid.day_part(self.month, day, div().child(text(day.day.to_string())));
-        row = row.child(grid.key_part(cx, day, cell, |view: &mut Task| &mut view.month));
+        let cell = grid.day_with(self.month, day, div().child(text(day.day.to_string())));
+        row = row.child(grid.key_with(cx, day, cell, |view: &mut Task| &mut view.month));
     }
     month = month.child(row);
 }

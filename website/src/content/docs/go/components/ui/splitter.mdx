@@ -14,34 +14,23 @@ import (
 
 ```go
 func SplitterExample() *native.Node {
-	return ui.Splitter.Root(
-		ui.SplitterRootProps{
-			DefaultValue: []float64{240, 400},
-			Panes:        []ui.SplitterPaneDeclaration{{}, {}},
-			PartProps:    ui.PartProps{Style: ui.Style().Display("flex").Height(240)},
-		},
-		func() *native.Node {
-			var children []*native.Node
-			first, second := 0, 1
-			children = append(children, ui.Splitter.Pane(ui.SplitterPaneProps{Index: &first}, "Sidebar"))
-			children = append(children, ui.Splitter.Handle(ui.SplitterPaneProps{
-				Index: &first,
-				PartProps: ui.PartProps{Style: ui.Style().
-					Width(6).
-					Cursor("col-resize")},
-			}))
-			children = append(children, ui.Splitter.Pane(ui.SplitterPaneProps{Index: &second}, "Content"))
-			return ui.Fragment(children)
-		},
-	)
+	splitter1 := ui.NewSplitter(ui.SplitterRootProps{DefaultValue: []float64{240, 400}, Panes: []ui.SplitterPaneDeclaration{{}, {}}, PartProps: ui.PartProps{Style: ui.Style().Display("flex").Height(240)}})
+	return splitter1.Root().Children(func() *native.Node {
+		var children []*native.Node
+		first, second := 0, 1
+		children = append(children, splitter1.PaneWith(ui.SplitterPaneProps{Index: &first}).Children("Sidebar").NativeNode())
+		children = append(children, splitter1.HandleWith(ui.SplitterPaneProps{Index: &first, PartProps: ui.PartProps{Style: ui.Style().Width(6).Cursor("col-resize")}}).NativeNode())
+		children = append(children, splitter1.PaneWith(ui.SplitterPaneProps{Index: &second}).Children("Content").NativeNode())
+		return ui.Fragment(children)
+	}).NativeNode()
 }
 ```
 
 ## Anatomy
 
-- `ui.Splitter.Root`
-- `ui.Splitter.Pane`
-- `ui.Splitter.Handle`
+- `splitter.Root`
+- `splitter.Pane`
+- `splitter.Handle`
 
 ## Key props
 

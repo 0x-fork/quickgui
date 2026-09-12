@@ -144,15 +144,18 @@ impl RangeControlsDemo {
         let fill = self.volume.fraction(0) * TRACK.width;
         let format = ValueFormat::new(|value, _maximum| Arc::from(format!("{value:.0}")));
 
-        slider.key_part(
+        slider.key_with(
             cx,
             slider
-                .root_part(div().flex_row().items_center().gap_3())
-                .child(slider.label_part(text("Volume").text_sm().text_color(colors.muted)))
+                .root()
+                .flex_row()
+                .items_center()
+                .gap_3()
+                .child(slider.label_with(text("Volume").text_sm().text_color(colors.muted)))
                 .focus(|state| state.border(2.0, colors.accent))
                 .child(
                     slider
-                        .track_part(
+                        .track_with(
                             div()
                                 .relative()
                                 .w(TRACK.width)
@@ -171,7 +174,7 @@ impl RangeControlsDemo {
                                 .bg(colors.track),
                         )
                         .child(
-                            slider.indicator_part(
+                            slider.indicator_with(
                                 div()
                                     .absolute()
                                     .top(8.0)
@@ -184,7 +187,7 @@ impl RangeControlsDemo {
                         )
                         .child(
                             thumb
-                                .thumb_part(
+                                .thumb_with(
                                     div()
                                         .absolute()
                                         .top(3.0)
@@ -203,7 +206,7 @@ impl RangeControlsDemo {
                         ),
                 )
                 .child(
-                    slider.value_part(
+                    slider.value_with(
                         text(slider.display_value(&format))
                             .text_sm()
                             .text_color(colors.muted),
@@ -234,11 +237,14 @@ impl RangeControlsDemo {
         let end = upper.fraction() * TRACK.width;
 
         slider
-            .root_part(div().flex_row().items_center().gap_3())
+            .root()
+            .flex_row()
+            .items_center()
+            .gap_3()
             .accessibility_label("Price range")
             .child(
                 slider
-                    .track_part(
+                    .track_with(
                         div()
                             .relative()
                             .w(TRACK.width)
@@ -257,7 +263,7 @@ impl RangeControlsDemo {
                             .bg(colors.track),
                     )
                     .child(
-                        slider.range_part(
+                        slider.range_with(
                             div()
                                 .absolute()
                                 .top(8.0)
@@ -269,10 +275,10 @@ impl RangeControlsDemo {
                         ),
                     )
                     .child(
-                        lower.key_part(
+                        lower.key_with(
                             cx,
                             lower
-                                .thumb_part(
+                                .thumb_with(
                                     div()
                                         .absolute()
                                         .top(3.0)
@@ -287,10 +293,10 @@ impl RangeControlsDemo {
                         ),
                     )
                     .child(
-                        upper.key_part(
+                        upper.key_with(
                             cx,
                             upper
-                                .thumb_part(
+                                .thumb_with(
                                     div()
                                         .absolute()
                                         .top(3.0)
@@ -330,15 +336,18 @@ impl RangeControlsDemo {
         let thumb = slider.thumb(0).expect("single thumb");
         let offset = track.height - self.zoom.fraction(0) * track.height;
 
-        slider.key_part(
+        slider.key_with(
             cx,
             slider
-                .root_part(div().flex_col().items_center().gap_2())
+                .root()
+                .flex_col()
+                .items_center()
+                .gap_2()
                 .accessibility_label("Zoom")
                 .focus(|state| state.border(2.0, colors.accent))
                 .child(
                     slider
-                        .track_part(
+                        .track_with(
                             div()
                                 .relative()
                                 .w(track.width)
@@ -357,7 +366,7 @@ impl RangeControlsDemo {
                                 .bg(colors.track),
                         )
                         .child(
-                            thumb.thumb_part(
+                            thumb.thumb_with(
                                 div()
                                     .absolute()
                                     .left(3.0)
@@ -428,14 +437,14 @@ impl RangeControlsDemo {
         };
 
         field
-            .root_part(
+            .root_with(
                 div()
                     .flex_row()
                     .items_center()
                     .gap_2()
                     .on_mouse_up(MouseButton::Left, release)
                     .child(
-                        field.input_part(
+                        field.input_with(
                             &self.quantity,
                             text_input(self.quantity.text().clone())
                                 .w(96.0)
@@ -450,18 +459,18 @@ impl RangeControlsDemo {
                                 .on_key_down(commit),
                         ),
                     )
-                    .child(field.decrement_part(
+                    .child(field.decrement_with(
                         &self.quantity,
                         stepper("−").on_mouse_down(MouseButton::Left, press_down),
                     ))
-                    .child(field.increment_part(
+                    .child(field.increment_with(
                         &self.quantity,
                         stepper("+").on_mouse_down(MouseButton::Left, press_up),
                     )),
             )
             .child(
                 field
-                    .scrub_area_part(
+                    .scrub_area_with(
                         &self.quantity,
                         div()
                             .relative()
@@ -480,7 +489,7 @@ impl RangeControlsDemo {
                     )
                     .child(text("↔").text_sm())
                     .children(self.quantity.is_scrubbing().then(|| {
-                        field.scrub_area_cursor_part(
+                        field.scrub_area_cursor_with(
                             div()
                                 .absolute()
                                 .top(-14.0)
@@ -508,15 +517,17 @@ impl RangeControlsDemo {
             .gap_3()
             .child(
                 download
-                    .root_part(div().flex_col().gap_1())
+                    .root()
+                    .flex_col()
+                    .gap_1()
                     .child(
                         div()
                             .flex_row()
                             .justify_between()
                             .gap_2()
-                            .child(download.label_part(text("Downloading").text_sm()))
+                            .child(download.label_with(text("Downloading").text_sm()))
                             .child(
-                                download.value_part(
+                                download.value_with(
                                     text(download.display_value().unwrap_or_default())
                                         .text_sm()
                                         .text_color(colors.muted),
@@ -524,13 +535,13 @@ impl RangeControlsDemo {
                             ),
                     )
                     .child(
-                        download.track_part(
+                        download.track_with(
                             div()
                                 .w(TRACK.width)
                                 .h(6.0)
                                 .rounded(3.0)
                                 .bg(colors.track)
-                                .child(download.indicator_part(
+                                .child(download.indicator_with(
                                     div().w(TRACK.width * completion).h(6.0).rounded(3.0).bg(
                                         if download.status() == ProgressStatus::Complete {
                                             colors.warning
@@ -544,7 +555,9 @@ impl RangeControlsDemo {
             )
             .child(
                 scanning
-                    .root_part(div().flex_col().gap_1())
+                    .root()
+                    .flex_col()
+                    .gap_1()
                     .accessibility_label("Scanning")
                     .child(text("Scanning library").text_sm())
                     .child(
@@ -553,13 +566,15 @@ impl RangeControlsDemo {
                             .h(6.0)
                             .rounded(3.0)
                             .bg(colors.track)
-                            .child(scanning.indicator_part(
+                            .child(scanning.indicator_with(
                                 div().w(80.0).h(6.0).rounded(3.0).bg(colors.muted),
                             )),
                     ),
             )
             .child(
-                disk.root_part(div().flex_col().gap_1())
+                disk.root()
+                    .flex_col()
+                    .gap_1()
                     .accessibility_label("Disk usage")
                     .child(text("Disk usage").text_sm())
                     .child(
@@ -569,7 +584,7 @@ impl RangeControlsDemo {
                             .rounded(3.0)
                             .bg(colors.track)
                             .child(
-                                disk.indicator_part(
+                                disk.indicator_with(
                                     div()
                                         .w(TRACK.width * disk.completion())
                                         .h(6.0)
@@ -596,30 +611,30 @@ impl RangeControlsDemo {
             }
         });
 
-        splitter.root_part(
+        splitter.root_with(
             div()
                 .h(160.0)
                 .rounded_lg()
                 .overflow_hidden()
                 .border(1.0, colors.border)
                 .child(
-                    sidebar.pane_part(
+                    sidebar.pane_with(
                         div()
                             .p_3()
                             .bg(colors.track)
                             .child(text("Sidebar").text_sm()),
                     ),
                 )
-                .child(handle.key_part(
+                .child(handle.key_with(
                     cx,
                     handle
-                        .handle_part(div().w(6.0).bg(colors.border).on_pointer(drag))
+                        .handle_with(div().w(6.0).bg(colors.border).on_pointer(drag))
                         .accessibility_label("Resize sidebar")
                         .focus(|state| state.bg(colors.accent)),
                     Self::panes,
                 ))
                 .child(
-                    content.pane_part(
+                    content.pane_with(
                         div()
                             .p_3()
                             .child(text("Editor").text_sm())

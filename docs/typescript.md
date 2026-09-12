@@ -28,8 +28,8 @@ import { Button, Text, View, createRenderer } from "@quickgui/solid";
 function Counter() {
   const [count, setCount] = createSignal(0);
   return (
-    <View display="flex" flexDirection="column" padding={24} gap={12}>
-      <Text fontSize={24}>Count: {count()}</Text>
+    <View style={{ display: "flex", flexDirection: "column", padding: 24, gap: 12 }}>
+      <Text style={{ fontSize: 24 }}>Count: {count()}</Text>
       <Button onClick={() => setCount(count() + 1)}>Increment</Button>
     </View>
   );
@@ -45,6 +45,17 @@ await app.whenReady();
 openWindow();
 ```
 
+`<View>some text</View>` accepts plain text directly. Intrinsic `<div>` and `<span>` are aliases for `View` and `Text`, and need no component import. Put all visual declarations in a camelCase `style` object:
+
+```tsx
+<div style={{ flexCol: true, gap2: true }}>
+  some text
+  <span style={{ textLg: true, fontSemibold: true }}>Styled text</span>
+</div>
+```
+
+The JSX compiler supplies its runtime imports using the project's `jsxImportSource` setting. `JSX.Style` provides editor completion for native values and fixed presets. Direct style attributes, `class`, and `className` are unsupported.
+
 Components construct once. Solid tracks JSX expressions and updates affected native properties or child edges. Use Solid 2's `Show`, `For`, signals, effects, and cleanup APIs. Each window has an independent Solid root, disposed when the native window closes. The Dock handler creates a fresh window after the last window closes on macOS.
 
 The TypeScript binding exposes the complete native component families:
@@ -59,26 +70,26 @@ Compound components expose their named parts and typed state hooks. Rust owns se
 
 `@quickgui/solid/router` supplies routes, nested outlets, links, and navigation hooks backed by Rust route matching and memory history. `@quickgui/solid/swift-ui` exposes native controls, popovers, and reverse QuickGUI hosting; typed modifier factories are in `@quickgui/solid/swift-ui/modifiers`.
 
-Use kebab-case native style attributes or reusable `JSX.Style` objects. Rust's fixed layout and style presets are boolean attributes:
+Use `style` for all layout, typography, and paint declarations. Style keys are camelCase. Fixed presets are boolean entries in the same object:
 
 ```tsx
-<View flex-col p-3 gap-2 rounded-lg>
-  <Text text-lg font-semibold>Panel title</Text>
+<View style={{ flexCol: true, p3: true, gap2: true, roundedLg: true }}>
+  <Text style={{ textLg: true, fontSemibold: true }}>Panel title</Text>
 </View>
 ```
 
-Preset helpers are boolean attributes: `rounded-lg`, `flex-col`, `items-center`, `p-3`, `text-lg`, and `font-bold`. `rounded-lg` uses Rust's 8-pixel radius; `p-3` uses 12 pixels from Rust's four-pixel spacing scale. Helpers take no size or string value. For custom values, use native style attributes such as `border-radius={10}`, `padding={14}`, `grid-template-columns={3}`, and `width="50%"`. Corner radii use attributes such as `border-top-left-radius={8}`. `position-sticky` is the boolean sticky-layout helper.
+Preset entries include `roundedLg`, `flexCol`, `itemsCenter`, `p3`, `textLg`, and `fontBold`. `roundedLg` uses an 8-pixel radius; `p3` uses 12 pixels from the four-pixel spacing scale. Presets take `true`, `false`, `null`, or `undefined`. Custom values use fields such as `borderRadius`, `padding`, `gridTemplateColumns`, and `width`. `positionSticky` is the sticky-layout preset.
 
-Helpers work in reusable styles and style arrays, which expand and merge left to right. Direct helper props override the corresponding style fields; setting a helper to `false`, `null`, or `undefined` withdraws it and restores the underlying style. Style objects use camelCase native fields and boolean preset keys. `bun scripts/generate-style-helpers.ts --check` checks all 272 TypeScript presets against Rust.
+Styles and nested style arrays merge left to right. A falsey array entry is ignored, and a falsey preset entry withdraws that preset so an earlier value remains visible. `bun scripts/generate-style-helpers.ts --check` checks all 272 TypeScript presets against Rust.
 
 ```tsx
 import type { JSX } from "@quickgui/solid";
 
-const panel = { "p-3": true, "rounded-xl": true, bg: "#18181b" } satisfies JSX.Style;
-<View style={panel} text-color="#fafafa"><Text>Hello</Text></View>
+const panel = { p3: true, roundedXl: true, bg: "#18181b" } satisfies JSX.Style;
+<View style={[panel, { textColor: "#fafafa" }]}><Text>Hello</Text></View>
 ```
 
-Direct properties override `style`. Removing a style field clears its native value; removing a direct property reveals its style value. Colors accept CSS hex forms or an integer packed as `0xAABBGGRR`, matching Rust. Property IDs and bounds are generated from Rust with `bun scripts/generate-typescript.ts`.
+Removing a style field clears its native value. Colors accept CSS hex forms or an integer packed as `0xAABBGGRR`, matching Rust. Component state, accessibility, and event handlers remain ordinary props. Property IDs and bounds are generated from Rust with `bun scripts/generate-typescript.ts`.
 
 Input handlers receive native events, with text in `event.value`:
 

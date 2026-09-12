@@ -308,28 +308,32 @@ impl View for TextServicesDemo {
             )
             .when(self.find_bar_open, |root| {
                 root.child(
-                    bar.root_part(div().flex_row().items_center().gap_2().w_full())
+                    bar.root()
+                        .flex_row()
+                        .items_center()
+                        .gap_2()
+                        .w_full()
                         .child(
-                            bar.query_input_part(
+                            bar.query_input_with(
                                 text_input(self.find.query().clone())
                                     .on_input(edit_query)
                                     .w(200.0),
                             ),
                         )
                         .child(
-                            bar.replace_input_part(
+                            bar.replace_input_with(
                                 text_input(self.find.replacement().clone())
                                     .on_input(edit_replacement)
                                     .w(200.0),
                             ),
                         )
-                        .child(bar.count_part(text(bar.count_text().clone())))
-                        .child(bar.previous_part(control("Previous").on_click(previous)))
-                        .child(bar.next_part(control("Next").on_click(next)))
-                        .child(bar.replace_part(control("Replace").on_click(replace)))
-                        .child(bar.replace_all_part(control("All").on_click(replace_all)))
+                        .child(bar.count_with(text(bar.count_text().clone())))
+                        .child(bar.previous_with(control("Previous").on_click(previous)))
+                        .child(bar.next_with(control("Next").on_click(next)))
+                        .child(bar.replace_with(control("Replace").on_click(replace)))
+                        .child(bar.replace_all_with(control("All").on_click(replace_all)))
                         .child(control("Whole word").on_click(toggle_whole_word))
-                        .child(bar.close_part(control("Close").on_click(close))),
+                        .child(bar.close_with(control("Close").on_click(close))),
                 )
             })
             .child(text(format!(

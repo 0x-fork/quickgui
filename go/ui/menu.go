@@ -187,8 +187,6 @@ func (state *popoverMenuState) selectItem(details MenuSelectDetails, event *nati
 var popoverMenuContext = createPartContext[popoverMenuState]()
 
 // PopoverMenu is a declared popover menu whose rows the core paints itself.
-var PopoverMenu = popoverMenuAPI{}
-
 type popoverMenuAPI struct{}
 
 func (popoverMenuAPI) Root(props PopoverMenuRootProps, children ...any) *native.Node {
@@ -322,8 +320,6 @@ func (state *contextMenuState) menu() string {
 var contextMenuContext = createPartContext[contextMenuState]()
 
 // ContextMenu is a declared cursor-point context menu.
-var ContextMenu = contextMenuAPI{}
-
 type contextMenuAPI struct{}
 
 func (contextMenuAPI) Root(props ContextMenuRootProps, children ...any) *native.Node {
@@ -757,8 +753,6 @@ func createMenuRoot(submenu bool, props MenuRootProps) *native.Node {
 }
 
 // Menu is an in-window menu whose rows are ordinary child nodes.
-var Menu = menuAPI{}
-
 type menuAPI struct{}
 
 func (menuAPI) Root(props MenuRootProps, children ...any) *native.Node {
@@ -993,8 +987,6 @@ type MenubarItemProps struct {
 var menubarContext = createPartContext[string]()
 
 // Menubar is an in-window menubar that owns which menu is open.
-var Menubar = menubarAPI{}
-
 type menubarAPI struct{}
 
 func (menubarAPI) Root(props MenubarRootProps, children ...any) *native.Node {

@@ -16,29 +16,23 @@ import (
 ```go
 func DateFieldExample() *native.Node {
 	value, setValue := ui.CreateSignal[*string](nil)
-	return ui.DateField.Root(
-		ui.DateFieldRootProps{
-			Value:         value,
-			Format:        "ymd",
-			Min:           "2026-01-01",
-			Max:           "2026-12-31",
-			OnValueChange: func(next *string, _ *native.Event) { setValue(next) },
-		},
-		func() *native.Node {
-			var children []*native.Node
-			for _, segment := range []string{"year", "month", "day"} {
-				children = append(children, ui.DateField.Segment(ui.DateFieldSegmentProps{Segment: segment}))
-			}
-			return ui.Fragment(children)
-		},
-	)
+	dateField1 := ui.NewDateField(ui.DateFieldRootProps{Value: value, Format: "ymd", Min: "2026-01-01", Max: "2026-12-31", OnValueChange: func(next *string, _ *native.Event) {
+		setValue(next)
+	}})
+	return dateField1.Root().Children(func() *native.Node {
+		var children []*native.Node
+		for _, segment := range []string{"year", "month", "day"} {
+			children = append(children, dateField1.SegmentWith(ui.DateFieldSegmentProps{Segment: segment}).NativeNode())
+		}
+		return ui.Fragment(children)
+	}).NativeNode()
 }
 ```
 
 ## 结构
 
-- `ui.DateField.Root`
-- `ui.DateField.Segment`
+- `dateField.Root`
+- `dateField.Segment`
 
 ## 主要属性
 

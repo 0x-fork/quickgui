@@ -54,13 +54,9 @@ func content(kind, description string, close func()) *ui.Element {
 		).Display("flex").FlexDirection("column").Gap(6),
 		ui.View().Children(
 
-			ui.Button(
-				ui.Text("Count: ", count()),
+			ui.Button().Style(actionStyle).Child(ui.Text("Count: ", count())).Style(buttonStyle).OnClick(func() { setCount(count() + 1) }),
 
-				actionStyle,
-			).Style(buttonStyle).OnClick(func() { setCount(count() + 1) }),
-
-			ui.Button("Close", actionStyle).Style(buttonStyle).OnClick(close),
+			ui.Button().Style(actionStyle).Child("Close").Style(buttonStyle).OnClick(close),
 		).Display("flex").Gap(10),
 	).Display("flex").FlexDirection("column").Width("100%").Height("100%").Gap(14).Padding(20).BackgroundColor("#151a23").TextColor("#f5f7fb").BorderColor("#3b4558").BorderWidth(1).BorderRadius(12)
 }

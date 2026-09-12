@@ -43,10 +43,7 @@ func workspace(m *model) *ui.Element {
 								ui.Text(
 									"Open a tab to start working",
 								).TextColor(m.color(func(t theme) string { return t.TextTertiary })).FontSize(13.5),
-								ui.Button(
-									"New Tab",
-									m.buttonStyle(false),
-								).OnClick(func() { m.newTerminal(m.activeSpace()) }),
+								ui.Button().Style(m.buttonStyle(false)).Child("New Tab").OnClick(func() { m.newTerminal(m.activeSpace()) }),
 							).Display("flex").Flex(1).MinWidth(0).MinHeight(0).FlexDirection("column").AlignItems("center").JustifyContent("center").Gap(9).BackgroundColor(m.color(func(t theme) string { return t.Terminal }))
 						},
 					),
@@ -74,10 +71,7 @@ func workspace(m *model) *ui.Element {
 							m.Error.Read() == "" && m.activePane() != nil,
 
 							func() *ui.Element {
-								return ui.Button(
-									"Restart",
-									m.buttonStyle(false),
-								).Height(22).FontSize(10.5).OnClick(func() {
+								return ui.Button().Style(m.buttonStyle(false)).Child("Restart").Height(22).FontSize(10.5).OnClick(func() {
 									if p := m.activePane(); p != nil {
 										m.restartPane(p)
 									}
@@ -107,13 +101,10 @@ func tabBar(m *model) *ui.Element {
 					active := func() bool { return tab().ID == m.ActiveTabID.Read() }
 					return ui.View().Children(
 
-						ui.Button(
+						ui.Button().Child(ui.Text(
 
-							ui.Text(
-
-								tabTitle(tab(), m.Panes.Read()),
-							).FontSize(12.5).FontWeight(560).LineClamp(1).TextOverflow("ellipsis"),
-						).AriaLabel("Select terminal tab").Display("flex").Width("100%").MinWidth(0).Height(28).AlignItems("center").PaddingLeft(10).PaddingRight(choose(active(), 30, 10)).BackgroundColor("transparent").TextColor(choose(active(), m.theme().Text, m.theme().TextTertiary)).Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
+							tabTitle(tab(), m.Panes.Read()),
+						).FontSize(12.5).FontWeight(560).LineClamp(1).TextOverflow("ellipsis")).AriaLabel("Select terminal tab").Display("flex").Width("100%").MinWidth(0).Height(28).AlignItems("center").PaddingLeft(10).PaddingRight(choose(active(), 30, 10)).BackgroundColor("transparent").TextColor(choose(active(), m.theme().Text, m.theme().TextTertiary)).Hover(func(s ui.StyleBuilder) ui.StyleBuilder {
 							return s.
 								BackgroundColor(func() string {
 									return choose(active(), m.theme().SelectedStrong, m.theme().Hover)
@@ -125,7 +116,7 @@ func tabBar(m *model) *ui.Element {
 						ui.Show(
 							active,
 							func() *ui.Element {
-								return iconButton(m, "Close tab", "close", 20, func() { m.closeTab(tab().ID) }, ui.Style().
+								return iconButton(m, "Close tab", "close", 20, func() { m.closeTab(tab().ID) }).Style(ui.Style().
 									Position("absolute").
 									Top(4).
 									Right(3))
@@ -139,8 +130,7 @@ func tabBar(m *model) *ui.Element {
 			iconButton(m, "New tab", "plus", 24, func() { m.newTerminal(m.activeSpace()) }),
 		).Display("flex").MinWidth(0).AlignItems("center").Gap(3).Overflow("hidden").AppRegion("no-drag"),
 		ui.View().Flex(1).AppRegion("drag"),
-		ui.Button(
-
+		ui.Button().Children(
 			icon("plus", 13, m.color(func(t theme) string { return t.TextSecondary })),
 			ui.Text("Agent"),
 		).AriaLabel("New agent").FocusOnPointer(ptr(false)).Display("flex").Height(24).FlexShrink(0).AlignItems("center").JustifyContent("center").Gap(5).PaddingLeft(9).PaddingRight(9).TextColor(m.color(func(t theme) string { return t.TextSecondary })).BackgroundColor("transparent").Hover(func(s ui.StyleBuilder) ui.StyleBuilder {

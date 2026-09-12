@@ -31,7 +31,7 @@ pub struct MenubarOpen;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct MenubarClose;
 
-/// Contextual bindings used by [`MenubarItem::key_part`].
+/// Contextual bindings used by [`MenubarItem::key_with`].
 ///
 /// Left and Right move between menus while the bar has focus, and they keep working while a menu is
 /// open because an open menu switches instead of closing — the desktop menubar convention. Down,
@@ -262,7 +262,7 @@ impl Menubar {
     }
 
     /// Decorate an application-owned menubar root without adding layout or appearance.
-    pub fn root_part(self, state: MenubarState, root: Element) -> Element {
+    pub fn root_with(self, state: MenubarState, root: Element) -> Element {
         let disabled = state.disabled || root.accessibility.disabled;
         let root = root
             .id(self.root_id)
@@ -277,6 +277,10 @@ impl Menubar {
             Some(open) => root.accessibility_active_descendant(self.item_id(open)),
             None => root.accessibility_active_descendant(self.item_id(state.focused)),
         }
+    }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(self, state: MenubarState) -> Element {
+        self.root_with(state, crate::div())
     }
 }
 
@@ -310,7 +314,7 @@ impl MenubarItem {
     ///
     /// Exactly one trigger carries the bar's Tab stop; the rest stay reachable only through the
     /// arrow keys, which is the roving pattern desktop menubars use.
-    pub fn item_part(self, item: Element) -> Element {
+    pub fn item_with(self, item: Element) -> Element {
         let disabled = self.state.disabled || item.accessibility.disabled;
         item.id(self.item_id())
             .accessibility_role(AccessibilityRole::MenuItem)
@@ -327,26 +331,38 @@ impl MenubarItem {
             .user_select_none()
             .disabled(disabled)
     }
+    /// Create the unstyled item part. Use [`Self::item_with`] to supply an existing element.
+    pub fn item(self) -> Element {
+        self.item_with(crate::div())
+    }
 
     /// Attach QuickGUI's typed menubar actions, click opening, and hover switching.
     ///
     /// Install [`menubar_key_bindings`] once on the application keymap. Compose the surface itself
     /// from [`crate::PopoverMenu`] anchored to [`Self::item_id`]; the menubar owns which menu
     /// is open, never the menu's own contents.
-    pub fn key_part<V: 'static>(
+    pub fn key_with<V: 'static>(
         self,
         cx: &mut ViewContext<'_, V>,
         item: Element,
         access: fn(&mut V) -> &mut MenubarState,
     ) -> Element {
-        self.key_part_with(cx, item, StateAccessor::from(access))
+        self.key_with_accessor(cx, item, StateAccessor::from(access))
+    }
+    /// Create the unstyled key part. Use [`Self::key_with`] to supply an existing element.
+    pub fn key<V: 'static>(
+        self,
+        cx: &mut ViewContext<'_, V>,
+        access: fn(&mut V) -> &mut MenubarState,
+    ) -> Element {
+        self.key_with(cx, crate::div(), access)
     }
 
     /// Attach the typed menubar actions against a per-instance state accessor.
     ///
     /// A host that renders many declared menubars through one view passes an accessor that
     /// captures which [`MenubarState`] this trigger belongs to.
-    pub fn key_part_with<V: 'static>(
+    pub fn key_with_accessor<V: 'static>(
         self,
         cx: &mut ViewContext<'_, V>,
         item: Element,
@@ -444,9 +460,9 @@ fn move_menubar_focus<V: 'static>(
 
 /// Create an unstyled semantic menubar root.
 ///
-/// This shorthand is equivalent to `Menubar::new(id).root_part(state, div())`.
+/// This shorthand is equivalent to `Menubar::new(id).root_with(state, div())`.
 pub fn menubar(id: impl Into<ElementId>, state: MenubarState) -> Element {
-    Menubar::new(id).root_part(state, div())
+    Menubar::new(id).root_with(state, div())
 }
 
 fn derived_menubar_id(parent: ElementId, tag: u64, index: u64) -> ElementId {
@@ -538,7 +554,7 @@ mod tests {
         state.open_menu_at(1);
         let bar = Menubar::new("menubar");
 
-        let root = bar.root_part(
+        let root = bar.root_with(
             state,
             div()
                 .h(28.0)
@@ -558,7 +574,7 @@ mod tests {
         let open = bar.item(state, 1).expect("a declared menu");
         assert!(open.is_open());
         assert!(open.is_focused());
-        let item = open.item_part(div().px(8.0).child(text("Edit")));
+        let item = open.item_with(div().px(8.0).child(text("Edit")));
         assert_eq!(item.accessibility.role, AccessibilityRole::MenuItem);
         assert_eq!(item.accessibility.expanded, Some(true));
         assert!(item.clickable);
@@ -569,7 +585,7 @@ mod tests {
         assert_eq!(item.children.len(), 1);
 
         let closed = bar.item(state, 2).expect("a declared menu");
-        let closed_item = closed.item_part(div());
+        let closed_item = closed.item_with(div());
         assert_eq!(closed_item.accessibility.expanded, Some(false));
         assert_eq!(
             closed_item.tab_index, -1,
@@ -615,16 +631,16 @@ mod tests {
         fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
             let bar = Menubar::new("menubar");
             let mut root = bar
-                .root_part(self.menubar, div().flex_row())
+                .root_with(self.menubar, div().flex_row())
                 .accessibility_label("Application menus");
             for index in 0..self.menubar.menu_count() {
                 let item = bar.item(self.menubar, index).expect("a declared menu");
-                let element = item.item_part(div().child(text(match index {
+                let element = item.item_with(div().child(text(match index {
                     0 => "File",
                     1 => "Edit",
                     _ => "View",
                 })));
-                root = root.child(item.key_part(cx, element, Self::menubar));
+                root = root.child(item.key_with(cx, element, Self::menubar));
             }
             root
         }

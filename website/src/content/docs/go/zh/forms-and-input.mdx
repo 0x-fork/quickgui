@@ -22,22 +22,14 @@ func InputExample() *ui.Element {
 ```go
 func FieldExample() *native.Node {
 	email, setEmail := ui.CreateSignal("")
-	return ui.Field.Root(
-		ui.FieldRootProps{
-			Required: true,
-			Filled:   func() bool { return email() != "" },
-		},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.Field.Label(ui.FieldLabelProps{}, "Email"),
-				ui.Field.Control(ui.FieldControlProps{InputPartProps: ui.InputPartProps{
-					Value:       email,
-					Placeholder: "you@example.com",
-					OnInput:     func(event *native.Event) { setEmail(event.Value) },
-				}}),
-				ui.Field.Description(ui.PartProps{}, "Used for receipts"),
-				ui.Field.Error(ui.PartProps{}, "Enter a valid email address")})
-		},
-	)
+	field1 := ui.NewField(ui.FieldRootProps{Required: true, Filled: func() bool {
+		return email() != ""
+	}})
+	return field1.Root().Children(func() *native.Node {
+		return ui.Fragment([]*native.Node{field1.Label(ui.FieldLabelProps{}).Children("Email").NativeNode(), field1.Control(ui.FieldControlProps{InputPartProps: ui.InputPartProps{Value: email, Placeholder: "you@example.com", OnInput: func(event *native.Event) {
+			setEmail(event.Value)
+		}}}).NativeNode(), field1.Description(ui.PartProps{}).Children("Used for receipts").NativeNode(), field1.Error(ui.PartProps{}).Children("Enter a valid email address").NativeNode()})
+	}).NativeNode()
 }
 ```
 
@@ -48,18 +40,21 @@ func FieldExample() *native.Node {
 ```go
 func CheckboxGroupExample() *native.Node {
 	values, setValues := ui.CreateSignal([]string{"email"})
-	return ui.CheckboxGroup.Root(
-		ui.CheckboxGroupProps{
-			AllValues:     []string{"email", "push"},
-			Value:         values,
-			OnValueChange: func(next []string, _ *native.Event) { setValues(next) },
-		},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.Checkbox.Root(ui.CheckboxProps{Parent: true}, "All notifications"),
-				ui.Checkbox.Root(ui.CheckboxProps{Value: "email"}, "Email"),
-				ui.Checkbox.Root(ui.CheckboxProps{Value: "push"}, "Push")})
-		},
-	)
+	checkboxGroup1 := ui.NewCheckboxGroup(ui.CheckboxGroupProps{AllValues: []string{"email", "push"}, Value: values, OnValueChange: func(next []string, _ *native.Event) {
+		setValues(next)
+	}})
+	return checkboxGroup1.Root().Children(func() *native.Node {
+		return ui.Fragment([]*native.Node{func() *native.Node {
+			checkbox2 := ui.NewCheckbox(ui.CheckboxProps{Parent: true})
+			return checkbox2.Root().Children("All notifications").NativeNode()
+		}(), func() *native.Node {
+			checkbox3 := ui.NewCheckbox(ui.CheckboxProps{Value: "email"})
+			return checkbox3.Root().Children("Email").NativeNode()
+		}(), func() *native.Node {
+			checkbox4 := ui.NewCheckbox(ui.CheckboxProps{Value: "push"})
+			return checkbox4.Root().Children("Push").NativeNode()
+		}()})
+	}).NativeNode()
 }
 ```
 
@@ -70,18 +65,14 @@ func CheckboxGroupExample() *native.Node {
 ```go
 func SelectExample() *native.Node {
 	value, setValue := ui.CreateSignal[*string](nil)
-	return ui.Select.Root(
-		ui.SelectRootProps{
-			PickerSourceProps: ui.PickerSourceProps{Items: func() []ui.OptionDeclaration {
-				return []ui.OptionDeclaration{{Value: "go", Label: "Go"}, {Value: "swift", Label: "Swift"}}
-			}},
-			Value:         value,
-			OnValueChange: func(next *string, _ *native.Event) { setValue(next) },
-		},
-		func() *native.Node {
-			return ui.Fragment([]*native.Node{ui.Select.Value(ui.PartProps{}), ui.Select.Icon(ui.PartProps{}, "▾")})
-		},
-	)
+	select1 := ui.NewSelect(ui.SelectRootProps{PickerSourceProps: ui.PickerSourceProps{Items: func() []ui.OptionDeclaration {
+		return []ui.OptionDeclaration{{Value: "go", Label: "Go"}, {Value: "swift", Label: "Swift"}}
+	}}, Value: value, OnValueChange: func(next *string, _ *native.Event) {
+		setValue(next)
+	}})
+	return select1.Root().Children(func() *native.Node {
+		return ui.Fragment([]*native.Node{select1.Value(ui.PartProps{}).NativeNode(), select1.Icon(ui.PartProps{}).Children("▾").NativeNode()})
+	}).NativeNode()
 }
 ```
 

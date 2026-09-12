@@ -19,21 +19,21 @@ func TestReadOnlySelectionControlsRefuseChanges(t *testing.T) {
 			if controlled {
 				props.Checked = func() CheckedState { return true }
 			}
-			return Checkbox.Root(props)
+			return (checkboxAPI{}).Root(props)
 		}},
 		{"switch", func(readOnly, controlled bool, part PartProps, change func(bool, *native.Event)) *native.Node {
 			props := SwitchProps{PartProps: part, ReadOnly: readOnly, DefaultChecked: true, OnCheckedChange: change}
 			if controlled {
 				props.Checked = func() bool { return true }
 			}
-			return Switch.Root(props)
+			return (switchAPI{}).Root(props)
 		}},
 		{"radio", func(readOnly, controlled bool, part PartProps, change func(bool, *native.Event)) *native.Node {
 			props := RadioProps{PartProps: part, ReadOnly: readOnly, OnCheckedChange: change}
 			if controlled {
 				props.Checked = func() bool { return false }
 			}
-			return Radio.Root(props)
+			return (radioAPI{}).Root(props)
 		}},
 		{"radio-group", func(readOnly, controlled bool, part PartProps, change func(bool, *native.Event)) *native.Node {
 			props := RadioGroupProps{
@@ -44,8 +44,8 @@ func TestReadOnlySelectionControlsRefuseChanges(t *testing.T) {
 				props.Value = func() *string { value := "first"; return &value }
 			}
 			var radio *native.Node
-			RadioGroup.Root(props, func() *native.Node {
-				radio = Radio.Root(RadioProps{PartProps: part, Value: "second"})
+			(radioGroupAPI{}).Root(props, func() *native.Node {
+				radio = (radioAPI{}).Root(RadioProps{PartProps: part, Value: "second"})
 				return radio
 			})
 			return radio

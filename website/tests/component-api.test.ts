@@ -33,11 +33,11 @@ test("each frontend reference uses real declarations, examples, and source targe
     }
 });
 
-test("compound props preserve callback types, inherited fields, and namespaces", () => {
+test("compound instances preserve callback types, inherited fields, and fluent parts", () => {
   const slider = getComponentApi("go", "ui", "slider").sections.find(
-    (section) => section.name === "Slider.Root",
+    (section) => section.name === "NewSlider",
   )!;
-  expect(slider.signature).toStartWith("ui.Slider.Root(");
+  expect(slider.signature).toStartWith("ui.NewSlider(");
   expect(slider.entries.find((entry) => entry.name === "OnValueChange")?.type).toBe(
     "func([]float64, *native.Event)",
   );
@@ -46,24 +46,11 @@ test("compound props preserve callback types, inherited fields, and namespaces",
   expect(terminal.signature).toStartWith("terminal.View(");
   expect(terminal.entries.some((entry) => entry.name === "Program")).toBe(true);
   const view = getComponentApi("typescript", "ui", "view").sections[0];
-  for (const name of [
-    "rounded-lg",
-    "flex-col",
-    "p-3",
-    "text-lg",
-    "bg-gradient",
-    "bg-image",
-    "border-radius",
-  ]) {
-    expect(view.entries.find((entry) => entry.name === name)?.source).toStartWith(
-      "packages/solid/src/style-helpers.generated.ts#L",
-    );
-  }
-  expect(view.entries.find((entry) => entry.name === "bg")?.source).toStartWith(
+  expect(view.entries.find((entry) => entry.name === "style")?.source).toStartWith(
     "packages/solid/src/index.ts#L",
   );
-  expect(view.entries.some((entry) => entry.name.startsWith("background"))).toBe(false);
-  expect(view.entries.some((entry) => entry.name === "rounded")).toBe(false);
+  for (const name of ["roundedLg", "flexCol", "p3", "textLg", "bg", "fontSize"])
+    expect(view.entries.some((entry) => entry.name === name)).toBe(false);
 });
 
 test("the browser catalog matches the Rust demo dispatcher", () => {

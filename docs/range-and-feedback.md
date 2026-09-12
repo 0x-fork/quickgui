@@ -42,39 +42,39 @@ let drag = cx.pointer_listener(slider.track_id(), |view: &mut Mixer, event, cx| 
 });
 let thumb = slider.thumb(0).expect("single thumb");
 
-slider.key_part(
+slider.key_with(
     cx,
     slider
-        .root_part(div())
+        .root()
         .accessibility_label("Volume")
         .child(
             slider
-                .track_part(div().w(TRACK.width).h(TRACK.height).on_pointer(drag))
-                .child(slider.range_part(div()))
-                .child(thumb.thumb_part(div())),
+                .track().w(TRACK.width).h(TRACK.height).on_pointer(drag)
+                .child(slider.range())
+                .child(thumb.thumb_with(div())),
         ),
     |view: &mut Mixer| &mut view.volume,
 )
 ```
 
-`root_part`, `track_part`, `range_part`, and `SliderThumb::thumb_part` are pure decorators; they add
-identity, roles, and interaction contracts and never add layout or paint. `key_part` attaches the
+`root_with`, `track_with`, `range_with`, and `SliderThumb::thumb_with` are pure decorators; they add
+identity, roles, and interaction contracts and never add layout or paint. `key_with` attaches the
 typed keyboard actions to whichever part owns focus.
 
 ### Parts
 
 | Base UI part | QuickGUI decorator | What QuickGUI owns |
 | --- | --- | --- |
-| Root | `root_part(element)` | the Slider or Group role, orientation, numeric value and bounds, and the label/value relationships |
-| Label | `label_part(element)` | the accessible-name target the root points at |
-| Value | `value_part(element)` | the accessible-description target the root points at |
-| Control | `control_part(element)` | a second, outer identity to attach the pointer capture to |
-| Track | `track_part(element)` | the pointer-capture identity, kept out of the accessible name |
-| Indicator | `indicator_part(element)` | the filled part of the track; the same decorator as `range_part` |
-| Thumb | `SliderThumb::thumb_part(element)` | per-thumb Slider role, neighbour-derived bounds, focus, and key context |
+| Root | `root_with(element)` | the Slider or Group role, orientation, numeric value and bounds, and the label/value relationships |
+| Label | `label_with(element)` | the accessible-name target the root points at |
+| Value | `value_with(element)` | the accessible-description target the root points at |
+| Control | `control_with(element)` | a second, outer identity to attach the pointer capture to |
+| Track | `track_with(element)` | the pointer-capture identity, kept out of the accessible name |
+| Indicator | `indicator_with(element)` | the filled part of the track; the same decorator as `range_with` |
+| Thumb | `SliderThumb::thumb_with(element)` | per-thumb Slider role, neighbour-derived bounds, focus, and key context |
 
-`control_part` is Base UI's separation of the region a press acts on from the track it paints. A
-caller that already attached the pointer listener to `track_part` keeps working unchanged.
+`control_with` is Base UI's separation of the region a press acts on from the track it paints. A
+caller that already attached the pointer listener to `track_with` keeps working unchanged.
 
 ### Commits, dragging, and formatting
 
@@ -91,7 +91,7 @@ moment a previewed value becomes final. `SliderState::is_dragging` is Base UI's 
 `Slider::display_value(&format)` and `SliderThumb::value_text(&format)` apply the shared
 [`ValueFormat`](#status-and-formatting) — Base UI's Root `format` and Thumb `getAriaValueText`. A
 range slider joins its thumbs with an en dash. QuickGUI never renders the result: put it inside
-`value_part`, or pass it to `Element::accessibility_value` on the thumb. The Thumb `getAriaLabel`
+`value_with`, or pass it to `Element::accessibility_value` on the thumb. The Thumb `getAriaLabel`
 equivalent is the ordinary `Element::accessibility_label` on the caller-owned thumb.
 
 ### Geometry
@@ -154,11 +154,11 @@ let edit = cx.input_listener(field.input_id(), |view: &mut Order, value, cx| {
     }
 });
 
-field.root_part(
+field.root_with(
     div()
-        .child(field.input_part(&self.quantity, text_input(self.quantity.text().clone()).on_input(edit)))
-        .child(field.decrement_part(&self.quantity, div().child("−")))
-        .child(field.increment_part(&self.quantity, div().child("+"))),
+        .child(field.input_with(&self.quantity, text_input(self.quantity.text().clone()).on_input(edit)))
+        .child(field.decrement_with(&self.quantity, div().child("−")))
+        .child(field.increment_with(&self.quantity, div().child("+"))),
 )
 ```
 
@@ -177,12 +177,12 @@ blocks Return submission for an invalid control, so commit from an ordinary key 
 
 | Base UI part | QuickGUI decorator | What QuickGUI owns |
 | --- | --- | --- |
-| Root | `root_part(element)` | the Group role and the identity every other part derives from |
-| Group | `group_part(element)` | one addressable unit around the steppers and the input |
-| Input | `input_part(state, element)` | the SpinButton role, numeric value and bounds, invalid, read-only, and required state |
-| Increment / Decrement | `increment_part(state, element)` / `decrement_part(state, element)` | button semantics outside the Tab sequence |
-| ScrubArea | `scrub_area_part(state, element)` | the pointer-capture identity, the axis cursor, drag exclusion, and selection suppression |
-| ScrubAreaCursor | `scrub_area_cursor_part(element)` | a stable identity for the caller-owned cursor shown while scrubbing |
+| Root | `root_with(element)` | the Group role and the identity every other part derives from |
+| Group | `group_with(element)` | one addressable unit around the steppers and the input |
+| Input | `input_with(state, element)` | the SpinButton role, numeric value and bounds, invalid, read-only, and required state |
+| Increment / Decrement | `increment_with(state, element)` / `decrement_with(state, element)` | button semantics outside the Tab sequence |
+| ScrubArea | `scrub_area_with(state, element)` | the pointer-capture identity, the axis cursor, drag exclusion, and selection suppression |
+| ScrubAreaCursor | `scrub_area_cursor_with(element)` | a stable identity for the caller-owned cursor shown while scrubbing |
 
 ### Modifiers, snapping, and read-only
 
@@ -257,17 +257,17 @@ let drag = cx.pointer_listener(handle.handle_id(), |view: &mut Workspace, event,
     }
 });
 
-splitter.root_part(
+splitter.root_with(
     div()
-        .child(sidebar.pane_part(div()))
-        .child(handle.key_part(cx, handle.handle_part(div().w(6.0).on_pointer(drag)), access))
-        .child(content.pane_part(div())),
+        .child(sidebar.pane_with(div()))
+        .child(handle.key_with(cx, handle.handle_with(div().w(6.0).on_pointer(drag)), access))
+        .child(content.pane_with(div())),
 )
 ```
 
 Pane sizes along the split axis are framework-owned structural geometry: without them the resize
 behavior would not exist. Every other layout and paint declaration is caller-owned, including the
-handle's thickness and hit area. `handle_part` applies the platform column or row resize cursor
+handle's thickness and hit area. `handle_with` applies the platform column or row resize cursor
 unless the caller sets `.cursor(...)` explicitly.
 
 Captured pointer motion stays anchored to the handle position and window coordinate recorded on
@@ -308,8 +308,8 @@ indicator are accessibility-hidden decoration.
 ```rust
 let download = Progress::new(3.0, 12.0).value_text("3 of 12 files");
 download
-    .root_part(div().accessibility_label("Download"))
-    .child(download.indicator_part(div().w(track * download.completion().unwrap_or(0.0))))
+    .root().accessibility_label("Download")
+    .child(download.indicator_with(div().w(track * download.completion().unwrap_or(0.0))))
 ```
 
 `Progress::indeterminate()` reports work whose completion is unknown: it projects the progress role
@@ -330,11 +330,11 @@ meter range is swapped, and values are clamped into range before they are retain
 
 | Base UI part | QuickGUI decorator | What QuickGUI owns |
 | --- | --- | --- |
-| Root | `root_part(element)` | the progress or meter role, exact numeric value and bounds, the accessible value, and the label/value relationships |
-| Track | `track_part(element)` | a stable identity, and keeping the fill out of the accessible name |
-| Indicator | `indicator_part(element)` | a stable identity, and keeping the fill out of the accessible name |
-| Label | `label_part(element)` | the accessible-name target the root points at |
-| Value | `value_part(element)` | the accessible-description target the root points at |
+| Root | `root_with(element)` | the progress or meter role, exact numeric value and bounds, the accessible value, and the label/value relationships |
+| Track | `track_with(element)` | a stable identity, and keeping the fill out of the accessible name |
+| Indicator | `indicator_with(element)` | a stable identity, and keeping the fill out of the accessible name |
+| Label | `label_with(element)` | the accessible-name target the root points at |
+| Value | `value_with(element)` | the accessible-description target the root points at |
 
 Declaring `.id(...)` gives the descriptor a stable identity, from which the label, value, track, and
 indicator identities are derived without allocation, and points the root's accessible name and
@@ -352,7 +352,7 @@ application can style a fill from one snapshot.
 `ValueFormat` is Base UI's `format` prop: a bounded formatter of `(value, maximum)`.
 `ValueFormat::percent()` and `ValueFormat::fraction()` cover the common shapes and
 `ValueFormat::new(...)` takes any closure. QuickGUI never renders the result: `display_value()`
-returns the text for a caller-owned `value_part`, and `accessible_value()` returns what assistive
+returns the text for a caller-owned `value_with`, and `accessible_value()` returns what assistive
 technology reads. An explicit `value_text(...)` — Base UI's `getAriaValueText` — wins over the
 formatter for assistive technology while the visible value part keeps the formatted string. `Meter`
 takes the same `format` and `value_text`.
@@ -401,53 +401,34 @@ alongside the existing root, track, and thumb parts, plus `MinStepsBetweenValues
 func VolumeSlider() *native.Node {
 	volume, setVolume := ui.CreateSignal([]float64{50})
 	thumb := 0
-	return ui.Slider.Root(
-		ui.SliderRootProps{
-			Value:            volume,
-			Min:              0,
-			Max:              100,
-			Step:             5,
-			Format:           "percent",
-			OnValueChange:    func(values []float64, _ *native.Event) { setVolume(values) },
-			OnValueCommitted: func(values []float64, _ *native.Event) { log.Print(values) },
-		},
-		func() *native.Node {
-			var children []*native.Node
-			slider := ui.UseSliderState()
-			children = append(children, ui.Slider.Label(ui.PartProps{}, "Volume"))
-			children = append(children, ui.Slider.Value(
-				ui.PartProps{},
-				func() string {
-					if value := slider().DisplayValue; value != nil {
-						return *value
-					}
-					return ""
-				},
-			))
-			children = append(children, ui.Slider.Control(
-				ui.PartProps{},
-				func() *native.Node {
-					return ui.Slider.Track(
-						ui.PartProps{},
-						func() *native.Node {
-							return ui.Slider.Indicator(ui.PartProps{})
-						},
-					)
-				},
-			))
-			children = append(children, ui.Slider.Thumb(ui.SliderThumbProps{
-				Index: &thumb,
-				PartProps: ui.PartProps{Style: ui.Style().
-					Opacity(func() float64 {
-						if slider().Dragging {
-							return 0.8
-						}
-						return 1
-					})},
-			}))
-			return ui.Fragment(children)
-		},
-	)
+	slider1 := ui.NewSlider(ui.SliderRootProps{Value: volume, Min: 0, Max: 100, Step: 5, Format: "percent", OnValueChange: func(values []float64, _ *native.Event) {
+		setVolume(values)
+	}, OnValueCommitted: func(values []float64, _ *native.Event) {
+		log.Print(values)
+	}})
+	return slider1.Root().Children(func() *native.Node {
+		var children []*native.Node
+		slider := ui.UseSliderState()
+		children = append(children, slider1.Label(ui.PartProps{}).Children("Volume").NativeNode())
+		children = append(children, slider1.Value(ui.PartProps{}).Children(func() string {
+			if value := slider().DisplayValue; value != nil {
+				return *value
+			}
+			return ""
+		}).NativeNode())
+		children = append(children, slider1.Control(ui.PartProps{}).Children(func() *native.Node {
+			return slider1.Track(ui.PartProps{}).Children(func() *native.Node {
+				return slider1.Indicator(ui.PartProps{}).NativeNode()
+			}).NativeNode()
+		}).NativeNode())
+		children = append(children, slider1.Thumb(ui.SliderThumbProps{Index: &thumb, PartProps: ui.PartProps{Style: ui.Style().Opacity(func() float64 {
+			if slider().Dragging {
+				return 0.8
+			}
+			return 1
+		})}}).NativeNode())
+		return ui.Fragment(children)
+	}).NativeNode()
 }
 ```
 

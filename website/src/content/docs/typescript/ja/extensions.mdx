@@ -17,7 +17,12 @@ Extension scaffolds use the shared extension ABI. A TypeScript consumer can use 
 ```tsx
 import { Button, type JSX } from "@quickgui/solid";
 export function PrimaryButton(props: JSX.NativeProps) {
-  return <Button bg="#2563eb" color="#ffffff" rounded-lg p-3 {...props} />;
+  return (
+    <Button
+      {...props}
+      style={[props.style, { bg: "#2563eb", color: "#ffffff", roundedLg: true, p3: true }]}
+    />
+  );
 }
 ```
 

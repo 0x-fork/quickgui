@@ -14,42 +14,30 @@ import (
 
 ```go
 func TableExample(rows []string) *native.Node {
-	return ui.Table.Root(
-		ui.TableRootProps{
-			Columns: func() []ui.TableColumnDeclaration {
-				return []ui.TableColumnDeclaration{{ID: "name", Label: "Name", Track: "1fr", Sortable: true}}
-			},
-			RowCount:     func() float64 { return float64(len(rows)) },
-			RowHeight:    26,
-			HeaderHeight: 28,
-			PartProps:    ui.PartProps{Style: ui.Style().Height(260).OverflowY("scroll")},
-		},
-		func() *native.Node {
-			var children []*native.Node
-			children = append(children, ui.Table.Header(ui.TableHeaderProps{Column: "name"}, "Name"))
-			for index, name := range rows {
-				children = append(children, ui.Table.Row(
-					ui.TableRowProps{Index: index},
-					func() *native.Node {
-						return ui.Table.Cell(
-							ui.TableCellProps{Column: "name"},
-							name,
-						)
-					},
-				))
-			}
-			return ui.Fragment(children)
-		},
-	)
+	table1 := ui.NewTable(ui.TableRootProps{Columns: func() []ui.TableColumnDeclaration {
+		return []ui.TableColumnDeclaration{{ID: "name", Label: "Name", Track: "1fr", Sortable: true}}
+	}, RowCount: func() float64 {
+		return float64(len(rows))
+	}, RowHeight: 26, HeaderHeight: 28, PartProps: ui.PartProps{Style: ui.Style().Height(260).OverflowY("scroll")}})
+	return table1.Root().Children(func() *native.Node {
+		var children []*native.Node
+		children = append(children, table1.Header(ui.TableHeaderProps{Column: "name"}).Children("Name").NativeNode())
+		for index, name := range rows {
+			children = append(children, table1.Row(ui.TableRowProps{Index: index}).Children(func() *native.Node {
+				return table1.Cell(ui.TableCellProps{Column: "name"}).Children(name).NativeNode()
+			}).NativeNode())
+		}
+		return ui.Fragment(children)
+	}).NativeNode()
 }
 ```
 
 ## 構成
 
-- `ui.Table.Root`
-- `ui.Table.Header`
-- `ui.Table.Row`
-- `ui.Table.Cell`
+- `table.Root`
+- `table.Header`
+- `table.Row`
+- `table.Cell`
 
 ## 主なプロパティ
 

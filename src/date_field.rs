@@ -43,7 +43,7 @@ pub struct DateFieldSegmentMinimum;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct DateFieldSegmentMaximum;
 
-/// Contextual bindings used by [`DateFieldSegment::key_part`].
+/// Contextual bindings used by [`DateFieldSegment::key_with`].
 ///
 /// Tab and Shift-Tab already move between segments because every segment is an ordinary focusable
 /// control; the arrow bindings add the desktop convention of moving inside one composite field.
@@ -51,7 +51,7 @@ pub fn date_field_key_bindings() -> [KeyBinding; 8] {
     segment_key_bindings(DATE_FIELD_KEY_CONTEXT)
 }
 
-/// Contextual bindings used by [`TimeFieldSegment::key_part`].
+/// Contextual bindings used by [`TimeFieldSegment::key_with`].
 ///
 /// These bind the same typed actions as [`date_field_key_bindings`] in the time field's own key
 /// context, so one application can install both without ambiguity.
@@ -1304,7 +1304,7 @@ impl DateField {
     ///
     /// The root is the group that owns the field's accessible name, its disabled state, its
     /// validity, and the active-descendant relationship to the segment being edited.
-    pub fn root_part(self, state: &DateFieldState, root: Element) -> Element {
+    pub fn root_with(self, state: &DateFieldState, root: Element) -> Element {
         let disabled = state.disabled || root.accessibility.disabled;
         root.id(self.root_id)
             .accessibility_role(AccessibilityRole::Group)
@@ -1314,6 +1314,10 @@ impl DateField {
             .cursor_default()
             .app_region_no_drag()
             .user_select_none()
+    }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(self, state: &DateFieldState) -> Element {
+        self.root_with(state, crate::div())
     }
 }
 
@@ -1339,7 +1343,7 @@ impl DateFieldSegment {
     /// The segment becomes a focusable spin button carrying its current numeric value, its live
     /// bounds, and the framework's default accessible name. Call `.accessibility_label(...)` after
     /// this decorator to replace that name with localized product text.
-    pub fn segment_part(self, state: &DateFieldState, element: Element) -> Element {
+    pub fn segment_with(self, state: &DateFieldState, element: Element) -> Element {
         let disabled = state.disabled || element.accessibility.disabled;
         let (minimum, maximum) = state.segment_bounds(self.segment);
         let mut element = element
@@ -1374,20 +1378,28 @@ impl DateFieldSegment {
     ///
     /// Install [`date_field_key_bindings`] once on the application keymap. Focusing the segment
     /// also makes it the edited segment, so typed digits always reach the segment the user sees.
-    pub fn key_part<V: 'static>(
+    pub fn key_with<V: 'static>(
         self,
         cx: &mut ViewContext<'_, V>,
         element: Element,
         access: fn(&mut V) -> &mut DateFieldState,
     ) -> Element {
-        self.key_part_with(cx, element, StateAccessor::from(access))
+        self.key_with_accessor(cx, element, StateAccessor::from(access))
+    }
+    /// Create the unstyled key part. Use [`Self::key_with`] to supply an existing element.
+    pub fn key<V: 'static>(
+        self,
+        cx: &mut ViewContext<'_, V>,
+        access: fn(&mut V) -> &mut DateFieldState,
+    ) -> Element {
+        self.key_with(cx, crate::div(), access)
     }
 
     /// Attach the typed segment actions against a per-instance state accessor.
     ///
     /// A host that renders many declared date fields through one view passes an accessor that
     /// captures which [`DateFieldState`] this segment belongs to.
-    pub fn key_part_with<V: 'static>(
+    pub fn key_with_accessor<V: 'static>(
         self,
         cx: &mut ViewContext<'_, V>,
         element: Element,
@@ -1537,7 +1549,7 @@ impl TimeField {
     }
 
     /// Decorate an application-owned root without adding layout or appearance.
-    pub fn root_part(self, state: &TimeFieldState, root: Element) -> Element {
+    pub fn root_with(self, state: &TimeFieldState, root: Element) -> Element {
         let disabled = state.disabled || root.accessibility.disabled;
         root.id(self.root_id)
             .accessibility_role(AccessibilityRole::Group)
@@ -1547,6 +1559,10 @@ impl TimeField {
             .cursor_default()
             .app_region_no_drag()
             .user_select_none()
+    }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(self, state: &TimeFieldState) -> Element {
+        self.root_with(state, crate::div())
     }
 }
 
@@ -1571,7 +1587,7 @@ impl TimeFieldSegment {
     ///
     /// The AM/PM segment is a spin button with two states rather than a numeric range, so it
     /// exposes its text through the accessible value instead of a value range.
-    pub fn segment_part(self, state: &TimeFieldState, element: Element) -> Element {
+    pub fn segment_with(self, state: &TimeFieldState, element: Element) -> Element {
         let disabled = state.disabled || element.accessibility.disabled;
         let (minimum, maximum) = state.segment_bounds(self.segment);
         let mut element = element
@@ -1606,20 +1622,28 @@ impl TimeFieldSegment {
     /// Attach QuickGUI's typed segment actions and typed entry.
     ///
     /// Install [`time_field_key_bindings`] once on the application keymap.
-    pub fn key_part<V: 'static>(
+    pub fn key_with<V: 'static>(
         self,
         cx: &mut ViewContext<'_, V>,
         element: Element,
         access: fn(&mut V) -> &mut TimeFieldState,
     ) -> Element {
-        self.key_part_with(cx, element, StateAccessor::from(access))
+        self.key_with_accessor(cx, element, StateAccessor::from(access))
+    }
+    /// Create the unstyled key part. Use [`Self::key_with`] to supply an existing element.
+    pub fn key<V: 'static>(
+        self,
+        cx: &mut ViewContext<'_, V>,
+        access: fn(&mut V) -> &mut TimeFieldState,
+    ) -> Element {
+        self.key_with(cx, crate::div(), access)
     }
 
     /// Attach the typed segment actions against a per-instance state accessor.
     ///
     /// A host that renders many declared time fields through one view passes an accessor that
     /// captures which [`TimeFieldState`] this segment belongs to.
-    pub fn key_part_with<V: 'static>(
+    pub fn key_with_accessor<V: 'static>(
         self,
         cx: &mut ViewContext<'_, V>,
         element: Element,
@@ -1737,16 +1761,16 @@ impl TimeFieldSegment {
 
 /// Create an unstyled empty date-field root.
 ///
-/// This shorthand is equivalent to `DateField::new(id).root_part(state, div())`.
+/// This shorthand is equivalent to `DateField::new(id).root_with(state, div())`.
 pub fn date_field(id: impl Into<ElementId>, state: &DateFieldState) -> Element {
-    DateField::new(id).root_part(state, div())
+    DateField::new(id).root_with(state, div())
 }
 
 /// Create an unstyled empty time-field root.
 ///
-/// This shorthand is equivalent to `TimeField::new(id).root_part(state, div())`.
+/// This shorthand is equivalent to `TimeField::new(id).root_with(state, div())`.
 pub fn time_field(id: impl Into<ElementId>, state: &TimeFieldState) -> Element {
-    TimeField::new(id).root_part(state, div())
+    TimeField::new(id).root_with(state, div())
 }
 
 fn derived_segment_id(parent: ElementId, tag: u64, segment: u64) -> ElementId {
@@ -2042,7 +2066,7 @@ mod tests {
     fn parts_add_exact_semantics_without_layout_or_appearance() {
         let state = DateFieldState::from_date(CivilDate::new(2026, 2, 3).unwrap());
         let field = DateField::new("due");
-        let root = field.root_part(
+        let root = field.root_with(
             &state,
             div()
                 .w(240.0)
@@ -2060,7 +2084,7 @@ mod tests {
 
         let month = field
             .segment(DateSegment::Month)
-            .segment_part(&state, div().child(text("02")));
+            .segment_with(&state, div().child(text("02")));
         assert_eq!(month.accessibility.role, AccessibilityRole::SpinButton);
         assert_eq!(month.accessibility.label.as_deref(), Some("Month"));
         assert_eq!(month.accessibility.value.as_deref(), Some("02"));
@@ -2079,7 +2103,7 @@ mod tests {
         let empty = DateFieldState::new();
         let year = DateField::new("due")
             .segment(DateSegment::Year)
-            .segment_part(&empty, div());
+            .segment_with(&empty, div());
         let range = year
             .accessibility
             .value_range
@@ -2091,14 +2115,14 @@ mod tests {
 
         let mut partial = DateFieldState::new();
         assert!(partial.type_digit(2));
-        let invalid_root = DateField::new("due").root_part(&partial, div());
+        let invalid_root = DateField::new("due").root_with(&partial, div());
         assert!(invalid_root.accessibility.invalid);
 
         let time_state = TimeFieldState::from_time(CivilTime::new(9, 5, 0).unwrap()).hour12(true);
         let time = TimeField::new("start");
         let period = time
             .segment(TimeSegment::Period)
-            .segment_part(&time_state, div());
+            .segment_with(&time_state, div());
         assert_eq!(period.accessibility.role, AccessibilityRole::SpinButton);
         assert_eq!(period.accessibility.value.as_deref(), Some("AM"));
         assert!(
@@ -2152,25 +2176,25 @@ mod tests {
     impl View for FieldsView {
         fn render(&mut self, cx: &mut ViewContext<'_, Self>) -> impl IntoElement {
             let date = DateField::new("due");
-            let mut date_root = date.root_part(&self.due, div()).accessibility_label("Due");
+            let mut date_root = date.root_with(&self.due, div()).accessibility_label("Due");
             for segment in self.due.segment_order().segments() {
                 let part = date.segment(segment);
                 let element =
-                    part.segment_part(&self.due, div().child(text(self.due.segment_text(segment))));
-                date_root = date_root.child(part.key_part(cx, element, Self::due));
+                    part.segment_with(&self.due, div().child(text(self.due.segment_text(segment))));
+                date_root = date_root.child(part.key_with(cx, element, Self::due));
             }
 
             let time = TimeField::new("start");
             let mut time_root = time
-                .root_part(&self.start, div())
+                .root_with(&self.start, div())
                 .accessibility_label("Start");
             for segment in self.start.segments() {
                 let part = time.segment(segment);
-                let element = part.segment_part(
+                let element = part.segment_with(
                     &self.start,
                     div().child(text(self.start.segment_text(segment))),
                 );
-                time_root = time_root.child(part.key_part(cx, element, Self::start));
+                time_root = time_root.child(part.key_with(cx, element, Self::start));
             }
 
             div().child(date_root).child(time_root)

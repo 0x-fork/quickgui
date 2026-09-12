@@ -25,7 +25,7 @@
     window.addEventListener('unhandledrejection', event => fail(event.reason));
     try {
       if (!navigator.gpu) throw new Error('WebGPU is unavailable');
-      const {default:init, start} = await import('./747a862fc24f/quickgui.js');
+      const {default:init, start} = await import('./a5ad635b18eb/quickgui.js');
       await init();
       const canvas=document.querySelector('#demo');
       const component=new URLSearchParams(location.search).get('component') || 'button';

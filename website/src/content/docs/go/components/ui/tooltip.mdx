@@ -14,38 +14,26 @@ import (
 
 ```go
 func TooltipExample() *native.Node {
-	return ui.Tooltip.Provider(
-		ui.TooltipProviderProps{Delay: 500},
-		func() *native.Node {
-			return ui.Tooltip.Root(
-				ui.TooltipRootProps{Side: "top"},
-				func() *native.Node {
-					return ui.Fragment([]*native.Node{ui.Tooltip.Trigger(ui.TooltipTriggerProps{}, "Hover me"),
-						ui.Tooltip.Positioner(
-							ui.TooltipPositionerProps{},
-							func() *native.Node {
-								return ui.Tooltip.Popup(
-									ui.PartProps{},
-									"Helpful information",
-								)
-							},
-						)})
-				},
-			)
-		},
-	)
+	return ui.NewTooltipProvider(ui.TooltipProviderProps{Delay: 500}).Root().Child(func() *native.Node {
+		tooltip1 := ui.NewTooltip(ui.TooltipRootProps{Side: "top"})
+		return tooltip1.Root().Children(func() *native.Node {
+			return ui.Fragment([]*native.Node{tooltip1.Trigger(ui.TooltipTriggerProps{}).Children("Hover me").NativeNode(), tooltip1.Positioner(ui.TooltipPositionerProps{}).Children(func() *native.Node {
+				return tooltip1.Popup(ui.PartProps{}).Children("Helpful information").NativeNode()
+			}).NativeNode()})
+		}).NativeNode()
+	}).NativeNode()
 }
 ```
 
 ## Anatomy
 
-- `ui.Tooltip.Provider`
-- `ui.Tooltip.Root`
-- `ui.Tooltip.Trigger`
-- `ui.Tooltip.Portal`
-- `ui.Tooltip.Positioner`
-- `ui.Tooltip.Popup`
-- `ui.Tooltip.Arrow`
+- `tooltip.Provider`
+- `tooltip.Root`
+- `tooltip.Trigger`
+- `tooltip.Portal`
+- `tooltip.Positioner`
+- `tooltip.Popup`
+- `tooltip.Arrow`
 
 ## Key props
 

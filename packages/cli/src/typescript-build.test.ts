@@ -118,3 +118,21 @@ test("the packaged JSX compiler resolves the reactive Solid client build", async
   expect(code).toContain("dist/solid.js");
   expect(code).not.toContain("react/jsx-runtime");
 });
+
+test("the JSX compiler supplies imports for a bare intrinsic div and span in development and production", async () => {
+  const root = resolve(import.meta.dir, "../../solid");
+  const entry = join(root, "test/fixtures/intrinsic-div.tsx");
+  expect(readFileSync(entry, "utf8")).not.toMatch(/^import\s/m);
+  for (const development of [true, false]) {
+    const result = await Bun.build({
+      entrypoints: [entry],
+      target: "bun",
+      plugins: [quickguiSolidPlugin({ projectRoot: root, development })],
+    });
+    expect(result.success).toBe(true);
+    const code = await result.outputs[0]!.text();
+    expect(code).toContain("some ");
+    expect(code).not.toContain("document.createElement");
+    expect(code).not.toContain("react/jsx-runtime");
+  }
+});

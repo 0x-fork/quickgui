@@ -229,33 +229,45 @@ impl Field {
     }
 
     /// Decorate an application-owned structural root without adding role or appearance.
-    pub fn root_part(&self, root: Element) -> Element {
+    pub fn root_with(&self, root: Element) -> Element {
         root.id(self.root_id())
+    }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(&self) -> Element {
+        self.root_with(crate::div())
     }
 
     /// Decorate a visible label and give it native label-to-control activation.
     ///
-    /// Use [`Self::passive_label_part`] for button-like controls whose label should name but not
+    /// Use [`Self::passive_label_with`] for button-like controls whose label should name but not
     /// activate them.
-    pub fn label_part(&self, label: Element) -> Element {
-        let label = self.passive_label_part(label);
+    pub fn label_with(&self, label: Element) -> Element {
+        let label = self.passive_label_with(label);
         if self.state.disabled {
             label.disabled(true)
         } else {
             label.activate_target_on_click(self.control_id)
         }
     }
+    /// Create the unstyled label part. Use [`Self::label_with`] to supply an existing element.
+    pub fn label(&self) -> Element {
+        self.label_with(crate::div())
+    }
 
     /// Decorate a label relationship without forwarding pointer activation to the control.
-    pub fn passive_label_part(&self, label: Element) -> Element {
+    pub fn passive_label_with(&self, label: Element) -> Element {
         label
             .id(self.label_id())
             .accessibility_role(AccessibilityRole::Label)
             .app_region_no_drag()
     }
+    /// Create the unstyled passive label part. Use [`Self::passive_label_with`] to supply an existing element.
+    pub fn passive_label(&self) -> Element {
+        self.passive_label_with(crate::div())
+    }
 
     /// Decorate the application-owned control with field state and mounted relationships.
-    pub fn control_part(&self, control: Element) -> Element {
+    pub fn control_with(&self, control: Element) -> Element {
         let disabled = control.accessibility.disabled || self.state.disabled;
         let required = control.accessibility.required || self.state.required;
         let mut control = control
@@ -276,19 +288,27 @@ impl Field {
         }
         control
     }
+    /// Create the unstyled control part. Use [`Self::control_with`] to supply an existing element.
+    pub fn control(&self) -> Element {
+        self.control_with(crate::div())
+    }
 
     /// Decorate the caller-owned wrapper around one label/control/description row.
     ///
     /// Base UI's Field.Item groups the parts of a single field inside a larger fieldset so the row
     /// can be styled and laid out as one unit. QuickGUI supplies the stable identity and propagates
     /// the field's disabled state; layout and appearance stay application-owned.
-    pub fn item_part(&self, item: Element) -> Element {
+    pub fn item_with(&self, item: Element) -> Element {
         let item = item.id(self.item_id()).app_region_no_drag();
         if self.state.disabled {
             item.disabled(true)
         } else {
             item
         }
+    }
+    /// Create the unstyled item part. Use [`Self::item_with`] to supply an existing element.
+    pub fn item(&self) -> Element {
+        self.item_with(crate::div())
     }
 
     /// Decorate a caller-owned part that is shown only for a chosen validity, Base UI's
@@ -297,34 +317,46 @@ impl Field {
     /// `visible` is the application's own predicate over [`Self::state`] — "invalid and touched",
     /// "valid and dirty", whatever the product means. QuickGUI removes the part from layout, paint,
     /// input, and the accessibility tree when the predicate is false, exactly as
-    /// [`Self::error_part`] does, so an unmatched validity costs nothing.
-    pub fn validity_part(&self, visible: bool, validity: Element) -> Element {
+    /// [`Self::error_with`] does, so an unmatched validity costs nothing.
+    pub fn validity_with(&self, visible: bool, validity: Element) -> Element {
         validity
             .id(self.validity_id())
             .accessibility_role(AccessibilityRole::Label)
             .when(!visible, Element::hidden)
     }
+    /// Create the unstyled validity part. Use [`Self::validity_with`] to supply an existing element.
+    pub fn validity(&self, visible: bool) -> Element {
+        self.validity_with(visible, crate::div())
+    }
 
     /// Decorate visible supplementary help for the control.
-    pub fn description_part(&self, description: Element) -> Element {
+    pub fn description_with(&self, description: Element) -> Element {
         description
             .id(self.description_id())
             .accessibility_role(AccessibilityRole::Label)
     }
+    /// Create the unstyled description part. Use [`Self::description_with`] to supply an existing element.
+    pub fn description(&self) -> Element {
+        self.description_with(crate::div())
+    }
 
     /// Decorate a visible error and remove it from layout while the controlled field is valid.
-    pub fn error_part(&self, error: Element) -> Element {
+    pub fn error_with(&self, error: Element) -> Element {
         error
             .id(self.error_id())
             .accessibility_role(AccessibilityRole::Label)
             .when(!self.state.invalid, Element::hidden)
+    }
+    /// Create the unstyled error part. Use [`Self::error_with`] to supply an existing element.
+    pub fn error(&self) -> Element {
+        self.error_with(crate::div())
     }
 }
 
 /// Controlled, unstyled group semantics for related fields.
 ///
 /// Use [`Self::field`] to propagate disabled state into each nested field without a registry or
-/// inherited runtime context. Direct custom controls can use [`Self::control_part`].
+/// inherited runtime context. Direct custom controls can use [`Self::control_with`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[must_use = "a Fieldset descriptor has no effect until its parts are mounted"]
 pub struct Fieldset {
@@ -367,33 +399,49 @@ impl Fieldset {
     }
 
     /// Decorate an application-owned group root with legend and description relationships.
-    pub fn root_part(self, root: Element) -> Element {
+    pub fn root_with(self, root: Element) -> Element {
         root.id(self.id)
             .accessibility_role(AccessibilityRole::Group)
             .accessibility_labelled_by(self.legend_id())
             .accessibility_described_by(self.description_id())
             .disabled(self.disabled)
     }
+    /// Create the unstyled root part. Use [`Self::root_with`] to supply an existing element.
+    pub fn root(self) -> Element {
+        self.root_with(crate::div())
+    }
 
-    pub fn legend_part(self, legend: Element) -> Element {
+    pub fn legend_with(self, legend: Element) -> Element {
         legend
             .id(self.legend_id())
             .accessibility_role(AccessibilityRole::Label)
     }
+    /// Create the unstyled legend part. Use [`Self::legend_with`] to supply an existing element.
+    pub fn legend(self) -> Element {
+        self.legend_with(crate::div())
+    }
 
-    pub fn description_part(self, description: Element) -> Element {
+    pub fn description_with(self, description: Element) -> Element {
         description
             .id(self.description_id())
             .accessibility_role(AccessibilityRole::Label)
     }
+    /// Create the unstyled description part. Use [`Self::description_with`] to supply an existing element.
+    pub fn description(self) -> Element {
+        self.description_with(crate::div())
+    }
 
     /// Apply fieldset disabled state to an application-owned direct control.
-    pub fn control_part(self, control: Element) -> Element {
+    pub fn control_with(self, control: Element) -> Element {
         if self.disabled {
             control.disabled(true)
         } else {
             control
         }
+    }
+    /// Create the unstyled control part. Use [`Self::control_with`] to supply an existing element.
+    pub fn control(self) -> Element {
+        self.control_with(crate::div())
     }
 }
 
@@ -441,18 +489,18 @@ mod tests {
             .filled(false)
             .validation_message("Name is required");
         assert!(!field.state().is_valid());
-        let root = field.root_part(div().w(321.0).bg(Color::rgb8(1, 2, 3)));
+        let root = field.root_with(div().w(321.0).bg(Color::rgb8(1, 2, 3)));
         assert_eq!(root.explicit_id, Some(field.root_id()));
         assert_eq!(root.visual.background, Some(Color::rgb8(1, 2, 3)));
 
-        let label = field.label_part(text("Name").text_lg());
+        let label = field.label_with(text("Name").text_lg());
         assert_eq!(label.explicit_id, Some(field.label_id()));
         assert_eq!(label.accessibility.role, AccessibilityRole::Label);
         assert_eq!(label.activation_target, Some(field.control_id()));
         assert!(label.clickable);
         assert!(!label.focusable);
 
-        let control = field.control_part(text_input("").border(3.0, Color::rgb8(4, 5, 6)));
+        let control = field.control_with(text_input("").border(3.0, Color::rgb8(4, 5, 6)));
         assert_eq!(control.explicit_id, Some(field.control_id()));
         assert!(control.accessibility.required);
         assert!(control.accessibility.invalid);
@@ -476,13 +524,13 @@ mod tests {
 
         assert!(
             !field
-                .description_part(text("Public profile"))
+                .description_with(text("Public profile"))
                 .is_display_none()
         );
-        assert!(!field.error_part(text("Required")).is_display_none());
+        assert!(!field.error_with(text("Required")).is_display_none());
         assert!(
             Field::new("valid")
-                .error_part(text("Not mounted"))
+                .error_with(text("Not mounted"))
                 .is_display_none()
         );
     }
@@ -533,16 +581,16 @@ mod tests {
             let disabled = Fieldset::new("disabled-group").disabled(true);
             let blocked = disabled.field("blocked");
             div()
-                .child(name.label_part(text("Name")))
-                .child(name.control_part(text_input(self.value.clone()).on_input(edit)))
-                .child(name.description_part(text("Visible publicly")))
-                .child(name.error_part(text("Name is required")))
-                .child(agree.label_part(text("Agree")))
-                .child(agree.control_part(checkbox(self.checked).on_click(toggle)))
-                .child(disabled.root_part(div()).children([
-                    disabled.legend_part(text("Disabled group")),
-                    blocked.label_part(text("Blocked")),
-                    blocked.control_part(text_input("")),
+                .child(name.label_with(text("Name")))
+                .child(name.control_with(text_input(self.value.clone()).on_input(edit)))
+                .child(name.description_with(text("Visible publicly")))
+                .child(name.error_with(text("Name is required")))
+                .child(agree.label_with(text("Agree")))
+                .child(agree.control_with(checkbox(self.checked).on_click(toggle)))
+                .child(disabled.root_with(div()).children([
+                    disabled.legend_with(text("Disabled group")),
+                    blocked.label_with(text("Blocked")),
+                    blocked.control_with(text_input("")),
                 ]))
         }
     }
@@ -594,7 +642,7 @@ mod tests {
     #[test]
     fn fieldset_wires_group_semantics_without_paint() {
         let fieldset = Fieldset::new("billing").disabled(true);
-        let root = fieldset.root_part(div().bg(Color::rgb8(9, 8, 7)));
+        let root = fieldset.root_with(div().bg(Color::rgb8(9, 8, 7)));
         assert_eq!(root.accessibility.role, AccessibilityRole::Group);
         assert!(root.accessibility.disabled);
         assert_eq!(
@@ -607,7 +655,7 @@ mod tests {
         );
         assert_eq!(root.visual.background, Some(Color::rgb8(9, 8, 7)));
         assert!(fieldset.field("company").state().disabled);
-        assert!(fieldset.control_part(text_input("")).accessibility.disabled);
+        assert!(fieldset.control_with(text_input("")).accessibility.disabled);
     }
 
     #[test]
@@ -686,7 +734,7 @@ mod tests {
             assert!(!ids[..index].contains(id));
         }
 
-        let item = field.item_part(div().bg(Color::rgb8(1, 2, 3)));
+        let item = field.item_with(div().bg(Color::rgb8(1, 2, 3)));
         assert_eq!(item.explicit_id, Some(field.item_id()));
         assert_eq!(item.visual.background, Some(Color::rgb8(1, 2, 3)));
         assert!(!item.accessibility.disabled);
@@ -694,17 +742,17 @@ mod tests {
         assert!(
             Field::new("email")
                 .disabled(true)
-                .item_part(div())
+                .item_with(div())
                 .accessibility
                 .disabled
         );
 
         // The application supplies the predicate; QuickGUI only removes the unmatched part.
-        let shown = field.validity_part(field.state().invalid && field.state().touched, div());
+        let shown = field.validity_with(field.state().invalid && field.state().touched, div());
         assert_eq!(shown.explicit_id, Some(field.validity_id()));
         assert_eq!(shown.accessibility.role, AccessibilityRole::Label);
         assert!(!shown.is_display_none());
-        let hidden = field.validity_part(false, div());
+        let hidden = field.validity_with(false, div());
         assert!(hidden.is_display_none());
         assert_eq!(hidden.visual.background, None);
     }
