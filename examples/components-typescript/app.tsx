@@ -180,14 +180,14 @@ const controlStyle = () =>
     paddingLeft: 12,
     paddingRight: 12,
     borderRadius: 8,
-    backgroundColor: p().control,
+    bg: p().control,
     borderColor: p().border,
     borderWidth: 1,
     color: p().ink,
     fontSize: 13,
     cursor: "default",
     userSelect: "none",
-    hover: { backgroundColor: p().controlHover },
+    hover: { bg: p().controlHover },
     focus: { outline: `2px solid ${p().accent}` },
     outlineOffset: 2,
   }) as const;
@@ -198,7 +198,7 @@ const inputStyle = () =>
     paddingLeft: 10,
     paddingRight: 10,
     borderRadius: 8,
-    backgroundColor: p().panelAlt,
+    bg: p().panelAlt,
     borderColor: p().border,
     borderWidth: 1,
     color: p().ink,
@@ -214,7 +214,7 @@ const popupStyle = () =>
     gap: 8,
     padding: 14,
     borderRadius: 12,
-    backgroundColor: p().popup,
+    bg: p().popup,
     borderColor: p().border,
     borderWidth: 1,
     boxShadow: `0 18px 40px ${appearance() === "dark" ? "#00000088" : "#0f172a2e"}`,
@@ -231,7 +231,7 @@ const menuRowStyle = () =>
     paddingRight: 10,
     height: 28,
     borderRadius: 6,
-    hover: { backgroundColor: p().selection },
+    hover: { bg: p().selection },
   }) as const;
 
 const pickerAppearance = (): PickerAppearance => ({
@@ -271,7 +271,7 @@ function Panel(props: { title: string; hint?: string; children?: unknown }) {
         flexDirection: "column",
         gap: 12,
         padding: 16,
-        backgroundColor: p().panel,
+        bg: p().panel,
         borderColor: p().border,
         borderWidth: 1,
         borderRadius: 12,
@@ -360,12 +360,12 @@ function Btn(props: { label: string; onClick: () => void; primary?: boolean; dis
       disabled={props.disabled === true}
       style={{
         ...controlStyle(),
-        backgroundColor: props.primary === true ? p().accent : p().control,
+        bg: props.primary === true ? p().accent : p().control,
         borderColor: props.primary === true ? p().accent : p().border,
         // A filled button darkens its own fill on hover instead of taking the neutral hover
         // background, which would put its light label on a light surface.
         hover: {
-          backgroundColor: props.primary === true ? p().accentHover : p().controlHover,
+          bg: props.primary === true ? p().accentHover : p().controlHover,
         },
         opacity: props.disabled === true ? 0.5 : 1,
       }}
@@ -430,7 +430,7 @@ function AccordionDemo() {
                 borderRadius: 10,
                 borderWidth: 1,
                 borderColor: p().border,
-                backgroundColor: p().panelAlt,
+                bg: p().panelAlt,
                 overflow: "hidden",
               }}
             >
@@ -448,7 +448,7 @@ function AccordionDemo() {
                     // The ring is drawn inside the header with the item's own corner radius, so
                     // it never lands on top of the rounded 1px border around the item.
                     borderRadius: 9,
-                    hover: { backgroundColor: p().controlHover },
+                    hover: { bg: p().controlHover },
                     focus: { outline: `2px solid ${p().accent}` },
                     outlineOffset: -2,
                   }}
@@ -504,7 +504,7 @@ function AlertDialogDemo() {
             justifyContent: "center",
           }}
         >
-          <AlertDialog.Backdrop style={{ ...overlayFill(), backgroundColor: p().backdrop }} />
+          <AlertDialog.Backdrop style={{ ...overlayFill(), bg: p().backdrop }} />
           <AlertDialog.Popup style={{ ...popupStyle(), width: 340 }}>
             <AlertDialog.Title style={{ fontSize: 15, fontWeight: 700, color: p().ink }}>
               Delete “electron-parity”?
@@ -519,9 +519,9 @@ function AlertDialogDemo() {
               <Button
                 style={{
                   ...controlStyle(),
-                  backgroundColor: p().danger,
+                  bg: p().danger,
                   borderColor: p().danger,
-                  hover: { backgroundColor: p().dangerHover },
+                  hover: { bg: p().dangerHover },
                 }}
                 onClick={() => {
                   setOutcome("deleted");
@@ -594,7 +594,7 @@ function AvatarDemo() {
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: p().selection,
+      bg: p().selection,
       borderColor: p().border,
       borderWidth: 1,
       overflow: "hidden",
@@ -741,9 +741,9 @@ function CalendarDemo() {
                       borderRadius: 7,
                       alignItems: "center",
                       justifyContent: "center",
-                      backgroundColor: date === day() ? p().accent : p().panelAlt,
+                      bg: date === day() ? p().accent : p().panelAlt,
                       hover: {
-                        backgroundColor: date === day() ? p().accent : p().controlHover,
+                        bg: date === day() ? p().accent : p().controlHover,
                       },
                       focus: { outline: `2px solid ${p().accent}` },
                       outlineOffset: 1,
@@ -793,7 +793,7 @@ function CheckboxDemo() {
       paddingLeft: 8,
       paddingRight: 10,
       borderRadius: 8,
-      hover: { backgroundColor: p().controlHover },
+      hover: { bg: p().controlHover },
       focus: { outline: `2px solid ${p().accent}` },
     }) as const;
 
@@ -806,7 +806,7 @@ function CheckboxDemo() {
       justifyContent: "center",
       borderWidth: 1,
       borderColor: checked === false ? p().border : p().accent,
-      backgroundColor: checked === false ? p().control : p().accent,
+      bg: checked === false ? p().control : p().accent,
     }) as const;
 
   return (
@@ -830,7 +830,7 @@ function CheckboxDemo() {
         <Muted text="Read-only: focusable, refuses changes" />
       </Checkbox.Root>
 
-      <Separator.Root style={{ height: 1, backgroundColor: p().border }} />
+      <Separator.Root style={{ height: 1, bg: p().border }} />
 
       <Checkbox.Root childrenChecked={kids()} style={box()}>
         <Checkbox.Indicator
@@ -879,7 +879,7 @@ function CheckboxGroupDemo() {
       paddingLeft: 8,
       paddingRight: 10,
       borderRadius: 8,
-      hover: { backgroundColor: p().controlHover },
+      hover: { bg: p().controlHover },
       focus: { outline: `2px solid ${p().accent}` },
     }) as const;
 
@@ -902,7 +902,7 @@ function CheckboxGroupDemo() {
               borderRadius: 5,
               borderWidth: 1,
               borderColor: p().accent,
-              backgroundColor: colors().length > 0 ? p().accent : p().control,
+              bg: colors().length > 0 ? p().accent : p().control,
             }}
           />
           <Label text="All colours" />
@@ -917,7 +917,7 @@ function CheckboxGroupDemo() {
                   borderRadius: 5,
                   borderWidth: 1,
                   borderColor: colors().includes(value) ? p().accent : p().border,
-                  backgroundColor: colors().includes(value) ? p().accent : p().control,
+                  bg: colors().includes(value) ? p().accent : p().control,
                 }}
               />
               <Label text={value} />
@@ -954,7 +954,7 @@ function CollapsibleDemo() {
           borderWidth: 1,
           borderColor: p().border,
           padding: 10,
-          backgroundColor: p().panelAlt,
+          bg: p().panelAlt,
         }}
       >
         <Collapsible.Trigger style={controlStyle()}>
@@ -982,7 +982,7 @@ function CollapsibleDemo() {
           borderWidth: 1,
           borderColor: p().border,
           padding: 10,
-          backgroundColor: p().panelAlt,
+          bg: p().panelAlt,
         }}
       >
         <Collapsible.Trigger style={controlStyle()}>
@@ -1079,7 +1079,7 @@ function ComboboxChipList() {
               paddingRight: 6,
               height: 22,
               borderRadius: 11,
-              backgroundColor: p().selection,
+              bg: p().selection,
             }}
           >
             <Text style={{ fontSize: 11, color: p().ink }}>{chip.label}</Text>
@@ -1149,7 +1149,7 @@ function ContextMenuDemo() {
       borderStyle: "dashed",
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: p().panelAlt,
+      bg: p().panelAlt,
     }) as const;
 
   return (
@@ -1294,7 +1294,7 @@ function DialogDemo() {
             justifyContent: "center",
           }}
         >
-          <Dialog.Backdrop style={{ ...overlayFill(), backgroundColor: p().backdrop }} />
+          <Dialog.Backdrop style={{ ...overlayFill(), bg: p().backdrop }} />
           <Dialog.Popup style={{ ...popupStyle(), width: 360 }}>
             <Dialog.Title style={{ fontSize: 15, fontWeight: 700, color: p().ink }}>
               Publish this build?
@@ -1367,7 +1367,7 @@ function DrawerDemo() {
           <Text style={{ fontSize: 12, color: p().ink }}>Open drawer</Text>
         </Drawer.Trigger>
         <Drawer.Portal style={overlayFill()}>
-          <Drawer.Backdrop style={{ ...overlayFill(), backgroundColor: p().backdrop }} />
+          <Drawer.Backdrop style={{ ...overlayFill(), bg: p().backdrop }} />
           <Drawer.Viewport
             style={{
               ...overlayFill(),
@@ -1385,7 +1385,7 @@ function DrawerDemo() {
                 width: "100%",
                 borderTopLeftRadius: 18,
                 borderTopRightRadius: 18,
-                backgroundColor: p().popup,
+                bg: p().popup,
                 borderColor: p().border,
                 borderWidth: 1,
                 transform: `translateY(${swipe().swipeOffset}px)`,
@@ -1397,7 +1397,7 @@ function DrawerDemo() {
                   height: 5,
                   borderRadius: 3,
                   alignSelf: "center",
-                  backgroundColor: swipe().swiping ? p().accent : p().border,
+                  bg: swipe().swiping ? p().accent : p().border,
                 }}
               />
               <Drawer.Title>
@@ -1507,7 +1507,7 @@ function FieldsetDemo() {
             height: 22,
             borderRadius: 11,
             padding: 2,
-            backgroundColor: saving() ? p().accent : p().track,
+            bg: saving() ? p().accent : p().track,
             focus: { outline: `2px solid ${p().accent}` },
           }}
         >
@@ -1516,7 +1516,7 @@ function FieldsetDemo() {
               width: 18,
               height: 18,
               borderRadius: 9,
-              backgroundColor: "#ffffff",
+              bg: "#ffffff",
               marginLeft: saving() ? 18 : 0,
             }}
           />
@@ -1533,7 +1533,7 @@ function FieldsetDemo() {
           borderRadius: 10,
           borderWidth: 1,
           borderColor: p().border,
-          backgroundColor: p().panelAlt,
+          bg: p().panelAlt,
           opacity: saving() ? 0.55 : 1,
         }}
       >
@@ -1612,7 +1612,7 @@ function FormDemo() {
           borderRadius: 10,
           borderWidth: 1,
           borderColor: p().border,
-          backgroundColor: p().panelAlt,
+          bg: p().panelAlt,
         }}
       >
         <Fieldset.Legend>
@@ -1667,7 +1667,7 @@ function FormDemo() {
                     paddingLeft: 8,
                     paddingRight: 10,
                     borderRadius: 8,
-                    hover: { backgroundColor: p().controlHover },
+                    hover: { bg: p().controlHover },
                     focus: { outline: `2px solid ${p().accent}` },
                   }}
                 >
@@ -1678,7 +1678,7 @@ function FormDemo() {
                       borderRadius: 7,
                       borderWidth: plan() === value ? 4 : 1,
                       borderColor: plan() === value ? p().accent : p().border,
-                      backgroundColor: p().control,
+                      bg: p().control,
                     }}
                   />
                   <Label text={value} />
@@ -1706,7 +1706,7 @@ function FormDemo() {
               borderRadius: 5,
               borderWidth: 1,
               borderColor: terms() ? p().accent : p().border,
-              backgroundColor: terms() ? p().accent : p().control,
+              bg: terms() ? p().accent : p().control,
             }}
           />
           <Label text="I accept the terms" />
@@ -1873,7 +1873,7 @@ function MenuDemo() {
             <Menu.Separator
               style={{
                 height: 1,
-                backgroundColor: p().border,
+                bg: p().border,
                 marginTop: 4,
                 marginBottom: 4,
               }}
@@ -1983,7 +1983,7 @@ function MenubarDemo() {
           gap: 2,
           padding: 4,
           borderRadius: 10,
-          backgroundColor: p().panelAlt,
+          bg: p().panelAlt,
           borderWidth: 1,
           borderColor: p().border,
         }}
@@ -2004,7 +2004,7 @@ function MenubarDemo() {
                   style={{
                     ...controlStyle(),
                     height: 26,
-                    backgroundColor: openMenu() === index() ? p().selection : "transparent",
+                    bg: openMenu() === index() ? p().selection : "transparent",
                     borderColor: "transparent",
                   }}
                 >
@@ -2012,7 +2012,7 @@ function MenubarDemo() {
                 </Menubar.Item>
               </PopoverMenu.Trigger>
               <PopoverMenu.Popup
-                style={{ backgroundColor: p().popup, borderRadius: 10, width: 220 }}
+                style={{ bg: p().popup, borderRadius: 10, width: 220 }}
               />
             </PopoverMenu.Root>
           )}
@@ -2073,7 +2073,7 @@ function MeterDemo() {
             width: GAUGE_WIDTH,
             height: 8,
             borderRadius: 4,
-            backgroundColor: p().track,
+            bg: p().track,
             overflow: "hidden",
           }}
         >
@@ -2082,7 +2082,7 @@ function MeterDemo() {
             style={{
               height: 8,
               borderRadius: 4,
-              backgroundColor: zone(),
+              bg: zone(),
               width: `${value()}%`,
             }}
           />
@@ -2124,7 +2124,7 @@ function MeterDemo() {
               width: GAUGE_WIDTH,
               height: 5,
               borderRadius: 3,
-              backgroundColor: p().track,
+              bg: p().track,
             }}
           >
             <Slider.Indicator
@@ -2132,7 +2132,7 @@ function MeterDemo() {
               style={{
                 height: 5,
                 borderRadius: 3,
-                backgroundColor: p().accent,
+                bg: p().accent,
                 width: `${value()}%`,
               }}
             />
@@ -2147,7 +2147,7 @@ function MeterDemo() {
               width: 14,
               height: 14,
               borderRadius: 7,
-              backgroundColor: p().accent,
+              bg: p().accent,
               focus: { outline: `2px solid ${p().accent}` },
               outlineOffset: 2,
             }}
@@ -2191,7 +2191,7 @@ function NavigationMenuDemo() {
                   style={{
                     ...controlStyle(),
                     opacity: item === "support" ? 0.5 : 1,
-                    backgroundColor: value() === item ? p().selection : p().control,
+                    bg: value() === item ? p().selection : p().control,
                   }}
                 >
                   <Text style={{ fontSize: 12, color: p().ink }}>{item}</Text>
@@ -2237,7 +2237,7 @@ function NumberFieldScrubCursor() {
         width: 12,
         height: 12,
         borderRadius: 6,
-        backgroundColor: field().scrubbing ? p().accent : p().border,
+        bg: field().scrubbing ? p().accent : p().border,
       }}
     />
   );
@@ -2409,9 +2409,9 @@ function PopoverDemo() {
           <Popover.Trigger
             style={{
               ...controlStyle(),
-              backgroundColor: p().accent,
+              bg: p().accent,
               borderColor: p().accent,
-              hover: { backgroundColor: p().accentHover },
+              hover: { bg: p().accentHover },
             }}
           >
             <Text style={{ fontSize: 12, color: p().onAccent }}>Account</Text>
@@ -2420,7 +2420,7 @@ function PopoverDemo() {
         </Row>
         <Popover.Positioner>
           <Popover.Popup style={{ ...popupStyle(), width: 240 }}>
-            <Popover.Arrow style={{ width: 10, height: 10, backgroundColor: p().popup }} />
+            <Popover.Arrow style={{ width: 10, height: 10, bg: p().popup }} />
             <Popover.Title>
               <Text style={{ fontSize: 13, fontWeight: 700, color: p().ink }}>Signed in</Text>
             </Popover.Title>
@@ -2531,7 +2531,7 @@ function ProgressDemo() {
             width: GAUGE_WIDTH,
             height: 8,
             borderRadius: 4,
-            backgroundColor: p().track,
+            bg: p().track,
             overflow: "hidden",
           }}
         >
@@ -2540,7 +2540,7 @@ function ProgressDemo() {
             style={{
               height: 8,
               borderRadius: 4,
-              backgroundColor: p().accent,
+              bg: p().accent,
               width: indeterminate() ? "35%" : `${Math.round((done() / total) * 100)}%`,
             }}
           />
@@ -2578,7 +2578,7 @@ function RadioDemo() {
       paddingLeft: 8,
       paddingRight: 12,
       borderRadius: 8,
-      hover: { backgroundColor: p().controlHover },
+      hover: { bg: p().controlHover },
       focus: { outline: `2px solid ${p().accent}` },
     }) as const;
 
@@ -2589,7 +2589,7 @@ function RadioDemo() {
       borderRadius: 8,
       borderWidth: on ? 4 : 1,
       borderColor: on ? p().accent : p().border,
-      backgroundColor: p().control,
+      bg: p().control,
     }) as const;
 
   return (
@@ -2613,7 +2613,7 @@ function RadioDemo() {
         </For>
       </RadioGroup.Root>
 
-      <Separator.Root style={{ height: 1, backgroundColor: p().border }} />
+      <Separator.Root style={{ height: 1, bg: p().border }} />
 
       <RadioGroup.Root
         value={locked()}
@@ -2652,7 +2652,7 @@ function ScrollAreaThumbBody() {
       style={{
         width: 8,
         borderRadius: 4,
-        backgroundColor: state().scrolling ? p().accent : p().border,
+        bg: state().scrolling ? p().accent : p().border,
       }}
     />
   );
@@ -2687,7 +2687,7 @@ function ScrollAreaDemo() {
           style={{
             width: viewport.width,
             height: viewport.height,
-            backgroundColor: p().panelAlt,
+            bg: p().panelAlt,
             borderRadius: 10,
             borderWidth: 1,
             borderColor: p().border,
@@ -2723,7 +2723,7 @@ function ScrollAreaDemo() {
           style={{
             width: 8,
             height: viewport.height,
-            backgroundColor: p().track,
+            bg: p().track,
             borderRadius: 4,
           }}
         >
@@ -2831,7 +2831,7 @@ function SeparatorDemo() {
         <Label text="Above the rule" />
         <Separator.Root
           orientation="horizontal"
-          style={{ height: 1, backgroundColor: p().border }}
+          style={{ height: 1, bg: p().border }}
         />
         <Label text="Below the rule" />
       </Col>
@@ -2839,12 +2839,12 @@ function SeparatorDemo() {
         <Muted text="Cut" />
         <Separator.Root
           orientation="vertical"
-          style={{ width: 1, height: 18, backgroundColor: p().border }}
+          style={{ width: 1, height: 18, bg: p().border }}
         />
         <Muted text="Copy" />
         <Separator.Root
           orientation="vertical"
-          style={{ width: 1, height: 18, backgroundColor: p().border }}
+          style={{ width: 1, height: 18, bg: p().border }}
         />
         <Muted text="Paste" />
       </Row>
@@ -2900,7 +2900,7 @@ function SliderDemo() {
       width: GAUGE_WIDTH,
       height: 4,
       borderRadius: 2,
-      backgroundColor: p().track,
+      bg: p().track,
       borderWidth: 1,
       borderColor: p().border,
     }) as const;
@@ -2910,7 +2910,7 @@ function SliderDemo() {
       borderRadius: 2,
       marginTop: -1,
       marginLeft: -1,
-      backgroundColor: p().accent,
+      bg: p().accent,
     }) as const;
   const thumb = (value: number) =>
     ({
@@ -2920,11 +2920,11 @@ function SliderDemo() {
       width: KNOB,
       height: KNOB,
       borderRadius: KNOB / 2,
-      backgroundColor: p().panel,
+      bg: p().panel,
       borderWidth: 1,
       borderColor: p().border,
       boxShadow: "0 1px 2px #0000003d",
-      active: { backgroundColor: p().controlHover },
+      active: { bg: p().controlHover },
       focus: { outline: `2px solid ${p().accent}` },
       outlineOffset: 2,
     }) as const;
@@ -3027,7 +3027,7 @@ function SplitterDemo() {
           borderWidth: 1,
           borderColor: p().border,
           overflow: "hidden",
-          backgroundColor: p().panelAlt,
+          bg: p().panelAlt,
         }}
       >
         <For each={[0, 1, 2]}>
@@ -3039,7 +3039,7 @@ function SplitterDemo() {
                   itemIndex={index - 1}
                   style={{
                     width: 6,
-                    backgroundColor: p().border,
+                    bg: p().border,
                     cursor: "col-resize",
                     focus: { outline: `2px solid ${p().accent}` },
                   }}
@@ -3083,7 +3083,7 @@ function SwitchDemo() {
       display: "flex",
       flexDirection: "row",
       alignItems: "center",
-      backgroundColor: on ? p().accent : p().track,
+      bg: on ? p().accent : p().track,
       focus: { outline: `2px solid ${p().accent}` },
       outlineOffset: 2,
     }) as const;
@@ -3093,7 +3093,7 @@ function SwitchDemo() {
       width: 20,
       height: 20,
       borderRadius: 10,
-      backgroundColor: "#ffffff",
+      bg: "#ffffff",
       marginLeft: on ? 20 : 0,
     }) as const;
 
@@ -3145,7 +3145,7 @@ function TabsDemo() {
   const tabStyle = (value: string) =>
     ({
       ...controlStyle(),
-      backgroundColor: tab() === value ? p().selection : "transparent",
+      bg: tab() === value ? p().selection : "transparent",
       borderColor: "transparent",
     }) as const;
 
@@ -3180,7 +3180,7 @@ function TabsDemo() {
           <Tabs.Tab value="limits" index={2} style={tabStyle("limits")}>
             <Text style={{ fontSize: 12, color: p().ink }}>Limits</Text>
           </Tabs.Tab>
-          <Tabs.Indicator placement="bottom" style={{ height: 2, backgroundColor: p().accent }} />
+          <Tabs.Indicator placement="bottom" style={{ height: 2, bg: p().accent }} />
         </Tabs.List>
         <TabsDirection />
         <Tabs.Panel value="overview">
@@ -3374,7 +3374,7 @@ function ToggleDemo() {
       width: 44,
       paddingLeft: 0,
       paddingRight: 0,
-      backgroundColor: on ? p().selection : p().control,
+      bg: on ? p().selection : p().control,
       borderColor: on ? p().accent : p().border,
     }) as const;
 
@@ -3397,7 +3397,7 @@ function ToggleDemo() {
               width: 6,
               height: 6,
               borderRadius: 3,
-              backgroundColor: pinned() ? p().accent : p().border,
+              bg: pinned() ? p().accent : p().border,
             }}
           />
           <Text style={{ fontSize: 12, color: p().ink }}>Pinned</Text>
@@ -3422,7 +3422,7 @@ function ToggleGroupDemo() {
       width: 46,
       paddingLeft: 0,
       paddingRight: 0,
-      backgroundColor: on ? p().selection : p().control,
+      bg: on ? p().selection : p().control,
       borderColor: on ? p().accent : p().border,
     }) as const;
 
@@ -3526,7 +3526,7 @@ function ToolbarDemo() {
           borderRadius: 10,
           borderWidth: 1,
           borderColor: p().border,
-          backgroundColor: p().panelAlt,
+          bg: p().panelAlt,
         }}
       >
         <Toolbar.Group scope="tb" style={{ display: "flex", flexDirection: "row", gap: 4 }}>
@@ -3539,7 +3539,7 @@ function ToolbarDemo() {
                   ...controlStyle(),
                   height: 26,
                   opacity: value === "erase" ? 0.5 : 1,
-                  backgroundColor: tool() === value ? p().selection : p().control,
+                  bg: tool() === value ? p().selection : p().control,
                 }}
               >
                 <Text style={{ fontSize: 11, color: p().ink }}>{value}</Text>
@@ -3549,7 +3549,7 @@ function ToolbarDemo() {
         </Toolbar.Group>
         <Toolbar.Separator
           scope="tb"
-          style={{ width: 1, height: 20, backgroundColor: p().border }}
+          style={{ width: 1, height: 20, bg: p().border }}
         />
         <Toolbar.Button scope="tb" partValue="share" style={{ ...controlStyle(), height: 26 }}>
           <Text style={{ fontSize: 11, color: p().ink }}>Share</Text>
@@ -3605,11 +3605,11 @@ function TooltipDemo() {
                   paddingTop: 5,
                   paddingBottom: 5,
                   borderRadius: 7,
-                  backgroundColor: p().ink,
+                  bg: p().ink,
                 }}
               >
                 <Text style={{ fontSize: 11, color: p().panel }}>The core owns every deadline</Text>
-                <Tooltip.Arrow style={{ width: 8, height: 8, backgroundColor: p().ink }} />
+                <Tooltip.Arrow style={{ width: 8, height: 8, bg: p().ink }} />
               </Tooltip.Popup>
             </Tooltip.Positioner>
           </Tooltip.Root>
@@ -3626,7 +3626,7 @@ function TooltipDemo() {
                   paddingTop: 5,
                   paddingBottom: 5,
                   borderRadius: 7,
-                  backgroundColor: p().ink,
+                  bg: p().ink,
                 }}
               >
                 <Text style={{ fontSize: 11, color: p().panel }}>trackCursorAxis="x"</Text>
@@ -3700,7 +3700,7 @@ function TableDemo() {
           borderRadius: 10,
           borderWidth: 1,
           borderColor: p().border,
-          backgroundColor: p().panelAlt,
+          bg: p().panelAlt,
           overflowY: "scroll",
         }}
       >
@@ -3823,7 +3823,7 @@ function TreeDemo() {
           borderRadius: 10,
           borderWidth: 1,
           borderColor: p().border,
-          backgroundColor: p().panelAlt,
+          bg: p().panelAlt,
           overflowY: "scroll",
         }}
       >
@@ -3936,7 +3936,7 @@ function Gallery() {
         flexDirection: "row",
         width: "100%",
         height: "100%",
-        backgroundColor: p().window,
+        bg: p().window,
       }}
     >
       <Tabs.Root
@@ -3959,7 +3959,7 @@ function Gallery() {
             width: 214,
             flexShrink: 0,
             height: "100%",
-            backgroundColor: p().sidebar,
+            bg: p().sidebar,
             borderRightWidth: 1,
             borderColor: p().border,
           }}
@@ -4012,9 +4012,9 @@ function Gallery() {
                       borderRadius: 7,
                       cursor: "default",
                       userSelect: "none",
-                      backgroundColor: tab() === demo.id ? p().accent : "transparent",
+                      bg: tab() === demo.id ? p().accent : "transparent",
                       hover: {
-                        backgroundColor: tab() === demo.id ? p().accent : p().controlHover,
+                        bg: tab() === demo.id ? p().accent : p().controlHover,
                       },
                       focus: { outline: `2px solid ${p().accent}` },
                       outlineOffset: -2,

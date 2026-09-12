@@ -418,7 +418,7 @@ function ModeButton(props: { label: string; active: boolean; onClick: () => void
         fontSize: 12,
         ...(props.active
           ? {
-              backgroundColor: app.theme().accentWash,
+              bg: app.theme().accentWash,
               borderColor: app.theme().accent,
               color: app.theme().accent,
             }
@@ -474,9 +474,9 @@ export function checkboxBox(app: ReturnType<typeof useApp>, checked: boolean) {
     borderRadius: 3.5,
     borderWidth: 1,
     borderColor: checked ? app.theme().accent : app.theme().inputBorder,
-    backgroundColor: checked ? app.theme().accent : app.theme().input,
+    bg: checked ? app.theme().accent : app.theme().input,
     boxShadow: checked ? "none" : "0 0.5px 1px #00000014",
-    transition: "background-color 80ms, border-color 80ms",
+    transition: "bg 80ms, border-color 80ms",
   };
 }
 

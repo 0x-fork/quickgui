@@ -17,7 +17,7 @@ export function Toolbar() {
             flexDirection: "row",
             height: 28,
             maxWidth: 260,
-            backgroundColor: "transparent",
+            bg: "transparent",
             borderWidth: 0,
           },
         ]}
@@ -87,7 +87,7 @@ export function Toolbar() {
                 width: "100%",
                 height: 4,
                 borderRadius: 2,
-                backgroundColor: app.theme().borderStrong,
+                bg: app.theme().borderStrong,
               }}
             >
               <Progress.Indicator
@@ -95,7 +95,7 @@ export function Toolbar() {
                   width: 12,
                   height: 4,
                   borderRadius: 2,
-                  backgroundColor: app.theme().textSecondary,
+                  bg: app.theme().textSecondary,
                 }}
               />
             </Progress.Track>

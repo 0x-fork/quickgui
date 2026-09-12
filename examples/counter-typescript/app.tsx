@@ -14,7 +14,7 @@ function Counter() {
       alignItems="center"
       justifyContent="center"
       gap={18}
-      backgroundColor="#18181b"
+      bg="#18181b"
       textColor="#fafafa"
     >
       <Text fontSize={28} fontWeight={600}>
@@ -24,19 +24,19 @@ function Counter() {
         width={250}
         padding={10}
         borderRadius={8}
-        backgroundColor="#27272a"
+        bg="#27272a"
         value={name()}
         onInput={(event) => setName(event.value ?? "")}
       />
       <Text fontSize={20}>Count: {count()}</Text>
       <View display="flex" gap={12}>
-        <Button padding={12} borderRadius={8} backgroundColor="#3f3f46" onClick={() => setCount(0)}>
+        <Button padding={12} borderRadius={8} bg="#3f3f46" onClick={() => setCount(0)}>
           Reset
         </Button>
         <Button
           padding={12}
           borderRadius={8}
-          backgroundColor="#2563eb"
+          bg="#2563eb"
           onClick={() => setCount(count() + 1)}
         >
           Increment

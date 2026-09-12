@@ -224,8 +224,8 @@ function FileList(props: { list: ListId }) {
               <Table.Row
                 index={row().index}
                 style={{
-                  hover: { backgroundColor: app.theme().hover },
-                  selected: { backgroundColor: app.theme().selection },
+                  hover: { bg: app.theme().hover },
+                  selected: { bg: app.theme().selection },
                 }}
               >
                 <Table.Cell column="toggle">

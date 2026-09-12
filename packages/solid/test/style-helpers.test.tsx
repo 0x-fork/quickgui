@@ -27,14 +27,14 @@ test("compiled JSX exposes kebab-case Rust helpers on primitives and compound pa
         rounded-lg
         width={320}
         height={120}
-        background-color="#090d16"
+        bg="#090d16"
         text-color="#e2e8f0"
       >
         <Text text-lg font-semibold text-center cursor-pointer>
           Title
         </Text>
         <Tabs.Root value="one">
-          <Tabs.List rounded-md px-3 />
+          <Tabs.List rounded-md px-3 bg="#18181b" />
         </Tabs.Root>
       </View>
     )),
@@ -60,7 +60,58 @@ test("compiled JSX exposes kebab-case Rust helpers on primitives and compound pa
   const list = node.children[1]!.children[0]!;
   expect(list.properties.get(PropertyCode.BorderRadius)).toBe(6);
   expect(list.properties.get(PropertyCode.PaddingLeft)).toBe(12);
+  expect(list.properties.get(PropertyCode.BackgroundColor)).toBe(parseColor("#18181b"));
   host.close();
+});
+
+test("compiled bg attributes project colors, gradients, images, and transitions", () => {
+  const [color, setColor] = createSignal("#090d16");
+  const gradient = "linear-gradient(90deg, #1d4ed8, #38bdf8)";
+  const imageStyle = {
+    "bg-image": "/assets/paper.png",
+    "bg-size": "cover",
+    "bg-repeat": "no-repeat",
+    "bg-position": "center",
+    "hover-bg": "#1d4ed8",
+    "active-bg": "#0b1220",
+    "focus-bg": gradient,
+  } satisfies JSX.NativeProps;
+  const host = new Window({
+    renderer: createRenderer(() => (
+      <View bg={color()} transition-property="bg, opacity" {...imageStyle}>
+        <View bg-gradient={gradient} />
+      </View>
+    )),
+  });
+  const node = host.root.children[0]!;
+  const child = node.children[0]!;
+  expect(node.properties.get(PropertyCode.BackgroundColor)).toBe(parseColor("#090d16"));
+  expect(node.properties.get(PropertyCode.BackgroundImage)).toBe("/assets/paper.png");
+  expect(node.properties.get(PropertyCode.BackgroundSize)).toBe("cover");
+  expect(node.properties.get(PropertyCode.BackgroundRepeat)).toBe("no-repeat");
+  expect(node.properties.get(PropertyCode.BackgroundPosition)).toBe("center");
+  expect(node.properties.get(PropertyCode.HoverBackgroundColor)).toBe(parseColor("#1d4ed8"));
+  expect(node.properties.get(PropertyCode.ActiveBackgroundColor)).toBe(parseColor("#0b1220"));
+  expect(node.properties.get(PropertyCode.FocusBackgroundGradient)).toBe(gradient);
+  expect(node.properties.get(PropertyCode.TransitionProperties)).toBe("background-color,opacity");
+  expect(child.properties.get(PropertyCode.BackgroundGradient)).toBe(gradient);
+  setColor("#ffffff");
+  flush();
+  expect(host.root.children[0]).toBe(node);
+  expect(node.children[0]).toBe(child);
+  expect(node.properties.get(PropertyCode.BackgroundColor)).toBe(parseColor("#ffffff"));
+  setProp(child, "bg-gradient", null);
+  expect(child.properties.has(PropertyCode.BackgroundGradient)).toBe(false);
+  setProp(node, "transition-property", undefined);
+  expect(node.properties.has(PropertyCode.TransitionProperties)).toBe(false);
+  host.close();
+
+  // @ts-expect-error Background colors use the Rust-style bg name.
+  const oldColor: JSX.Style = { backgroundColor: "#ffffff" };
+  // @ts-expect-error Background images use the bg- prefix in JSX.
+  const oldImage: JSX.NativeProps = { "background-image": "/assets/paper.png" };
+  void oldColor;
+  void oldImage;
 });
 
 test("radius helpers are boolean presets and custom radii use style attributes", () => {

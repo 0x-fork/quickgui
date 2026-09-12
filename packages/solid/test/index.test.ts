@@ -144,11 +144,11 @@ describe("Solid universal host", () => {
   test("projects retained hover and pressed styles into the native core", () => {
     const button = createComponent(Button, {
       style: {
-        hoverBackgroundColor: "#222233",
+        hoverBg: "#222233",
         hoverColor: "#ffffff",
-        activeBackgroundColor: "#111122",
+        activeBg: "#111122",
         activeColor: "#ddddff",
-        transition: "background-color 90ms, border-color 90ms, color 90ms",
+        transition: "bg 90ms, border-color 90ms, color 90ms",
       },
       children: "New agent",
     });
@@ -1310,7 +1310,7 @@ describe("Solid universal host", () => {
     const declared = createComponent(View, {
       style: {
         transition: {
-          properties: ["background-color", "color"],
+          properties: ["bg", "color"],
           duration: "0.2s",
           easing: "ease",
           maxFps: 30,
@@ -2299,12 +2299,12 @@ describe("declared option sources, virtual collections, and stateful fields", ()
   });
 
   test("routes one background declaration to either a color or a bounded gradient", () => {
-    const solid = createComponent(View, { style: { background: "#101828" } });
+    const solid = createComponent(View, { style: { bg: "#101828" } });
     expect(solid.properties.get(PropertyCode.BackgroundColor)).toBe(parseColor("#101828"));
     expect(solid.properties.has(PropertyCode.BackgroundGradient)).toBe(false);
 
     const gradient = createComponent(View, {
-      style: { background: "linear-gradient(135deg, #0f172a, #38bdf8)" },
+      style: { bg: "linear-gradient(135deg, #0f172a, #38bdf8)" },
     });
     expect(gradient.properties.get(PropertyCode.BackgroundGradient)).toBe(
       "linear-gradient(135deg, #0f172a, #38bdf8)",
@@ -2313,7 +2313,7 @@ describe("declared option sources, virtual collections, and stateful fields", ()
 
     const declared = createComponent(View, {
       style: {
-        background: {
+        bgGradient: {
           type: "radial",
           shape: "circle",
           center: { x: 0.3, y: 0.2 },
@@ -2331,9 +2331,9 @@ describe("declared option sources, virtual collections, and stateful fields", ()
     // Every state that the core's `ElementStateStyle` can swap a gradient in follows the same rule.
     const stateful = createComponent(Button, {
       style: {
-        hoverBackground: "linear-gradient(90deg, #111827, #334155)",
-        activeBackground: "#0b1220",
-        focusBackground: "conic-gradient(from 90deg, #1d4ed8, #0f172a)",
+        hoverBg: "linear-gradient(90deg, #111827, #334155)",
+        activeBg: "#0b1220",
+        focusBg: "conic-gradient(from 90deg, #1d4ed8, #0f172a)",
       },
       children: "Run",
     });
@@ -2354,10 +2354,10 @@ describe("declared option sources, virtual collections, and stateful fields", ()
         borderStyle: "dashed",
         outline: "2px dotted #38bdf8",
         outlineOffset: 3,
-        backgroundImage: "/assets/paper.png",
-        backgroundSize: "cover",
-        backgroundRepeat: "no-repeat",
-        backgroundPosition: "center",
+        bgImage: "/assets/paper.png",
+        bgSize: "cover",
+        bgRepeat: "no-repeat",
+        bgPosition: "center",
         filter: ["saturate(1.4)", "blur(2px)"],
         backdropFilter: "blur(18px) brightness(1.1)",
         transform: "rotate(3deg) scale(1.02)",
@@ -2397,7 +2397,7 @@ describe("declared option sources, virtual collections, and stateful fields", ()
         hoverOutline: "2px solid #f8fafc",
         activeTransform: { a: 0.98, b: 0, c: 0, d: 0.98, tx: 0, ty: 0 },
         activeOutline: "1px solid #94a3b8",
-        focusBackgroundColor: "#1f2937",
+        focusBg: "#1f2937",
         focusColor: "#f8fafc",
         focusOutline: "2px solid #60a5fa",
         focusTransform: "scale(1.01)",
@@ -2427,9 +2427,9 @@ describe("declared option sources, virtual collections, and stateful fields", ()
       JSON.parse(String(node.properties.get(code)));
     const tile = createComponent(Button, {
       style: {
-        backgroundColor: "#ffffff",
+        bg: "#ffffff",
         hover: {
-          background: "linear-gradient(90deg, #1d4ed8, #38bdf8)",
+          bgGradient: "linear-gradient(90deg, #1d4ed8, #38bdf8)",
           color: "#f8fafc",
           borderColor: "#93c5fd",
           borderWidth: "2px",
@@ -2442,18 +2442,18 @@ describe("declared option sources, virtual collections, and stateful fields", ()
           transformOrigin: "left top",
         },
         active: {
-          backgroundColor: "#0b1220",
+          bg: "#0b1220",
           transform: { a: 0.98, b: 0, c: 0, d: 0.98, tx: 0, ty: 0 },
         },
         focus: { outline: "2px solid #60a5fa" },
         disabled: { opacity: 0.5, cursor: "not-allowed" },
         invalid: { borderColor: "#ef4444" },
         dragging: { opacity: 0.6 },
-        dragOver: { background: "#eff6ff", outline: "none", boxShadow: "none" },
+        dragOver: { bg: "#eff6ff", outline: "none", boxShadow: "none" },
         groupHover: { group: "sidebar", opacity: 1 },
         groupActive: [{ opacity: 0.8 }, { group: "list", transform: "scale(0.98)" }],
         focusWithin: { outline: "1px solid #93c5fd" },
-        selected: { backgroundColor: "#1d4ed8", color: "#ffffff" },
+        selected: { bg: "#1d4ed8", color: "#ffffff" },
       },
       children: "Apply",
     });
@@ -2550,7 +2550,7 @@ describe("declared option sources, virtual collections, and stateful fields", ()
     // flag, and the nested style paints while it is set.
     const row = createComponent(View, {
       selected: true,
-      style: { selected: { backgroundColor: "#1d4ed8" } },
+      style: { selected: { bg: "#1d4ed8" } },
       children: "README.md",
     });
     expect(row.properties.get(PropertyCode.Selected)).toBe(true);
@@ -2630,14 +2630,14 @@ describe("declared option sources, virtual collections, and stateful fields", ()
     const [selected, setSelected] = createSignal(false);
     const card = {
       padding: 12,
-      backgroundColor: "#ffffff",
+      bg: "#ffffff",
       hover: { opacity: 0.9, transform: "scale(1.01)" },
     };
     const node = createComponent(View, {
       get style() {
         return [
           card,
-          selected() && { backgroundColor: "#eff6ff", hover: { opacity: 1 } },
+          selected() && { bg: "#eff6ff", hover: { opacity: 1 } },
           null,
           [undefined, { borderRadius: 8 }],
         ];
@@ -2727,7 +2727,7 @@ describe("declared option sources, virtual collections, and stateful fields", ()
     expect(() =>
       setProp(
         overlong,
-        "background",
+        "bg-gradient",
         `linear-gradient(90deg, ${"#000000, ".repeat(MAX_STYLE_DECLARATION_BYTES)}#ffffff)`,
       ),
     ).toThrow("style declarations");
@@ -2741,11 +2741,11 @@ describe("declared option sources, virtual collections, and stateful fields", ()
 
   test("clears extended styling when a declaration is withdrawn", () => {
     const node = createElement("view");
-    setProp(node, "background", "linear-gradient(90deg, #000000, #ffffff)");
+    setProp(node, "bg", "linear-gradient(90deg, #000000, #ffffff)");
     expect(node.properties.get(PropertyCode.BackgroundGradient)).toBeTypeOf("string");
-    setProp(node, "background", "#101828");
+    setProp(node, "bg", "#101828");
     expect(node.properties.has(PropertyCode.BackgroundGradient)).toBe(false);
-    setProp(node, "background", null);
+    setProp(node, "bg", null);
     expect(node.properties.has(PropertyCode.BackgroundColor)).toBe(false);
 
     setProp(node, "outline", "2px solid #38bdf8");

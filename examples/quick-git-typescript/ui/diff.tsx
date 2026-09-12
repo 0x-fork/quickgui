@@ -65,7 +65,7 @@ export function DiffPane() {
         minWidth: 0,
         minHeight: 0,
         flexDirection: "column",
-        backgroundColor: app.theme().content,
+        bg: app.theme().content,
       }}
     >
       <Show
@@ -189,7 +189,7 @@ export function DiffPane() {
               alignItems: "center",
               gap: 8,
               padding: 12,
-              backgroundColor: app.theme().dangerWash,
+              bg: app.theme().dangerWash,
             }}
           >
             <Icon name="alert" size={14} color={app.theme().danger} />
@@ -331,11 +331,11 @@ function DiffTableRow(props: {
       index={props.index}
       group
       style={{
-        backgroundColor: background(),
-        selected: { backgroundColor: selectedBackground() },
+        bg: background(),
+        selected: { bg: selectedBackground() },
       }}
     >
-      <Table.Cell column="old" style={{ backgroundColor: gutter() }}>
+      <Table.Cell column="old" style={{ bg: gutter() }}>
         <Show
           when={
             row().kind === "line" &&
@@ -347,7 +347,7 @@ function DiffTableRow(props: {
           </Text>
         </Show>
       </Table.Cell>
-      <Table.Cell column="new" style={{ backgroundColor: gutter() }}>
+      <Table.Cell column="new" style={{ bg: gutter() }}>
         <Show
           when={
             row().kind === "line" &&
@@ -473,7 +473,7 @@ function HunkButton(props: { label: string; danger?: boolean; onClick: () => voi
         paddingLeft: 6,
         paddingRight: 6,
         borderRadius: 4,
-        backgroundColor: app.theme().raised,
+        bg: app.theme().raised,
         borderWidth: 1,
         borderColor: app.theme().borderStrong,
         color: props.danger ? app.theme().danger : app.theme().text,
@@ -481,7 +481,7 @@ function HunkButton(props: { label: string; danger?: boolean; onClick: () => voi
         fontWeight: 600,
         cursor: "default",
         userSelect: "none",
-        hover: { backgroundColor: props.danger ? app.theme().dangerWash : app.theme().accentWash },
+        hover: { bg: props.danger ? app.theme().dangerWash : app.theme().accentWash },
         active: { opacity: 0.8 },
       }}
     >

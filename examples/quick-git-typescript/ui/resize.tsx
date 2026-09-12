@@ -35,7 +35,7 @@ export function ResizablePanel(props: {
           flexShrink: 0,
           cursor: "col-resize",
           appRegion: "no-drag",
-          backgroundColor: app.theme().border,
+          bg: app.theme().border,
         }}
       />
     </Splitter.Root>

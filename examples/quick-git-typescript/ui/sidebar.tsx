@@ -60,9 +60,9 @@ export function Sidebar() {
             paddingRight: 8,
             marginBottom: 6,
             borderRadius: 8,
-            backgroundColor: "transparent",
+            bg: "transparent",
             cursor: "default",
-            hover: { backgroundColor: app.theme().hover },
+            hover: { bg: app.theme().hover },
           }}
         >
           <View
@@ -74,7 +74,7 @@ export function Sidebar() {
               alignItems: "center",
               justifyContent: "center",
               borderRadius: 7,
-              backgroundColor: app.theme().accent,
+              bg: app.theme().accent,
             }}
           >
             <Icon name="branch" size={18} color={app.theme().textOnAccent} />
@@ -189,12 +189,12 @@ export function NavRow(props: {
         paddingLeft: 10,
         paddingRight: 8,
         borderRadius: 6,
-        backgroundColor: props.selected ? app.theme().selection : "transparent",
+        bg: props.selected ? app.theme().selection : "transparent",
         color: app.theme().text,
         cursor: "default",
         userSelect: "none",
-        hover: { backgroundColor: props.selected ? app.theme().selection : app.theme().hover },
-        active: { backgroundColor: app.theme().active },
+        hover: { bg: props.selected ? app.theme().selection : app.theme().hover },
+        active: { bg: app.theme().active },
       }}
     >
       <Text style={{ flex: 1, minWidth: 0, fontSize: 13, lineClamp: 1 }}>{props.label}</Text>
@@ -241,9 +241,9 @@ function SectionRow(props: {
           paddingLeft: 9,
           paddingRight: 6,
           borderRadius: 6,
-          backgroundColor: "transparent",
+          bg: "transparent",
           cursor: "default",
-          hover: { backgroundColor: app.theme().hover },
+          hover: { bg: app.theme().hover },
         }}
       >
         <Text

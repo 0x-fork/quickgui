@@ -74,7 +74,7 @@ Helpers work in reusable styles and style arrays, which expand and merge left to
 ```tsx
 import type { JSX } from "@quickgui/solid";
 
-const panel = { "p-3": true, "rounded-xl": true, backgroundColor: "#18181b" } satisfies JSX.Style;
+const panel = { "p-3": true, "rounded-xl": true, bg: "#18181b" } satisfies JSX.Style;
 <View style={panel} text-color="#fafafa"><Text>Hello</Text></View>
 ```
 

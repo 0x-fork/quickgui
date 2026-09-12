@@ -230,7 +230,7 @@ function generateTypeScriptHelpers() {
     const attribute = name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
     return name === attribute || states.has(name) || flags.has(attribute) ? [] : [[attribute, name]];
   }));
-  source += `/** Native style values exposed with CSS spelling in JSX. */\nexport interface StyleAttributes {\n`;
+  source += `/** Native style values exposed as kebab-case JSX attributes. */\nexport interface StyleAttributes {\n`;
   for (const [attribute, name] of Object.entries(attributes)) source += `  ${JSON.stringify(attribute)}?: JSX.Style[${JSON.stringify(name)}];\n`;
   source += `}\n\nexport const styleAttributeNames: Record<string, string> = ${JSON.stringify(attributes)};\n`;
   const path = "packages/solid/src/style-helpers.generated.ts";

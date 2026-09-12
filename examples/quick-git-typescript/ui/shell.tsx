@@ -171,7 +171,7 @@ function Notices() {
                       width: 3,
                       alignSelf: "stretch",
                       borderRadius: 2,
-                      backgroundColor: color(entry.type),
+                      bg: color(entry.type),
                     }}
                   />
                   <Toast.Content
@@ -255,13 +255,13 @@ export function RowButton(props: {
         paddingLeft: 10,
         paddingRight: 8,
         borderRadius: 6,
-        backgroundColor: props.selected ? app.theme().selection : "transparent",
+        bg: props.selected ? app.theme().selection : "transparent",
         color: app.theme().text,
         cursor: "default",
         userSelect: "none",
-        hover: { backgroundColor: app.theme().hover },
-        active: { backgroundColor: app.theme().active },
-        selected: { backgroundColor: app.theme().selection },
+        hover: { bg: app.theme().hover },
+        active: { bg: app.theme().active },
+        selected: { bg: app.theme().selection },
         focus: { outline: `2px solid ${app.theme().focusRing}` },
       }}
     >

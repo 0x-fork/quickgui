@@ -32,7 +32,7 @@ const Control = (props: NativeProps) => (
     borderWidth={1}
     borderColor="#dce0e7"
     borderRadius={6}
-    backgroundColor="#ffffff"
+    bg="#ffffff"
     fontSize={12}
     opacity={props.disabled ? 0.4 : 1}
     {...props}
@@ -57,7 +57,7 @@ function IssueTracker() {
       alignItems="stretch"
       textColor={ink}
       fontSize={14}
-      backgroundColor="#ffffff"
+      bg="#ffffff"
     >
       <View
         style={column}
@@ -68,7 +68,7 @@ function IssueTracker() {
         paddingLeft={12}
         paddingRight={12}
         gap={8}
-        backgroundColor="#f4f5f7"
+        bg="#f4f5f7"
         borderRightWidth={1}
         borderColor={line}
       >
@@ -88,7 +88,7 @@ function IssueTracker() {
               borderWidth={0}
               borderRadius={7}
               fontWeight={state.filter() === name ? 600 : 400}
-              backgroundColor={state.filter() === name ? "#e4ebfb" : "#0000"}
+              bg={state.filter() === name ? "#e4ebfb" : "#0000"}
               textColor={state.filter() === name ? accent : ink}
               onClick={() => state.setFilter(name)}
             >
@@ -127,7 +127,7 @@ function IssueTracker() {
             height={38}
             paddingLeft={12}
             paddingRight={12}
-            backgroundColor="#f8f9fb"
+            bg="#f8f9fb"
             borderWidth={1}
             borderColor="#dce0e7"
             borderRadius={7}
@@ -142,7 +142,7 @@ function IssueTracker() {
               paddingLeft={20}
               paddingRight={20}
               justifyContent="space-between"
-              backgroundColor="#fafbfc"
+              bg="#fafbfc"
               borderBottomWidth={1}
               borderColor={line}
             >
@@ -173,7 +173,7 @@ function IssueTracker() {
                           borderBottomWidth={1}
                           borderRadius={0}
                           borderColor="#edf0f4"
-                          backgroundColor={state.selected() === index ? "#edf3ff" : "#ffffff"}
+                          bg={state.selected() === index ? "#edf3ff" : "#ffffff"}
                           onClick={() => state.setSelected(index)}
                         >
                           <Text
@@ -263,7 +263,7 @@ function IssueTracker() {
                 borderWidth={0}
                 borderRadius={7}
                 marginTop={16}
-                backgroundColor={accent}
+                bg={accent}
                 textColor="#ffffff"
                 fontWeight={500}
                 onClick={() => state.complete()}

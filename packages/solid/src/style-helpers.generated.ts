@@ -1196,7 +1196,7 @@ export const helperProperties = new Set(
   Object.values(styleHelpers).flatMap((helper) => helper.fields),
 );
 
-/** Native style values exposed with CSS spelling in JSX. */
+/** Native style values exposed as kebab-case JSX attributes. */
 export interface StyleAttributes {
   "text-color"?: JSX.Style["textColor"];
   "flex-direction"?: JSX.Style["flexDirection"];
@@ -1221,10 +1221,7 @@ export interface StyleAttributes {
   "margin-right"?: JSX.Style["marginRight"];
   "margin-bottom"?: JSX.Style["marginBottom"];
   "margin-left"?: JSX.Style["marginLeft"];
-  "background-color"?: JSX.Style["backgroundColor"];
-  "hover-background-color"?: JSX.Style["hoverBackgroundColor"];
   "hover-color"?: JSX.Style["hoverColor"];
-  "active-background-color"?: JSX.Style["activeBackgroundColor"];
   "active-color"?: JSX.Style["activeColor"];
   "border-width"?: JSX.Style["borderWidth"];
   "border-top-width"?: JSX.Style["borderTopWidth"];
@@ -1290,7 +1287,7 @@ export interface StyleAttributes {
   "margin-end"?: JSX.Style["marginEnd"];
   "border-start-width"?: JSX.Style["borderStartWidth"];
   "border-end-width"?: JSX.Style["borderEndWidth"];
-  "background-gradient"?: JSX.Style["backgroundGradient"];
+  "bg-gradient"?: JSX.Style["bgGradient"];
   "border-top-left-radius"?: JSX.Style["borderTopLeftRadius"];
   "border-top-right-radius"?: JSX.Style["borderTopRightRadius"];
   "border-bottom-right-radius"?: JSX.Style["borderBottomRightRadius"];
@@ -1300,21 +1297,20 @@ export interface StyleAttributes {
   "outline-color"?: JSX.Style["outlineColor"];
   "outline-offset"?: JSX.Style["outlineOffset"];
   "outline-style"?: JSX.Style["outlineStyle"];
-  "background-image"?: JSX.Style["backgroundImage"];
-  "background-size"?: JSX.Style["backgroundSize"];
-  "background-repeat"?: JSX.Style["backgroundRepeat"];
-  "background-position"?: JSX.Style["backgroundPosition"];
+  "bg-image"?: JSX.Style["bgImage"];
+  "bg-size"?: JSX.Style["bgSize"];
+  "bg-repeat"?: JSX.Style["bgRepeat"];
+  "bg-position"?: JSX.Style["bgPosition"];
   "backdrop-filter"?: JSX.Style["backdropFilter"];
   "transform-origin"?: JSX.Style["transformOrigin"];
   "mix-blend-mode"?: JSX.Style["mixBlendMode"];
-  "hover-background"?: JSX.Style["hoverBackground"];
+  "hover-bg"?: JSX.Style["hoverBg"];
   "hover-outline"?: JSX.Style["hoverOutline"];
   "hover-transform"?: JSX.Style["hoverTransform"];
-  "active-background"?: JSX.Style["activeBackground"];
+  "active-bg"?: JSX.Style["activeBg"];
   "active-outline"?: JSX.Style["activeOutline"];
   "active-transform"?: JSX.Style["activeTransform"];
-  "focus-background"?: JSX.Style["focusBackground"];
-  "focus-background-color"?: JSX.Style["focusBackgroundColor"];
+  "focus-bg"?: JSX.Style["focusBg"];
   "focus-color"?: JSX.Style["focusColor"];
   "focus-outline"?: JSX.Style["focusOutline"];
   "focus-transform"?: JSX.Style["focusTransform"];
@@ -1347,10 +1343,7 @@ export const styleAttributeNames: Record<string, string> = {
   "margin-right": "marginRight",
   "margin-bottom": "marginBottom",
   "margin-left": "marginLeft",
-  "background-color": "backgroundColor",
-  "hover-background-color": "hoverBackgroundColor",
   "hover-color": "hoverColor",
-  "active-background-color": "activeBackgroundColor",
   "active-color": "activeColor",
   "border-width": "borderWidth",
   "border-top-width": "borderTopWidth",
@@ -1416,7 +1409,7 @@ export const styleAttributeNames: Record<string, string> = {
   "margin-end": "marginEnd",
   "border-start-width": "borderStartWidth",
   "border-end-width": "borderEndWidth",
-  "background-gradient": "backgroundGradient",
+  "bg-gradient": "bgGradient",
   "border-top-left-radius": "borderTopLeftRadius",
   "border-top-right-radius": "borderTopRightRadius",
   "border-bottom-right-radius": "borderBottomRightRadius",
@@ -1426,21 +1419,20 @@ export const styleAttributeNames: Record<string, string> = {
   "outline-color": "outlineColor",
   "outline-offset": "outlineOffset",
   "outline-style": "outlineStyle",
-  "background-image": "backgroundImage",
-  "background-size": "backgroundSize",
-  "background-repeat": "backgroundRepeat",
-  "background-position": "backgroundPosition",
+  "bg-image": "bgImage",
+  "bg-size": "bgSize",
+  "bg-repeat": "bgRepeat",
+  "bg-position": "bgPosition",
   "backdrop-filter": "backdropFilter",
   "transform-origin": "transformOrigin",
   "mix-blend-mode": "mixBlendMode",
-  "hover-background": "hoverBackground",
+  "hover-bg": "hoverBg",
   "hover-outline": "hoverOutline",
   "hover-transform": "hoverTransform",
-  "active-background": "activeBackground",
+  "active-bg": "activeBg",
   "active-outline": "activeOutline",
   "active-transform": "activeTransform",
-  "focus-background": "focusBackground",
-  "focus-background-color": "focusBackgroundColor",
+  "focus-bg": "focusBg",
   "focus-color": "focusColor",
   "focus-outline": "focusOutline",
   "focus-transform": "focusTransform",

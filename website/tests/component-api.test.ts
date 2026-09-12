@@ -46,11 +46,23 @@ test("compound props preserve callback types, inherited fields, and namespaces",
   expect(terminal.signature).toStartWith("terminal.View(");
   expect(terminal.entries.some((entry) => entry.name === "Program")).toBe(true);
   const view = getComponentApi("typescript", "ui", "view").sections[0];
-  for (const name of ["rounded-lg", "flex-col", "p-3", "text-lg", "background-color", "border-radius"]) {
+  for (const name of [
+    "rounded-lg",
+    "flex-col",
+    "p-3",
+    "text-lg",
+    "bg-gradient",
+    "bg-image",
+    "border-radius",
+  ]) {
     expect(view.entries.find((entry) => entry.name === name)?.source).toStartWith(
       "packages/solid/src/style-helpers.generated.ts#L",
     );
   }
+  expect(view.entries.find((entry) => entry.name === "bg")?.source).toStartWith(
+    "packages/solid/src/index.ts#L",
+  );
+  expect(view.entries.some((entry) => entry.name.startsWith("background"))).toBe(false);
   expect(view.entries.some((entry) => entry.name === "rounded")).toBe(false);
 });
 

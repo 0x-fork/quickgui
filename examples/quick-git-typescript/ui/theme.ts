@@ -161,7 +161,7 @@ export const DIFF_ROW_HEIGHT = 20;
 export const TITLEBAR_HEIGHT = 52;
 /** Room above the sidebar's first row for a focus ring, which the scrolling container clips. */
 export const SIDEBAR_TOP_INSET = 4;
-export const TRANSITION = "background-color 90ms, border-color 90ms, color 90ms, opacity 90ms";
+export const TRANSITION = "bg 90ms, border-color 90ms, color 90ms, opacity 90ms";
 
 type Style = JSX.Style;
 
@@ -175,13 +175,13 @@ export function createStyles(theme: Theme) {
     alignItems: "center",
     justifyContent: "center",
     color: theme.textSecondary,
-    backgroundColor: "transparent",
+    bg: "transparent",
     borderRadius: 5,
     cursor: "default",
     transition: TRANSITION,
     appRegion: "no-drag",
-    hover: { backgroundColor: theme.hover, color: theme.text },
-    active: { backgroundColor: theme.active },
+    hover: { bg: theme.hover, color: theme.text },
+    active: { bg: theme.active },
     focus: { outline: `2px solid ${theme.focusRing}` },
     disabled: { opacity: 0.4 },
   });
@@ -203,16 +203,16 @@ export function createStyles(theme: Theme) {
     disabled: { opacity: 0.4 },
     ...(kind === "primary"
       ? {
-          backgroundColor: theme.accent,
+          bg: theme.accent,
           color: theme.textOnAccent,
-          hover: { backgroundColor: theme.accentHover },
+          hover: { bg: theme.accentHover },
         }
       : {
-          backgroundColor: theme.raised,
+          bg: theme.raised,
           color: kind === "danger" ? theme.danger : theme.text,
           borderWidth: 1,
           borderColor: theme.borderStrong,
-          hover: { backgroundColor: theme.hover },
+          hover: { bg: theme.hover },
         }),
   });
   return {
@@ -224,7 +224,7 @@ export function createStyles(theme: Theme) {
       height: "100%",
       minWidth: 0,
       minHeight: 0,
-      backgroundColor: "transparent",
+      bg: "transparent",
       color: theme.text,
       fontSize: UI_FONT_SIZE,
     } satisfies Style,
@@ -234,7 +234,7 @@ export function createStyles(theme: Theme) {
       height: "100%",
       minWidth: 0,
       minHeight: 0,
-      backgroundColor: "transparent",
+      bg: "transparent",
     } satisfies Style,
     sidebarTitlebar: {
       display: "flex",
@@ -308,7 +308,7 @@ export function createStyles(theme: Theme) {
       minWidth: 0,
       minHeight: 0,
       flexDirection: "column",
-      backgroundColor: theme.content,
+      bg: theme.content,
     } satisfies Style,
     toolbar: {
       display: "flex",
@@ -320,11 +320,11 @@ export function createStyles(theme: Theme) {
       paddingRight: 12,
       borderBottomWidth: 1,
       borderColor: theme.border,
-      backgroundColor: theme.content,
+      bg: theme.content,
       appRegion: "drag",
     } satisfies Style,
-    hairline: { height: 1, flexShrink: 0, backgroundColor: theme.border } satisfies Style,
-    vhairline: { width: 1, flexShrink: 0, backgroundColor: theme.border } satisfies Style,
+    hairline: { height: 1, flexShrink: 0, bg: theme.border } satisfies Style,
+    vhairline: { width: 1, flexShrink: 0, bg: theme.border } satisfies Style,
     iconButton,
     button,
     tinyButton: {
@@ -339,7 +339,7 @@ export function createStyles(theme: Theme) {
       height: 22,
       paddingLeft: 7,
       paddingRight: 7,
-      backgroundColor: theme.input,
+      bg: theme.input,
       color: theme.text,
       borderWidth: 1,
       borderColor: theme.inputBorder,
@@ -359,7 +359,7 @@ export function createStyles(theme: Theme) {
       paddingRight: 7,
       paddingTop: 4,
       paddingBottom: 4,
-      backgroundColor: theme.input,
+      bg: theme.input,
       color: theme.text,
       borderWidth: 1,
       borderColor: theme.inputBorder,
@@ -380,7 +380,7 @@ export function createStyles(theme: Theme) {
       paddingLeft: 6,
       paddingRight: 6,
       borderRadius: 9,
-      backgroundColor: theme.hover,
+      bg: theme.hover,
       color: theme.textSecondary,
       fontSize: 11,
       fontWeight: 700,
@@ -388,7 +388,7 @@ export function createStyles(theme: Theme) {
     popup: {
       display: "flex",
       flexDirection: "column",
-      backgroundColor: theme.raised,
+      bg: theme.raised,
       borderWidth: 1,
       borderColor: theme.borderStrong,
       borderRadius: 8,
@@ -413,7 +413,7 @@ export function createStyles(theme: Theme) {
       right: 0,
       bottom: 0,
       left: 0,
-      backgroundColor: theme.scrim,
+      bg: theme.scrim,
     } satisfies Style,
     dialogPopup: {
       display: "flex",
@@ -421,7 +421,7 @@ export function createStyles(theme: Theme) {
       width: 440,
       gap: 14,
       padding: 20,
-      backgroundColor: theme.raised,
+      bg: theme.raised,
       borderWidth: 1,
       borderColor: theme.borderStrong,
       borderRadius: 10,

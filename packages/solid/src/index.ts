@@ -99,20 +99,11 @@ const properties: Record<string, PropertyEntry> = {
   marginRight: { code: PropertyCode.MarginRight },
   marginBottom: { code: PropertyCode.MarginBottom },
   marginLeft: { code: PropertyCode.MarginLeft },
-  backgroundColor: { code: PropertyCode.BackgroundColor, color: true },
   color: { code: PropertyCode.Color, color: true },
   textColor: { code: PropertyCode.Color, color: true },
   // Flat legacy state names. The nested `hover`, `active`, and `focus` objects are canonical; the
   // Rust binding overlays these on top of them so a partial migration paints what both declared.
-  hoverBackgroundColor: {
-    code: PropertyCode.HoverBackgroundColor,
-    color: true,
-  },
   hoverColor: { code: PropertyCode.HoverColor, color: true },
-  activeBackgroundColor: {
-    code: PropertyCode.ActiveBackgroundColor,
-    color: true,
-  },
   activeColor: { code: PropertyCode.ActiveColor, color: true },
 
   opacity: { code: PropertyCode.Opacity },
@@ -268,7 +259,10 @@ const properties: Record<string, PropertyEntry> = {
   gridRowStart: { code: PropertyCode.GridRowStart },
   gridRowEnd: { code: PropertyCode.GridRowEnd },
   gridRowSpan: { code: PropertyCode.GridRowSpan },
-  transitionProperty: { code: PropertyCode.TransitionProperties },
+  transitionProperty: {
+    code: PropertyCode.TransitionProperties,
+    normalize: normalizeTransitionProperties,
+  },
   transitionDuration: {
     code: PropertyCode.TransitionDuration,
     normalize: normalizeMilliseconds,
@@ -405,10 +399,10 @@ const properties: Record<string, PropertyEntry> = {
   outlineColor: { code: PropertyCode.OutlineColor, color: true },
   outlineOffset: { code: PropertyCode.OutlineOffset },
   outlineStyle: { code: PropertyCode.OutlineStyle },
-  backgroundImage: { code: PropertyCode.BackgroundImage },
-  backgroundSize: { code: PropertyCode.BackgroundSize },
-  backgroundRepeat: { code: PropertyCode.BackgroundRepeat },
-  backgroundPosition: { code: PropertyCode.BackgroundPosition },
+  bgImage: { code: PropertyCode.BackgroundImage },
+  bgSize: { code: PropertyCode.BackgroundSize },
+  bgRepeat: { code: PropertyCode.BackgroundRepeat },
+  bgPosition: { code: PropertyCode.BackgroundPosition },
   filter: { code: PropertyCode.Filter, normalize: normalizeStyleDeclaration },
   backdropFilter: {
     code: PropertyCode.BackdropFilter,
@@ -437,10 +431,6 @@ const properties: Record<string, PropertyEntry> = {
   activeTransform: {
     code: PropertyCode.ActiveTransform,
     normalize: normalizeStyleDeclaration,
-  },
-  focusBackgroundColor: {
-    code: PropertyCode.FocusBackgroundColor,
-    color: true,
   },
   focusColor: { code: PropertyCode.FocusColor, color: true },
   focusOutline: {
@@ -511,23 +501,23 @@ const properties: Record<string, PropertyEntry> = {
 
 /** Background properties that accept either one color or one declared gradient. */
 const backgroundProperties: Record<string, { color: PropertyCode; gradient: PropertyCode }> = {
-  background: {
+  bg: {
     color: PropertyCode.BackgroundColor,
     gradient: PropertyCode.BackgroundGradient,
   },
-  backgroundGradient: {
+  bgGradient: {
     color: PropertyCode.BackgroundColor,
     gradient: PropertyCode.BackgroundGradient,
   },
-  hoverBackground: {
+  hoverBg: {
     color: PropertyCode.HoverBackgroundColor,
     gradient: PropertyCode.HoverBackgroundGradient,
   },
-  activeBackground: {
+  activeBg: {
     color: PropertyCode.ActiveBackgroundColor,
     gradient: PropertyCode.ActiveBackgroundGradient,
   },
-  focusBackground: {
+  focusBg: {
     color: PropertyCode.FocusBackgroundColor,
     gradient: PropertyCode.FocusBackgroundGradient,
   },
@@ -967,7 +957,7 @@ const pointerlessStates = new Set(["groupHover", "groupActive", "focusWithin"]);
 
 /** The paint-only properties a state may swap in: exactly what the core's `ElementStateStyle` carries. */
 const stateStyleProperties =
-  "background, backgroundColor, color, borderColor, borderWidth, borderRadius, outline, " +
+  "bg, bgGradient, color, borderColor, borderWidth, borderRadius, outline, " +
   "boxShadow, opacity, cursor, transform, and transformOrigin";
 
 type EncodedStateStyle = {
@@ -1046,8 +1036,8 @@ function encodeStateEntry(state: string, value: Record<string, unknown>): Encode
   for (const [name, declared] of Object.entries(value)) {
     if (declared === null || declared === undefined || declared === false) continue;
     switch (name) {
-      case "background":
-      case "backgroundGradient": {
+      case "bg":
+      case "bgGradient": {
         if (isRecord(declared) || (typeof declared === "string" && isGradient(declared))) {
           const gradient = normalizeStyleDeclaration(declared);
           if (gradient !== null) encoded.background = gradient;
@@ -1056,7 +1046,6 @@ function encodeStateEntry(state: string, value: Record<string, unknown>): Encode
         }
         break;
       }
-      case "backgroundColor":
       case "color":
       case "borderColor":
         encoded[name] = parseColor(declared as number | string);
@@ -1270,11 +1259,10 @@ function normalizeLength(value: string | undefined): number | string | null {
   return Number.isFinite(number) ? number : trimmed;
 }
 
-/** Paint properties the Rust core can transition, keyed by their CSS-shaped names. */
+/** Public paint property names mapped to the transition names the Rust core reads. */
 const transitionProperties = new Map<string, string>([
   ["all", "all"],
-  ["background", "background-color"],
-  ["background-color", "background-color"],
+  ["bg", "background-color"],
   ["border-color", "border-color"],
   ["border-width", "border-width"],
   ["border-radius", "border-radius"],
@@ -1367,7 +1355,7 @@ function setTransition(node: NativeNode, value: PropertyInput): void {
     const property = tokens.find((token) => transitionProperties.has(token));
     if (!property) {
       throw new TypeError(
-        `QuickGUI cannot transition \`${declaration}\`; the core transitions background-color, border-color, border-width, border-radius, color, box-shadow, and opacity`,
+        `QuickGUI cannot transition \`${declaration}\`; the core transitions bg, border-color, border-width, border-radius, color, box-shadow, and opacity`,
       );
     }
     declared.add(transitionProperties.get(property)!);
@@ -1399,6 +1387,14 @@ function normalizeTransitionProperty(name: string): string {
     throw new TypeError(`QuickGUI cannot transition \`${name}\``);
   }
   return normalized;
+}
+
+function normalizeTransitionProperties(value: PropertyInput): string | null {
+  if (value === null || value === undefined || value === false) return null;
+  return String(value)
+    .split(",")
+    .map((name) => transitionProperties.get(name.trim()) ?? name.trim())
+    .join(",");
 }
 
 function normalizeTransitionEasing(name: string): string {
@@ -5687,8 +5683,7 @@ export type TransitionEasing = "linear" | "ease" | "ease-in" | "ease-out" | "eas
 /** Transition properties the Rust core can interpolate without a layout pass. */
 export type TransitionPropertyName =
   | "all"
-  | "background"
-  | "background-color"
+  | "bg"
   | "border-color"
   | "border-width"
   | "border-radius"
@@ -8856,15 +8851,10 @@ export namespace JSX {
     marginBottom?: number | string;
     marginLeft?: number | string;
     /** A color, a CSS gradient function string, or the declared gradient object form. */
-    background?: number | string | GradientDeclaration;
-    backgroundColor?: number | string;
+    bg?: number | string | GradientDeclaration;
     color?: number | string;
-    /** @deprecated Declare `hover: { backgroundColor }` instead. */
-    hoverBackgroundColor?: number | string;
     /** @deprecated Declare `hover: { color }` instead. */
     hoverColor?: number | string;
-    /** @deprecated Declare `active: { backgroundColor }` instead. */
-    activeBackgroundColor?: number | string;
     /** @deprecated Declare `active: { color }` instead. */
     activeColor?: number | string;
     transition?: number | string | TransitionDeclaration;
@@ -8959,7 +8949,7 @@ export namespace JSX {
     borderEndWidth?: number | string;
 
     /** A color, a CSS gradient function, or the declared gradient object form. */
-    backgroundGradient?: number | string | GradientDeclaration;
+    bgGradient?: number | string | GradientDeclaration;
     borderTopLeftRadius?: number | string;
     borderTopRightRadius?: number | string;
     borderBottomRightRadius?: number | string;
@@ -8972,10 +8962,10 @@ export namespace JSX {
     outlineOffset?: number | string;
     outlineStyle?: "solid" | "dashed" | "dotted" | "none";
     /** Path, `file://`, or base64 `data:` URL decoded once and painted inside the rounded box. */
-    backgroundImage?: string;
-    backgroundSize?: "auto" | "cover" | "contain" | (string & {});
-    backgroundRepeat?: "no-repeat" | "repeat" | "repeat-x" | "repeat-y";
-    backgroundPosition?: string;
+    bgImage?: string;
+    bgSize?: "auto" | "cover" | "contain" | (string & {});
+    bgRepeat?: "no-repeat" | "repeat" | "repeat-x" | "repeat-y";
+    bgPosition?: string;
     /** CSS filter-function list. `blur()` and `drop-shadow()` promote a compositing group. */
     filter?: string | readonly string[];
     /** Colour filters and one blur applied to whatever is already painted behind this element. */
@@ -8986,22 +8976,20 @@ export namespace JSX {
     transformOrigin?: string;
     mixBlendMode?: BlendMode;
 
-    /** @deprecated Declare `hover: { background }` instead. */
-    hoverBackground?: number | string | GradientDeclaration;
+    /** @deprecated Declare `hover: { bg }` instead. */
+    hoverBg?: number | string | GradientDeclaration;
     /** @deprecated Declare `hover: { outline }` instead. */
     hoverOutline?: string;
     /** @deprecated Declare `hover: { transform }` instead. */
     hoverTransform?: string | readonly string[] | TransformMatrix;
-    /** @deprecated Declare `active: { background }` instead. */
-    activeBackground?: number | string | GradientDeclaration;
+    /** @deprecated Declare `active: { bg }` instead. */
+    activeBg?: number | string | GradientDeclaration;
     /** @deprecated Declare `active: { outline }` instead. */
     activeOutline?: string;
     /** @deprecated Declare `active: { transform }` instead. */
     activeTransform?: string | readonly string[] | TransformMatrix;
-    /** @deprecated Declare `focus: { background }` instead. */
-    focusBackground?: number | string | GradientDeclaration;
-    /** @deprecated Declare `focus: { backgroundColor }` instead. */
-    focusBackgroundColor?: number | string;
+    /** @deprecated Declare `focus: { bg }` instead. */
+    focusBg?: number | string | GradientDeclaration;
     /** @deprecated Declare `focus: { color }` instead. */
     focusColor?: number | string;
     /** @deprecated Declare `focus: { outline }` instead. */
@@ -9079,8 +9067,9 @@ export namespace JSX {
   export interface StateStyle {
     textColor?: number | string;
     /** A color, a CSS gradient function, or the declared gradient object form. */
-    background?: number | string | GradientDeclaration;
-    backgroundColor?: number | string;
+    bg?: number | string | GradientDeclaration;
+    /** A color, a CSS gradient function, or the declared gradient object form. */
+    bgGradient?: number | string | GradientDeclaration;
     color?: number | string;
     borderColor?: number | string;
     /** Uniform border width in logical pixels. */

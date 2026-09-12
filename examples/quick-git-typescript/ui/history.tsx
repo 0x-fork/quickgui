@@ -152,8 +152,8 @@ export function HistoryView() {
                 <Table.Row
                   index={row().index}
                   style={{
-                    hover: { backgroundColor: app.theme().hover },
-                    selected: { backgroundColor: app.theme().selection },
+                    hover: { bg: app.theme().hover },
+                    selected: { bg: app.theme().selection },
                   }}
                 >
                   <Table.Cell column="graph">
@@ -202,7 +202,7 @@ export function HistoryView() {
                                 paddingLeft: 5,
                                 paddingRight: 5,
                                 borderRadius: 4,
-                                backgroundColor: ref.current
+                                bg: ref.current
                                   ? app.theme().accent
                                   : ref.kind === "tag"
                                     ? app.theme().warningWash
@@ -415,8 +415,8 @@ function CommitFileTable() {
           <Table.Row
             index={row().index}
             style={{
-              hover: { backgroundColor: app.theme().hover },
-              selected: { backgroundColor: app.theme().selection },
+              hover: { bg: app.theme().hover },
+              selected: { bg: app.theme().selection },
             }}
           >
             <Table.Cell column="status" style={{ paddingLeft: 12 }}>

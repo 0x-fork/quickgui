@@ -21,7 +21,7 @@ export function WelcomeView(props: { openRepository: () => Promise<void> }) {
         minWidth: 0,
         minHeight: 0,
         flexDirection: "column",
-        backgroundColor: app.theme().content,
+        bg: app.theme().content,
       }}
     >
       <View style={{ height: 52, flexShrink: 0, appRegion: "drag" }} />
@@ -40,7 +40,7 @@ export function WelcomeView(props: { openRepository: () => Promise<void> }) {
           justifyContent: "center",
           gap: 20,
           padding: 40,
-          dragOver: { backgroundColor: app.theme().accentWash },
+          dragOver: { bg: app.theme().accentWash },
         }}
       >
         <View
@@ -51,7 +51,7 @@ export function WelcomeView(props: { openRepository: () => Promise<void> }) {
             alignItems: "center",
             justifyContent: "center",
             borderRadius: 18,
-            backgroundColor: app.theme().accent,
+            bg: app.theme().accent,
             color: app.theme().textOnAccent,
           }}
         >
@@ -116,11 +116,11 @@ export function WelcomeView(props: { openRepository: () => Promise<void> }) {
                     paddingLeft: 10,
                     paddingRight: 10,
                     borderRadius: 8,
-                    backgroundColor: "transparent",
+                    bg: "transparent",
                     cursor: "default",
                     userSelect: "none",
-                    hover: { backgroundColor: app.theme().hover },
-                    active: { backgroundColor: app.theme().active },
+                    hover: { bg: app.theme().hover },
+                    active: { bg: app.theme().active },
                     focus: { outline: `2px solid ${app.theme().focusRing}` },
                     disabled: { opacity: 0.6 },
                   }}
