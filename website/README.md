@@ -10,7 +10,6 @@ This package is part of the repo's bun workspace — install from the repo root.
 
 ```console
 rustup target add wasm32-unknown-unknown
-cargo install wasm-bindgen-cli --version 0.2.128 --locked
 bun install        # at the repo root
 cd website
 bun run dev
@@ -37,8 +36,14 @@ plugin (workerd).
 
 ## Component references and demos
 
-`bun run dev` and `bun run build` generate the API catalog, highlighted demo source, and browser demos before starting the site. They require Go,
-Rust with `wasm32-unknown-unknown`, and the pinned wasm-bindgen CLI above.
+`bun run dev` generates the API catalog, highlighted demo source, and browser
+demos before starting the site. They require Go and Rust with
+`wasm32-unknown-unknown`. The demo build reuses an installed
+`wasm-bindgen` CLI when its version matches the pinned dependency in
+`crates/quickgui-docs-demo/Cargo.toml`; otherwise, it downloads
+the matching binary for the current platform from
+[wasm-bindgen releases](https://github.com/wasm-bindgen/wasm-bindgen/releases)
+and caches it under the repository's `target/tools` directory.
 
 - `bun run docs:api` reads Go declarations with `go/parser`, TypeScript declarations
   from the Solid bindings, and public Rust constructors from the `quickgui` crate.
