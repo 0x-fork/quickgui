@@ -1,17 +1,19 @@
-TypeScript 指南正文目前以英文提供，组件 API 参考包含中文说明。
+从普通函数返回 JSX。把布局、排版和颜色放在 `style` 里。
 
 ## 定义组件
-
-Return native JSX from ordinary TypeScript functions. Children and reactive prop getters are evaluated under the component owner; do not manually invoke components as setup side effects.
 
 ```tsx
 function Greeting(props: { name: string }) {
   return <Text>Hello, {props.name}</Text>;
 }
-<Greeting name={name()} />
+
+function Example() {
+  const [name] = createSignal("Ada");
+  return <Greeting name={name()} />;
+}
 ```
 
-`<View>some text</View>` 可以直接包含文本。`<div>` 和 `<span>` 分别对应 `View` 和 `Text`，无需导入组件。所有视觉声明都使用 `style` 中的 camelCase 键；不支持直接样式属性、`class` 或 `className`。
+`<View>` 可以直接接受文本。`<div>` 和 `<span>` 分别是 `View` 和 `Text` 的别名。没有 `class` 或 `className`；所有视觉效果都写在 `style` 里。
 
 ```tsx
 <div style={{ flexCol: true, gap2: true }}>
@@ -22,7 +24,7 @@ function Greeting(props: { name: string }) {
 
 ## 基础组件
 
-`View`, `Text`, `Button`, `Input`, `TextArea`, `Markdown`, `Image`, `Svg`, `Shader`, `VirtualList`, and optional `Terminal` are native building blocks. `TextInput` is also available as the single-line input spelling.
+`View`、`Text`、`Button`、`Input`、`TextArea`、`Markdown`、`Image`、`Svg`、`Shader` 和 `VirtualList` 是基础构件。`TextInput` 与 `Input` 相同。添加终端包后可以使用 `Terminal`。
 
 ## 复合组件
 
@@ -33,16 +35,21 @@ function Greeting(props: { name: string }) {
 </Checkbox.Root>
 ```
 
-Compound roots coordinate their named parts through Rust-owned state. Keep parts under the intended root so their scope, focus, and value relationships are explicit.
+把各部件放在所属的根节点下，这样焦点和值才能保持关联。
 
 ## 受控状态
 
-Use controlled values with the matching change callback, or `defaultValue`, `defaultChecked`, and `defaultOpen` where a component supports internal state. Native events describe the core decision; update the signal to accept that value.
+传入当前值和变更回调；也可以在组件自行持有状态时使用 `defaultValue`、`defaultChecked` 和 `defaultOpen`。
+
+```tsx
+const [name, setName] = createSignal("");
+<Input value={name()} onInput={event => setName(event.value ?? "")} />
+```
 
 ## 组件类别
 
-The reference covers selection controls, tabs, disclosure, fields, menus, context menus, pickers, dialogs, popovers, preview cards, drawers, navigation menus, ranges, splitters, progress, meters, toggles, toolbars, toasts, calendars, date/time fields, scroll areas, tables, trees, and SwiftUI controls. Run `examples/components-typescript` for the complete gallery.
+[组件参考](/docs/typescript/components/button) 覆盖表单、浮层、菜单、表格、树等。本仓库包含 `examples/components-typescript` 作为组件画廊。
 
 ## 设置各部件的样式
 
-Apply `style` to each visual part. Parts intentionally remain unstyled so layout and colors belong to the application. State hooks such as `useSliderState`, `useTabsState`, `useSelectState`, `useMenuItemState`, and `useScrollAreaState` expose the current native state for custom presentation.
+在每个可见部件上设置 `style`。部件默认无样式，颜色和布局由你的应用决定。`useTabsState` 和 `useSelectState` 这类钩子会暴露当前状态，便于自定义展示。

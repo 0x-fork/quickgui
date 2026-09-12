@@ -1,8 +1,8 @@
-TypeScript 指南正文目前以英文提供，组件 API 参考包含中文说明。
+JSX 构建的是原生界面，不是 HTML。当子节点需要随状态出现、消失或重新排序时，使用 `Show` 和 `For`。
 
-## 渲染模型
+## 视图如何工作
 
-The Solid universal compiler creates native nodes and retained bindings. It selects the reactive client build even though Bun normally resolves server conditions. Native layout, painting, focus, input, accessibility, and component state remain in Rust.
+组件函数只运行一次。Solid 会更新那些读取了变化值的属性和子节点槽位。每个窗口有自己的根，窗口关闭时会被释放。
 
 ## 条件内容
 
@@ -12,19 +12,19 @@ The Solid universal compiler creates native nodes and retained bindings. It sele
 </Show>
 ```
 
-A conditional region owns its effects and nodes. Removing the region disposes those resources; unrelated sibling nodes keep their identities.
+移除一个分支会释放它的副作用。兄弟内容不受影响。
 
-## 列表与节点身份
+## 列表
 
 ```tsx
 <For each={items()}>{item => <Text>{item.name}</Text>}</For>
 ```
 
-Use stable item identities for stateful rows. `For` moves existing nodes when order changes. Use `Table` or `Tree` for large native virtual collections and feed only requested visible data.
+给有状态的行一个稳定标识，这样重新排序时能保留它们的状态。长集合请使用 [Table](/docs/typescript/components/table) 或 [Tree](/docs/typescript/components/tree)。
 
 ## 窗口生命周期
 
-Each `Window` owns an independent Solid root. Closing a child window must not dispose its siblings. Handle macOS Dock reopening by constructing a fresh window when `hasVisibleWindows` is false.
+每个 `Window` 有独立的根。关闭一个窗口不会关闭其他窗口。处理 Dock 图标时，在 `hasVisibleWindows` 为 false 时打开新窗口。
 
 ## 当前窗口
 
@@ -35,13 +35,13 @@ function Content() {
 }
 ```
 
-The current window exists during renderer construction and native event dispatch. Capture it in setup or pass it explicitly to asynchronous work.
+在组件初次运行时捕获窗口，或把它传入异步工作。不要稍后从未相关的回调中查找它。
 
-## 检查、测试与调试
+## 测试
 
 ```sh
 quickgui check
 quickgui test
 ```
 
-The components gallery is the broad UI example. Quick Git exercises native menus, file dialogs, virtualized rows, splitters, shortcuts, multiple windows, background Git work, and persistence. Native integration checks are separate from headless adapter tests.
+`examples/components-typescript` 是界面画廊。`examples/quick-git-typescript` 是一个更大的应用，包含菜单、对话框和多个窗口。

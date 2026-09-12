@@ -1,27 +1,43 @@
-TypeScript 指南正文目前以英文提供，组件 API 参考包含中文说明。
+用基础样式上的 `transition` 为样式变化添加动画。每一帧都不会重新运行组件。
 
 ## 悬停过渡
 
 ```tsx
-<Button style={{ bg: "#2563eb", transition: { property: "bg", duration: 160 }, hover: { bg: "#1d4ed8" } }}>Hover</Button>
+<Button style={{
+  bg: "#2563eb",
+  transition: { property: "bg", duration: 160 },
+  hover: { bg: "#1d4ed8" },
+}}>Hover</Button>
 ```
 
 ## 状态驱动的动画
 
-Change a reactive style value from application state. Rust interpolates supported transitions while retaining the node and its interaction state. Do not reconstruct the component on each frame.
+根据状态改变样式，并保持该节点挂载。不要在每一帧重建组件。
+
+```tsx
+<View style={{
+  bg: selected() ? "#2563eb" : "#334155",
+  opacity: selected() ? 1 : 0.6,
+  transition: { property: ["bg", "opacity"], duration: 180 },
+}} />
+```
 
 ## 时长与帧率
 
-Transition durations accept supported numbers or duration strings. Set easing and `maxFps` when needed; the frame-rate value is a ceiling while animation is active, not an idle scheduling source.
+时长接受毫秒数或 `"180ms"` 这样的字符串。需要上限时设置缓动和 `maxFps`。省略 `maxFps` 则跟随显示器。
 
 ## 支持的属性
 
-Native transitions cover the documented color, border, radius, opacity, and shadow properties. Transforms are supported as native style declarations. Consult the typed transition property union for interpolation support.
+颜色、边框、圆角、透明度、阴影和变换会插值。宽度、高度和内边距不会。
 
 ## 挂载与减少动态效果
 
-Keep an overlay mounted during its native exit transition when its component supports that lifecycle. Respect `reduceMotion` on window configuration and the platform preference instead of imposing a JavaScript animation loop.
+当组件支持时，在退出过渡期间保持浮层挂载。`Show` 会立即移除子节点。过渡会遵循系统的「减少动态效果」设置。可在窗口上设置 `reduceMotion` 来覆盖它。
 
 ## 动态图像
 
-`Image` uses native image resources, including animated GIF/WebP sources. The core owns playback deadlines, cache limits, and visibility-based suspension; loading a static image does not request idle frames.
+`Image` 会播放你传入路径的 GIF 和 WebP 文件。不需要定时器。
+
+```tsx
+<Image value={path} style={{ width: 96, height: 96, objectFit: "contain" }} />
+```

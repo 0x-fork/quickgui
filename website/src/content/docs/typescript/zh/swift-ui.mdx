@@ -1,24 +1,35 @@
-TypeScript 指南正文目前以英文提供，组件 API 参考包含中文说明。
+从 `@quickgui/solid/swift-ui` 导入 SwiftUI 控件，并用 `Host` 包裹它们。普通 QuickGUI 组件不需要这样做。
 
 ## Host
 
-Import native SwiftUI components from `@quickgui/solid/swift-ui` and wrap them in `Host`. These controls are AppKit/SwiftUI views composed with QuickGUI’s retained scene, not replicas drawn by JavaScript.
+```tsx
+import { Host, Button } from "@quickgui/solid/swift-ui";
+
+<Host matchContents>
+  <Button label="Continue" />
+</Host>
+```
+
+Host 是原生视图边界，可以根据内容调整自身尺寸。
 
 ## 原生控件
 
-The adapter includes buttons, labels, toggles, sliders, steppers, progress views, gauges, text and secure fields, pickers, segmented controls, date/color pickers, and popovers. Each component’s reference lists its exact prop and event types.
+按钮、标签、开关、滑块、步进器、进度视图、仪表、文本字段和安全字段、选择器、分段控件、日期选择器和颜色选择器，以及弹出框。外观和行为与系统控件一致。
 
 ## 受控值
 
 ```tsx
 import { Host, Toggle } from "@quickgui/solid/swift-ui";
-<Host matchContents><Toggle label="Notifications" isOn={enabled()} onIsOnChange={setEnabled} /></Host>
+
+<Host matchContents>
+  <Toggle label="Notifications" isOn={enabled()} onIsOnChange={setEnabled} />
+</Host>
 ```
 
 ## 尺寸
 
-Use `matchContents` for intrinsic native sizing, including per-axis options where supported. Keep the parent’s dimensions constrained so native measurement and GPU layout agree.
+`matchContents` 根据控件决定 Host 的尺寸。需要固定宽度和固有高度时，可以使用按轴的选项。
 
 ## 平台支持
 
-SwiftUI hosting is macOS-specific. System availability determines optional appearances and controls, including Liquid Glass. Go exposes the same core capability through its own adapter.
+SwiftUI 托管需要 macOS。Liquid Glass 等可选外观取决于操作系统版本。

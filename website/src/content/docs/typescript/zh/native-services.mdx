@@ -1,21 +1,32 @@
-TypeScript 指南正文目前以英文提供，组件 API 参考包含中文说明。
+在 `app.whenReady()` 之后创建窗口。每个窗口有自己的界面根。
 
 ## 窗口生命周期
 
-Create a `Window` with `renderer: createRenderer(...)`. `onClose` and `on("closed", ...)` observe native destruction; `onCloseRequested` can hold a user close request. `close()` completes it. `whenReady()` resolves after the native window is mounted, including hidden windows. Returned snapshots use `bounds`, `viewportSize`, and `scaleFactor`.
+```tsx
+new Window({
+  title: "My App",
+  width: 720,
+  height: 480,
+  renderer: createRenderer(App),
+});
+```
+
+`onClose` 和 `on("closed", ...)` 在窗口消失后运行。`onCloseRequested` 可以阻止关闭，以便询问用户是否保存。`whenReady()` 在原生窗口存在后兑现，包括隐藏窗口。
+
+用 `app.on("reopen", ...)` 处理 Dock 图标，并在 `hasVisibleWindows` 为 false 时打开窗口。
 
 ## 命令与服务
 
 ```tsx
-import { app, Window, Clipboard, Dialog, Menu, Shell, Screen } from "@quickgui/native";
+import { app, Clipboard, Dialog, Menu, Shell, Screen } from "@quickgui/native";
+
 await app.whenReady();
 const displays = await Screen.getAllDisplays();
 const selected = await Dialog.showOpenDialog({ properties: ["openDirectory"] });
-// Menus, dialogs, clipboard, displays, appearance, and window operations use Rust services.
 ```
 
-Native result operations return promises. Window mutations declare work immediately and are submitted after native creation. System menus and file dialogs remain native controls.
+有返回值的调用是 Promise。菜单、文件对话框、剪贴板、外观、通知和托盘图标可从 `@quickgui/native` 使用。
 
 ## 事件与文件监听
 
-Window events include focus, resize, appearance, ready-to-show, minimize, fullscreen, and close. Application events include ready, reopen, activation, quit, open URLs, and keyboard-layout changes. Use Bun file watching and asynchronous I/O for application data; dispose watchers with their owner window. Quick Git demonstrates cancellation, bounded subprocess output, and per-window stores.
+窗口事件包括焦点、调整大小、外观、最小化、全屏和关闭。应用事件包括就绪、重新打开、激活、退出和打开 URL。项目文件请使用 Bun 的文件监听；属于窗口的监听器请在 `onCleanup` 中停止。

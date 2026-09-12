@@ -1,8 +1,17 @@
-TypeScript 指南正文目前以英文提供，组件 API 参考包含中文说明。
+修饰器用于设置原生 SwiftUI 控件的样式。反向托管把 QuickGUI 内容放进 SwiftUI。
 
 ## 修饰器
 
-Apply typed modifier factories from `@quickgui/solid/swift-ui/modifiers` in declaration order. They include control size, tint, disabled state, label style, button border shape, and button style.
+从 `@quickgui/solid/swift-ui/modifiers` 导入工厂，并按顺序传入。
+
+```tsx
+<Button
+  label="Create project"
+  modifiers={[buttonStyle("borderedProminent"), controlSize("large"), tint("#f97316")]}
+/>
+```
+
+它们包括控件尺寸、着色、禁用状态、标签样式、按钮边框形状和按钮样式。
 
 ## Liquid Glass
 
@@ -10,7 +19,7 @@ Apply typed modifier factories from `@quickgui/solid/swift-ui/modifiers` in decl
 <Button label="Continue" modifiers={[buttonStyle("glass"), controlSize("large")]} />
 ```
 
-The operating system draws native glass where available. Layout and hit testing remain owned by the native hosting layer.
+macOS 在可用的地方绘制玻璃效果。
 
 ## 反向托管
 
@@ -24,8 +33,8 @@ The operating system draws native glass where available. Layout and hit testing 
 
 ## SwiftUI Popover
 
-Use `Popover.Trigger` with a rendered SwiftUI control and `Popover.Content` for the presented hierarchy. A `QuickGUIHostView` inside that content owns a separate ordinary QuickGUI renderer.
+使用 `Popover.Trigger` 配合 SwiftUI 控件，并用 `Popover.Content` 呈现界面。该内容中的 `QuickGUIHostView` 托管普通 QuickGUI 子节点。
 
 ## 生命周期
 
-Native and Solid ownership must agree: an embedded renderer is disposed with its host, and a presented panel is disposed with its owner. Unmounting removes handlers and retained resources; never keep a detached host alive through a global subscription.
+嵌入的 Host 随所属窗口关闭。卸载会移除原生视图；不要通过全局订阅保留已分离的 Host。
