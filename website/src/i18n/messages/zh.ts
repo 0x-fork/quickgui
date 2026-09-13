@@ -23,7 +23,8 @@ export const zh: typeof en = {
     benchmarks: "基准测试",
   },
   hero: {
-    badge: "Go + TypeScript + Rust · 快速构建",
+    badge: "Pre-alpha",
+    badgeHint: "接口可能变更",
     titleLine1: "构建原生桌面应用，",
     titleLine2: "用 Go、TypeScript 或 Rust。",
     sub: "使用 Go、TypeScript 或 Rust 开发原生界面，支持快速增量构建、细粒度响应式和无障碍组件，共享同一个 GPU 渲染器。",

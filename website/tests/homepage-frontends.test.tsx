@@ -24,8 +24,10 @@ test("homepage frontends share the init command and select their examples and do
     for (const frontend of DOCS_FRONTENDS) {
       const render = (children: React.ReactNode) =>
         renderToString(<I18nextProvider i18n={i18n}>{children}</I18nextProvider>);
-      const hero = render(<Hero frontend={frontend} />);
+      const hero = render(<Hero />);
       const command = "bunx @quickgui/cli init my-app";
+      expect(plain(hero)).toContain(i18n.t("hero.badge"));
+      expect(plain(hero)).toContain(i18n.t("hero.badgeHint"));
       expect(plain(hero)).toContain(command);
       expect(hero).not.toContain("--frontend");
       expect(hero).not.toContain('role="group"');

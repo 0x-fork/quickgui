@@ -1,25 +1,22 @@
 import { useTranslation } from "react-i18next";
 import { CopyButton } from "../copy-button";
 import { FrontendDocsLinks } from "../frontend-docs-links";
-import type { DocsFrontend } from "../../lib/docs";
 
-export function Hero({ frontend }: { frontend: DocsFrontend }) {
-  const { t, i18n } = useTranslation();
-  const prefix = i18n.language === "en" ? "" : `/${i18n.language}`;
-  const docsHref = `${prefix}/docs/${frontend}`;
+export function Hero() {
+  const { t } = useTranslation();
   const initCommand = "bunx @quickgui/cli init my-app";
 
   return (
     <section className="border-b border-border">
       <div className="px-6 py-24 sm:px-12 sm:py-32">
-        <a
-          href={docsHref}
-          className="inline-flex items-center gap-2 border border-border bg-card-2 px-3 py-1.5 font-mono text-xs text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <span className="size-1.5 animate-pulse rounded-full bg-mint" />
-          {t("hero.badge")}
-          <span className="i-lucide-arrow-up-right size-3" aria-hidden />
-        </a>
+        <p className="inline-flex items-stretch border border-peach/30">
+          <span className="flex items-center bg-peach px-2.5 py-1.5 font-mono text-[10px] leading-none font-semibold tracking-[0.16em] text-primary-foreground uppercase">
+            {t("hero.badge")}
+          </span>
+          <span className="flex items-center bg-peach/[0.06] px-3 py-1.5 font-mono text-xs leading-none text-muted-foreground">
+            {t("hero.badgeHint")}
+          </span>
+        </p>
 
         <h1 className="mt-8 max-w-4xl text-5xl leading-[1.08] font-semibold tracking-tight text-balance lg:text-6xl">
           <span className="block">{t("hero.titleLine1")}</span>

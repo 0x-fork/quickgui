@@ -21,7 +21,8 @@ export const en = {
     benchmarks: "Benchmarks",
   },
   hero: {
-    badge: "Go + TypeScript + Rust · Fast builds",
+    badge: "Pre-alpha",
+    badgeHint: "APIs may change",
     titleLine1: "Build native desktop apps.",
     titleLine2: "With Go, TypeScript, or Rust.",
     sub: "Build native interfaces in Go, TypeScript, or Rust with fast incremental builds, fine-grained reactivity, and accessible components powered by the same GPU renderer.",

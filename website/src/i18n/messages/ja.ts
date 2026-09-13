@@ -23,7 +23,8 @@ export const ja: typeof en = {
     benchmarks: "ベンチマーク",
   },
   hero: {
-    badge: "Go + TypeScript + Rust · 高速ビルド",
+    badge: "Pre-alpha",
+    badgeHint: "API は変更されます",
     titleLine1: "ネイティブデスクトップアプリを、",
     titleLine2: "Go、TypeScript、Rust で。",
     sub: "Go、TypeScript、Rust でネイティブ UI を構築。共通の GPU レンダラー、高速な増分ビルド、細粒度のリアクティビティ、アクセシブルなコンポーネントを利用できます。",
