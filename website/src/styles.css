@@ -197,10 +197,6 @@ html:lang(ja) h2 {
     );
     background-size: 22px 22px;
   }
-
-  .animate-fade-up {
-    animation: fade-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
 }
 
 /* Both homepage and docs code colors follow the system theme. */
@@ -281,24 +277,8 @@ html:lang(ja) h2 {
   background-color: var(--scrollbar-color);
 }
 
-@keyframes fade-up {
-  from {
-    opacity: 0;
-    transform: translateY(14px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
-  }
-
-  .animate-fade-up {
-    animation-duration: 0.01ms;
-    animation-iteration-count: 1;
   }
 }
