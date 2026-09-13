@@ -170,7 +170,7 @@
     },
     "packages/cli": {
       "name": "@quickgui/cli",
-      "version": "0.1.4-next.1",
+      "version": "0.1.4-next.2",
       "bin": {
         "quickgui": "src/cli.ts",
       },

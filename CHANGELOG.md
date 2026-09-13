@@ -4,6 +4,13 @@ All notable user-facing changes to QuickGUI are recorded here.
 
 ## Unreleased
 
+## @quickgui/cli 0.1.4-next.2 - 2026-09-13
+
+### CLI
+
+- `quickgui dev` now streams Cargo progress, warnings, and compiler diagnostics while building
+  Rust applications, without exposing the machine-readable output used to locate the executable.
+
 ## 0.1.4-next.1 - 2026-09-13
 
 ### CLI

@@ -15,7 +15,7 @@
     "solid-js": "2.0.0-rc.8"
   },
   "devDependencies": {
-    "@quickgui/cli": "^0.1.4-next.1",
+    "@quickgui/cli": "^0.1.4-next.2",
     "@types/bun": "latest",
     "typescript": "7.0.2",
     "oxfmt": "^0.67.0"

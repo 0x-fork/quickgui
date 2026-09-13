@@ -91,6 +91,42 @@ test("Cargo artifact JSON reports the built executable", () => {
   expect(() => parseCargoExecutable("{}\n")).toThrow("did not produce an executable");
 });
 
+test("Rust development builds stream Cargo logs", async () => {
+  const root = mkdtempSync(join(tmpdir(), "quickgui-rust-cargo-logs-"));
+  try {
+    mkdirSync(join(root, "src"));
+    writeFileSync(
+      join(root, "Cargo.toml"),
+      '[package]\nname = "cargo-log-test"\nversion = "0.1.0"\nedition = "2024"\n',
+    );
+    writeFileSync(join(root, "src/main.rs"), "fn main() {}\n");
+    writeFileSync(
+      join(root, "quickgui.toml"),
+      'name = "Cargo Log Test"\nidentifier = "dev.test.cargo-log"\nlanguage = "rust"\nentry = "."\n',
+    );
+    const child = Bun.spawn(
+      [process.execPath, join(import.meta.dir, "cli.ts"), "dev", "--project", root, "--no-launch"],
+      {
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+        // Do not let a developer's global Cargo wrapper affect this isolated fixture.
+        env: { ...process.env, CARGO_BUILD_RUSTC_WRAPPER: "" },
+      },
+    );
+    const [status, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    expect(status).toBe(0);
+    expect(stdout).toContain("[quickgui] Development app:");
+    expect(stderr).toContain("Compiling cargo-log-test");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("Rust scaffold writes a crate and language config", async () => {
   const root = mkdtempSync(join(tmpdir(), "quickgui-rust-init-"));
   try {

@@ -141,16 +141,15 @@ export async function compileRustApplication(options: NativeCompileOptions): Pro
     cwd: plan.manifestDir,
     stdin: "ignore",
     stdout: "pipe",
-    stderr: "pipe",
+    // Cargo keeps machine-readable artifact messages on stdout and writes its
+    // human-readable progress and rendered diagnostics to stderr. Keep stdout
+    // available for parseCargoExecutable while showing Cargo output live.
+    stderr: "inherit",
     env: plan.env,
   });
-  const [status, stdout, stderr] = await Promise.all([
-    child.exited,
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ]);
+  const [status, stdout] = await Promise.all([child.exited, new Response(child.stdout).text()]);
   if (status !== 0) {
-    throw new CliError(`Rust compilation failed\n${stderr.trim() || stdout.trim()}`);
+    throw new CliError("Rust compilation failed");
   }
   const built = parseCargoExecutable(stdout);
   if (!existsSync(built)) throw new CliError(`Cargo did not write ${built}`);
