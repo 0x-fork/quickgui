@@ -1,7 +1,15 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { delimiter, join, resolve } from "node:path";
 
 import { parseCliArgs } from "./args.ts";
 import { loadConfig, resolveConfig } from "./config.ts";
@@ -104,14 +112,42 @@ test("Rust development builds stream Cargo logs", async () => {
       join(root, "quickgui.toml"),
       'name = "Cargo Log Test"\nidentifier = "dev.test.cargo-log"\nlanguage = "rust"\nentry = "."\n',
     );
+    // Stub cargo so this assertion does not wait on a cold rustc compile.
+    const artifact = join(root, "cargo-log-test");
+    writeFileSync(artifact, "");
+    const cargoHome = join(root, "cargo-bin");
+    mkdirSync(cargoHome);
+    const cargoShim = join(root, "cargo-shim.ts");
+    writeFileSync(
+      cargoShim,
+      `console.error("   Compiling cargo-log-test v0.1.0");
+console.log(${JSON.stringify(
+        JSON.stringify({
+          reason: "compiler-artifact",
+          target: { kind: ["bin"], name: "cargo-log-test" },
+          executable: artifact,
+        }),
+      )});
+`,
+    );
+    const cargo = join(cargoHome, process.platform === "win32" ? "cargo.cmd" : "cargo");
+    if (process.platform === "win32") {
+      writeFileSync(cargo, `@echo off\r\n"${process.execPath}" "${cargoShim}" %*\r\n`);
+    } else {
+      writeFileSync(cargo, `#!/bin/sh\nexec "${process.execPath}" "${cargoShim}" "$@"\n`);
+      chmodSync(cargo, 0o755);
+    }
     const child = Bun.spawn(
       [process.execPath, join(import.meta.dir, "cli.ts"), "dev", "--project", root, "--no-launch"],
       {
         stdin: "ignore",
         stdout: "pipe",
         stderr: "pipe",
-        // Do not let a developer's global Cargo wrapper affect this isolated fixture.
-        env: { ...process.env, CARGO_BUILD_RUSTC_WRAPPER: "" },
+        env: {
+          ...process.env,
+          PATH: `${cargoHome}${delimiter}${process.env.PATH ?? ""}`,
+          CARGO_BUILD_RUSTC_WRAPPER: "",
+        },
       },
     );
     const [status, stdout, stderr] = await Promise.all([
