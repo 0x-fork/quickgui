@@ -1,0 +1,4 @@
+name = "Benchmark QuickGUI Rust"
+identifier = "dev.quickgui.benchmark.rust"
+language = "rust"
+entry = "."

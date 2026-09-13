@@ -30,9 +30,17 @@ const fixtures = join(root, "benchmarks/desktop");
 const output = join(root, "target/desktop-benchmarks");
 const manifestPath = join(output, "apps.json");
 const runs = 3;
+const supportedAppIds = [
+  "quickgui-go",
+  "quickgui-typescript",
+  "quickgui-rust",
+  "tauri",
+  "electron",
+] as const;
+type AppId = (typeof supportedAppIds)[number];
 
 interface App {
-  id: string;
+  id: AppId;
   name: string;
   version: string;
   appPath: string;
@@ -43,6 +51,21 @@ interface Process {
   parent: number;
   rssBytes: number;
   path: string;
+}
+
+function selectedAppIds(argv: string[]): AppId[] {
+  const equals = argv.find((argument) => argument.startsWith("--only="));
+  const index = argv.indexOf("--only");
+  if (equals && index !== -1) throw new Error("Pass --only only once");
+  const value = equals?.slice("--only=".length) ?? (index === -1 ? undefined : argv[index + 1]);
+  if (index !== -1 && (!value || value.startsWith("--")))
+    throw new Error(`--only requires one of: ${supportedAppIds.join(", ")}`);
+  if (!value) return [...supportedAppIds];
+  if (!supportedAppIds.includes(value as AppId))
+    throw new Error(
+      `Unsupported --only value ${JSON.stringify(value)}; expected one of: ${supportedAppIds.join(", ")}`,
+    );
+  return [value as AppId];
 }
 
 async function command(argv: string[], cwd = root): Promise<string> {
@@ -77,114 +100,137 @@ function bytesInBundle(path: string, inodes = new Set<string>()): number {
   return stat.size;
 }
 
-async function build(): Promise<App[]> {
+async function build(selectedIds: readonly AppId[]): Promise<App[]> {
+  const selected = new Set<AppId>(selectedIds);
   const dataset = JSON.stringify(createIssues(), null, 2);
-  writeFileSync(join(fixtures, "quickgui-go/issues.generated.json"), dataset);
-  writeFileSync(join(fixtures, "quickgui-typescript/issues.generated.json"), dataset);
-  writeFileSync(join(fixtures, "web/issues.generated.json"), dataset);
+  for (const language of ["go", "typescript", "rust"] as const) {
+    const id = `quickgui-${language}` as AppId;
+    if (selected.has(id)) writeFileSync(join(fixtures, `${id}/issues.generated.json`), dataset);
+  }
   const webOutput = join(output, "web");
-  mkdirSync(webOutput, { recursive: true });
-  const web = await Bun.build({
-    entrypoints: [join(fixtures, "web/app.ts")],
-    outdir: webOutput,
-    target: "browser",
-    minify: true,
-  });
-  if (!web.success) throw new AggregateError(web.logs, "Could not build the issue tracker");
-  cpSync(join(fixtures, "web/index.html"), join(webOutput, "index.html"));
+  if (selected.has("tauri") || selected.has("electron")) {
+    writeFileSync(join(fixtures, "web/issues.generated.json"), dataset);
+    mkdirSync(webOutput, { recursive: true });
+    const web = await Bun.build({
+      entrypoints: [join(fixtures, "web/app.ts")],
+      outdir: webOutput,
+      target: "browser",
+      minify: true,
+    });
+    if (!web.success) throw new AggregateError(web.logs, "Could not build the issue tracker");
+    cpSync(join(fixtures, "web/index.html"), join(webOutput, "index.html"));
+  }
   const apps: App[] = [];
   const quickguiVersion = JSON.parse(
     readFileSync(join(root, "packages/cli/package.json"), "utf8"),
   ).version;
-  for (const frontend of ["go", "typescript"] as const) {
-    console.log(`[benchmark] Building QuickGUI ${frontend} (release)`);
-    const project = join(fixtures, `quickgui-${frontend}`);
-    if (frontend === "go") await command(["go", "mod", "tidy"], project);
+  for (const language of ["go", "typescript", "rust"] as const) {
+    const id = `quickgui-${language}` as AppId;
+    if (!selected.has(id)) continue;
+    console.log(`[benchmark] Building QuickGUI ${language} (release)`);
+    const project = join(fixtures, id);
+    if (language === "go") await command(["go", "mod", "tidy"], project);
     const result = await buildProject(await loadConfig(project), {
       mode: "production",
       target: "darwin-arm64",
-      outDir: join(output, `quickgui-${frontend}`),
+      outDir: join(output, id),
     });
     apps.push({
-      id: `quickgui-${frontend}`,
-      name: `QuickGUI ${frontend === "go" ? "Go" : "TypeScript"}`,
+      id,
+      name: `QuickGUI ${language === "go" ? "Go" : language === "rust" ? "Rust" : "TypeScript"}`,
       version: quickguiVersion,
       appPath: result.artifactPath,
       executablePath: result.executablePath,
     });
   }
-  console.log("[benchmark] Building Tauri (release)");
-  await command(
-    [
-      join(fixtures, "node_modules/.bin/tauri"),
-      "build",
-      "--bundles",
-      "app",
-      "--target",
-      "aarch64-apple-darwin",
-    ],
-    join(fixtures, "tauri"),
-  );
-  const tauriApp = join(
-    output,
-    "cargo/aarch64-apple-darwin/release/bundle/macos/Benchmark Tauri.app",
-  );
-  apps.push({
-    id: "tauri",
-    name: "Tauri",
-    version: "2.11.5",
-    appPath: tauriApp,
-    executablePath: join(tauriApp, "Contents/MacOS/benchmark-tauri"),
-  });
-  console.log("[benchmark] Packaging Electron (release)");
-  const source = join(output, "electron-source");
-  mkdirSync(source, { recursive: true });
-  const bundled = await Bun.build({
-    entrypoints: [join(fixtures, "electron/main.ts")],
-    outdir: source,
-    target: "node",
-    format: "cjs",
-    external: ["electron"],
-    minify: true,
-  });
-  if (!bundled.success) throw new AggregateError(bundled.logs, "Could not bundle Electron entry");
-  cpSync(webOutput, source, { recursive: true });
+  if (selected.has("tauri")) {
+    console.log("[benchmark] Building Tauri (release)");
+    await command(
+      [
+        join(fixtures, "node_modules/.bin/tauri"),
+        "build",
+        "--bundles",
+        "app",
+        "--target",
+        "aarch64-apple-darwin",
+      ],
+      join(fixtures, "tauri"),
+    );
+    const tauriApp = join(
+      output,
+      "cargo/aarch64-apple-darwin/release/bundle/macos/Benchmark Tauri.app",
+    );
+    apps.push({
+      id: "tauri",
+      name: "Tauri",
+      version: "2.11.5",
+      appPath: tauriApp,
+      executablePath: join(tauriApp, "Contents/MacOS/benchmark-tauri"),
+    });
+  }
+  if (selected.has("electron")) {
+    console.log("[benchmark] Packaging Electron (release)");
+    const source = join(output, "electron-source");
+    mkdirSync(source, { recursive: true });
+    const bundled = await Bun.build({
+      entrypoints: [join(fixtures, "electron/main.ts")],
+      outdir: source,
+      target: "node",
+      format: "cjs",
+      external: ["electron"],
+      minify: true,
+    });
+    if (!bundled.success) throw new AggregateError(bundled.logs, "Could not bundle Electron entry");
+    cpSync(webOutput, source, { recursive: true });
+    writeFileSync(
+      join(source, "package.json"),
+      JSON.stringify({
+        name: "benchmark-electron",
+        version: "0.1.0",
+        main: "main.js",
+        private: true,
+      }),
+    );
+    await command(
+      [
+        join(fixtures, "node_modules/.bin/electron-packager"),
+        source,
+        "Benchmark Electron",
+        "--platform=darwin",
+        "--arch=arm64",
+        "--electron-version=44.2.0",
+        "--asar",
+        `--out=${join(output, "electron")}`,
+        "--overwrite",
+        "--app-bundle-id=dev.quickgui.benchmark.electron",
+      ],
+      fixtures,
+    );
+    const electronApp = join(
+      output,
+      "electron/Benchmark Electron-darwin-arm64/Benchmark Electron.app",
+    );
+    apps.push({
+      id: "electron",
+      name: "Electron",
+      version: "44.2.0",
+      appPath: electronApp,
+      executablePath: join(electronApp, "Contents/MacOS/Benchmark Electron"),
+    });
+  }
+  const previousApps: App[] = existsSync(manifestPath)
+    ? JSON.parse(readFileSync(manifestPath, "utf8"))
+    : [];
+  const manifestApps = new Map(previousApps.map((app) => [app.id, app]));
+  for (const app of apps) manifestApps.set(app.id, app);
   writeFileSync(
-    join(source, "package.json"),
-    JSON.stringify({
-      name: "benchmark-electron",
-      version: "0.1.0",
-      main: "main.js",
-      private: true,
-    }),
+    manifestPath,
+    JSON.stringify(
+      supportedAppIds.flatMap((id) => manifestApps.get(id) ?? []),
+      null,
+      2,
+    ) + "\n",
   );
-  await command(
-    [
-      join(fixtures, "node_modules/.bin/electron-packager"),
-      source,
-      "Benchmark Electron",
-      "--platform=darwin",
-      "--arch=arm64",
-      "--electron-version=44.2.0",
-      "--asar",
-      `--out=${join(output, "electron")}`,
-      "--overwrite",
-      "--app-bundle-id=dev.quickgui.benchmark.electron",
-    ],
-    fixtures,
-  );
-  const electronApp = join(
-    output,
-    "electron/Benchmark Electron-darwin-arm64/Benchmark Electron.app",
-  );
-  apps.push({
-    id: "electron",
-    name: "Electron",
-    version: "44.2.0",
-    appPath: electronApp,
-    executablePath: join(electronApp, "Contents/MacOS/Benchmark Electron"),
-  });
-  writeFileSync(manifestPath, JSON.stringify(apps, null, 2) + "\n");
   return apps;
 }
 
@@ -450,7 +496,7 @@ async function measure(apps: App[]) {
       workload:
         "A 1100 × 720 issue tracker with 1,000 identical records, three sidebar filters, search, 100 retained rows per page, pagination, issue details, editable notes, and completion actions. Idle on the first page with the first issue selected. Edits stay in memory for the session; no network or database service.",
       build:
-        "Production builds; no optional plugins. Go uses the CLI release build; TypeScript embeds Bun and a Solid 2 worker with the same native library. Tauri uses the default Cargo release profile; Electron is packaged with ASAR.",
+        "Production builds; no optional plugins. QuickGUI Go uses the CLI release build, QuickGUI TypeScript embeds Bun and a Solid 2 worker with the same native library, and QuickGUI Rust links the crate into its executable. Tauri uses the default Cargo release profile; Electron is packaged with ASAR.",
       memory:
         "Sum of proc_pid_rusage physical footprints for the main app, bundled helper executables, and coalition-associated WebKit WebContent/GPU/Networking processes. AutoFill/SafariPlatformSupport and other macOS services are recorded but excluded. Includes compressed memory; this is not JavaScript heap size or RSS. Charts use decimal MB (1,000,000 bytes), as in Activity Monitor.",
       bundle:
@@ -466,26 +512,55 @@ async function measure(apps: App[]) {
       samplesPerRun: idlePolicy.samplesPerRun,
       intervalMs: idlePolicy.intervalMs,
       idlePolicy,
+      measurementDates:
+        "Each result records its own measurement date and toolchain; every row uses the same machine, OS, workload, and idle policy.",
     },
     results,
   };
-  const json = JSON.stringify(report, null, 2) + "\n";
+  const publicDir = join(root, "website/public/benchmarks");
+  const publishedPath = join(publicDir, "desktop-macos-arm64.json");
+  const publish = process.argv.includes("--publish");
+  let finalReport = report;
+  if (publish && apps.length < supportedAppIds.length) {
+    if (!existsSync(publishedPath))
+      throw new Error("A partial publish needs the existing website benchmark data");
+    const existing = JSON.parse(readFileSync(publishedPath, "utf8")) as typeof report;
+    if (
+      existing.schemaVersion !== report.schemaVersion ||
+      existing.platform !== report.platform ||
+      JSON.stringify(existing.workload) !== JSON.stringify(report.workload) ||
+      JSON.stringify(existing.machine) !== JSON.stringify(report.machine)
+    )
+      throw new Error(
+        "The existing website data uses a different schema, machine, OS, or workload; rerun every framework instead of merging incomparable results",
+      );
+    const merged = new Map(existing.results.map((result) => [result.id, result]));
+    for (const result of report.results) merged.set(result.id, result);
+    const mergedResults = supportedAppIds.map((id) => merged.get(id));
+    const missing = supportedAppIds.filter((_, index) => !mergedResults[index]);
+    if (missing.length)
+      throw new Error(`The existing website data is missing ${missing.join(", ")}`);
+    finalReport = {
+      ...report,
+      results: mergedResults.filter((result) => result !== undefined),
+    };
+  }
+  const json = JSON.stringify(finalReport, null, 2) + "\n";
   writeFileSync(join(output, "results.json"), json);
-  if (process.argv.includes("--publish")) {
-    const publicDir = join(root, "website/public/benchmarks");
+  if (publish) {
     const dataDir = join(root, "website/src/data");
     mkdirSync(publicDir, { recursive: true });
     mkdirSync(dataDir, { recursive: true });
     for (const app of apps) {
       cpSync(join(output, "screenshots", `${app.id}-1.png`), join(publicDir, `${app.id}.png`));
     }
-    writeFileSync(join(publicDir, "desktop-macos-arm64.json"), json);
+    writeFileSync(publishedPath, json);
     writeFileSync(
       join(dataDir, "desktop-benchmarks.json"),
       JSON.stringify(
         {
-          ...report,
-          results: report.results.map(({ runs: _runs, ...summary }) => summary),
+          ...finalReport,
+          results: finalReport.results.map(({ runs: _runs, ...summary }) => summary),
         },
         null,
         2,
@@ -504,21 +579,19 @@ if (import.meta.main) {
   process.env.GOWORK = "off";
   process.env.CGO_ENABLED = "0";
   process.env.CARGO_TARGET_DIR = join(output, "cargo");
-  const apps: App[] = process.argv.includes("--measure-only")
+  const requestedIds = selectedAppIds(process.argv);
+  const builtOrManifestApps: App[] = process.argv.includes("--measure-only")
     ? JSON.parse(readFileSync(manifestPath, "utf8"))
-    : await build();
-  const supportedApps = [
-    "quickgui-go",
-    "quickgui-typescript",
-    "tauri",
-    "electron",
-  ];
-  if (apps.some((app) => !supportedApps.includes(app.id)))
-    throw new Error("Benchmark manifest contains an unsupported app; rebuild the fixtures before measuring or publishing");
-  for (const id of supportedApps) {
+    : await build(requestedIds);
+  if (builtOrManifestApps.some((app) => !supportedAppIds.includes(app.id)))
+    throw new Error(
+      "Benchmark manifest contains an unsupported app; rebuild the fixtures before measuring or publishing",
+    );
+  const apps = builtOrManifestApps.filter((app) => requestedIds.includes(app.id));
+  for (const id of requestedIds) {
     if (!apps.some((app) => app.id === id))
       throw new Error(
-        `Benchmark manifest is missing ${id}; rebuild all fixtures before measuring or publishing`,
+        `Benchmark manifest is missing ${id}; build that fixture before measuring or publishing`,
       );
   }
   if (!process.argv.includes("--build-only")) await measure(apps);

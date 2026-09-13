@@ -1,4 +1,5 @@
 /tauri/gen/
 /quickgui-go/issues.generated.json
+/quickgui-rust/issues.generated.json
 /quickgui-typescript/issues.generated.json
 /web/issues.generated.json

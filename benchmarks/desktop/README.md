@@ -13,7 +13,7 @@ Edits are kept in memory for the session. The initial view contains the first
 100 issues and the first issue's details. There is no network, database, or
 background synchronization. No fixture includes optional extensions or plugins.
 Electron and Tauri use the exact same bundled TypeScript, HTML, and CSS. QuickGUI
-uses Go and Bun/Solid 2 TypeScript components with fine-grained reactive state.
+uses Go, Bun/Solid 2 TypeScript, and Rust components over the same native core.
 
 [`workload.ts`](workload.ts) generates one deterministic dataset embedded in all
 five builds; generated copies are ignored by Git. The result records the dataset
@@ -51,8 +51,8 @@ It embeds the same generated JSON, retains 100 rows per page, and checks the dat
 mounted row count, and native viewport before setting the readiness title. Its bundle
 includes Bun and the Rust shared library; its worker runs inside the measured app process.
 The homepage retains a measurement date and toolchain for each framework. The
-TypeScript result was measured on September 9, 2026; the other rows retain their
-September 8 measurements on the same machine, OS, workload, and idle policy.
+rows can be refreshed independently while retaining the other measurements from
+the same machine, OS, workload, and idle policy.
 
 ```sh
 # Build without opening the apps.
@@ -61,15 +61,20 @@ bun scripts/benchmark-desktop.ts --build-only
 # Rerun the already-built apps and regenerate the homepage's data files.
 bun scripts/benchmark-desktop.ts --measure-only --publish
 
+# Build and measure only QuickGUI Rust, merging it with the published rows.
+bun scripts/benchmark-desktop.ts --only quickgui-rust --publish
+
 # Open the packaged Electron app for manual use.
 open "target/desktop-benchmarks/electron/Benchmark Electron-darwin-arm64/Benchmark Electron.app"
 ```
 
 `--publish` writes local website data files and the first launch's screenshot for
-each framework, shown in the homepage's app preview. It does not deploy the website.
-Every framework must finish successfully before those files are replaced. The
-runner identifies the fresh process from each launch; it does not close a copy
-that you opened manually.
+each measured framework, shown in the homepage's app preview. It does not deploy
+the website. A partial `--only` publish verifies that the existing result used the
+same schema, machine, OS, and workload before replacing that framework's row. Every
+requested framework must finish successfully before those files are replaced. The
+runner identifies the fresh process from each launch; it does not close a copy that
+you opened manually.
 
 The runner waits for the packaged app's visible issue tracker window. Electron and
 Tauri change the window title only after validating all 1,000 records, the 100
@@ -149,14 +154,15 @@ symlinks are not followed and hard-linked files are deduplicated. Directory
 allocation, extended attributes, and compression are excluded.
 
 Tauri uses the OS's WebKit, so WebKit is not part of its distributed bundle.
-Electron ships Chromium and Node. QuickGUI bundles its shared native runtime; the TypeScript fixture also embeds Bun.
+Electron ships Chromium and Node. QuickGUI Go bundles its shared native runtime,
+QuickGUI TypeScript also embeds Bun, and QuickGUI Rust links the core into its executable.
 This measures what each fixture ships, rather than adding system libraries to
 one framework or removing included libraries from another. It is installed
 bundle size, not DMG, ZIP, or installer download size.
 
-The CLI uses its normal Go release flags. Tauri uses the default Cargo release profile. Electron is packaged
-with ASAR using `@electron/packager`. Dependency versions are pinned in the
-fixture manifests and lockfiles.
+The CLI uses its normal Go and Rust release builds. Tauri uses the default Cargo
+release profile. Electron is packaged with ASAR using `@electron/packager`.
+Dependency versions are pinned in the fixture manifests and lockfiles.
 
 ## Data and limitations
 

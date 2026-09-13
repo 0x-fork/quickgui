@@ -8,6 +8,7 @@ const MB = 1_000_000;
 const colors: Record<string, string> = {
   "quickgui-go": "var(--peach)",
   "quickgui-typescript": "#7ea6e8",
+  "quickgui-rust": "#b7794d",
   tauri: "#64748b",
   electron: "#71717a",
 };

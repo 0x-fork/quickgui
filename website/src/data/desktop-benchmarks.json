@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "measuredAt": "2026-09-09T13:23:03.939Z",
+  "measuredAt": "2026-09-13T00:39:34.522Z",
   "platform": "macOS arm64",
   "workload": {
     "id": "issue-tracker-v1",
@@ -22,13 +22,13 @@
     "go": "go version go1.27.1 darwin/arm64",
     "rust": "rustc 1.96.0 (ac68faa20 2026-05-25)",
     "bun": "1.4.2",
-    "solid": "2.0.0-rc.7",
-    "quickguiRevision": "3e6f700dd761d86570744923d83a3b97628c9d88",
+    "solid": "2.0.0-rc.8",
+    "quickguiRevision": "d88334805f24e1e0474323cdb0646065b75f6229",
     "quickguiWorkingTreeDirty": true
   },
   "methodology": {
     "workload": "A 1100 × 720 issue tracker with 1,000 identical records, three sidebar filters, search, 100 retained rows per page, pagination, issue details, editable notes, and completion actions. Idle on the first page with the first issue selected. Edits stay in memory for the session; no network or database service.",
-    "build": "Production builds; no optional plugins. Go uses the CLI release build; TypeScript embeds Bun and Solid 2 with the same native library. Tauri uses the default Cargo release profile; Electron is packaged with ASAR.",
+    "build": "Production builds; no optional plugins. QuickGUI Go uses the CLI release build, QuickGUI TypeScript embeds Bun and a Solid 2 worker with the same native library, and QuickGUI Rust links the crate into its executable. Tauri uses the default Cargo release profile; Electron is packaged with ASAR.",
     "memory": "Sum of proc_pid_rusage physical footprints for the main app, bundled helper executables, and coalition-associated WebKit WebContent/GPU/Networking processes. AutoFill/SafariPlatformSupport and other macOS services are recorded but excluded. Includes compressed memory; this is not JavaScript heap size or RSS. Charts use decimal MB (1,000,000 bytes), as in Activity Monitor.",
     "bundle": "Uncompressed .app file bytes, including bundled libraries/frameworks. Symlinks counted once; OS-provided frameworks such as WebKit are excluded. This is not installer/download size.",
     "aggregation": "Wait at least 30 seconds after readiness, then require 15 seconds with app/renderer CPU at most 1% of one core, unchanged process membership, and memory spread at most 1 MB or 1% for both main process and framework helpers. Take ten further one-second samples, requiring continued stability; activity restarts the idle observation within the same 180-second deadline. Median per launch, then median of three launch medians; whiskers show the launch-median range. No forced GC, cache purge, or memory-pressure injection.",
@@ -48,7 +48,7 @@
       "maximumMemorySpreadBytes": 1000000,
       "maximumMemorySpreadRatio": 0.01
     },
-    "measurementDates": "Each result records its own measurement date and toolchain. TypeScript was measured on September 9, 2026; the other frameworks retain their September 8, 2026 measurements on the same machine, OS, workload, and idle policy."
+    "measurementDates": "Each result records its own measurement date and toolchain; every row uses the same machine, OS, workload, and idle policy."
   },
   "results": [
     {
@@ -90,6 +90,27 @@
       "memoryMinBytes": 92554440,
       "memoryMaxBytes": 97928416,
       "mainProcessMemoryBytes": 97486072,
+      "frameworkHelperMemoryBytes": 0
+    },
+    {
+      "id": "quickgui-rust",
+      "name": "QuickGUI Rust",
+      "version": "0.1.4-next.2",
+      "measuredAt": "2026-09-13T00:39:34.515Z",
+      "toolchain": {
+        "go": "go version go1.27.1 darwin/arm64",
+        "rust": "rustc 1.96.0 (ac68faa20 2026-05-25)",
+        "bun": "1.4.2",
+        "solid": "2.0.0-rc.8",
+        "quickguiRevision": "d88334805f24e1e0474323cdb0646065b75f6229",
+        "quickguiWorkingTreeDirty": true
+      },
+      "bundleBytes": 13740179,
+      "executableSha256": "3956b647ca28a049cbf608eb192624fc4f54b45b950436ec943433d804c17d5a",
+      "memoryBytes": 68731912,
+      "memoryMinBytes": 68682736,
+      "memoryMaxBytes": 69960712,
+      "mainProcessMemoryBytes": 68731912,
       "frameworkHelperMemoryBytes": 0
     },
     {
