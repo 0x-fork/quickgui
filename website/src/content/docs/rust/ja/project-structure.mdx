@@ -55,10 +55,11 @@ quickgui = { version = "...", features = ["updater"] }
 ## ローカル開発
 
 ```sh
-bun run dev
-bun run check
-bun run test
-bun run build
+quickgui check
+quickgui test
+quickgui fmt
+quickgui dev
+quickgui build
 ```
 
 `dev` はソースの変更に合わせて再ビルドします。

@@ -9,26 +9,13 @@ macOS is the supported target today.
 
 ## Create a project
 
-The fastest way to try QuickGUI is the counter in this repository:
-
-```sh
-git clone https://github.com/egoist/quickgui.git
-cd quickgui
-bun install
-bun run build:native
-cd examples/counter-typescript
-bun run dev
-```
-
-After packages are published:
-
 ```sh
 bunx @quickgui/cli init my-app --language typescript
 cd my-app
-bun run dev
+quickgui dev
 ```
 
-From a checkout, `bun packages/cli/src/cli.ts init ../my-app --language typescript` scaffolds the same project.
+`init` writes the project and installs dependencies. Omit `--language` to choose Go, TypeScript, or Rust interactively.
 
 ## Your first window
 
@@ -63,10 +50,11 @@ openWindow();
 ## Run and build
 
 ```sh
-bun run check
-bun run test
-bun run dev
-bun run build
+quickgui check
+quickgui test
+quickgui fmt
+quickgui dev
+quickgui build
 ```
 
 `dev` rebuilds as you edit. `build` writes a packaged app under `dist/`.

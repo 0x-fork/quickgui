@@ -9,26 +9,13 @@
 
 ## プロジェクトを作成
 
-いちばん早い試し方は、このリポジトリのカウンターです。
-
-```sh
-git clone https://github.com/egoist/quickgui.git
-cd quickgui
-bun install
-bun run build:native
-cd examples/counter-typescript
-bun run dev
-```
-
-パッケージ公開後は：
-
 ```sh
 bunx @quickgui/cli init my-app --language typescript
 cd my-app
-bun run dev
+quickgui dev
 ```
 
-チェックアウトからは `bun packages/cli/src/cli.ts init ../my-app --language typescript` で同じプロジェクトを作れます。
+`init` はプロジェクトを作成し、依存関係をインストールします。`--language` を省略すると、Go、TypeScript、Rust を対話的に選べます。
 
 ## 最初のウィンドウ
 
@@ -63,10 +50,11 @@ openWindow();
 ## 実行とビルド
 
 ```sh
-bun run check
-bun run test
-bun run dev
-bun run build
+quickgui check
+quickgui test
+quickgui fmt
+quickgui dev
+quickgui build
 ```
 
 `dev` は編集に合わせて再ビルドします。`build` はパッケージ済みアプリを `dist/` に書き出します。

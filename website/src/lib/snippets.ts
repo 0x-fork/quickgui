@@ -49,7 +49,7 @@ native_view(host.view())
 }
 `,
   },
-  typescriptCliCheck: { lang: "bash", code: "bun run check\nbun run test\nbun run fmt" },
+  typescriptCliCheck: { lang: "bash", code: "quickgui check\nquickgui test\nquickgui fmt" },
   rustCounter: {
     lang: "rust",
     code: `impl View for Counter {
@@ -155,16 +155,16 @@ func openWindow() {
     lang: "bash",
     code: `bunx @quickgui/cli init my-app
 cd my-app
-bun run dev`,
+quickgui dev`,
   },
   cliFormat: {
     lang: "bash",
-    code: `bun run fmt
-bun run build`,
+    code: `quickgui fmt
+quickgui build`,
   },
   cliBuild: {
     lang: "bash",
-    code: `bun run build --target darwin-arm64 \\
+    code: `quickgui build --target darwin-arm64 \\
   --sign "Developer ID Application: Example (TEAMID)" \\
   --notarize quickgui-notary`,
   },

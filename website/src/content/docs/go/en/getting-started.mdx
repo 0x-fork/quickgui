@@ -9,27 +9,13 @@ macOS is the supported target today.
 
 ## Create a project
 
-The fastest way to try QuickGUI is the counter in this repository:
-
-```bash
-git clone https://github.com/egoist/quickgui.git
-cd quickgui
-bun install
-bun run build:native
-cd examples/counter
-bun run dev
+```sh
+bunx @quickgui/cli init my-app --language go
+cd my-app
+quickgui dev
 ```
 
-To start a new app from the same checkout:
-
-```bash
-bun packages/cli/src/cli.ts init ../my-app --language go --no-install
-cd ../my-app
-go mod edit -replace github.com/egoist/quickgui/go=../quickgui/go
-go mod tidy
-```
-
-Then run the app with `bun packages/cli/src/cli.ts dev --project ../my-app` from the QuickGUI checkout. After packages are published, `quickgui init my-app --language go` will be the usual command.
+`init` writes the project and installs dependencies. Omit `--language` to choose Go, TypeScript, or Rust interactively.
 
 ## Your first window
 
@@ -91,15 +77,14 @@ func main() {
 
 ## Run and build
 
-```bash
+```sh
 quickgui dev
 quickgui fmt
+quickgui check
 quickgui build
 ```
 
 `dev` rebuilds your Go code and relaunches the app as you edit. `fmt` wraps long UI calls. `build` writes a packaged app under `dist/`.
-
-From this repository, prefix those commands with `bun packages/cli/src/cli.ts` and pass `--project` if you are not inside the app directory.
 
 ## Next steps
 
