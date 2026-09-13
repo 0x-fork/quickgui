@@ -1,0 +1,4 @@
+# Vite copies this into the client build. Hashed files under /assets/* are
+# content-addressed, so browsers can keep them without revalidation.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
