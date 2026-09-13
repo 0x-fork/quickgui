@@ -4,6 +4,34 @@ All notable user-facing changes to QuickGUI are recorded here.
 
 ## Unreleased
 
+## 0.1.4-next.4 - 2026-09-13
+
+Same user-facing cut as 0.1.4-next.3. This version is the complete `latest` npm
+set; `0.1.4-next.3` could not move `@quickgui/native` onto `latest` after that
+package was already published.
+
+## 0.1.4-next.3 - 2026-09-13
+
+### CLI
+
+- Shipped project templates are now `.tmpl` files. After `bun install`, Go, bun, and Cargo
+  no longer treat `node_modules/@quickgui/cli/templates` as packages or modules.
+- Native resource bundles now size the gzip envelope separately from decoded content. A
+  framework at the 128 MiB content limit packs and unpacks, and an oversized envelope is
+  rejected before any output is written.
+- Published npm packages now ship Linux and Windows host libraries beside the macOS
+  images, so `quickgui` installs on those platforms instead of being rejected as
+  darwin-only. The Windows terminal image links Ghostty's static archive instead of
+  the DLL import library, so `quickgui_terminal.dll` can link on MSVC.
+
+### JavaScript
+
+- `useParams`, `useLocation`, and `useSearchParams` now return store-like objects, so
+  `params.id` and `location.pathname` work as they do in Solid Router instead of requiring
+  accessor calls.
+- Destroying the native application now rejects pending app-service requests. Those
+  promises previously stayed pending after cleanup.
+
 ## @quickgui/cli 0.1.4-next.2 - 2026-09-13
 
 ### CLI
