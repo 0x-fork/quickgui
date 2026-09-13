@@ -38,6 +38,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Meta />
         <Links />
+        {import.meta.env.PROD ? (
+          <script
+            defer
+            src="https://u.egoist.dev/script.js"
+            data-website-id="77aceb0f-88e7-4237-b08f-86d964ed9425"
+          />
+        ) : null}
       </head>
       <body>
         {children}
