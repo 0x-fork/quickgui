@@ -7,7 +7,7 @@ QuickGUI is a native desktop GUI framework for **Go**, **TypeScript**, and **Rus
 
 ## Try it
 
-Clone this repository, then run a counter:
+Create a new project:
 
 ```console
 bunx @quickgui/cli init my-app
