@@ -97,7 +97,7 @@ func TestAnInstanceConstructedInAnEventKeepsItsControlledBinding(t *testing.T) {
 			}
 		}
 		setOpen(true)
-		trigger := popup.NativeNode().Children[0]
+		trigger := popup.NativeNode().Group[0]
 		for _, listener := range trigger.Listeners {
 			if listener.Type == protocol.EventClick {
 				listener.Listener(&native.Event{Type: protocol.EventClick, Target: trigger})

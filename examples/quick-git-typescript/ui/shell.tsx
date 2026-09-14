@@ -141,20 +141,29 @@ function Notices() {
           : app.theme().accent;
   return (
     <Toast.Portal
-      style={{ position: "absolute", right: 16, bottom: 16, width: 340, display: "flex" }}
+      style={{
+        position: "absolute",
+        left: 0,
+        right: 0,
+        bottom: 16,
+        display: "flex",
+        justifyContent: "center",
+      }}
     >
-      <Toast.Viewport style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%" }}>
+      <Toast.Viewport style={{ display: "flex", flexDirection: "column", gap: 8, width: 340 }}>
         <For each={toasts.stack()}>
           {(entry) => {
             const toast = () => toasts.toasts().find((candidate) => candidate.id === entry.id);
             return (
-              <Toast.Positioner toastId={entry.id}>
+              <Toast.Positioner toastId={entry.id} style={{ width: "100%", minWidth: 0 }}>
                 <Toast.Root
                   toastId={entry.id}
                   style={[
                     app.styles().popup,
                     {
                       flexDirection: "row",
+                      width: "100%",
+                      minWidth: 0,
                       alignItems: "flex-start",
                       gap: 10,
                       paddingLeft: 12,

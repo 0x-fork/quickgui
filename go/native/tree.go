@@ -436,7 +436,22 @@ func retire(node *Node) {
 		retire(child)
 	}
 	node.Children = nil
+	for _, member := range node.Group {
+		retire(member)
+	}
 	node.Group = nil
+}
+
+// DiscardDetachedNode retires a node that was constructed but never inserted.
+// Frontend fragment regions use this when replacing detached grouped content.
+func DiscardDetachedNode(node *Node) {
+	if node == nil || node.Removed {
+		return
+	}
+	if node.Parent != nil || node.Host != nil {
+		panic("only detached QuickGUI nodes can be discarded directly")
+	}
+	retire(node)
 }
 
 func indexOfChild(parent, node *Node) int {

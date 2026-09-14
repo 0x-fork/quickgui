@@ -30,7 +30,13 @@ func TestComponentInstancesComposeWithoutCallbacksAndKeepStateSeparate(t *testin
 		trigger := first.Trigger().Child("First").Px4()
 		other := second.Trigger().Child("Second")
 		root := View().Children(first.Root().Child(trigger), second.Root().Child(other))
-		if root.Node.Children[0].Children[0] != trigger.NativeNode() {
+		var mounted []*native.Node
+		for _, child := range root.Node.Children {
+			if child.Tag != protocol.TagSentinel {
+				mounted = append(mounted, child)
+			}
+		}
+		if len(mounted) != 2 || mounted[0] != trigger.NativeNode() || mounted[1] != other.NativeNode() {
 			t.Fatal("compound part did not mount directly")
 		}
 		id := trigger.ID
@@ -42,6 +48,43 @@ func TestComponentInstancesComposeWithoutCallbacksAndKeepStateSeparate(t *testin
 		clickComponent(other.NativeNode())
 		if secondChanges != 1 {
 			t.Fatal("second instance lost its default action")
+		}
+		return struct{}{}
+	})
+}
+
+func TestTransparentComponentRootsDoNotAddLayoutViews(t *testing.T) {
+	native.ResetTreeStateForTests()
+	reactive.CreateRoot(func(dispose func()) struct{} {
+		defer dispose()
+		content := View().SizeFull().Child("window content")
+		provider := NewToast().Provider().Child(content)
+		parent := View().Child(provider)
+		root := provider.NativeNode()
+		if root.Tag != protocol.TagSentinel || len(root.Group) != 1 || root.Group[0] != content.Node {
+			t.Fatal("a transparent provider inserted a layout node around its content")
+		}
+		if len(parent.Node.Children) != 2 || parent.Node.Children[0] != content.Node || parent.Node.Children[1] != root {
+			t.Fatal("transparent provider content did not mount directly in its parent")
+		}
+		return struct{}{}
+	})
+}
+
+func TestDetachedRegionsRetireNestedFragmentGroups(t *testing.T) {
+	native.ResetTreeStateForTests()
+	reactive.CreateRoot(func(dispose func()) struct{} {
+		defer dispose()
+		visible, setVisible := CreateSignal(true)
+		var fragment, child *native.Node
+		Show(visible, func() *native.Node {
+			child = View().Child("nested").Node
+			fragment = Fragment(child)
+			return fragment
+		})
+		setVisible(false)
+		if fragment == nil || child == nil || !fragment.Removed || !child.Removed {
+			t.Fatal("clearing a detached region leaked a nested fragment group")
 		}
 		return struct{}{}
 	})

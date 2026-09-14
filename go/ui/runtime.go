@@ -374,9 +374,11 @@ func (r *Region) Clear() {
 	}
 	if r.Sentinel.Group != nil {
 		parent := r.Sentinel.Parent
-		if parent != nil {
-			for _, node := range r.Sentinel.Group {
+		for _, node := range r.Sentinel.Group {
+			if parent != nil {
 				native.RemoveNode(parent, node)
+			} else {
+				native.DiscardDetachedNode(node)
 			}
 		}
 		r.Sentinel.Group = nil

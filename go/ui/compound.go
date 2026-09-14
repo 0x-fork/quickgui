@@ -125,7 +125,9 @@ func (instance *componentInstance) rootElement(transparent bool, build func(Comp
 					instance.owner = reactive.GetOwner()
 					content := withPartChildren(previous, children)
 					if transparent {
-						return View().Child(content).Node
+						// Logical roots such as Toast.Provider and Popover.Root need a stable
+						// ownership node, but must not add a box to their children's layout.
+						return Fragment(content)
 					}
 					if content == nil {
 						return nil

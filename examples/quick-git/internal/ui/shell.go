@@ -98,8 +98,8 @@ func mainView() *native.Node {
 func notices(notifications *gui.ToastComponent) *native.Node {
 	app := UseApp()
 	toasts := gui.UseToastManager()
-	return notifications.Portal(gui.PartProps{Style: gui.Style().Position("absolute").Right(16).Bottom(16).Width(340).Display("flex")}).Child(func() *native.Node {
-		return notifications.Viewport(gui.ToastViewportProps{PartProps: gui.PartProps{Style: gui.Style().Display("flex").FlexDirection("column").Gap(8).Width("100%")}}).Child(func() *native.Node {
+	return notifications.Portal(gui.PartProps{Style: gui.Style().Position("absolute").Left(0).Right(0).Bottom(16).Display("flex").JustifyContent("center")}).Child(func() *native.Node {
+		return notifications.Viewport(gui.ToastViewportProps{PartProps: gui.PartProps{Style: gui.Style().Display("flex").FlexDirection("column").Gap(8).Width(340)}}).Child(func() *native.Node {
 			return gui.For(
 				func() []gui.ToastStackEntry {
 					return toasts.Stack()
@@ -129,11 +129,11 @@ func notices(notifications *gui.ToastComponent) *native.Node {
 					}
 					return notifications.Positioner(gui.ToastPartProps{
 						ToastID:   entry.ID,
-						PartProps: gui.PartProps{},
+						PartProps: gui.PartProps{Style: gui.Style().Width("100%").MinWidth(0)},
 					}).Child(func() *native.Node {
 						return notifications.Root(gui.ToastPartProps{
 							ToastID:   entry.ID,
-							PartProps: gui.PartProps{Style: gui.Style().Display("flex").FlexDirection("row").AlignItems("flex-start").Gap(10).PaddingLeft(12).PaddingRight(8).PaddingTop(10).PaddingBottom(10).BackgroundColor(app.Theme().Raised).BorderWidth(1).BorderColor(app.Theme().BorderStrong).BorderRadius(8).Opacity(opacity).Transform("translateX(" + formatSwipe(entry.SwipeMovement) + "px)")},
+							PartProps: gui.PartProps{Style: gui.Style().Display("flex").Width("100%").MinWidth(0).FlexDirection("row").AlignItems("flex-start").Gap(10).PaddingLeft(12).PaddingRight(8).PaddingTop(10).PaddingBottom(10).BackgroundColor(app.Theme().Raised).BorderWidth(1).BorderColor(app.Theme().BorderStrong).BorderRadius(8).Opacity(opacity).Transform("translateX(" + formatSwipe(entry.SwipeMovement) + "px)")},
 						}).Child(func() *native.Node {
 							return gui.Fragment([]*native.Node{gui.View().Width(3).AlignSelf("stretch").BorderRadius(2).BackgroundColor(color).Node, notifications.Content(gui.ToastPartProps{
 								ToastID:   entry.ID,

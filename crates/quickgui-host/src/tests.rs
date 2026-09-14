@@ -4209,7 +4209,7 @@ fn declared_toasts_push_and_dismiss_through_the_core_queue() {
     let toast_id = 661;
     let close_id = 662;
     let mut tree = NativeTree::default();
-    let viewport = component_part_node(
+    let mut viewport = component_part_node(
         NodeTag::View,
         ROOT_NODE,
         "toast-viewport",
@@ -4217,19 +4217,23 @@ fn declared_toasts_push_and_dismiss_through_the_core_queue() {
             (property::SCOPE, "toasts"),
             (
                 property::TOASTS,
-                r#"[{"id":"saved","title":"Saved","kind":"success"},{"id":"","title":"Dropped"}]"#,
+                r#"[{"id":"saved","title":"Saved","kind":"success","duration":1000},{"id":"","title":"Dropped"}]"#,
             ),
         ],
         &[(property::COMPONENT_CHANGE_LISTENER, true)],
     );
+    viewport.set_property(property::WIDTH, Some(PropertyValue::Number(200.0)));
+    viewport.set_property(property::HEIGHT, Some(PropertyValue::Number(100.0)));
     insert_component_node(&mut tree, viewport_id, ROOT_NODE, viewport);
-    let toast = component_part_node(
+    let mut toast = component_part_node(
         NodeTag::View,
         viewport_id,
         "toast",
         &[(property::SCOPE, "toasts"), (property::PART_VALUE, "saved")],
         &[],
     );
+    toast.set_property(property::WIDTH, Some(PropertyValue::Number(100.0)));
+    toast.set_property(property::HEIGHT, Some(PropertyValue::Number(40.0)));
     insert_component_node(&mut tree, toast_id, viewport_id, toast);
     let close = component_part_node(
         NodeTag::Button,
@@ -4255,6 +4259,55 @@ fn declared_toasts_push_and_dismiss_through_the_core_queue() {
             .map(|state| state.manager.len()))
             .unwrap(),
         Some(1)
+    );
+
+    let toast_element = cx
+        .read(view, |view| {
+            let state = view.components.toasts.values().next().unwrap();
+            let entry = state.entry("saved").unwrap();
+            ToastViewport::new(ElementId::named("toasts"))
+                .toast(entry)
+                .root_id()
+        })
+        .unwrap();
+    let bounds = cx.element_bounds(window, toast_element).unwrap();
+    cx.visual(window)
+        .unwrap()
+        .move_pointer(quickgui::Point::new(
+            bounds.x + bounds.width * 0.5,
+            bounds.y + bounds.height * 0.5,
+        ))
+        .unwrap();
+    assert!(
+        cx.read(view, |view| view
+            .components
+            .toasts
+            .values()
+            .next()
+            .unwrap()
+            .entry("saved")
+            .unwrap()
+            .is_paused())
+            .unwrap()
+    );
+    cx.visual(window)
+        .unwrap()
+        .move_pointer(quickgui::Point::new(
+            bounds.right() + 20.0,
+            bounds.bottom() + 20.0,
+        ))
+        .unwrap();
+    assert!(
+        !cx.read(view, |view| view
+            .components
+            .toasts
+            .values()
+            .next()
+            .unwrap()
+            .entry("saved")
+            .unwrap()
+            .is_paused())
+            .unwrap()
     );
 
     let close_element = cx

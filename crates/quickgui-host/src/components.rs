@@ -2905,6 +2905,19 @@ pub(super) fn apply_field_part(
                     if !listeners_enabled {
                         return Some(element);
                     }
+                    let hover = cx.hover_listener(parts.root_id(), move |view, hovered, cx| {
+                        let retained = view.components.toasts.entry(key).or_default();
+                        let now = Instant::now();
+                        let changed = if *hovered {
+                            retained.manager.pause(toast_id, now)
+                        } else {
+                            retained.manager.resume(toast_id, now)
+                        };
+                        if changed {
+                            retained.deadline = retained.manager.next_deadline();
+                            cx.invalidate();
+                        }
+                    });
                     // Swipe-to-dismiss is the core's own captured-pointer arithmetic against a
                     // bounded threshold and the declared direction.
                     let swipe = cx.pointer_listener(parts.root_id(), move |view, event, cx| {
@@ -2917,6 +2930,7 @@ pub(super) fn apply_field_part(
                     Some(
                         parts
                             .key_with_accessor(cx, element, toast_accessor(key))
+                            .on_hover(hover)
                             .on_pointer(swipe),
                     )
                 }

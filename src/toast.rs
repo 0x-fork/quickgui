@@ -214,6 +214,7 @@ pub struct ToastEntry {
     toast: Toast,
     deadline: Option<Instant>,
     remaining: Option<Duration>,
+    paused: bool,
     limited: bool,
     swiping: bool,
     swipe: f32,
@@ -235,7 +236,7 @@ impl ToastEntry {
 
     /// Whether this toast's countdown is currently paused by hover or focus.
     pub const fn is_paused(&self) -> bool {
-        self.remaining.is_some()
+        self.paused
     }
 
     /// Whether this toast sits past the provider's visible limit, Base UI's `data-limited`.
@@ -400,6 +401,7 @@ impl ToastManager {
             toast,
             deadline,
             remaining: None,
+            paused: false,
             limited: false,
             swiping: false,
             swipe: 0.0,
@@ -427,8 +429,13 @@ impl ToastManager {
         };
         let duration = toast.duration;
         entry.toast = toast;
-        entry.remaining = None;
-        entry.deadline = duration.map(|declared| now + declared.min(timeout.max(declared)));
+        if entry.paused {
+            entry.remaining = duration;
+            entry.deadline = None;
+        } else {
+            entry.remaining = None;
+            entry.deadline = duration.map(|declared| now + declared.min(timeout.max(declared)));
+        }
         true
     }
 
@@ -491,13 +498,13 @@ impl ToastManager {
         let Some(entry) = self.entries.iter_mut().find(|entry| entry.id == id) else {
             return false;
         };
-        if entry.remaining.is_some() {
+        if entry.paused {
             return false;
         }
-        let Some(deadline) = entry.deadline.take() else {
-            return false;
-        };
-        entry.remaining = Some(deadline.saturating_duration_since(now));
+        entry.paused = true;
+        if let Some(deadline) = entry.deadline.take() {
+            entry.remaining = Some(deadline.saturating_duration_since(now));
+        }
         true
     }
 
@@ -506,10 +513,13 @@ impl ToastManager {
         let Some(entry) = self.entries.iter_mut().find(|entry| entry.id == id) else {
             return false;
         };
-        let Some(remaining) = entry.remaining.take() else {
+        if !entry.paused {
             return false;
-        };
-        entry.deadline = Some(now + remaining);
+        }
+        entry.paused = false;
+        if let Some(remaining) = entry.remaining.take() {
+            entry.deadline = Some(now + remaining);
+        }
         true
     }
 
@@ -1046,8 +1056,10 @@ mod tests {
             manager.entry(persistent).expect("persistent").deadline(),
             None
         );
-        assert!(!manager.pause(persistent, start));
+        assert!(manager.pause(persistent, start));
+        assert!(manager.entry(persistent).expect("persistent").is_paused());
         assert!(!manager.expire(start + Duration::from_secs(3_600)));
+        assert!(manager.resume(persistent, start + Duration::from_secs(3_600)));
         assert!(manager.entry(persistent).is_some());
 
         assert!(manager.dismiss(persistent));
@@ -1075,6 +1087,28 @@ mod tests {
             Some(MAX_TOAST_TEXT_BYTES)
         );
         assert_eq!(bounded.action_label(), None);
+    }
+
+    #[test]
+    fn updating_a_paused_toast_keeps_its_new_countdown_paused() {
+        let start = Instant::now();
+        let mut manager = ToastManager::new();
+        let id = manager.push(Toast::new("Uploading").persistent(), start);
+        assert!(manager.pause(id, start));
+        assert!(manager.update(
+            id,
+            Toast::new("Uploaded").duration(Duration::from_secs(4)),
+            start + Duration::from_secs(1),
+        ));
+        assert!(manager.entry(id).expect("updated toast").is_paused());
+        assert_eq!(manager.next_deadline(), None);
+        assert!(!manager.expire(start + Duration::from_secs(60)));
+
+        assert!(manager.resume(id, start + Duration::from_secs(60)));
+        assert_eq!(
+            manager.next_deadline(),
+            Some(start + Duration::from_secs(64))
+        );
     }
 
     #[test]
