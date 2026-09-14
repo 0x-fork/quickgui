@@ -372,7 +372,8 @@ pub const MAX_MOUNTED_LIST_ITEMS: usize = 16_384;
 const LIST_HEIGHT_BLOCK_ITEMS: usize = 64;
 const DEFAULT_UNSIZED_LIST_ITEMS: usize = 16;
 const LIST_MEASUREMENT_EPSILON: f32 = 1.0 / 64.0;
-const MAX_LIST_ITEM_HEIGHT: f32 = 1_048_576.0;
+/// Maximum logical height retained for one variable-height list item.
+pub const MAX_LIST_ITEM_HEIGHT: f32 = 1_048_576.0;
 
 static NEXT_LIST_ID: AtomicUsize = AtomicUsize::new(1);
 
@@ -472,6 +473,7 @@ impl ListItemMeasurement {
 
 #[derive(Clone)]
 struct ListStateInner {
+    overscan_pixels: f32,
     id: usize,
     metrics: HeightMetrics,
     overscan: usize,
@@ -665,17 +667,27 @@ impl ListStateInner {
             return VisibleRows { range };
         }
 
-        let first = self.metrics.item_at_offset(self.scroll_offset);
-        let viewport_bottom =
-            (self.scroll_offset + self.viewport.height).min(self.metrics.content_height());
-        let visible_end = if viewport_bottom >= self.metrics.content_height() {
-            self.metrics.len
-        } else {
-            self.metrics
-                .item_at_offset((viewport_bottom - LIST_MEASUREMENT_EPSILON).max(0.0))
-                .saturating_add(1)
-                .min(self.metrics.len)
+        let range_end_at = |bottom: f32| {
+            if bottom >= self.metrics.content_height() {
+                self.metrics.len
+            } else {
+                self.metrics
+                    .item_at_offset((bottom - LIST_MEASUREMENT_EPSILON).max(0.0))
+                    .saturating_add(1)
+                    .min(self.metrics.len)
+            }
         };
+        let viewport_first = self.metrics.item_at_offset(self.scroll_offset);
+        let viewport_end = range_end_at(
+            (self.scroll_offset + self.viewport.height).min(self.metrics.content_height()),
+        );
+        let first = self
+            .metrics
+            .item_at_offset((self.scroll_offset - self.overscan_pixels).max(0.0));
+        let visible_end = range_end_at(
+            (self.scroll_offset + self.viewport.height + self.overscan_pixels)
+                .min(self.metrics.content_height()),
+        );
         let overscan = if self.available_range.is_some() {
             self.overscan
                 .max(visible_end.saturating_sub(first))
@@ -683,11 +695,27 @@ impl ListStateInner {
         } else {
             self.overscan
         };
-        let start = first.saturating_sub(overscan);
-        let end = visible_end.saturating_add(overscan).min(self.metrics.len);
-        VisibleRows {
-            range: start..end.min(start.saturating_add(MAX_MOUNTED_LIST_ITEMS)),
+        let mut start = first.saturating_sub(overscan);
+        let mut end = visible_end.saturating_add(overscan).min(self.metrics.len);
+        if end - start > MAX_MOUNTED_LIST_ITEMS {
+            let required_end = viewport_end.min(
+                viewport_first
+                    .saturating_add(MAX_MOUNTED_LIST_ITEMS)
+                    .min(self.metrics.len),
+            );
+            let remaining = MAX_MOUNTED_LIST_ITEMS - (required_end - viewport_first);
+            let desired_before = viewport_first - start;
+            let desired_after = end - required_end;
+            let mut before = desired_before.min(remaining / 2);
+            let mut after = desired_after.min(remaining - before);
+            let unused = remaining - before - after;
+            let extra_before = (desired_before - before).min(unused);
+            before += extra_before;
+            after += (desired_after - after).min(unused - extra_before);
+            start = viewport_first - before;
+            end = required_end + after;
         }
+        VisibleRows { range: start..end }
     }
 }
 
@@ -766,6 +794,7 @@ impl ListState {
         );
         let id = NEXT_LIST_ID.fetch_add(1, Ordering::Relaxed);
         Self(Rc::new(RefCell::new(ListStateInner {
+            overscan_pixels: 0.0,
             id,
             metrics: HeightMetrics::new(item_count, estimated_item_height),
             overscan: 2,
@@ -803,6 +832,16 @@ impl ListState {
         self
     }
 
+    /// Extend the mounted range by measured logical distance rather than an estimated row count.
+    pub fn with_overscan_pixels(self, pixels: f32) -> Self {
+        self.0.borrow_mut().overscan_pixels = if pixels.is_finite() {
+            pixels.clamp(0.0, MAX_LIST_ITEM_HEIGHT)
+        } else {
+            0.0
+        };
+        self
+    }
+
     pub fn with_follow_mode(self, mode: FollowMode) -> Self {
         self.set_follow_mode(mode);
         self
@@ -837,6 +876,26 @@ impl ListState {
     pub fn set_viewport_height(&self, height: f32) -> bool {
         let width = self.0.borrow().viewport.width;
         self.set_viewport_size(width, height)
+    }
+
+    /// Supply exact row heights when the application knows them without layout.
+    /// Updating known heights preserves the current logical scroll anchor.
+    pub fn set_item_heights(&self, heights: &[f32]) {
+        assert!(heights.iter().all(|h| h.is_finite() && *h > 0.0));
+        let mut state = self.0.borrow_mut();
+        assert_eq!(heights.len(), state.metrics.len);
+        let anchor = state.capture_anchor();
+        let mut changed = false;
+        for (i, height) in heights.iter().enumerate() {
+            let height = height.min(MAX_LIST_ITEM_HEIGHT);
+            if (state.metrics.item_height(i) - height).abs() > LIST_MEASUREMENT_EPSILON {
+                changed |= state.metrics.set_item_height(i, height);
+            }
+        }
+        if changed {
+            state.restore_anchor(anchor);
+            state.bump_measurement_revision();
+        }
     }
 
     /// Update the item count while retaining measurements for unchanged prefix items.
@@ -1027,9 +1086,15 @@ impl ListState {
 
     pub fn set_follow_mode(&self, mode: FollowMode) {
         let mut state = self.0.borrow_mut();
+        let previous = state.follow_mode;
         state.follow_mode = mode;
         match mode {
-            FollowMode::Normal => state.following_tail = false,
+            FollowMode::Normal => {
+                state.following_tail = false;
+                if previous == FollowMode::Tail {
+                    state.anchor_end = false;
+                }
+            }
             FollowMode::Tail => {
                 state.following_tail = true;
                 state.anchor_end = true;
@@ -1473,6 +1538,48 @@ mod tests {
     use super::*;
 
     #[test]
+    fn known_heights_preserve_scroll_anchor_and_pixel_overscan() {
+        let list = ListState::new(1000, 10.0)
+            .with_overscan(0)
+            .with_overscan_pixels(20.0);
+        list.set_viewport_size(400.0, 40.0);
+        let mut heights = vec![10.0; 1000];
+        heights[1] = 100.0;
+        list.set_item_heights(&heights);
+        list.scroll_to_pixels(110.0);
+        let range = list.visible_rows().range;
+        assert_eq!(range, 1..8);
+        let anchor = list.logical_scroll_top();
+        heights[0] = 20.0;
+        list.set_item_heights(&heights);
+        assert_eq!(list.logical_scroll_top(), anchor);
+        assert_eq!(list.scroll_offset(), 120.0);
+    }
+
+    #[test]
+    fn known_heights_keep_content_geometry_finite() {
+        let list = ListState::new(2, 10.0);
+        list.set_item_heights(&[f32::MAX, f32::MAX]);
+
+        assert_eq!(list.content_height(), MAX_LIST_ITEM_HEIGHT * 2.0);
+        assert!(list.content_height().is_finite());
+    }
+
+    #[test]
+    fn bounded_pixel_overscan_keeps_the_viewport_mounted() {
+        let list = ListState::new(MAX_LIST_ITEMS, 10.0)
+            .with_overscan(0)
+            .with_overscan_pixels(200_000.0);
+        list.set_viewport_size(320.0, 40.0);
+        list.scroll_to_pixels(400_000.0);
+
+        let range = list.visible_rows().range;
+        assert_eq!(range.len(), MAX_MOUNTED_LIST_ITEMS);
+        assert!(range.start <= 40_000);
+        assert!(range.end >= 40_004);
+    }
+
+    #[test]
     fn only_viewport_rows_and_overscan_are_returned() {
         let mut list = VirtualList::new(100_000, 20.0).with_overscan(2);
         list.set_viewport_height(100.0);
@@ -1640,6 +1747,34 @@ mod tests {
         assert_eq!(list.scroll_offset(), 20.0);
         handle.set_offset_from_input(list.max_scroll_offset());
         assert!(list.is_following_tail());
+    }
+
+    #[test]
+    fn disabling_tail_following_preserves_the_viewport_when_content_grows() {
+        let list = ListState::new(3, 20.0).with_follow_mode(FollowMode::Tail);
+        list.set_viewport_size(200.0, 40.0);
+        assert_eq!(list.scroll_offset(), 20.0);
+        list.set_follow_mode(FollowMode::Normal);
+        list.set_item_count(5);
+        assert_eq!(list.scroll_offset(), 20.0);
+        assert!(!list.is_following_tail());
+    }
+
+    #[test]
+    fn normal_mode_preserves_end_anchors_that_did_not_come_from_tail_following() {
+        let list = ListState::new(3, 20.0)
+            .with_alignment(ListAlignment::Bottom)
+            .with_follow_mode(FollowMode::Normal);
+        list.set_viewport_size(200.0, 40.0);
+        list.set_item_count(4);
+        assert_eq!(list.scroll_offset(), 40.0);
+
+        let list = ListState::new(3, 20.0);
+        list.set_viewport_size(200.0, 40.0);
+        list.scroll_to_end();
+        list.set_follow_mode(FollowMode::Normal);
+        list.set_item_count(4);
+        assert_eq!(list.scroll_offset(), 40.0);
     }
 
     #[test]
