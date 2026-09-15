@@ -344,6 +344,7 @@ for (const packageName of [
   "quickgui-cosmic-text",
   "quickgui-glyphon",
   "quickgui-system",
+  "quickgui-extension-sdk",
 ] as const) {
   replaceCargoLockPackageVersion("benchmarks/desktop/quickgui-rust/Cargo.lock", packageName);
 }

@@ -4,6 +4,8 @@ All notable user-facing changes to QuickGUI are recorded here.
 
 ## Unreleased
 
+## 0.1.5 - 2026-09-16
+
 ### CLI
 
 - Production macOS disk images are created with the vendored
@@ -23,14 +25,33 @@ All notable user-facing changes to QuickGUI are recorded here.
 - Generated packaging names (`*.AppDir`, `*-setup.exe`, `quickgui.json`, and similar) are reserved
   so a resource cannot overwrite them. Update manifests select AppImage and NSIS artifacts
   from packaging outputs only. Debian `md5sums` omit directory members.
+- `quickgui fmt` wraps long Go fluent method chains one call per line, including instance
+  APIs such as `popover.Root().Children()`.
 
 ### Framework
 
+- Editor, CodeBlock, DiffView, Markdown, Terminal, and Updater ship as standalone native
+  extensions. Each has its own crate, Go module, and npm package; the host registers them by
+  name through a public ABI instead of compiling their algorithms into `libquickgui_host`.
+  Go imports discover `quickgui.extension.json` and call `host.RequireExtension`; TypeScript
+  apps install the matching `@quickgui/extension-*` package. Rust apps still enable crate
+  features (`editor`, `markdown`, `terminal`) to link the same implementations. Language
+  grammars stay out of the default bundle; register a linked grammar or load a language pack.
 - `Image::open`, `MenuIcon::open`, and `TrayIconImage::from_path` treat a stem ending in
   `Template` (optionally `@2x`) as a macOS template image. Go and TypeScript `ImageSource`
   values accept an explicit `template` flag; omitted path flags still infer that convention.
 - Rust `EventContext` can create, replace, remove, and (on macOS and Windows) pop a native
   tray menu, so `Application::run` apps no longer need `AppRunner` for tray icons.
+- Variable lists accept a logical overscan distance and a complete known-height table
+  (`with_overscan_pixels` / `set_item_heights`, Go `OverscanPixels` / `ItemHeights`,
+  TypeScript `overscanPixels` / `itemHeights`).
+- `Element::layout_rounding(false)` on a window root keeps fractional layout coordinates
+  through painting and hit testing.
+- Intrinsic text width is rounded once in logical pixels, so Retina labels no longer pick
+  up an extra physical guard pixel.
+- Hovering a toast pauses its countdown, including after an update while it is already
+  paused. Go transparent compound roots such as `Toast.Provider` and `Popover.Root` no
+  longer insert a layout box around their children.
 
 ### Website
 

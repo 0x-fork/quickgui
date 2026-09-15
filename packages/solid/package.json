@@ -1,6 +1,6 @@
 {
   "name": "@quickgui/solid",
-  "version": "0.1.4-next.4",
+  "version": "0.1.5",
   "description": "Solid 2 renderer for QuickGUI native desktop applications",
   "repository": {
     "type": "git",

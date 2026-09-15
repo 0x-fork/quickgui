@@ -3,6 +3,6 @@
   "name": "editor",
   "abi": 1,
   "package": "@quickgui/extension-editor",
-  "version": "0.1.4-next.4",
+  "version": "0.1.5",
   "library": "quickgui_editor"
 }

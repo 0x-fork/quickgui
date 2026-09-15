@@ -2,11 +2,11 @@ module quickgui.example/ai-chat
 
 go 1.23.0
 
-require github.com/egoist/quickgui/go v0.1.4-next.4
+require github.com/egoist/quickgui/go v0.1.5
 
-require github.com/egoist/quickgui/extensions/markdown v0.1.4-next.4
+require github.com/egoist/quickgui/extensions/markdown v0.1.5
 
-require github.com/egoist/quickgui/extensions/editor v0.1.4-next.4
+require github.com/egoist/quickgui/extensions/editor v0.1.5
 
 replace github.com/egoist/quickgui/extensions/editor => ../../extensions/editor
 

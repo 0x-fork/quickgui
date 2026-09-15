@@ -1,6 +1,6 @@
 [package]
 name = "quickgui-extension-sdk"
-version = "0.1.4-next.4"
+version = "0.1.5"
 edition = "2024"
 rust-version = "1.90"
 description = "Renderer-independent ABI and declarations for QuickGUI native extensions"
