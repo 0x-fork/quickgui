@@ -33,7 +33,7 @@ git diff --check
 QUICKGUI_PACKAGE_TOOLCHAIN=1.90.0 scripts/package-release-gate.sh
 ```
 
-The package gate builds all six `.crate` archives, extracts the exact normalized contents, and
+The package gate builds all seven `.crate` archives, extracts the exact normalized contents, and
 compiles `tests/downstream_smoke` with only those extracted packages patched into the registry
 graph. This catches missing files, accidental path-only dependencies, mismatched renamed-crate
 types, missing license/notice files, duplicated vendor sources, and a public API that cannot be
@@ -45,7 +45,7 @@ CI sets `QUICKGUI_PACKAGE_TOOLCHAIN=1.90.0`, making both package creation and th
 resolution use the declared MSRV rather than the runner's newer default compiler.
 
 The GitHub `CI` workflow runs this complete non-interactive gate on clean commits. Every non-PR
-invocation uploads one immutable `quickgui-<version>-crates-<commit>` artifact containing all six
+invocation uploads one immutable `quickgui-<version>-crates-<commit>` artifact containing all seven
 verified `.crate` archives, `SHA256SUMS`, this release guide, and the changelog. Pull requests verify
 the same packages but do not retain release artifacts. The CI workflow never publishes.
 
@@ -84,8 +84,9 @@ are recorded in [the status ledger](status.md).
 ## Registry authentication setup
 
 The private GitHub repository cannot use crates.io trusted publishing. Create a crates.io API token
-that can publish these six crates and store it as the `CARGO_REGISTRY_TOKEN` GitHub Actions secret:
+that can publish these seven crates and store it as the `CARGO_REGISTRY_TOKEN` GitHub Actions secret:
 
+- `quickgui-extension-sdk`
 - `quickgui-winit`
 - `quickgui-accesskit-winit`
 - `quickgui-cosmic-text`
@@ -93,7 +94,7 @@ that can publish these six crates and store it as the `CARGO_REGISTRY_TOKEN` Git
 - `quickgui-system`
 - `quickgui`
 
-For each npm package (`@quickgui/native`, `@quickgui/extension-terminal`, `@quickgui/extension-updater`, `@quickgui/solid`, and `@quickgui/cli`), add an
+For each npm package (`@quickgui/native`, `@quickgui/extension-terminal`, `@quickgui/extension-updater`, `@quickgui/solid`, `@quickgui/extension-editor`, `@quickgui/extension-markdown`, and `@quickgui/cli`), add an
 [npm Trusted Publisher](https://docs.npmjs.com/trusted-publishers/) with GitHub owner `egoist`,
 repository `quickgui`, workflow filename `release.yml`, and no environment. Allow `npm publish`.
 npm requires Node 22.14 or newer and npm 11.5.1 or newer for OIDC; the workflow uses Node 24 and
@@ -101,11 +102,11 @@ verifies the npm CLI before publication. No `NPM_TOKEN` secret is required.
 
 Creating the workflow does not create the npm registry-side trust records. A missing or misspelled
 record makes npm authentication fail with a 404 on `PUT` even when the package already exists.
-Each of the five packages needs that Trusted Publisher record before OIDC can publish it. From
+Each package needs that Trusted Publisher record before OIDC can publish it. From
 an npm login with 2FA:
 
 ```console
-for name in native extension-terminal extension-updater solid cli; do
+for name in native extension-terminal extension-updater solid extension-editor extension-markdown cli; do
   npm trust github "@quickgui/$name" --file release.yml --repo egoist/quickgui
 done
 ```
@@ -139,12 +140,13 @@ verify an already synchronized checkout without changing files.
 
 The workflow publishes crates.io packages in this dependency order:
 
-1. `quickgui-winit`
-2. `quickgui-accesskit-winit`
-3. `quickgui-cosmic-text`
-4. `quickgui-glyphon`
-5. `quickgui-system`
-6. `quickgui`
+1. `quickgui-extension-sdk`
+2. `quickgui-winit`
+3. `quickgui-accesskit-winit`
+4. `quickgui-cosmic-text`
+5. `quickgui-glyphon`
+6. `quickgui-system`
+7. `quickgui`
 
 The Go SDK is published from the same source commit with a `go/v<version>` tag, as required for
 the nested `github.com/egoist/quickgui/go` module. The workflow refuses to move an existing SDK tag
@@ -152,7 +154,7 @@ and continues when that tag already exists, so a later npm-only recovery can kee
 Go module bytes unchanged.
 The repository must be readable by Go consumers; a tag alone does not grant access to a private repository.
 
-It then publishes npm packages in the order `@quickgui/native`, `@quickgui/extension-terminal`, `@quickgui/extension-updater`, `@quickgui/solid`, and `@quickgui/cli`.
+It then publishes npm packages in the order `@quickgui/native`, `@quickgui/extension-terminal`, `@quickgui/extension-updater`, `@quickgui/solid`, `@quickgui/extension-editor`, `@quickgui/extension-markdown`, and `@quickgui/cli`.
 npm 11 refuses a prerelease without `--tag`, so every version is published with `--tag latest`.
 A rerun skips a version that is already on the registry instead of republishing or moving
 dist-tags; OIDC cannot run `npm dist-tag`.
@@ -172,6 +174,7 @@ provenance for it.
 If automation is unavailable, use the same dependency order from a clean, fully verified tag:
 
 ```console
+cargo publish --manifest-path crates/quickgui-extension-sdk/Cargo.toml --locked
 cargo publish --manifest-path vendor/winit/Cargo.toml
 cargo publish --manifest-path vendor/accesskit_winit/Cargo.toml
 cargo publish --manifest-path vendor/cosmic_text/Cargo.toml

@@ -1,0 +1,7 @@
+{
+ "name": "quickgui-example-extensions",
+ "private": true,
+ "type": "module",
+ "scripts": { "pack:languages": "quickgui pack-languages languages.json --out resources/languages.qglang", "dev": "bun run pack:languages && quickgui dev", "build": "bun run pack:languages && quickgui build" },
+ "devDependencies": { "@quickgui/cli": "workspace:*" }
+}

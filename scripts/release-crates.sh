@@ -92,6 +92,7 @@ wait_for_crate() {
 }
 
 crate_names=(
+  quickgui-extension-sdk
   quickgui-winit
   quickgui-accesskit-winit
   quickgui-cosmic-text
@@ -100,6 +101,7 @@ crate_names=(
   quickgui
 )
 crate_manifests=(
+  crates/quickgui-extension-sdk/Cargo.toml
   vendor/winit/Cargo.toml
   vendor/accesskit_winit/Cargo.toml
   vendor/cosmic_text/Cargo.toml
@@ -140,7 +142,7 @@ for index in "${!crate_names[@]}"; do
   if [[ ${QUICKGUI_RELEASE_ALLOW_DIRTY:-0} == 1 ]]; then
     publish_args+=(--allow-dirty)
   fi
-  if [[ $crate_name == quickgui-system || $crate_name == quickgui ]]; then
+  if [[ $crate_name == quickgui-extension-sdk || $crate_name == quickgui-system || $crate_name == quickgui ]]; then
     publish_args+=(--locked)
   fi
   cargo publish "${publish_args[@]}"

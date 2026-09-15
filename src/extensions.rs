@@ -1,6 +1,6 @@
 //! Extension registration happens before the host starts. Registered images remain loaded for
 //! process lifetime; individual sessions still release all resources when they unmount.
-use crate::extension_api::{self as abi, Extension, ServiceApi, TerminalApi};
+use crate::extension_api::{self as abi, ComponentApi, Extension, ServiceApi};
 use std::{
     collections::BTreeMap,
     sync::{Mutex, OnceLock},
@@ -12,10 +12,16 @@ struct RegisteredService {
     api: ServiceApi,
 }
 
+#[derive(Clone)]
+struct RegisteredComponent {
+    version: String,
+    api: ComponentApi,
+}
+
 #[derive(Default)]
 struct Registry {
     services: BTreeMap<String, RegisteredService>,
-    terminal: bool,
+    components: BTreeMap<String, RegisteredComponent>,
 }
 
 static SERVICES: OnceLock<Mutex<Registry>> = OnceLock::new();
@@ -33,6 +39,16 @@ pub fn service(name: &str) -> Option<ServiceApi> {
         .map(|service| service.api)
 }
 
+/// Look up a component package. Package names and component types are extension-owned.
+pub fn component(name: &str) -> Option<ComponentApi> {
+    services()
+        .lock()
+        .unwrap()
+        .components
+        .get(name)
+        .map(|entry| entry.api)
+}
+
 pub fn shutdown_services() {
     // Never hold a registry lock while calling foreign code. Extensions can emit
     // their last events and release their sinks during shutdown.
@@ -46,13 +62,6 @@ pub fn shutdown_services() {
     for api in extensions {
         unsafe { (api.shutdown)() };
     }
-}
-
-static TERMINAL: OnceLock<TerminalApi> = OnceLock::new();
-
-#[cfg(all(feature = "terminal-extension", not(feature = "terminal")))]
-pub(crate) fn terminal() -> Option<&'static TerminalApi> {
-    TERMINAL.get()
 }
 
 /// Register an extension obtained from `quickgui_extension_v1` through an in-process loader.
@@ -109,12 +118,43 @@ pub unsafe fn register_extension_versioned(
     let version =
         unsafe { std::slice::from_raw_parts(descriptor.version.data, descriptor.version.len) };
     if version != expected_version {
+        eprintln!(
+            "quickgui extension {}: loaded version {:?}, requested {:?}",
+            String::from_utf8_lossy(name),
+            String::from_utf8_lossy(version),
+            String::from_utf8_lossy(expected_version)
+        );
         return Err("extension release does not match the importing package");
     }
-    if descriptor.kind == abi::SERVICE_EXTENSION {
-        if name == b"terminal" {
-            return Err("terminal requires its typed extension contract");
+    if descriptor.kind == abi::COMPONENT_EXTENSION {
+        if descriptor.api.is_null()
+            || descriptor.api_size as usize != size_of::<ComponentApi>()
+            || !unsafe { valid_functions(descriptor.api, 5) }
+        {
+            return Err("component extension function table mismatch");
         }
+        let api = unsafe { *(descriptor.api.cast::<ComponentApi>()) };
+        return services().lock().unwrap().register_component(
+            std::str::from_utf8(name).map_err(|_| "invalid extension name")?,
+            std::str::from_utf8(version).map_err(|_| "invalid extension version")?,
+            api,
+        );
+    }
+    if descriptor.kind == abi::PACKAGE_EXTENSION {
+        if descriptor.api.is_null()
+            || descriptor.api_size as usize != size_of::<abi::PackageApi>()
+            || !unsafe { valid_functions(descriptor.api, 7) }
+        {
+            return Err("package extension function table mismatch");
+        }
+        let api = unsafe { *(descriptor.api.cast::<abi::PackageApi>()) };
+        return services().lock().unwrap().register_package(
+            std::str::from_utf8(name).map_err(|_| "invalid extension name")?,
+            std::str::from_utf8(version).map_err(|_| "invalid extension version")?,
+            api,
+        );
+    }
+    if descriptor.kind == abi::SERVICE_EXTENSION {
         if descriptor.api.is_null()
             || descriptor.api_size as usize != size_of::<ServiceApi>()
             || !unsafe { valid_functions(descriptor.api, 2) }
@@ -128,36 +168,7 @@ pub unsafe fn register_extension_versioned(
             api,
         );
     }
-    if descriptor.kind != abi::TERMINAL_EXTENSION || name != b"terminal" {
-        return Err("extension is not supported by this core version");
-    }
-    // The legacy terminal frame adapter remains tied to the core release.
-    if version != env!("CARGO_PKG_VERSION").as_bytes() {
-        return Err("terminal extension and core release versions differ");
-    }
-    if descriptor.api.is_null()
-        || descriptor.api_size as usize != size_of::<TerminalApi>()
-        || !unsafe { valid_functions(descriptor.api, 4) }
-    {
-        return Err("terminal extension function table mismatch");
-    }
-    let api = unsafe { *(descriptor.api.cast::<TerminalApi>()) };
-    let mut registry = services().lock().unwrap();
-    if !registry.terminal && registry.services.len() >= abi::MAX_EXTENSIONS {
-        return Err("native extension registry is full");
-    }
-    if let Err(api) = TERMINAL.set(api) {
-        let current = TERMINAL.get().unwrap();
-        if current.create as usize != api.create as usize
-            || current.destroy as usize != api.destroy as usize
-            || current.command as usize != api.command as usize
-            || current.frame as usize != api.frame as usize
-        {
-            return Err("a different terminal extension is already registered");
-        }
-    }
-    registry.terminal = true;
-    Ok(())
+    Err("extension is not supported by this core version")
 }
 
 fn valid_name(name: &[u8]) -> bool {
@@ -173,7 +184,95 @@ unsafe fn valid_functions(table: *const std::ffi::c_void, count: usize) -> bool 
 }
 
 impl Registry {
+    fn len(&self) -> usize {
+        self.services.len()
+            + self
+                .components
+                .keys()
+                .filter(|name| !self.services.contains_key(*name))
+                .count()
+    }
+
+    fn register_package(
+        &mut self,
+        name: &str,
+        version: &str,
+        api: abi::PackageApi,
+    ) -> Result<(), &'static str> {
+        match (self.services.get(name), self.components.get(name)) {
+            (Some(service), Some(component))
+                if service.version == version
+                    && component.version == version
+                    && service.api.invoke as usize == api.service.invoke as usize
+                    && service.api.shutdown as usize == api.service.shutdown as usize
+                    && component.api.create as usize == api.component.create as usize
+                    && component.api.update as usize == api.component.update as usize
+                    && component.api.render as usize == api.component.render as usize
+                    && component.api.event as usize == api.component.event as usize
+                    && component.api.destroy as usize == api.component.destroy as usize =>
+            {
+                return Ok(());
+            }
+            (None, None) => {}
+            _ => return Err("a different extension with this name is already registered"),
+        }
+        if self.len() >= abi::MAX_EXTENSIONS {
+            return Err("native extension registry is full");
+        }
+        self.services.insert(
+            name.to_owned(),
+            RegisteredService {
+                version: version.to_owned(),
+                api: api.service,
+            },
+        );
+        self.components.insert(
+            name.to_owned(),
+            RegisteredComponent {
+                version: version.to_owned(),
+                api: api.component,
+            },
+        );
+        Ok(())
+    }
+    fn register_component(
+        &mut self,
+        name: &str,
+        version: &str,
+        api: ComponentApi,
+    ) -> Result<(), &'static str> {
+        if self.services.contains_key(name) {
+            return Err("a different extension with this name is already registered");
+        }
+        if let Some(current) = self.components.get(name) {
+            if current.version != version
+                || current.api.create as usize != api.create as usize
+                || current.api.update as usize != api.update as usize
+                || current.api.render as usize != api.render as usize
+                || current.api.event as usize != api.event as usize
+                || current.api.destroy as usize != api.destroy as usize
+            {
+                return Err("a different extension with this name is already registered");
+            }
+            return Ok(());
+        }
+        if self.len() >= abi::MAX_EXTENSIONS {
+            return Err("native extension registry is full");
+        }
+        self.components.insert(
+            name.to_owned(),
+            RegisteredComponent {
+                version: version.to_owned(),
+                api,
+            },
+        );
+        Ok(())
+    }
+
     fn register(&mut self, name: &str, version: &str, api: ServiceApi) -> Result<(), &'static str> {
+        if self.components.contains_key(name) {
+            return Err("a different extension with this name is already registered");
+        }
         if let Some(current) = self.services.get(name) {
             if current.version != version
                 || current.api.invoke as usize != api.invoke as usize
@@ -183,7 +282,7 @@ impl Registry {
             }
             return Ok(());
         }
-        if self.services.len() + usize::from(self.terminal) >= abi::MAX_EXTENSIONS {
+        if self.len() >= abi::MAX_EXTENSIONS {
             return Err("native extension registry is full");
         }
         self.services.insert(
@@ -214,6 +313,116 @@ mod tests {
         SHUTDOWNS.fetch_add(10, Ordering::SeqCst);
     }
     static API: ServiceApi = ServiceApi { invoke, shutdown };
+
+    unsafe extern "C" fn create_component(
+        _: abi::Bytes,
+        _: abi::Bytes,
+        wake: abi::Wake,
+        _: *mut std::ffi::c_void,
+        _: abi::Reply,
+    ) -> *mut std::ffi::c_void {
+        unsafe { (wake.release)(wake.context) };
+        std::ptr::null_mut()
+    }
+    unsafe extern "C" fn update_component(_: *mut std::ffi::c_void, _: abi::Bytes) -> i32 {
+        0
+    }
+    unsafe extern "C" fn render_component(
+        _: *mut std::ffi::c_void,
+        _: abi::Bytes,
+        _: *mut std::ffi::c_void,
+        _: abi::Reply,
+    ) -> i32 {
+        0
+    }
+    unsafe extern "C" fn destroy_component(_: *mut std::ffi::c_void) {}
+    unsafe extern "C" fn shutdown_package() {}
+    const COMPONENT: ComponentApi = ComponentApi {
+        create: create_component,
+        update: update_component,
+        render: render_component,
+        event: render_component,
+        destroy: destroy_component,
+    };
+
+    #[test]
+    fn packages_register_both_capabilities_atomically_and_count_as_one() {
+        let mut registry = Registry::default();
+        let package = abi::PackageApi {
+            component: COMPONENT,
+            service: API,
+        };
+        registry
+            .register_package("package", "1.0", package)
+            .unwrap();
+        registry
+            .register_package("package", "1.0", package)
+            .unwrap();
+        assert_eq!(registry.len(), 1);
+        assert!(
+            registry.components.contains_key("package")
+                && registry.services.contains_key("package")
+        );
+        assert!(
+            registry
+                .register_package("package", "2.0", package)
+                .is_err()
+        );
+        assert!(registry.register("package", "1.0", API).is_err());
+        assert_eq!(registry.services["package"].version, "1.0");
+        for i in 1..abi::MAX_EXTENSIONS {
+            registry
+                .register(&format!("package-{i}"), "1.0", API)
+                .unwrap();
+        }
+        assert!(
+            registry
+                .register_package("overflow", "1.0", package)
+                .is_err()
+        );
+        assert!(
+            !registry.services.contains_key("overflow")
+                && !registry.components.contains_key("overflow")
+        );
+    }
+
+    #[test]
+    fn validates_both_tables_before_registering_a_package() {
+        let nulls = [0_usize; 7];
+        let package = abi::PackageApi {
+            component: COMPONENT,
+            service: ServiceApi {
+                invoke,
+                shutdown: shutdown_package,
+            },
+        };
+        let mut descriptor = Extension {
+            abi_version: abi::ABI_VERSION,
+            descriptor_size: size_of::<Extension>() as u32,
+            kind: abi::PACKAGE_EXTENSION,
+            api_size: size_of::<abi::PackageApi>() as u32,
+            name: abi::Bytes::new(b"independent-package-test"),
+            version: abi::Bytes::new(b"1.0"),
+            api: nulls.as_ptr().cast(),
+        };
+        assert!(
+            unsafe {
+                register_extension_versioned(&descriptor, b"independent-package-test", b"1.0")
+            }
+            .is_err()
+        );
+        assert!(
+            component("independent-package-test").is_none()
+                && service("independent-package-test").is_none()
+        );
+        descriptor.api = (&package as *const abi::PackageApi).cast();
+        unsafe { register_extension_versioned(&descriptor, b"independent-package-test", b"1.0") }
+            .unwrap();
+        assert!(
+            component("independent-package-test").is_some()
+                && service("independent-package-test").is_some()
+        );
+    }
 
     #[test]
     fn accepts_independent_services_without_extension_specific_core_code() {
@@ -309,31 +518,5 @@ mod tests {
         let short = [abi::ABI_VERSION, 8];
         assert!(unsafe { register_extension(short.as_ptr().cast(), b"terminal") }.is_err());
         assert!(unsafe { register_extension(ptr::null(), b"terminal") }.is_err());
-    }
-
-    #[test]
-    fn rejects_wrong_package_release_and_function_table() {
-        let mut descriptor = Extension {
-            abi_version: abi::ABI_VERSION,
-            descriptor_size: size_of::<Extension>() as u32,
-            kind: abi::TERMINAL_EXTENSION,
-            api_size: size_of::<TerminalApi>() as u32,
-            name: abi::Bytes::new(b"terminal"),
-            version: abi::Bytes::new(b"999.0.0"),
-            api: ptr::null(),
-        };
-        assert_eq!(
-            unsafe { register_extension(&descriptor, b"different") },
-            Err("loaded extension does not match the requested package")
-        );
-        assert_eq!(
-            unsafe { register_extension(&descriptor, b"terminal") },
-            Err("extension release does not match the importing package")
-        );
-        descriptor.version = abi::Bytes::new(env!("CARGO_PKG_VERSION").as_bytes());
-        assert_eq!(
-            unsafe { register_extension(&descriptor, b"terminal") },
-            Err("terminal extension function table mismatch")
-        );
     }
 }
